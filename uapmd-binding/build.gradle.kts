@@ -167,3 +167,92 @@ afterEvaluate {
         }
     }
 }
+
+// ─── Build uapmd-c-api Emscripten Wasm module ─────────────────────────────────
+//
+// Produces:
+//   external/uapmd/build-wasm/uapmd-c-api.js
+//   external/uapmd/build-wasm/uapmd-c-api.wasm
+//
+// Prerequisites: emcmake/emcc in PATH (Emscripten SDK activated).
+// The output files are bundled as resources in the jsMain and wasmJsMain
+// source sets so the KMP binding can load the module at runtime.
+
+val wasmSrcDir    = project.file("src/webMain/cpp")
+val wasmOutputDir = rootProject.file("external/uapmd/build-wasm")
+val wasmBuildDir  = layout.buildDirectory.dir("uapmd-c-api-wasm")
+
+tasks.register("buildUapmdCApiWasm") {
+    group       = "build"
+    description = "Builds uapmd-c-api.js + uapmd-c-api.wasm via Emscripten"
+
+    inputs.dir(wasmSrcDir)
+    inputs.dir(rootProject.file("external/uapmd/source/uapmd-c-api"))
+    outputs.file(File(wasmOutputDir, "uapmd-c-api.js"))
+    outputs.file(File(wasmOutputDir, "uapmd-c-api.wasm"))
+
+    doFirst {
+        // Require emcmake — fail early with a clear message
+        val emcmake = ProcessBuilder("which", "emcmake")
+            .redirectErrorStream(true)
+            .start()
+            .inputStream.bufferedReader().readText().trim()
+        if (emcmake.isEmpty()) {
+            throw GradleException(
+                "emcmake not found in PATH.\n" +
+                "Activate the Emscripten SDK before building:\n" +
+                "  source /path/to/emsdk/emsdk_env.sh"
+            )
+        }
+    }
+
+    doLast {
+        val buildDir = wasmBuildDir.get().asFile
+        buildDir.mkdirs()
+        wasmOutputDir.mkdirs()
+
+        val cpmCacheArg = "-DCPM_SOURCE_CACHE=${cpmCacheDir.absolutePath}"
+
+        // ── 1. Configure ──────────────────────────────────────────────────────
+        exec {
+            commandLine(
+                "emcmake", "cmake",
+                "-S", wasmSrcDir.absolutePath,
+                "-B", buildDir.absolutePath,
+                "-G", "Ninja",
+                "-DCMAKE_BUILD_TYPE=Release",
+                cpmCacheArg,
+                "-DUAPMD_BUILD_TESTS=OFF",
+                "-DMIDICCI_SKIP_TOOLS=ON"
+            )
+        }
+
+        // ── 2. Build ──────────────────────────────────────────────────────────
+        exec {
+            commandLine(
+                "cmake",
+                "--build", buildDir.absolutePath,
+                "--target", "uapmd-c-api-web",
+                "--parallel"
+            )
+        }
+
+        // ── 3. Copy outputs ───────────────────────────────────────────────────
+        listOf("uapmd-c-api.js", "uapmd-c-api.wasm").forEach { name ->
+            val built = File(buildDir, name)
+            if (!built.exists()) {
+                throw GradleException("Expected Emscripten output not found: ${built.absolutePath}")
+            }
+            built.copyTo(File(wasmOutputDir, name), overwrite = true)
+        }
+        logger.lifecycle("uapmd-c-api Wasm: outputs copied to $wasmOutputDir")
+    }
+}
+
+// Wire: compileKotlinJs and compileKotlinWasmJs must run after the Wasm build
+// so the JS/Wasm assets exist before they are bundled as resources.
+afterEvaluate {
+    listOf("compileKotlinJs", "compileKotlinWasmJs").forEach { taskName ->
+        tasks.findByName(taskName)?.dependsOn("buildUapmdCApiWasm")
+    }
+}
