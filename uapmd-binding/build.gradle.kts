@@ -36,9 +36,17 @@ kotlin {
         browser()
     }
 
+    compilerOptions {
+        // UInt/UByte/UShort/ULong are stable in Kotlin 2.x; suppress the opt-in noise.
+        optIn.add("kotlin.ExperimentalUnsignedTypes")
+    }
+
     sourceSets {
         commonTest.dependencies {
             implementation(libs.kotlin.test)
+        }
+        jvmMain.dependencies {
+            implementation(libs.jna)
         }
     }
 }

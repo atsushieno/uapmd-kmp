@@ -126,4 +126,8 @@ data class AudioFileProperties(
 
 enum class ScanMode { InProcess, Remote }
 
-enum class InstancingState { Created, Preparing, Ready, Error, Terminating, Terminated }
+enum class InstancingState { Created, Preparing, Ready, Error, Terminating, Terminated;
+    companion object {
+        fun fromNative(v: Int): InstancingState = entries.getOrElse(v) { Created }
+    }
+}
