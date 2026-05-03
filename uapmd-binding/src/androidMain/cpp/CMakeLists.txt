@@ -1,21 +1,28 @@
-cmake_minimum_required(VERSION 3.22.1)
+cmake_minimum_required(VERSION 3.28)
 project("uapmd-jni")
 
-if(NOT DEFINED UAPMD_LIB_DIR)
-    set(UAPMD_LIB_DIR
-        "${CMAKE_CURRENT_SOURCE_DIR}/../../../../external/uapmd/build-android/${ANDROID_ABI}")
+# uapmd source tree (android/app/src/main/cpp is a symlink to source/)
+get_filename_component(UAPMD_SRC_DIR
+    "${CMAKE_CURRENT_SOURCE_DIR}/../../../../external/uapmd/android/app/src/main/cpp"
+    REALPATH)
+
+include("${UAPMD_SRC_DIR}/cmake/CPM.cmake")
+
+find_package(SDL3 REQUIRED CONFIG)
+
+add_subdirectory("${UAPMD_SRC_DIR}" "${CMAKE_CURRENT_BINARY_DIR}/uapmd" EXCLUDE_FROM_ALL)
+
+# ContainerWindow_Android.cpp calls SDL_GetAndroidJNIEnv() which lives in libSDL3.so;
+# the upstream remidy-gui CMakeLists.txt does not add this link for Android.
+if(ANDROID)
+    target_link_libraries(remidy-gui PUBLIC SDL3::SDL3)
 endif()
 
-add_library(uapmd-c-api SHARED IMPORTED)
-set_target_properties(uapmd-c-api PROPERTIES
-    IMPORTED_LOCATION "${UAPMD_LIB_DIR}/libuapmd-c-api.so")
-
-set(UAPMD_INCLUDE_DIR
-    "${CMAKE_CURRENT_SOURCE_DIR}/../../../../external/uapmd/source/uapmd-c-api/include")
-
+# JNI bridge
 add_library(uapmd-jni SHARED uapmd_jni.cpp)
 
-target_include_directories(uapmd-jni PRIVATE ${UAPMD_INCLUDE_DIR})
+target_include_directories(uapmd-jni PRIVATE
+    "${UAPMD_SRC_DIR}/uapmd-c-api/include")
 
 target_link_libraries(uapmd-jni
     uapmd-c-api

@@ -4,7 +4,7 @@ import kotlinx.cinterop.*
 import uapmd.*
 
 class NativeScanTool internal constructor(
-    private val handle: uapmd_scan_tool_t
+    internal val handle: uapmd_scan_tool_t
 ) : ScanTool {
 
     override val catalogEntryCount: UInt get() = uapmd_scan_tool_catalog_entry_count(handle)
@@ -106,7 +106,7 @@ class NativePluginInstancing internal constructor(
 ) : PluginInstancing {
 
     override val state: InstancingState
-        get() = InstancingState.entries[uapmd_instancing_state(handle)]
+        get() = InstancingState.entries[uapmd_instancing_state(handle).toInt()]
 
     override fun makeAlive(callback: (String?) -> Unit) {
         val ref = StableRef.create(callback)

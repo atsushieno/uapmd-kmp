@@ -40,6 +40,7 @@ kotlin {
     compilerOptions {
         // UInt/UByte/UShort/ULong are stable in Kotlin 2.x; suppress the opt-in noise.
         optIn.add("kotlin.ExperimentalUnsignedTypes")
+        optIn.add("kotlinx.cinterop.ExperimentalForeignApi")
     }
 
     sourceSets {
@@ -48,6 +49,11 @@ kotlin {
         }
         jvmMain.dependencies {
             implementation(libs.jna)
+        }
+        androidMain.dependencies {
+            implementation(libs.oboe)
+            implementation(libs.androidaudioplugin)
+            implementation(files(rootProject.file("external/uapmd/android/external/SDL3-3.4.0.aar")))
         }
     }
 }
@@ -61,7 +67,14 @@ android {
         minSdk = libs.versions.android.minSdk.get().toInt()
         externalNativeBuild {
             cmake {
-                cppFlags("-std=c++17")
+                arguments.addAll(listOf(
+                    "-DCMAKE_BUILD_TYPE=RelWithDebInfo",
+                    "-DMIDICCI_SKIP_TOOLS=ON",
+                    "-DCPM_SOURCE_CACHE=${cpmCacheDir.absolutePath}",
+                    "-DANDROID_STL=c++_shared",
+                    "-DAAP_DIR=placeholder"
+                ))
+                targets.add("uapmd-jni")
             }
         }
     }
@@ -75,58 +88,8 @@ android {
         sourceCompatibility = JavaVersion.VERSION_11
         targetCompatibility = JavaVersion.VERSION_11
     }
-}
-
-// ─── Build libuapmd-c-api.so for each Android ABI ────────────────────────────
-val uapmdAndroidAbis   = listOf("arm64-v8a", "x86_64", "armeabi-v7a", "x86")
-val uapmdAndroidNativeSrc = rootProject.file("external/uapmd/android/app/src/main/cpp")
-
-uapmdAndroidAbis.forEach { abi ->
-    val outputDir      = rootProject.file("external/uapmd/build-android/$abi")
-    val outputSo       = File(outputDir, "libuapmd-c-api.so")
-    val nativeBuildDir = layout.buildDirectory.dir("uapmd-c-api-native/$abi")
-
-    tasks.register("buildUapmdCApiNative[$abi]") {
-        group       = "build"
-        description = "Builds libuapmd-c-api.so for Android ABI $abi"
-        inputs.dir(uapmdAndroidNativeSrc)
-        outputs.file(outputSo)
-
-        doLast {
-            val buildDir = nativeBuildDir.get().asFile
-            buildDir.mkdirs()
-            outputDir.mkdirs()
-
-            exec {
-                commandLine(
-                    "cmake",
-                    "-S", uapmdAndroidNativeSrc.absolutePath,
-                    "-B", buildDir.absolutePath,
-                    "-DCMAKE_TOOLCHAIN_FILE=${android.ndkDirectory}/build/cmake/android.toolchain.cmake",
-                    "-DANDROID_ABI=$abi",
-                    "-DANDROID_PLATFORM=android-${android.defaultConfig.minSdk}",
-                    "-DANDROID_STL=c++_shared",
-                    "-DCMAKE_BUILD_TYPE=RelWithDebInfo",
-                    "-DCPM_SOURCE_CACHE=${cpmCacheDir.absolutePath}",
-                    "-DMIDICCI_SKIP_TOOLS=ON"
-                )
-            }
-            exec {
-                commandLine("cmake", "--build", buildDir.absolutePath,
-                    "--target", "uapmd-c-api", "--parallel")
-            }
-            val built = fileTree(buildDir) { include("**/libuapmd-c-api.so") }.singleFile
-            built.copyTo(outputSo, overwrite = true)
-        }
-    }
-}
-
-afterEvaluate {
-    uapmdAndroidAbis.forEach { abi ->
-        listOf("Debug", "Release").forEach { variant ->
-            tasks.findByName("buildCMake$variant[$abi]")
-                ?.dependsOn("buildUapmdCApiNative[$abi]")
-        }
+    buildFeatures {
+        prefab = true
     }
 }
 

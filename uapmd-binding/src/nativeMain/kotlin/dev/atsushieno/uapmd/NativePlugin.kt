@@ -110,7 +110,7 @@ class NativePluginInstance internal constructor(
     ) {
         val ref = StableRef.create(callback)
         uapmd_instance_request_state(
-            handle, ctx.toNative(), includeUiState, ref.asCPointer(),
+            handle, ctx.toNative().toUInt(), includeUiState, ref.asCPointer(),
             staticCFunction { state, stateSize, error, userData ->
                 if (userData == null) return@staticCFunction
                 val cb = userData.asStableRef<(ByteArray?, String?) -> Unit>()
@@ -135,7 +135,7 @@ class NativePluginInstance internal constructor(
         data.usePinned { pinned ->
             uapmd_instance_load_state(
                 handle, pinned.addressOf(0).reinterpret(), data.size.toULong(),
-                ctx.toNative(), includeUiState, ref.asCPointer(),
+                ctx.toNative().toUInt(), includeUiState, ref.asCPointer(),
                 staticCFunction { error, userData ->
                     if (userData == null) return@staticCFunction
                     val cb = userData.asStableRef<(String?) -> Unit>()

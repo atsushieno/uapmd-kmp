@@ -152,16 +152,15 @@ class NativeSequencerEngine internal constructor(
             handle, cs.ptr, ctx?.asCPointer(),
             if (progressCallback != null) staticCFunction { progress, userData ->
                 if (userData == null || progress == null) return@staticCFunction
-                val pair = userData.asStableRef<Pair<((OfflineRenderProgress) -> Unit)?, (() -> Boolean)?>?>().get()
-                progress.useContents {
-                    pair?.first?.invoke(
-                        OfflineRenderProgress(this.progress, rendered_seconds, total_seconds, rendered_frames, total_frames)
-                    )
-                }
+                val pair = userData!!.asStableRef<Pair<((OfflineRenderProgress) -> Unit)?, (() -> Boolean)?>>().get()
+                val p = progress.pointed
+                pair?.first?.invoke(
+                    OfflineRenderProgress(p.progress, p.rendered_seconds, p.total_seconds, p.rendered_frames, p.total_frames)
+                )
             } else null,
             if (shouldCancel != null) staticCFunction { userData ->
-                userData?.asStableRef<Pair<((OfflineRenderProgress) -> Unit)?, (() -> Boolean)?>?>()
-                    ?.get()?.second?.invoke() ?: false
+                userData!!.asStableRef<Pair<((OfflineRenderProgress) -> Unit)?, (() -> Boolean)?>>()
+                    .get().second?.invoke() ?: false
             } else null
         )
         ctx?.dispose()
@@ -221,7 +220,7 @@ class NativeAudioDeviceManager internal constructor(
         val out = alloc<uapmd_audio_device_info_t>()
         if (!uapmd_audio_device_mgr_get_device_info(handle, index, out.ptr)) return null
         AudioDeviceInfo(
-            directions = AudioIoDirection.fromNative(out.directions),
+            directions = AudioIoDirection.fromNative(out.directions.toInt()),
             id = out.id,
             name = out.name?.toKString() ?: "",
             sampleRate = out.sample_rate,
@@ -260,7 +259,7 @@ class NativeMidiIODevice internal constructor(
 // ---------------------------------------------------------------------------
 
 class NativeDeviceIODispatcher internal constructor(
-    private val handle: uapmd_device_io_dispatcher_t
+    internal val handle: uapmd_device_io_dispatcher_t
 ) : DeviceIODispatcher {
     override fun start(): Int = uapmd_dispatcher_start(handle)
     override fun stop(): Int = uapmd_dispatcher_stop(handle)
