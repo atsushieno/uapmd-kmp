@@ -344,9 +344,9 @@ private fun DrawScope.drawLink(src: Offset, dst: Offset, color: Color, width: Fl
             val sign = if (dy > 0) 1f else -1f
             path.moveTo(src.x, src.y)
             path.lineTo(midX - r, src.y)
-            path.quadraticBezierTo(midX, src.y, midX, src.y + sign * r)
+            path.quadraticTo(midX, src.y, midX, src.y + sign * r)
             path.lineTo(midX, dst.y - sign * r)
-            path.quadraticBezierTo(midX, dst.y, midX + r, dst.y)
+            path.quadraticTo(midX, dst.y, midX + r, dst.y)
             path.lineTo(dst.x, dst.y)
         }
     } else {
@@ -357,13 +357,13 @@ private fun DrawScope.drawLink(src: Offset, dst: Offset, color: Color, width: Fl
         val sign = if (dy > 0) 1f else -1f
         path.moveTo(src.x, src.y)
         path.lineTo(src.x + slack - r, src.y)
-        path.quadraticBezierTo(src.x + slack, src.y, src.x + slack, src.y + sign * r)
+        path.quadraticTo(src.x + slack, src.y, src.x + slack, src.y + sign * r)
         path.lineTo(src.x + slack, midY - sign * r)
-        path.quadraticBezierTo(src.x + slack, midY, src.x + slack - r, midY)
+        path.quadraticTo(src.x + slack, midY, src.x + slack - r, midY)
         path.lineTo(dst.x - slack + r, midY)
-        path.quadraticBezierTo(dst.x - slack, midY, dst.x - slack, midY + sign * r)
+        path.quadraticTo(dst.x - slack, midY, dst.x - slack, midY + sign * r)
         path.lineTo(dst.x - slack, dst.y - sign * r)
-        path.quadraticBezierTo(dst.x - slack, dst.y, dst.x - slack + r, dst.y)
+        path.quadraticTo(dst.x - slack, dst.y, dst.x - slack + r, dst.y)
         path.lineTo(dst.x, dst.y)
     }
 

@@ -41,7 +41,8 @@ data class TimelineClip(
     val id: Int,
     val startMs: Long,
     val endMs: Long,
-    val label: String = ""
+    val label: String = "",
+    val previewData: ClipPreviewData? = null
 )
 
 data class TimelineTrack(
@@ -351,6 +352,8 @@ private fun DrawScope.drawSections(
     }
 }
 
+private const val CLIP_LABEL_H = 16f
+
 private fun DrawScope.drawClip(
     state: TimelineState,
     clip: TimelineClip,
@@ -367,6 +370,20 @@ private fun DrawScope.drawClip(
     val rect = Rect(x1, clipY + 2f, x2, clipY + laneH - 2f)
 
     drawRoundRect(bg, rect.topLeft, rect.size, androidx.compose.ui.geometry.CornerRadius(4f))
+
+    // Preview content (rendered before border so border draws on top)
+    val previewRect = Rect(rect.left + 2f, rect.top + CLIP_LABEL_H, rect.right - 2f, rect.bottom - 2f)
+    if (previewRect.width > 4f && previewRect.height > 4f) {
+        when (val p = clip.previewData) {
+            is ClipPreviewData.Audio -> drawWaveformPreview(p, previewRect, measurer)
+            is ClipPreviewData.Midi -> drawMidiPreview(p, previewRect)
+            is ClipPreviewData.MasterMeta -> drawMasterMetaPreview(p, previewRect, measurer)
+            is ClipPreviewData.Loading -> drawPreviewPlaceholder("Loading…", previewRect, measurer)
+            is ClipPreviewData.Error -> drawPreviewPlaceholder(p.message, previewRect, measurer)
+            null -> Unit
+        }
+    }
+
     drawRoundRect(
         color = if (isSelected) TimelineColors.clipBorder else TimelineColors.clipBorder.copy(alpha = 0.5f),
         topLeft = rect.topLeft, size = rect.size,
@@ -374,9 +391,126 @@ private fun DrawScope.drawClip(
         style = androidx.compose.ui.graphics.drawscope.Stroke(width = 1f)
     )
     if (rect.width > 20f) {
-        val layout = measurer.measure(clip.label, TextStyle(color = TimelineColors.clipText, fontSize = 10.sp))
-        clipRect(left = rect.left + 2f, top = rect.top, right = rect.right - 2f, bottom = rect.bottom) {
-            drawText(layout, topLeft = Offset(rect.left + 4f, rect.top + 3f))
+        val typeLabel = when (clip.previewData) {
+            is ClipPreviewData.Midi -> "MIDI"
+            is ClipPreviewData.Audio -> "Audio"
+            is ClipPreviewData.MasterMeta -> "Meta"
+            else -> null
+        }
+        clipRect(left = rect.left + 2f, top = rect.top, right = rect.right - 2f, bottom = rect.top + CLIP_LABEL_H) {
+            val layout = measurer.measure(clip.label, TextStyle(color = TimelineColors.clipText, fontSize = 10.sp))
+            drawText(layout, topLeft = Offset(rect.left + 4f, rect.top + 2f))
+            if (typeLabel != null) {
+                val tl = measurer.measure(typeLabel, TextStyle(color = TimelineColors.clipText.copy(alpha = 0.6f), fontSize = 8.sp))
+                drawText(tl, topLeft = Offset(rect.right - tl.size.width - 4f, rect.top + 3f))
+            }
+        }
+    }
+}
+
+private fun DrawScope.drawPreviewPlaceholder(text: String, rect: Rect, measurer: TextMeasurer) {
+    val layout = measurer.measure(text, TextStyle(color = TimelineColors.clipText.copy(alpha = 0.5f), fontSize = 8.sp))
+    val x = rect.left + (rect.width - layout.size.width) / 2
+    val y = rect.top + (rect.height - layout.size.height) / 2
+    clipRect(rect.left, rect.top, rect.right, rect.bottom) {
+        drawText(layout, topLeft = Offset(x, y))
+    }
+}
+
+private fun DrawScope.drawWaveformPreview(
+    data: ClipPreviewData.Audio,
+    rect: Rect,
+    measurer: TextMeasurer
+) {
+    if (data.waveform.isEmpty()) return
+    val centerY = rect.center.y
+    val halfH = rect.height / 2f
+    val lineColor = Color(0xB270C8FF.toInt())
+    val safeDuration = data.durationSeconds.coerceAtLeast(0.001)
+
+    clipRect(rect.left, rect.top, rect.right, rect.bottom) {
+        val count = data.waveform.size
+        data.waveform.forEachIndexed { i, pt ->
+            val t = if (count > 1) i.toFloat() / (count - 1) else 0f
+            val x = rect.left + t * rect.width
+            val y1 = centerY - pt.maxValue.coerceIn(-1f, 1f) * halfH
+            val y2 = centerY - pt.minValue.coerceIn(-1f, 1f) * halfH
+            drawLine(lineColor, Offset(x, y1), Offset(x, y2.coerceAtLeast(y1 + 1f)), 1.2f)
+        }
+
+        val markerColor = Color(0xDCFFDE59.toInt())
+        for (marker in data.markers) {
+            val x = rect.left + (marker.clipPositionSeconds / safeDuration).toFloat().coerceIn(0f, 1f) * rect.width
+            drawLine(markerColor, Offset(x, rect.top), Offset(x, rect.bottom), 1.5f)
+            if (marker.name.isNotEmpty()) {
+                val ml = measurer.measure(marker.name, TextStyle(color = markerColor, fontSize = 7.sp))
+                drawText(ml, topLeft = Offset(x + 2f, rect.top + 1f))
+            }
+        }
+    }
+}
+
+private fun DrawScope.drawMidiPreview(data: ClipPreviewData.Midi, rect: Rect) {
+    if (data.notes.isEmpty()) return
+    val noteRange = (data.maxNote - data.minNote + 1).coerceAtLeast(1)
+    val safeDuration = data.durationSeconds.coerceAtLeast(0.01)
+    val laneH = rect.height / noteRange
+
+    clipRect(rect.left, rect.top, rect.right, rect.bottom) {
+        for (note in data.notes) {
+            val x1 = rect.left + (note.startSeconds / safeDuration).toFloat().coerceIn(0f, 1f) * rect.width
+            val x2 = (rect.left + ((note.startSeconds + note.durationSeconds) / safeDuration).toFloat().coerceIn(0f, 1f) * rect.width)
+                .coerceAtLeast(x1 + 1.5f)
+            val notePos = (data.maxNote - note.note).toFloat() / noteRange
+            val y1 = rect.top + notePos * rect.height
+            val y2 = (y1 + laneH.coerceAtLeast(4f) * 0.85f).coerceAtMost(rect.bottom)
+            val v = note.velocity
+            val noteColor = Color(0.2f + 0.5f * v, 0.4f + 0.3f * v, 0.9f - 0.4f * v, 0.9f)
+            drawRoundRect(noteColor, Offset(x1, y1), Size(x2 - x1, y2 - y1), androidx.compose.ui.geometry.CornerRadius(2f))
+        }
+    }
+}
+
+private fun DrawScope.drawMasterMetaPreview(
+    data: ClipPreviewData.MasterMeta,
+    rect: Rect,
+    measurer: TextMeasurer
+) {
+    val safeDuration = data.durationSeconds.coerceAtLeast(0.001)
+    val validTempos = data.tempoPoints.filter { it.bpm > 0 }
+    val minBpm = validTempos.minOfOrNull { it.bpm } ?: 40.0
+    val maxBpm = validTempos.maxOfOrNull { it.bpm } ?: 200.0
+    val bpmRange = (maxBpm - minBpm).coerceAtLeast(1.0)
+
+    fun toX(sec: Double) = rect.left + (sec / safeDuration).toFloat().coerceIn(0f, 1f) * rect.width
+    fun toY(bpm: Double) = rect.bottom - ((bpm - minBpm) / bpmRange).toFloat().coerceIn(0f, 1f) * rect.height
+
+    clipRect(rect.left, rect.top, rect.right, rect.bottom) {
+        val gridColor = Color(0xA0787890.toInt())
+        for (i in 0..3) {
+            val y = rect.bottom - i / 3f * rect.height
+            drawLine(gridColor, Offset(rect.left, y), Offset(rect.right, y), 0.5f)
+        }
+
+        val tempoColor = Color(0xFF70CAFF.toInt())
+        validTempos.forEachIndexed { i, pt ->
+            val x = toX(pt.timeSeconds)
+            val y = toY(pt.bpm)
+            val endX = if (i + 1 < validTempos.size) toX(validTempos[i + 1].timeSeconds) else rect.right
+            if (endX > x) drawLine(tempoColor, Offset(x, y), Offset(endX, y), 2f)
+            drawCircle(tempoColor, 2.5f, Offset(x, y))
+            if (i + 1 < validTempos.size) {
+                val ny = toY(validTempos[i + 1].bpm)
+                drawLine(tempoColor, Offset(endX, y), Offset(endX, ny), 2f)
+            }
+        }
+
+        val sigColor = Color(0xC8D68FFF.toInt())
+        for (sig in data.timeSignatures) {
+            val x = toX(sig.timeSeconds)
+            drawLine(sigColor, Offset(x, rect.top), Offset(x, rect.bottom), 1f)
+            val tl = measurer.measure("${sig.numerator}/${sig.denominator}", TextStyle(color = sigColor, fontSize = 7.sp))
+            drawText(tl, topLeft = Offset(x + 2f, rect.top + 1f))
         }
     }
 }
