@@ -54,6 +54,8 @@ kotlin {
             implementation(libs.compose.uiToolingPreview)
             implementation(libs.androidx.lifecycle.viewmodelCompose)
             implementation(libs.androidx.lifecycle.runtimeCompose)
+            implementation(libs.kotlinx.coroutinesCore)
+            implementation(project(":uapmd-binding"))
         }
         commonTest.dependencies {
             implementation(libs.kotlin.test)

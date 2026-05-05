@@ -189,17 +189,20 @@ class JvmPluginHost internal constructor(
         val fmtBuf = ByteArray(256)
         val idBuf = ByteArray(512)
         val nameBuf = ByteArray(512)
+        val vendorBuf = ByteArray(256)
         if (!lib.uapmd_plugin_host_get_catalog_entry(
                 handle, index.toInt(),
                 fmtBuf, 256L,
                 idBuf, 512L,
-                nameBuf, 512L
+                nameBuf, 512L,
+                vendorBuf, 256L
             )
         ) return null
         return CatalogEntry(
             fmtBuf.decodeToNullTerminated(),
             idBuf.decodeToNullTerminated(),
-            nameBuf.decodeToNullTerminated()
+            nameBuf.decodeToNullTerminated(),
+            vendorBuf.decodeToNullTerminated()
         )
     }
 

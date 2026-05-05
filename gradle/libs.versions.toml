@@ -13,6 +13,7 @@ composeHotReload = "1.1.0"
 composeMultiplatform = "1.10.3"
 androidaudioplugin = "0.10.0"
 jna = "5.18.1"
+jne = "4.3.0"
 oboe = "1.10.0"
 junit = "4.13.2"
 kotlin = "2.3.21"
@@ -39,7 +40,9 @@ compose-components-resources = { module = "org.jetbrains.compose.components:comp
 compose-uiToolingPreview = { module = "org.jetbrains.compose.ui:ui-tooling-preview", version.ref = "composeMultiplatform" }
 androidaudioplugin = { module = "org.androidaudioplugin:androidaudioplugin", version.ref = "androidaudioplugin" }
 jna = { module = "net.java.dev.jna:jna", version.ref = "jna" }
+jne = { group = "com.fizzed", name = "jne", version.ref = "jne" }
 oboe = { module = "com.google.oboe:oboe", version.ref = "oboe" }
+kotlinx-coroutinesCore = { module = "org.jetbrains.kotlinx:kotlinx-coroutines-core", version.ref = "kotlinx-coroutines" }
 kotlinx-coroutinesSwing = { module = "org.jetbrains.kotlinx:kotlinx-coroutines-swing", version.ref = "kotlinx-coroutines" }
 
 [plugins]

@@ -49,6 +49,7 @@ kotlin {
         }
         jvmMain.dependencies {
             implementation(libs.jna)
+            implementation(libs.jne)
         }
         androidMain.dependencies {
             implementation(libs.oboe)
@@ -91,6 +92,92 @@ android {
     buildFeatures {
         prefab = true
     }
+}
+
+// ─── Build uapmd-c-api desktop shared library ────────────────────────────────
+//
+// Produces:
+//   external/uapmd/cmake-build-debug/source/uapmd-c-api/libuapmd-c-api.dylib  (macOS)
+//   external/uapmd/cmake-build-debug/source/uapmd-c-api/libuapmd-c-api.so     (Linux)
+//
+// The dylib is then copied into the JNE resource path so JNE.loadLibrary() can
+// find and extract it at runtime without requiring java.library.path tricks.
+
+val uapmdSrcDir      = rootProject.file("external/uapmd")
+val uapmdBuildDir    = rootProject.file("external/uapmd/cmake-build-debug")
+val uapmdDylibDir    = File(uapmdBuildDir, "source/uapmd-c-api")
+val os               = org.gradle.internal.os.OperatingSystem.current()
+
+tasks.register("buildUapmdCApiDesktop") {
+    group       = "build"
+    description = "Builds libuapmd-c-api shared library for JVM desktop via cmake"
+
+    inputs.dir(File(uapmdSrcDir, "source/uapmd-c-api"))
+    if (os.isMacOsX)
+        outputs.file(File(uapmdDylibDir, "libuapmd-c-api.dylib"))
+    else
+        outputs.file(File(uapmdDylibDir, "libuapmd-c-api.so"))
+
+    doLast {
+        val patchFile = rootProject.file("external/uapmd-jvm-shared.patch")
+        uapmdBuildDir.mkdirs()
+
+        // Apply the patch from this (parent) repo to the submodule working tree.
+        exec {
+            workingDir = uapmdSrcDir
+            commandLine("git", "apply", "--whitespace=fix", patchFile.absolutePath)
+        }
+
+        try {
+            exec {
+                workingDir = uapmdSrcDir
+                commandLine(
+                    "cmake", "--build", uapmdBuildDir.absolutePath,
+                    "--target", "uapmd-c-api",
+                    "--parallel"
+                )
+            }
+        } finally {
+            // Always restore the submodule to HEAD so it stays clean.
+            exec {
+                workingDir = uapmdSrcDir
+                commandLine("git", "checkout", "--", ".")
+            }
+        }
+    }
+}
+
+// ─── Copy dylib into JNE resource path ───────────────────────────────────────
+//
+// JNE looks for native libraries under jne/{os}/{arch}/{filename} in the
+// classpath.  This task stages the built dylib into the jvmMain resources so
+// it is included in the JAR and discoverable by JNE.loadLibrary() at runtime.
+
+val jneArch = System.getProperty("os.arch").let {
+    if (it == "aarch64") "arm64" else "x86_64"
+}
+val jneOs = when {
+    os.isMacOsX  -> "macos"
+    os.isLinux   -> "linux"
+    os.isWindows -> "windows"
+    else         -> "unknown"
+}
+val jneLibName = if (os.isMacOsX || os.isLinux) "libuapmd-c-api.${if (os.isMacOsX) "dylib" else "so"}"
+                 else "uapmd-c-api.dll"
+val jneResourceDir = project.file("src/jvmMain/resources/jne/$jneOs/$jneArch")
+
+tasks.register<Copy>("copyUapmdDylibToJneResources") {
+    group       = "build"
+    description = "Copies libuapmd-c-api into the JNE resource path for classpath discovery"
+    dependsOn("buildUapmdCApiDesktop")
+    from(File(uapmdDylibDir, jneLibName))
+    into(jneResourceDir)
+}
+
+// Wire: compileKotlinJvm depends on the shared library being staged in resources
+afterEvaluate {
+    tasks.findByName("compileKotlinJvm")?.dependsOn("copyUapmdDylibToJneResources")
+    tasks.findByName("jvmProcessResources")?.dependsOn("copyUapmdDylibToJneResources")
 }
 
 // ─── Build uapmd-c-api Emscripten Wasm module ─────────────────────────────────

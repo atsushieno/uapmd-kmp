@@ -24,10 +24,12 @@ fun TrackList(
     entries: List<TrackInstanceEntry>,
     onEnabledChanged: (instanceId: Int, enabled: Boolean) -> Unit = { _, _ -> },
     onDetailsRequested: (instanceId: Int) -> Unit = {},
+    onRemoveInstance: (instanceId: Int) -> Unit = {},
+    onAddTrack: () -> Unit = {},
     modifier: Modifier = Modifier
 ) {
     Column(modifier = modifier) {
-        // Header
+        // Header row with Add Track button
         Row(
             modifier = Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 4.dp),
             horizontalArrangement = Arrangement.spacedBy(8.dp),
@@ -39,7 +41,11 @@ fun TrackList(
                 color = MaterialTheme.colorScheme.onSurfaceVariant)
             Text("Device", modifier = Modifier.weight(1f), fontSize = 11.sp,
                 color = MaterialTheme.colorScheme.onSurfaceVariant)
-            Spacer(Modifier.width(48.dp + 64.dp))
+            Spacer(Modifier.weight(0.01f))
+            TextButton(onClick = onAddTrack, contentPadding = PaddingValues(horizontal = 8.dp, vertical = 0.dp)) {
+                Text("+ Track", fontSize = 11.sp)
+            }
+            Spacer(Modifier.width(64.dp + 32.dp))
         }
         HorizontalDivider()
         LazyColumn(modifier = Modifier.fillMaxSize()) {
@@ -61,6 +67,17 @@ fun TrackList(
                     TextButton(onClick = { onDetailsRequested(entry.instanceId) },
                         modifier = Modifier.width(64.dp)) {
                         Text("Details", fontSize = 11.sp)
+                    }
+                    if (entry.instanceId >= 0) {
+                        TextButton(
+                            onClick = { onRemoveInstance(entry.instanceId) },
+                            modifier = Modifier.width(32.dp),
+                            contentPadding = PaddingValues(0.dp)
+                        ) {
+                            Text("×", fontSize = 14.sp, color = MaterialTheme.colorScheme.error)
+                        }
+                    } else {
+                        Spacer(Modifier.width(32.dp))
                     }
                 }
                 HorizontalDivider(thickness = 0.5.dp)

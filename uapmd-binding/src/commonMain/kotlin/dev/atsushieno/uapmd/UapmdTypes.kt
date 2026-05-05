@@ -28,7 +28,7 @@ enum class StateContextType(val nativeValue: Int) {
     Remember(0), Copyable(1), Preset(2), Project(3)
 }
 
-data class CatalogEntry(val format: String, val pluginId: String, val displayName: String)
+data class CatalogEntry(val format: String, val pluginId: String, val displayName: String, val vendor: String = "")
 
 data class UiSize(val width: UInt, val height: UInt)
 

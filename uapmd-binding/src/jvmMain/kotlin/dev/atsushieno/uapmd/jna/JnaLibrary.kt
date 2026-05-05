@@ -1,5 +1,6 @@
 package dev.atsushieno.uapmd.jna
 
+import com.fizzed.jne.JNE
 import com.sun.jna.*
 import com.sun.jna.Structure.FieldOrder
 import com.sun.jna.ptr.*
@@ -254,6 +255,7 @@ interface UapmdLibrary : Library {
         const val LIB_NAME = "uapmd-c-api"
 
         val INSTANCE: UapmdLibrary by lazy {
+            JNE.loadLibrary(LIB_NAME)
             @Suppress("UNCHECKED_CAST")
             Native.load(LIB_NAME, UapmdLibrary::class.java) as UapmdLibrary
         }
@@ -354,7 +356,8 @@ interface UapmdLibrary : Library {
         host: Pointer?, index: Int,
         formatBuf: ByteArray, formatBufSize: Long,
         pluginIdBuf: ByteArray, pluginIdBufSize: Long,
-        displayNameBuf: ByteArray, displayNameBufSize: Long
+        displayNameBuf: ByteArray, displayNameBufSize: Long,
+        vendorBuf: ByteArray, vendorBufSize: Long
     ): Boolean
     fun uapmd_plugin_host_save_catalog(host: Pointer?, path: String)
     fun uapmd_plugin_host_perform_scanning(host: Pointer?, rescan: Boolean)
