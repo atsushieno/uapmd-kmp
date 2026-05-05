@@ -3,7 +3,7 @@ project("uapmd-jni")
 
 # uapmd source tree (android/app/src/main/cpp is a symlink to source/)
 get_filename_component(UAPMD_SRC_DIR
-    "${CMAKE_CURRENT_SOURCE_DIR}/../../../../external/uapmd/android/app/src/main/cpp"
+    "${CMAKE_CURRENT_SOURCE_DIR}/../../../../../external/uapmd/android/app/src/main/cpp"
     REALPATH)
 
 # Our owned c-api directory (sibling of kotlin/ and external/)

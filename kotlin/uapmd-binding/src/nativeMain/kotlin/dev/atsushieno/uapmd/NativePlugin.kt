@@ -201,9 +201,10 @@ class NativePluginHost internal constructor(
         val fmtBuf = allocArray<ByteVar>(256)
         val idBuf = allocArray<ByteVar>(512)
         val nameBuf = allocArray<ByteVar>(512)
-        if (!uapmd_plugin_host_get_catalog_entry(handle, index, fmtBuf, 256u, idBuf, 512u, nameBuf, 512u))
+        val vendorBuf = allocArray<ByteVar>(256)
+        if (!uapmd_plugin_host_get_catalog_entry(handle, index, fmtBuf, 256u, idBuf, 512u, nameBuf, 512u, vendorBuf, 256u))
             return null
-        CatalogEntry(fmtBuf.toKString(), idBuf.toKString(), nameBuf.toKString())
+        CatalogEntry(fmtBuf.toKString(), idBuf.toKString(), nameBuf.toKString(), vendorBuf.toKString())
     }
 
     override fun saveCatalog(path: String) = uapmd_plugin_host_save_catalog(handle, path)

@@ -3,6 +3,7 @@
 package dev.atsushieno.uapmd
 
 import kotlin.js.Promise
+import kotlinx.coroutines.await
 
 // ── External declarations for the Emscripten module ──────────────────────────
 
@@ -513,6 +514,9 @@ external interface UapmdCApiModule : JsAny {
 // ── External adapter declarations ────────────────────────────────────────────
 
 @JsModule("uapmd-wasm-adapter")
+@JsFun("(factory) => factory()")
+private external fun invokeFactory(factory: JsAny): Promise<UapmdCApiModule>
+
 private external fun setUapmdModule(mod: JsAny)
 
 @JsModule("uapmd-wasm-adapter")
@@ -592,9 +596,7 @@ internal val wasmMod: UapmdCApiModule
  */
 suspend fun initUapmdWasm(factory: JsAny) {
     if (_uapmdModule != null) return
-    val mod = factory.unsafeCast<() -> Promise<UapmdCApiModule>>()()
-        .unsafeCast<Promise<UapmdCApiModule>>()
-        .await()
+    val mod: UapmdCApiModule = invokeFactory(factory).await()
     _uapmdModule = mod
     setUapmdModule(mod)
 }

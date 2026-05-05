@@ -1,0 +1,225 @@
+name: build dist
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+    inputs:
+      tag_name:
+        description: 'Release tag name (e.g. v1.2.3)'
+        required: true
+        type: string
+      release_name:
+        description: 'Release title (defaults to tag name when empty)'
+        required: false
+        type: string
+        default: ''
+      release_body:
+        description: 'Release notes body (Markdown)'
+        required: false
+        type: string
+        default: ''
+      prerelease:
+        description: 'Mark release as pre-release'
+        required: false
+        type: boolean
+        default: false
+      draft:
+        description: 'Create release as draft'
+        required: false
+        type: boolean
+        default: false
+
+jobs:
+  build:
+    name: 'build (${{ matrix.name }})'
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          # macOS: JVM + iOS only
+          - os: macos-15
+            name: macos-jvm-ios
+            gradle_tasks: jvmTest compileKotlinJvm compileKotlinIosArm64 compileKotlinIosSimulatorArm64
+          # macOS: Android (NDK cross-compile)
+          - os: macos-15
+            name: android
+            gradle_tasks: assembleDebug
+          # Linux: JVM only (no Android NDK cross-compile, no iOS)
+          - os: ubuntu-24.04
+            name: linux-jvm
+            gradle_tasks: jvmTest compileKotlinJvm
+          # Windows: JVM only
+          - os: windows-latest
+            name: windows-jvm
+            gradle_tasks: jvmTest compileKotlinJvm
+    steps:
+    - name: checkout
+      uses: actions/checkout@v4
+      with:
+        submodules: recursive
+
+    - name: apt update and install
+      if: matrix.name == 'linux-jvm'
+      run: |
+        sudo apt-get update
+        sudo apt install gcc-14 ninja-build libgtk-3-dev libwebkit2gtk-4.1-dev libadwaita-1-dev libsdl2-dev
+
+    - name: brew install
+      if: matrix.name == 'macos-jvm-ios'
+      run: brew install sdl3 ninja
+
+    - name: prepare dependency cache directories on Windows
+      if: matrix.name == 'windows-jvm'
+      run: cmake -E make_directory cmake-build-debug/_deps
+
+    - name: cache Windows cmake dependencies
+      if: matrix.name == 'windows-jvm'
+      uses: actions/cache@v4
+      with:
+        path: cmake-build-debug/_deps
+        key: ${{ runner.os }}-deps-${{ hashFiles('**/CMakeLists.txt', '**/*.cmake') }}
+
+    - name: set up JDK 17
+      uses: actions/setup-java@v4
+      with:
+        java-version: '17'
+        distribution: 'temurin'
+
+    - name: restore CPM package cache
+      uses: actions/cache@v4
+      with:
+        path: ~/.cache/CPM/uapmd
+        key: cpm-${{ runner.os }}-${{ hashFiles('**/CMakeLists.txt', '**/*.cmake') }}
+        restore-keys: cpm-${{ runner.os }}-
+
+    - name: setup Gradle
+      uses: gradle/actions/setup-gradle@v4
+
+    - name: build
+      working-directory: kotlin
+      shell: bash
+      run: ./gradlew ${{ matrix.gradle_tasks }}
+
+    - name: upload build failure logs
+      if: failure()
+      uses: actions/upload-artifact@v4
+      with:
+        name: test-failure-logs-${{ matrix.name }}
+        path: kotlin/**/build/reports/
+
+    - name: upload artifact (macOS DMG)
+      if: success() && matrix.name == 'macos-jvm-ios'
+      uses: actions/upload-artifact@v4
+      with:
+        name: uapmd-kmp-${{ matrix.name }}
+        path: kotlin/composeApp/build/compose/binaries/main/dmg/*.dmg
+
+    - name: upload artifact (Android APK)
+      if: success() && matrix.name == 'android'
+      uses: actions/upload-artifact@v4
+      with:
+        name: uapmd-kmp-${{ matrix.name }}
+        path: kotlin/composeApp/build/outputs/apk/debug/*.apk
+
+  build-wasm:
+    # we need consistent libremidi API across all platforms (when `winmidi_virtual` goes `main`)
+    if: false
+    name: 'build Wasm (Emscripten / macOS)'
+    runs-on: macos-15
+    steps:
+    - name: checkout
+      uses: actions/checkout@v4
+      with:
+        submodules: recursive
+
+    - name: restore emsdk cache
+      uses: actions/cache@v4
+      with:
+        path: external/uapmd/source/tools/uapmd-app/web/.emsdk
+        key: emsdk-${{ runner.os }}-${{ hashFiles('external/uapmd/build-wasm.sh') }}
+        restore-keys: emsdk-${{ runner.os }}-
+
+    - name: restore CPM package cache
+      uses: actions/cache@v4
+      with:
+        path: ~/.cache/CPM/uapmd
+        key: cpm-wasm-${{ runner.os }}-${{ hashFiles('**/CMakeLists.txt', '**/*.cmake') }}
+        restore-keys: cpm-wasm-${{ runner.os }}-
+
+    - name: install and activate Emscripten SDK
+      run: |
+        EMSDK_DIR="external/uapmd/source/tools/uapmd-app/web/.emsdk"
+        if [[ ! -d "${EMSDK_DIR}/.git" ]]; then
+          git clone --depth 1 https://github.com/emscripten-core/emsdk.git "${EMSDK_DIR}"
+        else
+          git -C "${EMSDK_DIR}" pull --ff-only || true
+        fi
+        cd "${EMSDK_DIR}"
+        ./emsdk install latest
+        ./emsdk activate latest
+        # Export the emscripten bin directory to subsequent steps
+        echo "$(pwd)/upstream/emscripten" >> $GITHUB_PATH
+
+    - name: set up JDK 17
+      uses: actions/setup-java@v4
+      with:
+        java-version: '17'
+        distribution: 'temurin'
+
+    - name: setup Gradle
+      uses: gradle/actions/setup-gradle@v4
+
+    - name: build Wasm
+      working-directory: kotlin
+      shell: bash
+      run: ./gradlew buildUapmdCApiWasm compileKotlinJs compileKotlinWasmJs
+
+    - name: upload build failure logs
+      if: failure()
+      uses: actions/upload-artifact@v4
+      with:
+        name: test-failure-logs-wasm
+        path: kotlin/**/build/reports/
+
+    - name: upload Wasm artifacts
+      if: success()
+      uses: actions/upload-artifact@v4
+      with:
+        name: uapmd-kmp-wasm
+        path: |
+          build-wasm/uapmd-c-api.js
+          build-wasm/uapmd-c-api.wasm
+
+  release:
+    if: github.event_name == 'workflow_dispatch'
+    needs: [build, build-wasm]
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write
+    steps:
+    - name: checkout
+      uses: actions/checkout@v4
+      with:
+        fetch-depth: 1
+
+    - name: download build artifacts
+      uses: actions/download-artifact@v4
+      with:
+        pattern: uapmd-kmp-*
+        merge-multiple: true
+        path: release-artifacts
+
+    - name: list release assets
+      run: ls -R release-artifacts
+
+    - name: create GitHub release
+      uses: ncipollo/release-action@v1.20.0
+      with:
+        tag: ${{ github.event.inputs.tag_name }}
+        name: ${{ github.event.inputs.release_name || github.event.inputs.tag_name }}
+        body: ${{ github.event.inputs.release_body }}
+        draft: ${{ github.event.inputs.draft }}
+        prerelease: ${{ github.event.inputs.prerelease }}
+        artifacts: release-artifacts/**

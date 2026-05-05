@@ -111,7 +111,7 @@ class WasmJsPluginInstance internal constructor(
         val mod = wasmMod
         val ptr = mod.malloc(data.size)
         try {
-            data.forEachIndexed { i, b -> mod.setValue((ptr + i).toDouble(), b.toDouble(), "i8") }
+            data.forEachIndexed { i, b -> mod.setValue(ptr + i, b.toDouble(), "i8") }
             mod.uapmdInstanceLoadStateSync(handle, ptr, data.size)
         } finally { mod.free(ptr) }
     }
@@ -127,7 +127,7 @@ class WasmJsPluginInstance internal constructor(
         val mod = wasmMod
         val ptr = mod.malloc(data.size)
         try {
-            data.forEachIndexed { i, b -> mod.setValue((ptr + i).toDouble(), b.toDouble(), "i8") }
+            data.forEachIndexed { i, b -> mod.setValue(ptr + i, b.toDouble(), "i8") }
             val cbId = nextCallbackId()
             pendingLoadStateCallbacks[cbId] = callback
             val fnPtr = makeCFunctionPtr(cbId, "uapmdDispatchLoadState", "vi")
@@ -180,7 +180,7 @@ class WasmJsPluginInstance internal constructor(
         val namedValues = List(namedCount) { i ->
             val b = namedBase + i * 16
             ParameterNamedValue(
-                value = mod.getValue(b.toDouble(), "double"),
+                value = mod.getValue(b, "double"),
                 name  = getStr(b + 8 - ptr) // relative offset hack — read directly
             )
         }.let {
@@ -320,7 +320,7 @@ class WasmJsPluginNode internal constructor(
         val mod = wasmMod
         val ptr = mod.malloc(events.size)
         return try {
-            events.forEachIndexed { i, b -> mod.setValue((ptr + i).toDouble(), b.toDouble(), "i8") }
+            events.forEachIndexed { i, b -> mod.setValue(ptr + i, b.toDouble(), "i8") }
             mod.uapmdNodeScheduleEvents(handle, timestamp.toInt(), ptr, events.size)
         } finally { mod.free(ptr) }
     }

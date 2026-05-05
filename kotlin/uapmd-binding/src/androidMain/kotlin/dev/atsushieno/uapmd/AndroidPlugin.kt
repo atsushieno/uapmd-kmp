@@ -166,7 +166,7 @@ class AndroidPluginHost internal constructor(
 
     override fun getCatalogEntry(index: UInt): CatalogEntry? {
         val arr = JniBridge.uapmdPluginHostGetCatalogEntry(handle, index.toInt()) ?: return null
-        return CatalogEntry(arr[0] ?: "", arr[1] ?: "", arr[2] ?: "")
+        return CatalogEntry(arr[0] ?: "", arr[1] ?: "", arr[2] ?: "", arr[3] ?: "")
     }
 
     override fun saveCatalog(path: String) = JniBridge.uapmdPluginHostSaveCatalog(handle, path)

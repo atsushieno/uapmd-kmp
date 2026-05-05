@@ -2,6 +2,10 @@
 
 #include "c-api/uapmd-c-gui.h"
 #include <remidy-gui/remidy-gui.hpp>
+// remidy-gui.hpp skips GLContextGuard.hpp on Android; include it explicitly.
+#if defined(__ANDROID__)
+#include <remidy-gui/detail/GLContextGuard.hpp>
+#endif
 #include <unordered_map>
 #include <mutex>
 #include <memory>

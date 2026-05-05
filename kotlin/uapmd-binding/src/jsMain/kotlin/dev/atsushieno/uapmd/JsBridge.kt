@@ -3,6 +3,7 @@
 package dev.atsushieno.uapmd
 
 import kotlin.js.Promise
+import kotlinx.coroutines.await
 
 // ── Module singleton ──────────────────────────────────────────────────────────
 

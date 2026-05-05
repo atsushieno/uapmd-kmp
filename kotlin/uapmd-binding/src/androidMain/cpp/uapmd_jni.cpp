@@ -390,15 +390,16 @@ JNIEXPORT jint JNICALL Java_dev_atsushieno_uapmd_JniBridge_uapmdPluginHostCatalo
 // Returns {format, pluginId, displayName} as String[3], or null if not found.
 JNIEXPORT jobjectArray JNICALL Java_dev_atsushieno_uapmd_JniBridge_uapmdPluginHostGetCatalogEntry(
         JNIEnv* env, jclass, jlong h, jint idx) {
-    char fmt[256], pid[512], name[512];
+    char fmt[256], pid[512], name[512], vendor[256];
     if (!uapmd_plugin_host_get_catalog_entry(j2p<uapmd_plugin_host_t>(h), idx,
-            fmt, sizeof(fmt), pid, sizeof(pid), name, sizeof(name)))
+            fmt, sizeof(fmt), pid, sizeof(pid), name, sizeof(name), vendor, sizeof(vendor)))
         return nullptr;
     jclass sc = env->FindClass("java/lang/String");
-    jobjectArray arr = env->NewObjectArray(3, sc, nullptr);
+    jobjectArray arr = env->NewObjectArray(4, sc, nullptr);
     env->SetObjectArrayElement(arr, 0, env->NewStringUTF(fmt));
     env->SetObjectArrayElement(arr, 1, env->NewStringUTF(pid));
     env->SetObjectArrayElement(arr, 2, env->NewStringUTF(name));
+    env->SetObjectArrayElement(arr, 3, env->NewStringUTF(vendor));
     return arr;
 }
 JNIEXPORT void JNICALL Java_dev_atsushieno_uapmd_JniBridge_uapmdPluginHostSaveCatalog(

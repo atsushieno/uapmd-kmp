@@ -42,7 +42,7 @@ class WasmJsAudioFileReader internal constructor(
             for (i in 0 until channelCount) {
                 val chPtr = mod.malloc(frameSizeBytes)
                 channelPtrs[i] = chPtr
-                mod.setValue((ptrsPtr + i * 4).toDouble(), chPtr.toDouble(), "i32")
+                mod.setValue(ptrsPtr + i * 4, chPtr.toDouble(), "i32")
             }
             mod.uapmdAudioFileReaderReadFrames(handle, startFrame.toDouble(), framesToRead.toDouble(), ptrsPtr, channelCount)
             // Copy back from Wasm memory to Kotlin arrays

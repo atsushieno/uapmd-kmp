@@ -104,7 +104,7 @@ class WasmJsSequencerEngine internal constructor(
         val mod = wasmMod
         val ptr = mod.malloc(ump.size * 4)
         try {
-            ump.forEachIndexed { i, v -> mod.setValue((ptr + i * 4).toDouble(), v.toDouble(), "i32") }
+            ump.forEachIndexed { i, v -> mod.setValue(ptr + i * 4, v.toDouble(), "i32") }
             mod.uapmdEngineEnqueueUmp(handle, instanceId, ptr, ump.size, timestamp.toDouble())
         } finally { mod.free(ptr) }
     }

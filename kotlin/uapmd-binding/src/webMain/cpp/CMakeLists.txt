@@ -13,10 +13,16 @@ set(CMAKE_CXX_STANDARD 23)
 set(CMAKE_CXX_SCAN_FOR_MODULES OFF)
 
 # ── uapmd source root ─────────────────────────────────────────────────────────
-# Default: four levels up from this file → project root → external/uapmd
+# Five levels up from this file lands at the repo root; source is under
+# external/uapmd/source and the owned C API wrapper is under c-api/.
 if(NOT DEFINED UAPMD_SOURCE_DIR)
     get_filename_component(UAPMD_SOURCE_DIR
-        "${CMAKE_CURRENT_SOURCE_DIR}/../../../../external/uapmd"
+        "${CMAKE_CURRENT_SOURCE_DIR}/../../../../../external/uapmd/source"
+        ABSOLUTE)
+endif()
+if(NOT DEFINED CAPI_DIR)
+    get_filename_component(CAPI_DIR
+        "${CMAKE_CURRENT_SOURCE_DIR}/../../../../../c-api"
         ABSOLUTE)
 endif()
 
@@ -26,8 +32,9 @@ set(BUILD_SHARED_LIBS  OFF CACHE BOOL "" FORCE)
 set(UAPMD_BUILD_TESTS  OFF CACHE BOOL "" FORCE)
 set(MIDICCI_SKIP_TOOLS ON  CACHE BOOL "" FORCE)
 
-# Pull in the full uapmd source tree (provides the uapmd-c-api static target).
+# Pull in the full uapmd source tree, then our owned C API wrapper.
 add_subdirectory("${UAPMD_SOURCE_DIR}" "${CMAKE_CURRENT_BINARY_DIR}/uapmd")
+add_subdirectory("${CAPI_DIR}" "${CMAKE_CURRENT_BINARY_DIR}/uapmd-c-api")
 
 # ── Exported C API symbols ────────────────────────────────────────────────────
 # Every public uapmd_* function that the KMP binding calls must appear here so

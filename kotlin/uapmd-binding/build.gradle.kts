@@ -59,6 +59,12 @@ kotlin {
             implementation(libs.androidaudioplugin)
             implementation(files(repoRoot.resolve("external/uapmd/android/external/SDL3-3.4.0.aar")))
         }
+        jsMain.dependencies {
+            implementation(libs.kotlinx.coroutinesCore)
+        }
+        wasmJsMain.dependencies {
+            implementation(libs.kotlinx.coroutinesCore)
+        }
     }
 }
 
@@ -113,25 +119,33 @@ tasks.register("buildUapmdCApiDesktop") {
     description = "Builds libuapmd-c-api shared library for JVM desktop via cmake"
 
     inputs.dir(repoRoot.resolve("c-api"))
-    if (os.isMacOsX)
-        outputs.file(File(cApiDylibDir, "libuapmd-c-api.dylib"))
-    else
-        outputs.file(File(cApiDylibDir, "libuapmd-c-api.so"))
+    outputs.file(File(cApiDylibDir, when {
+        os.isWindows -> "RelWithDebInfo/uapmd-c-api.dll"
+        os.isMacOsX  -> "libuapmd-c-api.dylib"
+        else         -> "libuapmd-c-api.so"
+    }))
 
     doLast {
         cmakeBuildDir.mkdirs()
         // Configure if this is a fresh build directory.
         if (!File(cmakeBuildDir, "CMakeCache.txt").exists()) {
+            val configureArgs = mutableListOf(
+                "cmake", "-B", cmakeBuildDir.absolutePath,
+                "-DCMAKE_BUILD_TYPE=RelWithDebInfo",
+                "-DCPM_SOURCE_CACHE=${cpmCacheDir.absolutePath}",
+                "-DUAPMD_BUILD_TESTS=OFF",
+                "-DMIDICCI_SKIP_TOOLS=ON"
+            )
+            when {
+                os.isWindows -> configureArgs.addAll(listOf("-G", "Visual Studio 17 2022"))
+                os.isLinux   -> configureArgs.addAll(listOf("-G", "Ninja",
+                    "-DCMAKE_C_COMPILER=clang", "-DCMAKE_CXX_COMPILER=clang++",
+                    "-DCMAKE_POSITION_INDEPENDENT_CODE=ON"))
+                else         -> configureArgs.addAll(listOf("-G", "Ninja"))
+            }
             exec {
                 workingDir = repoRoot
-                commandLine(
-                    "cmake", "-B", cmakeBuildDir.absolutePath,
-                    "-G", "Ninja",
-                    "-DCMAKE_BUILD_TYPE=RelWithDebInfo",
-                    "-DCPM_SOURCE_CACHE=${cpmCacheDir.absolutePath}",
-                    "-DUAPMD_BUILD_TESTS=OFF",
-                    "-DMIDICCI_SKIP_TOOLS=ON"
-                )
+                commandLine(configureArgs)
             }
         }
         exec {
@@ -160,15 +174,21 @@ val jneOs = when {
     os.isWindows -> "windows"
     else         -> "unknown"
 }
-val jneLibName = if (os.isMacOsX || os.isLinux) "libuapmd-c-api.${if (os.isMacOsX) "dylib" else "so"}"
-                 else "uapmd-c-api.dll"
+// VS generator places outputs in a config subdirectory (e.g. RelWithDebInfo/); Ninja does not.
+val jneLibName = when {
+    os.isMacOsX  -> "libuapmd-c-api.dylib"
+    os.isLinux   -> "libuapmd-c-api.so"
+    else         -> "uapmd-c-api.dll"
+}
+val jneLibFile = if (os.isWindows) File(cApiDylibDir, "RelWithDebInfo/$jneLibName")
+                 else File(cApiDylibDir, jneLibName)
 val jneResourceDir = project.file("src/jvmMain/resources/jne/$jneOs/$jneArch")
 
 tasks.register<Copy>("copyUapmdDylibToJneResources") {
     group       = "build"
     description = "Copies libuapmd-c-api into the JNE resource path for classpath discovery"
     dependsOn("buildUapmdCApiDesktop")
-    from(File(cApiDylibDir, jneLibName))
+    from(jneLibFile)
     into(jneResourceDir)
 }
 
@@ -176,6 +196,10 @@ tasks.register<Copy>("copyUapmdDylibToJneResources") {
 afterEvaluate {
     tasks.findByName("compileKotlinJvm")?.dependsOn("copyUapmdDylibToJneResources")
     tasks.findByName("jvmProcessResources")?.dependsOn("copyUapmdDylibToJneResources")
+    // AGP does not allow local .aar file dependencies when bundling a library AAR.
+    // uapmd-binding is not published, so skip the AAR bundling tasks entirely.
+    tasks.findByName("bundleReleaseAar")?.enabled = false
+    tasks.findByName("bundleDebugAar")?.enabled = false
 }
 
 // ─── Build uapmd-c-api Emscripten Wasm module ─────────────────────────────────
