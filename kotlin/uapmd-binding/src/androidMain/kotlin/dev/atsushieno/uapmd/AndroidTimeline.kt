@@ -24,8 +24,29 @@ class AndroidAudioFileReader internal constructor(
 // ─── AndroidTimelineTrack ────────────────────────────────────────────────────
 
 class AndroidTimelineTrack internal constructor(
-    @Suppress("unused") private val handle: Long
-) : TimelineTrack
+    private val handle: Long
+) : TimelineTrack {
+    override fun getClips(): List<ClipData> {
+        val count = JniBridge.uapmdTtClipCount(handle)
+        if (count == 0) return emptyList()
+        val outStrings = arrayOfNulls<String>(count * 2)
+        val numerics = JniBridge.uapmdTtGetAllClips(handle, outStrings) ?: return emptyList()
+        return (0 until count).map { i ->
+            val base = i * 7
+            ClipData(
+                clipId               = numerics[base + 0].toInt(),
+                positionSamples      = numerics[base + 1].toLong(),
+                positionLegacyBeats  = numerics[base + 2],
+                durationSamples      = numerics[base + 3].toLong(),
+                gain                 = numerics[base + 4],
+                muted                = numerics[base + 5] != 0.0,
+                name                 = outStrings[i * 2] ?: "",
+                filepath             = outStrings[i * 2 + 1] ?: "",
+                clipType             = ClipType.fromNative(numerics[base + 6].toInt())
+            )
+        }
+    }
+}
 
 // ─── AndroidTimelineFacade ───────────────────────────────────────────────────
 

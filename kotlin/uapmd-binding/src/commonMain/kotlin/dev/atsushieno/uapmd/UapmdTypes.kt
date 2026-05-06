@@ -124,6 +124,23 @@ data class AudioFileProperties(
     val sampleRate: UInt
 )
 
+enum class ClipType(val nativeValue: Int) {
+    Audio(0), Midi(1);
+    companion object { fun fromNative(v: Int) = entries.firstOrNull { it.nativeValue == v } ?: Audio }
+}
+
+data class ClipData(
+    val clipId: Int,
+    val positionSamples: Long,
+    val positionLegacyBeats: Double,
+    val durationSamples: Long,
+    val gain: Double,
+    val muted: Boolean,
+    val name: String,
+    val filepath: String,
+    val clipType: ClipType
+)
+
 enum class ScanMode { InProcess, Remote }
 
 enum class InstancingState { Created, Preparing, Ready, Error, Terminating, Terminated;

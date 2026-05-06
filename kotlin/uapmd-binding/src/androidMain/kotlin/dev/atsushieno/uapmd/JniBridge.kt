@@ -262,6 +262,19 @@ object JniBridge {
     /** Returns double[5]{hasContent, firstSample, lastSample, firstSecs, lastSecs} */
     @JvmStatic external fun uapmdTlCalculateContentBounds(h: Long): DoubleArray
 
+    // ─── TimelineTrack (clip data) ────────────────────────────────────────────
+
+    /** Returns the number of clips on this timeline track. */
+    @JvmStatic external fun uapmdTtClipCount(h: Long): Int
+
+    /**
+     * Fills [outStrings] (size = count*2) with [name, filepath] per clip.
+     * Returns double[count*7] where each clip occupies 7 doubles:
+     * [clipId, positionSamples, positionBeats, durationSamples, gain, muted, clipType]
+     * or null on failure.
+     */
+    @JvmStatic external fun uapmdTtGetAllClips(h: Long, outStrings: Array<String?>): DoubleArray?
+
     // ─── AudioDeviceManager ───────────────────────────────────────────────────
 
     @JvmStatic external fun uapmdAudioDeviceMgrInstance(driver: String?): Long
@@ -364,4 +377,12 @@ object JniBridge {
     @JvmStatic external fun uapmdFormatManagerDestroy(h: Long)
     @JvmStatic external fun uapmdFormatManagerFormatCount(h: Long): Int
     @JvmStatic external fun uapmdFormatManagerGetFormatName(h: Long, idx: Int): String
+
+    // ─── Android EventLoop ────────────────────────────────────────────────────
+    // Must be called once from the Android main thread before any engine is
+    // created.  dispatcher.dispatchTask(token) is called to post a task to
+    // the main looper; uapmdRunEventLoopTask(token) then executes it.
+
+    @JvmStatic external fun uapmdSetupAndroidEventLoop(dispatcher: Any)
+    @JvmStatic external fun uapmdRunEventLoopTask(token: Long)
 }

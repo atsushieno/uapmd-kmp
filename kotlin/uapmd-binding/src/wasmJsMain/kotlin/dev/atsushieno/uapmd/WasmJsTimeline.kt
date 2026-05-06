@@ -4,7 +4,9 @@ package dev.atsushieno.uapmd
 
 class WasmJsTimelineTrack internal constructor(
     internal val handle: Int
-) : TimelineTrack
+) : TimelineTrack {
+    override fun getClips(): List<ClipData> = emptyList()
+}
 
 // ─── WasmJsAudioFileReader ────────────────────────────────────────────────────
 

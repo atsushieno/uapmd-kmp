@@ -71,6 +71,22 @@ interface InstancingCb : Callback {
     fun invoke(error: String?, userData: Pointer?)
 }
 
+// ─── Event loop callbacks ─────────────────────────────────────────────────────
+
+interface EventLoopInitializeCb : Callback {
+    fun invoke(userData: Pointer?)
+}
+
+interface EventLoopIsMainThreadCb : Callback {
+    fun invoke(userData: Pointer?): Boolean
+}
+
+// The C side passes (task_fn: Pointer, task_ctx: Pointer, user_data: Pointer).
+// task_fn is a void(*)(void*) C function pointer; call it via JNA Function.
+interface EventLoopEnqueueCb : Callback {
+    fun invoke(taskFn: Pointer?, taskCtx: Pointer?, userData: Pointer?)
+}
+
 // ─── JNA Structure types ─────────────────────────────────────────────────────
 
 @FieldOrder("value", "name")
@@ -161,6 +177,39 @@ open class UapmdContentBounds : Structure() {
     @JvmField var last_seconds: Double = 0.0
 
     class ByVal : UapmdContentBounds(), Structure.ByValue
+}
+
+// Maps uapmd_clip_data_t — only the fields needed for UI; pointer fields for markers/warps
+// are mapped as Pointer? (they are read-only and owned by ClipManager).
+@FieldOrder(
+    "clip_id", "reference_id", "position", "duration_samples",
+    "source_node_instance_id", "gain", "muted", "name", "filepath",
+    "needs_file_save", "clip_type", "tick_resolution", "clip_tempo",
+    "nrpn_to_parameter_mapping", "anchor_reference_id", "anchor_origin",
+    "anchor_offset", "marker_count", "markers", "audio_warp_count", "audio_warps"
+)
+open class UapmdClipData : Structure() {
+    @JvmField var clip_id: Int = 0
+    @JvmField var reference_id: String? = null
+    @JvmField var position: UapmdTimelinePosition = UapmdTimelinePosition()
+    @JvmField var duration_samples: Long = 0L
+    @JvmField var source_node_instance_id: Int = 0
+    @JvmField var gain: Double = 1.0
+    @JvmField var muted: Byte = 0
+    @JvmField var name: String? = null
+    @JvmField var filepath: String? = null
+    @JvmField var needs_file_save: Byte = 0
+    @JvmField var clip_type: Int = 0
+    @JvmField var tick_resolution: Int = 0
+    @JvmField var clip_tempo: Double = 120.0
+    @JvmField var nrpn_to_parameter_mapping: Byte = 0
+    @JvmField var anchor_reference_id: String? = null
+    @JvmField var anchor_origin: Int = 0
+    @JvmField var anchor_offset: UapmdTimelinePosition = UapmdTimelinePosition()
+    @JvmField var marker_count: Int = 0
+    @JvmField var markers: Pointer? = null
+    @JvmField var audio_warp_count: Int = 0
+    @JvmField var audio_warps: Pointer? = null
 }
 
 @FieldOrder("directions", "id", "name", "sample_rate", "channels")
@@ -566,6 +615,12 @@ interface UapmdLibrary : Library {
     fun uapmd_tl_load_project(tl: Pointer?, filePath: String?): UapmdProjectResult.ByVal
     fun uapmd_tl_calculate_content_bounds(tl: Pointer?): UapmdContentBounds.ByVal
 
+    // ── TimelineTrack / ClipManager ──────────────────────────────────────────
+
+    fun uapmd_tt_clip_manager(tt: Pointer?): Pointer?
+    fun uapmd_cm_clip_count(cm: Pointer?): Long   // size_t
+    fun uapmd_cm_get_all_clips(cm: Pointer?, out: UapmdClipData, outCount: Int): Int
+
     // ── AudioIODeviceManager ─────────────────────────────────────────────────
 
     fun uapmd_audio_device_mgr_instance(driverName: String?): Pointer?
@@ -673,4 +728,13 @@ interface UapmdLibrary : Library {
     fun uapmd_format_manager_destroy(mgr: Pointer?)
     fun uapmd_format_manager_format_count(mgr: Pointer?): Int
     fun uapmd_format_manager_get_format_name(mgr: Pointer?, index: Int, buf: ByteArray?, bufSize: Long): Long
+
+    // ── Custom EventLoop ─────────────────────────────────────────────────────
+
+    fun uapmd_set_event_loop(
+        userData: Pointer?,
+        onInitialize: EventLoopInitializeCb?,
+        isMainThread: EventLoopIsMainThreadCb,
+        enqueueTask: EventLoopEnqueueCb
+    )
 }

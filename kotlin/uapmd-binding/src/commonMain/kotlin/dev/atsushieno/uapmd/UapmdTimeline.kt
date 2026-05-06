@@ -9,8 +9,9 @@ interface AudioFileReader : AutoCloseable {
     fun readFrames(startFrame: Long, framesToRead: Long, dest: Array<FloatArray>)
 }
 
-/** Marker for a timeline track handle (extended by platform implementations). */
-interface TimelineTrack
+interface TimelineTrack {
+    fun getClips(): List<ClipData>
+}
 
 interface TimelineFacade {
     fun getState(): TimelineState?

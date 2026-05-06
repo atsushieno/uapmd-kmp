@@ -3,6 +3,10 @@ package dev.atsushieno.uapmd_kmp
 import dev.atsushieno.uapmd.*
 
 actual fun createUapmdModel(): UapmdModel {
+    // Must be called from the Android main thread before creating any engine.
+    // Routes remidy EventLoop tasks to the Android main looper so plugins that
+    // require the UI thread initialise correctly.
+    initAndroidEventLoop()
     val dispatcher = getDefaultDeviceIODispatcher()
     val sequencer  = createRealtimeSequencer(
         bufferSize    = 512u,

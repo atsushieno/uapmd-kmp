@@ -3,6 +3,7 @@ package dev.atsushieno.uapmd
 import com.sun.jna.Memory
 import com.sun.jna.Pointer
 import dev.atsushieno.uapmd.jna.UapmdAudioFileProperties
+import dev.atsushieno.uapmd.jna.UapmdClipData
 import dev.atsushieno.uapmd.jna.UapmdTimelineState
 
 // ─── JvmAudioFileReader ──────────────────────────────────────────────────────
@@ -126,8 +127,31 @@ class JvmTimelineFacade internal constructor(
     }
 }
 
-// ─── JvmTimelineTrack (marker wrapper) ───────────────────────────────────────
+// ─── JvmTimelineTrack ────────────────────────────────────────────────────────
 
 class JvmTimelineTrack internal constructor(
-    @Suppress("unused") private val handle: Pointer
-) : TimelineTrack
+    private val handle: Pointer
+) : TimelineTrack {
+    override fun getClips(): List<ClipData> {
+        val cm = lib.uapmd_tt_clip_manager(handle) ?: return emptyList()
+        val count = lib.uapmd_cm_clip_count(cm).toInt()
+        if (count == 0) return emptyList()
+        @Suppress("UNCHECKED_CAST")
+        val arr = UapmdClipData().toArray(count) as Array<UapmdClipData>
+        lib.uapmd_cm_get_all_clips(cm, arr[0], count)
+        return arr.map { c ->
+            c.read()
+            ClipData(
+                clipId              = c.clip_id,
+                positionSamples     = c.position.samples,
+                positionLegacyBeats = c.position.legacy_beats,
+                durationSamples     = c.duration_samples,
+                gain                = c.gain,
+                muted               = c.muted != 0.toByte(),
+                name                = c.name ?: "",
+                filepath            = c.filepath ?: "",
+                clipType            = ClipType.fromNative(c.clip_type)
+            )
+        }
+    }
+}

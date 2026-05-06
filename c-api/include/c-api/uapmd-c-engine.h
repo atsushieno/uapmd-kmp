@@ -333,6 +333,37 @@ UAPMD_C_EXPORT uapmd_offline_render_result_t uapmd_render_offline(uapmd_sequence
                                                                      uapmd_render_progress_cb_t progress_cb,
                                                                      uapmd_render_should_cancel_cb_t cancel_cb);
 
+/* ═══════════════════════════════════════════════════════════════════════════
+ *  Custom Event Loop
+ *
+ *  Call uapmd_set_event_loop() once — before creating any engine or
+ *  sequencer — FROM the thread that should be treated as the "native main"
+ *  thread (i.e. the thread on which is_main_thread returns true).
+ *
+ *  remidy's EventLoop::runTaskOnMainThread() blocks the calling thread until
+ *  the designated main thread executes the task, which is how plugin
+ *  initialisation on GUI frameworks (Cocoa, Win32, GTK, …) is serialised.
+ *  The default implementation uses choc::messageloop, which requires a
+ *  native Cocoa/Win32 run-loop; that loop is absent in JVM/Compose apps, so
+ *  plugin loading deadlocks.  Registering a custom loop fixes the freeze.
+ * ═══════════════════════════════════════════════════════════════════════════ */
+
+typedef void (*uapmd_event_loop_task_fn_t)(void* task_ctx);
+typedef void (*uapmd_event_loop_initialize_fn_t)(void* user_data);
+typedef bool (*uapmd_event_loop_is_main_thread_fn_t)(void* user_data);
+
+/* The enqueue callback receives the task function pointer plus its opaque
+ * context; the host must schedule task(task_ctx) on the main thread and
+ * return immediately (the C++ side blocks until task() completes).         */
+typedef void (*uapmd_event_loop_enqueue_fn_t)(
+    uapmd_event_loop_task_fn_t task, void* task_ctx, void* user_data);
+
+UAPMD_C_EXPORT void uapmd_set_event_loop(
+    void* user_data,
+    uapmd_event_loop_initialize_fn_t on_initialize,   /* nullable */
+    uapmd_event_loop_is_main_thread_fn_t is_main_thread,
+    uapmd_event_loop_enqueue_fn_t enqueue_task);
+
 #ifdef __cplusplus
 }
 #endif

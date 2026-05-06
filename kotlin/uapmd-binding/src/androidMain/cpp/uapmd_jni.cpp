@@ -10,6 +10,7 @@
 
 #include <jni.h>
 #include <android/log.h>
+#include <functional>
 #include <string>
 #include <vector>
 #include <mutex>
@@ -106,6 +107,51 @@ struct MidiHandlerCtx {
 static std::mutex g_midi_mu;
 static std::unordered_map<int64_t, MidiHandlerCtx*> g_midi_handlers;
 static std::atomic<int64_t> g_midi_counter{0};
+
+// ─── Android EventLoop bridge ─────────────────────────────────────────────────
+// remidy::EventLoop::runTaskOnMainThread() enqueues a task on the "native main"
+// thread and blocks the caller until it completes.  We redirect this to the
+// Android main looper so that plugins that require the UI thread work correctly.
+
+struct AndroidElCtx {
+    jobject  dispatcher;      // global ref: AndroidEventLoopDispatcher Kotlin obj
+    jmethodID dispatch_method; // dispatchTask(J)V
+};
+
+static AndroidElCtx*            g_android_el = nullptr;
+static std::mutex               g_el_task_mutex;
+static std::atomic<jlong>       g_el_next_id{1};
+static std::unordered_map<jlong, std::function<void()>> g_el_tasks;
+
+static bool android_is_main_thread(void*) {
+    JNIEnv* env = jni_env();
+    if (!env) return false;
+    jclass cls = env->FindClass("android/os/Looper");
+    if (!cls) return false;
+    jmethodID my_lp   = env->GetStaticMethodID(cls, "myLooper",   "()Landroid/os/Looper;");
+    jmethodID main_lp = env->GetStaticMethodID(cls, "getMainLooper", "()Landroid/os/Looper;");
+    if (!my_lp || !main_lp) { env->DeleteLocalRef(cls); return false; }
+    jobject cur  = env->CallStaticObjectMethod(cls, my_lp);
+    jobject main = env->CallStaticObjectMethod(cls, main_lp);
+    bool on_main = cur && main && env->IsSameObject(cur, main);
+    if (cur)  env->DeleteLocalRef(cur);
+    if (main) env->DeleteLocalRef(main);
+    env->DeleteLocalRef(cls);
+    return on_main;
+}
+
+static void android_enqueue_task(uapmd_event_loop_task_fn_t task_fn, void* task_ctx, void*) {
+    auto* ctx = g_android_el;
+    if (!ctx) { task_fn(task_ctx); return; } // safe fallback before init
+    jlong token = g_el_next_id++;
+    {
+        std::lock_guard<std::mutex> lock(g_el_task_mutex);
+        g_el_tasks[token] = [task_fn, task_ctx]() { task_fn(task_ctx); };
+    }
+    JNIEnv* env = jni_env();
+    if (env)
+        env->CallVoidMethod(ctx->dispatcher, ctx->dispatch_method, token);
+}
 
 // Single C trampoline for all JNI-backed MIDI handlers.
 static void midi_ump_trampoline(void* context, uapmd_ump_t* ump, size_t size, uapmd_timestamp_t ts) {
@@ -989,6 +1035,41 @@ JNIEXPORT jdoubleArray JNICALL Java_dev_atsushieno_uapmd_JniBridge_uapmdTlCalcul
     return arr;
 }
 
+// ─── TimelineTrack (clip data) ────────────────────────────────────────────────
+
+JNIEXPORT jint JNICALL Java_dev_atsushieno_uapmd_JniBridge_uapmdTtClipCount(
+        JNIEnv*, jclass, jlong h) {
+    auto cm = uapmd_tt_clip_manager(j2p<uapmd_timeline_track_t>(h));
+    return static_cast<jint>(uapmd_cm_clip_count(cm));
+}
+
+// Returns double[count*7]: per clip [clipId, posSamples, posBeats, durSamples, gain, muted, clipType]
+// Fills outStrings[count*2]: per clip [name, filepath]
+JNIEXPORT jdoubleArray JNICALL Java_dev_atsushieno_uapmd_JniBridge_uapmdTtGetAllClips(
+        JNIEnv* env, jclass, jlong h, jobjectArray outStrings) {
+    auto cm = uapmd_tt_clip_manager(j2p<uapmd_timeline_track_t>(h));
+    auto count = static_cast<uint32_t>(uapmd_cm_clip_count(cm));
+    if (count == 0) return env->NewDoubleArray(0);
+    std::vector<uapmd_clip_data_t> clips(count);
+    auto actual = uapmd_cm_get_all_clips(cm, clips.data(), count);
+    std::vector<jdouble> numerics(actual * 7);
+    for (uint32_t i = 0; i < actual; i++) {
+        const auto& c = clips[i];
+        numerics[i*7 + 0] = static_cast<jdouble>(c.clip_id);
+        numerics[i*7 + 1] = static_cast<jdouble>(c.position.samples);
+        numerics[i*7 + 2] = c.position.legacy_beats;
+        numerics[i*7 + 3] = static_cast<jdouble>(c.duration_samples);
+        numerics[i*7 + 4] = c.gain;
+        numerics[i*7 + 5] = c.muted ? 1.0 : 0.0;
+        numerics[i*7 + 6] = static_cast<jdouble>(c.clip_type);
+        env->SetObjectArrayElement(outStrings, i*2,   env->NewStringUTF(c.name     ? c.name     : ""));
+        env->SetObjectArrayElement(outStrings, i*2+1, env->NewStringUTF(c.filepath ? c.filepath : ""));
+    }
+    jdoubleArray arr = env->NewDoubleArray(actual * 7);
+    env->SetDoubleArrayRegion(arr, 0, actual * 7, numerics.data());
+    return arr;
+}
+
 // ─── AudioIODeviceManager ─────────────────────────────────────────────────────
 
 JNIEXPORT jlong JNICALL Java_dev_atsushieno_uapmd_JniBridge_uapmdAudioDeviceMgrInstance(
@@ -1274,6 +1355,36 @@ JNIEXPORT jstring JNICALL Java_dev_atsushieno_uapmd_JniBridge_uapmdFormatManager
         JNIEnv* env, jclass, jlong h, jint idx) {
     auto m = j2p<uapmd_format_manager_t>(h);
     return cstr(env, [&](char* b, size_t n){ return uapmd_format_manager_get_format_name(m, idx, b, n); });
+}
+
+// ─── Android EventLoop JNI entry points ──────────────────────────────────────
+
+// Called once from the Android main thread before creating any engine.
+// dispatcher: Kotlin AndroidEventLoopDispatcher with fun dispatchTask(Long).
+JNIEXPORT void JNICALL Java_dev_atsushieno_uapmd_JniBridge_uapmdSetupAndroidEventLoop(
+        JNIEnv* env, jclass, jobject dispatcher) {
+    auto* ctx = new AndroidElCtx();
+    ctx->dispatcher = env->NewGlobalRef(dispatcher);
+    jclass cls = env->GetObjectClass(dispatcher);
+    ctx->dispatch_method = env->GetMethodID(cls, "dispatchTask", "(J)V");
+    env->DeleteLocalRef(cls);
+    g_android_el = ctx;
+    uapmd_set_event_loop(ctx, nullptr, android_is_main_thread, android_enqueue_task);
+}
+
+// Called from the Android main thread (via Handler) to execute a queued task.
+JNIEXPORT void JNICALL Java_dev_atsushieno_uapmd_JniBridge_uapmdRunEventLoopTask(
+        JNIEnv*, jclass, jlong token) {
+    std::function<void()> fn;
+    {
+        std::lock_guard<std::mutex> lock(g_el_task_mutex);
+        auto it = g_el_tasks.find(token);
+        if (it != g_el_tasks.end()) {
+            fn = std::move(it->second);
+            g_el_tasks.erase(it);
+        }
+    }
+    if (fn) fn();
 }
 
 } // extern "C"

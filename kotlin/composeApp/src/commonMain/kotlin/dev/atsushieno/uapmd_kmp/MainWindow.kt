@@ -15,7 +15,9 @@ import dev.atsushieno.uapmd_kmp.nodegraph.NodeGraphEditor
 import dev.atsushieno.uapmd_kmp.timeline.*
 import dev.atsushieno.uapmd_kmp.ui.PluginEntry
 import dev.atsushieno.uapmd_kmp.ui.*
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
 
 // ── Main entry point ───────────────────────────────────────────────────────
 
@@ -78,6 +80,7 @@ private fun MainWindowContent(model: UapmdModel) {
     var addToTrackMenuPlugin by remember { mutableStateOf<PluginEntry?>(null) }
     var pluginSortColumn     by remember { mutableStateOf(PluginSortColumn.Name) }
     var pluginSortAsc        by remember { mutableStateOf(true) }
+    val scope = rememberCoroutineScope()
 
     // ── Dialog-specific local state ────────────────────────────────────────
     var exportSettings  by remember { mutableStateOf(ExportSettings()) }
@@ -173,8 +176,10 @@ private fun MainWindowContent(model: UapmdModel) {
                             DropdownMenuItem(
                                 text = { Text("Track 1 (new)") },
                                 onClick = {
-                                    model.addPluginToTrack(0, plugin.format, plugin.pluginId)
                                     addToTrackMenuPlugin = null
+                                    scope.launch(Dispatchers.IO) {
+                                        model.addPluginToTrack(0, plugin.format, plugin.pluginId)
+                                    }
                                 }
                             )
                         } else {
@@ -184,8 +189,10 @@ private fun MainWindowContent(model: UapmdModel) {
                                 DropdownMenuItem(
                                     text = { Text(label) },
                                     onClick = {
-                                        model.addPluginToTrack(ti, plugin.format, plugin.pluginId)
                                         addToTrackMenuPlugin = null
+                                        scope.launch(Dispatchers.IO) {
+                                            model.addPluginToTrack(ti, plugin.format, plugin.pluginId)
+                                        }
                                     }
                                 )
                             }
@@ -193,9 +200,11 @@ private fun MainWindowContent(model: UapmdModel) {
                             DropdownMenuItem(
                                 text = { Text("New track") },
                                 onClick = {
-                                    val newIdx = (trackCount.maxOrNull() ?: -1) + 1
-                                    model.addPluginToTrack(newIdx, plugin.format, plugin.pluginId)
                                     addToTrackMenuPlugin = null
+                                    val newIdx = (trackCount.maxOrNull() ?: -1) + 1
+                                    scope.launch(Dispatchers.IO) {
+                                        model.addPluginToTrack(newIdx, plugin.format, plugin.pluginId)
+                                    }
                                 }
                             )
                         }

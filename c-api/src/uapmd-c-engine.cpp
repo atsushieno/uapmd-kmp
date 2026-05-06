@@ -3,7 +3,9 @@
 #include "c-api/uapmd-c-engine.h"
 #include "c-api-internal.h"
 #include <uapmd-engine/uapmd-engine.hpp>
+#include <remidy/detail/event-loop.hpp>
 #include <cstring>
+#include <functional>
 #include <string>
 #include <vector>
 
@@ -507,4 +509,69 @@ uapmd_offline_render_result_t uapmd_render_offline(uapmd_sequencer_engine_t engi
     auto r = uapmd::renderOfflineProject(*E(engine), s, cb);
     tl_error = r.errorMessage;
     return { r.success, r.canceled, r.renderedSeconds, tl_error.empty() ? nullptr : tl_error.c_str() };
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════
+ *  Custom EventLoop bridge
+ *
+ *  Wraps the four C callbacks (initialize, is_main_thread, enqueue_task,
+ *  start/stop no-ops) into a remidy::EventLoop subclass and installs it.
+ * ═══════════════════════════════════════════════════════════════════════════ */
+
+namespace {
+
+class CApiEventLoop : public remidy::EventLoop {
+    void* user_data_;
+    uapmd_event_loop_initialize_fn_t    on_initialize_;
+    uapmd_event_loop_is_main_thread_fn_t is_main_thread_;
+    uapmd_event_loop_enqueue_fn_t        enqueue_task_;
+
+protected:
+    void initializeOnUIThreadImpl() override {
+        if (on_initialize_) on_initialize_(user_data_);
+    }
+
+    bool runningOnMainThreadImpl() override {
+        return is_main_thread_(user_data_);
+    }
+
+    void enqueueTaskOnMainThreadImpl(std::function<void()>&& func) override {
+        // Heap-allocate so the task survives the C callback boundary.
+        auto* task = new std::function<void()>(std::move(func));
+        enqueue_task_(
+            [](void* ctx) {
+                auto* f = static_cast<std::function<void()>*>(ctx);
+                (*f)();
+                delete f;
+            },
+            task,
+            user_data_
+        );
+    }
+
+    void startImpl() override {}
+    void stopImpl() override {}
+
+public:
+    CApiEventLoop(void* ud,
+                  uapmd_event_loop_initialize_fn_t init,
+                  uapmd_event_loop_is_main_thread_fn_t imt,
+                  uapmd_event_loop_enqueue_fn_t enq)
+        : user_data_(ud), on_initialize_(init), is_main_thread_(imt), enqueue_task_(enq) {}
+};
+
+static CApiEventLoop* s_c_api_event_loop = nullptr;
+
+} // anonymous namespace
+
+void uapmd_set_event_loop(
+    void* user_data,
+    uapmd_event_loop_initialize_fn_t on_initialize,
+    uapmd_event_loop_is_main_thread_fn_t is_main_thread,
+    uapmd_event_loop_enqueue_fn_t enqueue_task)
+{
+    auto* old = s_c_api_event_loop;
+    s_c_api_event_loop = new CApiEventLoop(user_data, on_initialize, is_main_thread, enqueue_task);
+    remidy::setEventLoop(s_c_api_event_loop);
+    delete old;
 }

@@ -132,9 +132,25 @@ class UapmdModel(val sequencer: RealtimeSequencer) {
         val tl = engine.timeline
         val count = tl.trackCount.toInt()
         val sampleRate = sequencer.sampleRate.takeIf { it > 0 } ?: 48000
+        fun clipDataToUi(clip: dev.atsushieno.uapmd.ClipData): TimelineClip {
+            val startMs = clip.positionSamples * 1000L / sampleRate
+            val endMs = (clip.positionSamples + clip.durationSamples) * 1000L / sampleRate
+            val label = clip.name.ifEmpty { clip.filepath.substringAfterLast('/').substringAfterLast('\\') }
+            return TimelineClip(
+                id = clip.clipId,
+                startMs = startMs,
+                endMs = endMs.coerceAtLeast(startMs + 1L),
+                label = label,
+                previewData = dev.atsushieno.uapmd_kmp.timeline.ClipPreviewData.Loading
+            )
+        }
         timelineTracks = (0 until count).map { i ->
-            TimelineTrack(index = i, name = "Track ${i + 1}", clips = emptyList())
-        } + TimelineTrack(index = count, name = "Master", clips = emptyList())
+            val track = tl.getTrack(i.toUInt())
+            TimelineTrack(index = i, name = "Track ${i + 1}", clips = track.getClips().map { clipDataToUi(it) })
+        } + run {
+            val master = tl.masterTimelineTrack
+            TimelineTrack(index = count, name = "Master", clips = master.getClips().map { clipDataToUi(it) })
+        }
     }
 
     // ── Plugin graph nodes ─────────────────────────────────────────────────
