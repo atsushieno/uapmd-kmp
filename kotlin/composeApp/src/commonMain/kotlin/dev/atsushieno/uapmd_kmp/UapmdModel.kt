@@ -27,6 +27,21 @@ class UapmdModel(val sequencer: RealtimeSequencer) {
 
     private val engine: SequencerEngine get() = sequencer.engine
 
+    // ── Audio engine ───────────────────────────────────────────────────────
+
+    var isAudioEngineRunning by mutableStateOf(true)
+        private set
+
+    fun toggleAudioEngine() {
+        if (isAudioEngineRunning) {
+            sequencer.stopAudio()
+            isAudioEngineRunning = false
+        } else {
+            sequencer.startAudio()
+            isAudioEngineRunning = true
+        }
+    }
+
     // ── Transport ──────────────────────────────────────────────────────────
 
     var isPlaying by mutableStateOf(false)
@@ -98,17 +113,20 @@ class UapmdModel(val sequencer: RealtimeSequencer) {
         engine.removePluginInstance(instanceId)
         engine.cleanupEmptyTracks()
         refreshTracks()
+        refreshTimeline()
     }
 
     fun addEmptyTrack(): Int {
         val idx = engine.addEmptyTrack()
         refreshTracks()
+        refreshTimeline()
         return idx
     }
 
     fun removeTrack(trackIndex: Int) {
         engine.removeTrack(trackIndex)
         refreshTracks()
+        refreshTimeline()
     }
 
     fun addPluginToTrack(trackIndex: Int, format: String, pluginId: String) {
@@ -118,6 +136,7 @@ class UapmdModel(val sequencer: RealtimeSequencer) {
         }
         engine.addPluginToTrack(trackIndex, format, pluginId) { _, _, _ ->
             refreshTracks()
+            refreshTimeline()
         }
     }
 
@@ -130,7 +149,10 @@ class UapmdModel(val sequencer: RealtimeSequencer) {
 
     fun refreshTimeline() {
         val tl = engine.timeline
-        val count = tl.trackCount.toInt()
+        val tlCount  = tl.trackCount.toInt()
+        // Show all engine tracks even if no clips have been added yet (tlCount may be < engCount)
+        val engCount = engine.trackCount.toInt()
+        val count = maxOf(tlCount, engCount)
         val sampleRate = sequencer.sampleRate.takeIf { it > 0 } ?: 48000
         fun clipDataToUi(clip: dev.atsushieno.uapmd.ClipData): TimelineClip {
             val startMs = clip.positionSamples * 1000L / sampleRate
@@ -145,8 +167,10 @@ class UapmdModel(val sequencer: RealtimeSequencer) {
             )
         }
         timelineTracks = (0 until count).map { i ->
-            val track = tl.getTrack(i.toUInt())
-            TimelineTrack(index = i, name = "Track ${i + 1}", clips = track.getClips().map { clipDataToUi(it) })
+            // tl.getTrack() throws if index >= tlCount; use empty clips for engine-only tracks
+            val clips = if (i < tlCount) tl.getTrack(i.toUInt()).getClips().map { clipDataToUi(it) }
+                        else emptyList()
+            TimelineTrack(index = i, name = "Track ${i + 1}", clips = clips)
         } + run {
             val master = tl.masterTimelineTrack
             TimelineTrack(index = count, name = "Master", clips = master.getClips().map { clipDataToUi(it) })
@@ -208,16 +232,28 @@ class UapmdModel(val sequencer: RealtimeSequencer) {
         nextGraphLinkId = 1
     }
 
-    // ── Instance details ───────────────────────────────────────────────────
+    // ── Instance details (multiple open panels) ────────────────────────────
 
-    var selectedInstanceId by mutableStateOf<Int?>(null)
-    var instanceInfo by mutableStateOf<InstanceInfo?>(null)
+    var instanceInfos by mutableStateOf<Map<Int, InstanceInfo>>(emptyMap())
         private set
 
-    fun selectInstance(instanceId: Int) {
-        selectedInstanceId = instanceId
-        instanceInfo = buildInstanceInfo(instanceId)
+    fun openInstance(instanceId: Int) {
+        val info = buildInstanceInfo(instanceId) ?: return
+        instanceInfos = instanceInfos + (instanceId to info)
     }
+
+    fun closeInstance(instanceId: Int) {
+        instanceInfos = instanceInfos - instanceId
+    }
+
+    private fun refreshOpenInstance(instanceId: Int) {
+        if (instanceId !in instanceInfos) return
+        val info = buildInstanceInfo(instanceId) ?: return
+        instanceInfos = instanceInfos + (instanceId to info)
+    }
+
+    fun sendNoteOn(instanceId: Int, note: Int) = engine.sendNoteOn(instanceId, note)
+    fun sendNoteOff(instanceId: Int, note: Int) = engine.sendNoteOff(instanceId, note)
 
     private fun buildInstanceInfo(instanceId: Int): InstanceInfo? {
         val inst = engine.getPluginInstance(instanceId) ?: return null
@@ -261,17 +297,17 @@ class UapmdModel(val sequencer: RealtimeSequencer) {
         val meta = inst.getParameterMetadata(paramIndex.toUInt()) ?: return
         val plain = meta.minPlainValue + normalizedValue * (meta.maxPlainValue - meta.minPlainValue)
         inst.setParameterValue(paramIndex, plain)
-        instanceInfo = buildInstanceInfo(instanceId)
+        refreshOpenInstance(instanceId)
     }
 
     fun loadPreset(instanceId: Int, preset: PresetEntry) {
         engine.getPluginInstance(instanceId)?.loadPreset(preset.index)
-        instanceInfo = buildInstanceInfo(instanceId)
+        refreshOpenInstance(instanceId)
     }
 
     fun setInstanceGroup(instanceId: Int, group: Int) {
         engine.setInstanceGroup(instanceId, group.toUByte())
-        instanceInfo = buildInstanceInfo(instanceId)
+        refreshOpenInstance(instanceId)
     }
 
     // ── Plugin catalog & scanning ──────────────────────────────────────────

@@ -64,7 +64,6 @@ private fun MainWindowContent(model: UapmdModel) {
     var showAudioImport      by remember { mutableStateOf(false) }
     var showScriptEditor     by remember { mutableStateOf(false) }
     var showPluginSelector   by remember { mutableStateOf(false) }
-    var showInstanceDetails  by remember { mutableStateOf(false) }
     var showMidiDump         by remember { mutableStateOf(false) }
 
     // ── Timeline UI state ──────────────────────────────────────────────────
@@ -88,29 +87,30 @@ private fun MainWindowContent(model: UapmdModel) {
     var exportStatus    by remember { mutableStateOf("") }
     var importFilePath  by remember { mutableStateOf("") }
     var scriptText      by remember { mutableStateOf("") }
-    var instanceFilter  by remember { mutableStateOf("") }
 
-    // ── Selected tab ──────────────────────────────────────────────────────
-    var selectedTab by remember { mutableStateOf(0) }
+    // ── Selected tab (default to Tracks) ──────────────────────────────────
+    var selectedTab by remember { mutableStateOf(1) }
 
     // ── Toolbar ────────────────────────────────────────────────────────────
     Toolbar(
-        isPlaying      = model.isPlaying,
-        isPaused       = model.isPaused,
-        onPlay         = { model.play() },
-        onPause        = { model.pause() },
-        onDeviceSettings   = { showDeviceSettings  = !showDeviceSettings  },
-        onAudioGraph       = { showNodeGraph        = !showNodeGraph       },
-        onPlugins          = { showPluginSelector   = !showPluginSelector  },
-        onScript           = { showScriptEditor     = !showScriptEditor    },
-        onImportAudio      = { showAudioImport      = !showAudioImport     },
-        onExport           = { showExporter         = !showExporter        },
-        onTrackList        = { selectedTab = 1 },
-        onPluginList       = { selectedTab = 2 },
-        onMidiDump         = { showMidiDump         = !showMidiDump        },
-        inputSpectrum  = model.inputSpectrum,
-        outputSpectrum = model.outputSpectrum,
-        modifier       = Modifier.fillMaxWidth()
+        isPlaying            = model.isPlaying,
+        isPaused             = model.isPaused,
+        isAudioEngineRunning = model.isAudioEngineRunning,
+        onPlay               = { model.play() },
+        onPause              = { model.pause() },
+        onAudioEngine        = { model.toggleAudioEngine() },
+        onDeviceSettings     = { showDeviceSettings  = !showDeviceSettings  },
+        onAudioGraph         = { showNodeGraph        = !showNodeGraph       },
+        onPlugins            = { showPluginSelector   = !showPluginSelector  },
+        onScript             = { showScriptEditor     = !showScriptEditor    },
+        onImportAudio        = { showAudioImport      = !showAudioImport     },
+        onExport             = { showExporter         = !showExporter        },
+        onTrackList          = { selectedTab = 1 },
+        onPluginList         = { selectedTab = 2 },
+        onMidiDump           = { showMidiDump         = !showMidiDump        },
+        inputSpectrum        = model.inputSpectrum,
+        outputSpectrum       = model.outputSpectrum,
+        modifier             = Modifier.fillMaxWidth()
     )
 
     // ── Tab row ────────────────────────────────────────────────────────────
@@ -135,13 +135,16 @@ private fun MainWindowContent(model: UapmdModel) {
             )
             1 -> TrackList(
                 entries = model.trackEntries,
+                catalogEntries = model.catalogEntries,
                 onEnabledChanged = { id, en -> model.setInstanceEnabled(id, en) },
-                onDetailsRequested = { id ->
-                    model.selectInstance(id)
-                    showInstanceDetails = true
-                },
+                onDetailsRequested = { id -> model.openInstance(id) },
                 onRemoveInstance = { id -> model.removeInstance(id) },
                 onAddTrack = { model.addEmptyTrack() },
+                onAddPluginToTrack = { ti, fmt, pid ->
+                    scope.launch(Dispatchers.IO) {
+                        model.addPluginToTrack(ti, fmt, pid)
+                    }
+                },
                 modifier = Modifier.fillMaxSize().padding(4.dp)
             )
             2 -> Box(modifier = Modifier.fillMaxSize()) {
@@ -303,22 +306,19 @@ private fun MainWindowContent(model: UapmdModel) {
             }
         }
 
-        if (showInstanceDetails) {
-            val info = model.instanceInfo
-            if (info != null) {
-                AppDialog(title = "Instance: ${info.displayName}", onDismiss = { showInstanceDetails = false }) {
-                    InstanceDetails(
-                        info             = info,
-                        filterText       = instanceFilter,
-                        onFilterChanged  = { instanceFilter = it },
-                        onEnabledChanged = { en -> model.setInstanceEnabled(info.instanceId, en) },
-                        onGroupChanged   = { g  -> model.setInstanceGroup(info.instanceId, g) },
-                        onPresetSelected = { p  -> model.loadPreset(info.instanceId, p) },
-                        onParameterChanged = { idx, v -> model.setParameterValue(info.instanceId, idx, v) },
-                        modifier = Modifier.fillMaxWidth().height(500.dp).padding(bottom = 4.dp)
-                    )
-                }
-            }
+        // ── Floating instance-details panels (one per open instance) ──────
+        model.instanceInfos.values.forEachIndexed { i, info ->
+            InstanceDetailsPanel(
+                info            = info,
+                initialOffset   = androidx.compose.ui.geometry.Offset(40f + i * 30f, 60f + i * 30f),
+                onClose         = { model.closeInstance(info.instanceId) },
+                onEnabledChanged = { en -> model.setInstanceEnabled(info.instanceId, en) },
+                onGroupChanged   = { g  -> model.setInstanceGroup(info.instanceId, g) },
+                onPresetSelected = { p  -> model.loadPreset(info.instanceId, p) },
+                onParameterChanged = { idx, v -> model.setParameterValue(info.instanceId, idx, v) },
+                onNoteOn         = { note -> model.sendNoteOn(info.instanceId, note) },
+                onNoteOff        = { note -> model.sendNoteOff(info.instanceId, note) },
+            )
         }
 
         if (showMidiDump) {
@@ -338,8 +338,10 @@ private fun MainWindowContent(model: UapmdModel) {
 private fun Toolbar(
     isPlaying: Boolean,
     isPaused: Boolean,
+    isAudioEngineRunning: Boolean,
     onPlay: () -> Unit,
     onPause: () -> Unit,
+    onAudioEngine: () -> Unit,
     onDeviceSettings: () -> Unit,
     onAudioGraph: () -> Unit,
     onPlugins: () -> Unit,
@@ -364,6 +366,20 @@ private fun Toolbar(
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(4.dp)
         ) {
+            Button(
+                onClick = onAudioEngine,
+                colors = ButtonDefaults.buttonColors(
+                    containerColor = if (isAudioEngineRunning) MaterialTheme.colorScheme.secondary
+                                     else MaterialTheme.colorScheme.surfaceVariant
+                ),
+                contentPadding = PaddingValues(horizontal = 10.dp, vertical = 4.dp)
+            ) {
+                Text(
+                    if (isAudioEngineRunning) "Audio Engine: On" else "Audio Engine: Off",
+                    fontSize = 11.sp
+                )
+            }
+
             Button(
                 onClick = onPlay,
                 colors = ButtonDefaults.buttonColors(
