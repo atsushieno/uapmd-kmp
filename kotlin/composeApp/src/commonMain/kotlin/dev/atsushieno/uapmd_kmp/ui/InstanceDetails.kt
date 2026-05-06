@@ -18,6 +18,8 @@ data class InstanceInfo(
     val isEnabled: Boolean,
     val groupIndex: Int,
     val groupCount: Int,
+    val hasUiSupport: Boolean,
+    val nativeUiVisible: Boolean,
     val parameters: List<ParameterEntry>,
     val presets: List<PresetEntry>
 )
@@ -46,7 +48,9 @@ fun InstanceDetails(
                 Spacer(Modifier.width(4.dp))
                 Text("Enabled", fontSize = 12.sp)
             }
-            Button(onClick = onShowUi) { Text("Show UI", fontSize = 12.sp) }
+            Button(onClick = onShowUi, enabled = info.hasUiSupport) {
+                Text(if (info.nativeUiVisible) "Show UI Again" else "Show UI", fontSize = 12.sp)
+            }
         }
 
         // Group selector

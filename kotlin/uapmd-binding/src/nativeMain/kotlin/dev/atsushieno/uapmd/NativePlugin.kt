@@ -7,8 +7,7 @@ class NativePluginInstance internal constructor(
     internal val handle: uapmd_plugin_instance_t
 ) : PluginInstance {
 
-    // Held for the lifetime of the UI to prevent GC of the resize handler StableRef.
-    private var resizeHandlerRef: StableRef<(UInt, UInt) -> Boolean>? = null
+    private val activeUiPresentations = linkedSetOf<NativePluginUiPresentation>()
 
     override val displayName: String
         get() = readCString { buf, size -> uapmd_instance_display_name(handle, buf, size) }
@@ -146,47 +145,100 @@ class NativePluginInstance internal constructor(
         }
     }
 
-    override val hasUiSupport: Boolean get() = uapmd_instance_has_ui_support(handle)
+    override val uiCapabilities: PluginUiCapabilities
+        get() = memScoped {
+            val caps = alloc<uapmd_ui_capabilities_t>()
+            uapmd_instance_get_ui_capabilities(handle, caps.ptr)
+            PluginUiCapabilities(
+                hasUiSupport = caps.has_ui_support,
+                supportsEmbeddedPresentations = caps.supports_embedded_presentations,
+                supportsFloatingPresentations = caps.supports_floating_presentations,
+                supportsMultiplePresentations = caps.supports_multiple_presentations
+            )
+        }
 
-    override fun createUi(
-        isFloating: Boolean,
-        parentHandle: Long,
-        resizeHandler: ((UInt, UInt) -> Boolean)?
-    ): Boolean {
-        resizeHandlerRef?.dispose()
-        resizeHandlerRef = resizeHandler?.let { StableRef.create(it) }
-        return uapmd_instance_create_ui(
-            handle, isFloating,
-            parentHandle.toCPointer<COpaque>(),
-            resizeHandlerRef?.asCPointer(),
-            resizeHandler?.let {
-                staticCFunction { w, h, userData ->
-                    userData?.asStableRef<(UInt, UInt) -> Boolean>()?.get()?.invoke(w, h) ?: false
+    override fun createUiPresentation(request: PluginUiPresentationRequest): PluginUiPresentation? {
+        if (!uiCapabilities.hasUiSupport)
+            return null
+        if (activeUiPresentations.isNotEmpty() && !uiCapabilities.supportsMultiplePresentations)
+            return null
+
+        val resizeHandlerRef = request.resizeHandler?.let { StableRef.create(it) }
+        val callback: CPointer<CFunction<(UInt, UInt, COpaquePointer?) -> Boolean>>? = request.resizeHandler?.let {
+            staticCFunction<UInt, UInt, COpaquePointer?, Boolean> { w, h, userData ->
+                userData?.asStableRef<(UInt, UInt) -> Boolean>()?.get()?.invoke(w, h) ?: false
+            }
+        }
+        val presentationHandle = memScoped {
+            val nativeRequest = alloc<uapmd_ui_presentation_request_t>()
+            when (val host = request.host) {
+                PluginUiHost.FloatingWindow -> {
+                    nativeRequest.host_kind = 0u
+                    nativeRequest.parent_handle = null
+                    nativeRequest.web_container_id = null
+                }
+                is PluginUiHost.NativeEmbedded -> {
+                    nativeRequest.host_kind = 1u
+                    nativeRequest.parent_handle = host.parentHandle.toCPointer<COpaque>()
+                    nativeRequest.web_container_id = null
+                }
+                is PluginUiHost.WebEmbedded -> {
+                    nativeRequest.host_kind = 2u
+                    nativeRequest.parent_handle = null
+                    nativeRequest.web_container_id = host.containerId.cstr.ptr
                 }
             }
-        )
+            nativeRequest.role = when (request.role) {
+                PluginUiPresentationRole.COMPACT -> 0u
+                PluginUiPresentationRole.FULL -> 1u
+                PluginUiPresentationRole.AUXILIARY -> 2u
+            }
+            uapmd_instance_create_ui_presentation(handle, nativeRequest.ptr, resizeHandlerRef?.asCPointer(), callback)
+        }
+        if (presentationHandle == null) {
+            resizeHandlerRef?.dispose()
+            return null
+        }
+
+        return NativePluginUiPresentation(request, presentationHandle, resizeHandlerRef).also { activeUiPresentations += it }
     }
 
-    override fun destroyUi() {
-        uapmd_instance_destroy_ui(handle)
-        resizeHandlerRef?.dispose()
-        resizeHandlerRef = null
-    }
-    override fun showUi(): Boolean = uapmd_instance_show_ui(handle)
-    override fun hideUi() = uapmd_instance_hide_ui(handle)
-    override val isUiVisible: Boolean get() = uapmd_instance_is_ui_visible(handle)
-
-    override fun setUiSize(width: UInt, height: UInt): Boolean =
-        uapmd_instance_set_ui_size(handle, width, height)
-
-    override fun getUiSize(): UiSize? = memScoped {
+    private fun getUiSizeInternal(presentationHandle: uapmd_ui_presentation_t): UiSize? = memScoped {
         val w = alloc<UIntVar>()
         val h = alloc<UIntVar>()
-        if (!uapmd_instance_get_ui_size(handle, w.ptr, h.ptr)) return null
+        if (!uapmd_ui_presentation_get_size(presentationHandle, w.ptr, h.ptr)) return null
         UiSize(w.value, h.value)
     }
 
-    override val canUiResize: Boolean get() = uapmd_instance_can_ui_resize(handle)
+    private inner class NativePluginUiPresentation(
+        private val request: PluginUiPresentationRequest,
+        private val presentationHandle: uapmd_ui_presentation_t,
+        private val resizeHandlerRef: StableRef<(UInt, UInt) -> Boolean>?
+    ) : PluginUiPresentation {
+
+        override val host: PluginUiHost get() = request.host
+        override val role: PluginUiPresentationRole get() = request.role
+        override val mode: PluginUiPresentationMode get() = request.mode
+        override val isVisible: Boolean get() = uapmd_ui_presentation_is_visible(presentationHandle)
+        override val canResize: Boolean get() = uapmd_ui_presentation_can_resize(presentationHandle)
+
+        override fun show(): Boolean = uapmd_ui_presentation_show(presentationHandle)
+
+        override fun hide() {
+            uapmd_ui_presentation_hide(presentationHandle)
+        }
+
+        override fun close() {
+            uapmd_ui_presentation_destroy(presentationHandle)
+            resizeHandlerRef?.dispose()
+            activeUiPresentations.remove(this)
+        }
+
+        override fun setSize(width: UInt, height: UInt): Boolean =
+            uapmd_ui_presentation_set_size(presentationHandle, width, height)
+
+        override fun getSize(): UiSize? = getUiSizeInternal(presentationHandle)
+    }
 }
 
 // ---------------------------------------------------------------------------

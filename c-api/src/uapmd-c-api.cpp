@@ -3,6 +3,7 @@
 #include "c-api/uapmd-c-api.h"
 #include <uapmd/uapmd.hpp>
 #include <cstring>
+#include <memory>
 #include <string>
 #include <vector>
 
@@ -18,6 +19,16 @@ static uapmd::UapmdFunctionBlockManager* FBM(uapmd_function_block_mgr_t h) { ret
 static uapmd::UapmdFunctionDevice*    FD(uapmd_function_device_t h) { return reinterpret_cast<uapmd::UapmdFunctionDevice*>(h); }
 static uapmd::UapmdUmpInputMapper*    UIN(uapmd_ump_input_mapper_t h) { return reinterpret_cast<uapmd::UapmdUmpInputMapper*>(h); }
 static uapmd::UapmdUmpOutputMapper*   UOUT(uapmd_ump_output_mapper_t h) { return reinterpret_cast<uapmd::UapmdUmpOutputMapper*>(h); }
+
+struct UiPresentationHandle {
+    uapmd::AudioPluginInstanceAPI* instance{};
+    uapmd_ui_presentation_request_t request{};
+    std::string web_container_id;
+    void* resize_user_data{};
+    uapmd_ui_resize_handler_t resize_handler{};
+};
+
+static UiPresentationHandle* P(uapmd_ui_presentation_t h) { return reinterpret_cast<UiPresentationHandle*>(h); }
 
 /* ── String copy helper ──────────────────────────────────────────────────── */
 
@@ -201,6 +212,62 @@ void uapmd_instance_load_state(uapmd_plugin_instance_t inst,
 
 bool uapmd_instance_has_ui_support(uapmd_plugin_instance_t inst) { return I(inst)->hasUISupport(); }
 
+void uapmd_instance_get_ui_capabilities(uapmd_plugin_instance_t inst, uapmd_ui_capabilities_t* out) {
+    if (!out)
+        return;
+    const bool has_ui_support = I(inst)->hasUISupport();
+    out->has_ui_support = has_ui_support;
+    out->supports_embedded_presentations = has_ui_support;
+    out->supports_floating_presentations = has_ui_support;
+    out->supports_multiple_presentations = false;
+}
+
+uapmd_ui_presentation_t uapmd_instance_create_ui_presentation(
+        uapmd_plugin_instance_t inst,
+        const uapmd_ui_presentation_request_t* request,
+        void* resize_user_data,
+        uapmd_ui_resize_handler_t resize_handler) {
+    if (!inst || !request)
+        return nullptr;
+
+    auto presentation = std::make_unique<UiPresentationHandle>();
+    presentation->instance = I(inst);
+    presentation->request = *request;
+    presentation->resize_user_data = resize_user_data;
+    presentation->resize_handler = resize_handler;
+    if (request->web_container_id)
+        presentation->web_container_id = request->web_container_id;
+
+    bool is_floating = request->host_kind == UAPMD_UI_HOST_FLOATING;
+    void* parent_handle = nullptr;
+    switch (request->host_kind) {
+        case UAPMD_UI_HOST_FLOATING:
+            parent_handle = nullptr;
+            break;
+        case UAPMD_UI_HOST_NATIVE_EMBEDDED:
+            parent_handle = request->parent_handle;
+            break;
+        case UAPMD_UI_HOST_WEB_EMBEDDED:
+            parent_handle = presentation->web_container_id.empty() ? nullptr : const_cast<char*>(presentation->web_container_id.c_str());
+            break;
+        default:
+            return nullptr;
+    }
+
+    const bool created = presentation->instance->createUI(
+        is_floating,
+        parent_handle,
+        [resize_handler, resize_user_data](uint32_t w, uint32_t h) -> bool {
+            if (resize_handler)
+                return resize_handler(w, h, resize_user_data);
+            return true;
+        });
+    if (!created)
+        return nullptr;
+
+    return reinterpret_cast<uapmd_ui_presentation_t>(presentation.release());
+}
+
 bool uapmd_instance_create_ui(uapmd_plugin_instance_t inst,
                                bool is_floating,
                                void* parent_handle,
@@ -227,6 +294,41 @@ bool uapmd_instance_get_ui_size(uapmd_plugin_instance_t inst, uint32_t* width, u
 }
 
 bool uapmd_instance_can_ui_resize(uapmd_plugin_instance_t inst) { return I(inst)->canUIResize(); }
+
+void uapmd_ui_presentation_destroy(uapmd_ui_presentation_t presentation) {
+    if (!presentation)
+        return;
+    auto* p = P(presentation);
+    p->instance->destroyUI();
+    delete p;
+}
+
+bool uapmd_ui_presentation_show(uapmd_ui_presentation_t presentation) {
+    return presentation ? P(presentation)->instance->showUI() : false;
+}
+
+void uapmd_ui_presentation_hide(uapmd_ui_presentation_t presentation) {
+    if (presentation)
+        P(presentation)->instance->hideUI();
+}
+
+bool uapmd_ui_presentation_is_visible(uapmd_ui_presentation_t presentation) {
+    return presentation ? P(presentation)->instance->isUIVisible() : false;
+}
+
+bool uapmd_ui_presentation_set_size(uapmd_ui_presentation_t presentation, uint32_t width, uint32_t height) {
+    return presentation ? P(presentation)->instance->setUISize(width, height) : false;
+}
+
+bool uapmd_ui_presentation_get_size(uapmd_ui_presentation_t presentation, uint32_t* width, uint32_t* height) {
+    if (!presentation || !width || !height)
+        return false;
+    return P(presentation)->instance->getUISize(*width, *height);
+}
+
+bool uapmd_ui_presentation_can_resize(uapmd_ui_presentation_t presentation) {
+    return presentation ? P(presentation)->instance->canUIResize() : false;
+}
 
 /* ═══════════════════════════════════════════════════════════════════════════
  *  AudioPluginHostingAPI

@@ -11,8 +11,7 @@ class JvmPluginInstance internal constructor(
     internal val handle: Pointer
 ) : PluginInstance {
 
-    // Keep a strong reference to the resize handler to prevent GC while UI is alive.
-    private var resizeHandlerRef: UiResizeHandler? = null
+    private val activeUiPresentations = linkedSetOf<JvmPluginUiPresentation>()
 
     override val displayName: String
         get() = readJvmString { buf, size -> lib.uapmd_instance_display_name(handle, buf, size) }
@@ -134,47 +133,109 @@ class JvmPluginInstance internal constructor(
         lib.uapmd_instance_load_state(handle, data, data.size.toLong(), ctx.toJvmInt(), includeUiState, null, cb)
     }
 
-    override val hasUiSupport: Boolean get() = lib.uapmd_instance_has_ui_support(handle)
+    override val uiCapabilities: PluginUiCapabilities
+        get() {
+            val caps = UapmdUiCapabilities()
+            lib.uapmd_instance_get_ui_capabilities(handle, caps)
+            return PluginUiCapabilities(
+                hasUiSupport = caps.has_ui_support.toInt() != 0,
+                supportsEmbeddedPresentations = caps.supports_embedded_presentations.toInt() != 0,
+                supportsFloatingPresentations = caps.supports_floating_presentations.toInt() != 0,
+                supportsMultiplePresentations = caps.supports_multiple_presentations.toInt() != 0
+            )
+        }
 
-    override fun createUi(
-        isFloating: Boolean,
-        parentHandle: Long,
-        resizeHandler: ((UInt, UInt) -> Boolean)?
-    ): Boolean {
-        resizeHandlerRef = resizeHandler?.let { handler ->
+    override fun createUiPresentation(request: PluginUiPresentationRequest): PluginUiPresentation? {
+        if (!uiCapabilities.hasUiSupport)
+            return null
+        if (activeUiPresentations.isNotEmpty() && !uiCapabilities.supportsMultiplePresentations)
+            return null
+
+        val resizeHandlerRef = request.resizeHandler?.let { handler ->
             object : UiResizeHandler {
                 override fun invoke(width: Int, height: Int, userData: Pointer?): Boolean =
                     handler(width.toUInt(), height.toUInt())
             }
         }
-        return lib.uapmd_instance_create_ui(
-            handle, isFloating,
-            if (parentHandle != 0L) Pointer(parentHandle) else null,
-            null,
-            resizeHandlerRef
-        )
+        val nativeRequest = UapmdUiPresentationRequest().apply {
+            when (val host = request.host) {
+                PluginUiHost.FloatingWindow -> {
+                    host_kind = 0
+                    parent_handle = null
+                    web_container_id = null
+                }
+                is PluginUiHost.NativeEmbedded -> {
+                    host_kind = 1
+                    parent_handle = Pointer(host.parentHandle)
+                    web_container_id = null
+                }
+                is PluginUiHost.WebEmbedded -> {
+                    host_kind = 2
+                    parent_handle = null
+                    web_container_id = host.containerId
+                }
+            }
+            role = when (request.role) {
+                PluginUiPresentationRole.COMPACT -> 0
+                PluginUiPresentationRole.FULL -> 1
+                PluginUiPresentationRole.AUXILIARY -> 2
+            }
+            write()
+        }
+        val presentationHandle = runOnJvmEventLoopThread {
+            lib.uapmd_instance_create_ui_presentation(handle, nativeRequest, null, resizeHandlerRef)
+        }
+        if (presentationHandle == null)
+            return null
+
+        return JvmPluginUiPresentation(request, presentationHandle, resizeHandlerRef).also { activeUiPresentations += it }
     }
 
-    override fun destroyUi() {
-        lib.uapmd_instance_destroy_ui(handle)
-        resizeHandlerRef = null
-    }
-
-    override fun showUi(): Boolean = lib.uapmd_instance_show_ui(handle)
-    override fun hideUi() = lib.uapmd_instance_hide_ui(handle)
-    override val isUiVisible: Boolean get() = lib.uapmd_instance_is_ui_visible(handle)
-
-    override fun setUiSize(width: UInt, height: UInt): Boolean =
-        lib.uapmd_instance_set_ui_size(handle, width.toInt(), height.toInt())
-
-    override fun getUiSize(): UiSize? {
+    private fun getUiSizeInternal(presentationHandle: Pointer): UiSize? {
         val w = IntByReference()
         val h = IntByReference()
-        if (!lib.uapmd_instance_get_ui_size(handle, w, h)) return null
+        if (!lib.uapmd_ui_presentation_get_size(presentationHandle, w, h)) return null
         return UiSize(w.value.toUInt(), h.value.toUInt())
     }
 
-    override val canUiResize: Boolean get() = lib.uapmd_instance_can_ui_resize(handle)
+    private inner class JvmPluginUiPresentation(
+        private val request: PluginUiPresentationRequest,
+        private val presentationHandle: Pointer,
+        private val resizeHandlerRef: UiResizeHandler?
+    ) : PluginUiPresentation {
+
+        override val host: PluginUiHost get() = request.host
+        override val role: PluginUiPresentationRole get() = request.role
+        override val mode: PluginUiPresentationMode get() = request.mode
+        override val isVisible: Boolean
+            get() = runOnJvmEventLoopThread { lib.uapmd_ui_presentation_is_visible(presentationHandle) }
+        override val canResize: Boolean
+            get() = runOnJvmEventLoopThread { lib.uapmd_ui_presentation_can_resize(presentationHandle) }
+
+        override fun show(): Boolean =
+            runOnJvmEventLoopThread { lib.uapmd_ui_presentation_show(presentationHandle) }
+
+        override fun hide() {
+            runOnJvmEventLoopThread {
+                lib.uapmd_ui_presentation_hide(presentationHandle)
+            }
+        }
+
+        override fun close() {
+            runOnJvmEventLoopThread {
+                lib.uapmd_ui_presentation_destroy(presentationHandle)
+            }
+            activeUiPresentations.remove(this)
+        }
+
+        override fun setSize(width: UInt, height: UInt): Boolean =
+            runOnJvmEventLoopThread {
+                lib.uapmd_ui_presentation_set_size(presentationHandle, width.toInt(), height.toInt())
+            }
+
+        override fun getSize(): UiSize? =
+            runOnJvmEventLoopThread { getUiSizeInternal(presentationHandle) }
+    }
 }
 
 // ─── JvmPluginHost ───────────────────────────────────────────────────────────

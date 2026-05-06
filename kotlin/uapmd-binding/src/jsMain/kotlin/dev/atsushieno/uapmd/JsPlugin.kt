@@ -6,6 +6,8 @@ class JsPluginInstance internal constructor(
     internal val handle: Int
 ) : PluginInstance {
 
+    private val activeUiPresentations = linkedSetOf<JsPluginUiPresentation>()
+
     override val displayName: String
         get() = readJsString(handle) { h, buf, sz -> jsMod._uapmd_instance_display_name(h, buf, sz) as Int }
 
@@ -112,28 +114,88 @@ class JsPluginInstance internal constructor(
         } finally { jsMod._free(ptr) }
     }
 
-    override val hasUiSupport: Boolean   get() = jsMod._uapmd_instance_has_ui_support(handle) as Boolean
-    override val isUiVisible: Boolean    get() = jsMod._uapmd_instance_is_ui_visible(handle) as Boolean
-    override val canUiResize: Boolean    get() = jsMod._uapmd_instance_can_ui_resize(handle) as Boolean
+    override val uiCapabilities: PluginUiCapabilities
+        get() = withWasmMem(4) { ptr ->
+            jsMod._uapmd_instance_get_ui_capabilities(handle, ptr)
+            jsDecodeUiCapabilities(ptr)
+        }
 
-    override fun createUi(isFloating: Boolean, parentHandle: Long, resizeHandler: ((UInt, UInt) -> Boolean)?): Boolean =
-        jsMod._uapmd_instance_create_ui(handle, isFloating, 0, 0, 0) as Boolean
+    override fun createUiPresentation(request: PluginUiPresentationRequest): PluginUiPresentation? {
+        if (!uiCapabilities.hasUiSupport)
+            return null
+        if (activeUiPresentations.isNotEmpty() && !uiCapabilities.supportsMultiplePresentations)
+            return null
 
-    override fun destroyUi() = jsMod._uapmd_instance_destroy_ui(handle)
-    override fun showUi(): Boolean = jsMod._uapmd_instance_show_ui(handle) as Boolean
-    override fun hideUi() = jsMod._uapmd_instance_hide_ui(handle)
+        val presentationHandle = withWasmMem(16) { reqPtr ->
+            jsSetI32(reqPtr + 4, when (request.role) {
+                PluginUiPresentationRole.COMPACT -> 0
+                PluginUiPresentationRole.FULL -> 1
+                PluginUiPresentationRole.AUXILIARY -> 2
+            })
+            when (val host = request.host) {
+                PluginUiHost.FloatingWindow -> {
+                    jsSetI32(reqPtr, 0)
+                    jsSetI32(reqPtr + 8, 0)
+                    jsSetI32(reqPtr + 12, 0)
+                    jsMod._uapmd_instance_create_ui_presentation(handle, reqPtr, 0, 0) as Int
+                }
+                is PluginUiHost.NativeEmbedded -> {
+                    jsSetI32(reqPtr, 1)
+                    jsSetI32(reqPtr + 8, host.parentHandle.toInt())
+                    jsSetI32(reqPtr + 12, 0)
+                    jsMod._uapmd_instance_create_ui_presentation(handle, reqPtr, 0, 0) as Int
+                }
+                is PluginUiHost.WebEmbedded ->
+                    withJsCString(host.containerId) { strPtr ->
+                        jsSetI32(reqPtr, 2)
+                        jsSetI32(reqPtr + 8, 0)
+                        jsSetI32(reqPtr + 12, strPtr)
+                        jsMod._uapmd_instance_create_ui_presentation(handle, reqPtr, 0, 0) as Int
+                    }
+            }
+        }
+        if (presentationHandle == 0)
+            return null
 
-    override fun getUiSize(): UiSize? {
+        return JsPluginUiPresentation(request, presentationHandle).also { activeUiPresentations += it }
+    }
+
+    private fun getUiSizeInternal(presentationHandle: Int): UiSize? {
         val wPtr = jsMod._malloc(4) as Int
         val hPtr = jsMod._malloc(4) as Int
         return try {
-            if (!(jsMod._uapmd_instance_get_ui_size(handle, wPtr, hPtr) as Boolean)) null
+            if (!(jsMod._uapmd_ui_presentation_get_size(presentationHandle, wPtr, hPtr) as Boolean)) null
             else UiSize(jsGetI32(wPtr).toUInt(), jsGetI32(hPtr).toUInt())
         } finally { jsMod._free(wPtr); jsMod._free(hPtr) }
     }
 
-    override fun setUiSize(width: UInt, height: UInt): Boolean =
-        jsMod._uapmd_instance_set_ui_size(handle, width.toInt(), height.toInt()) as Boolean
+    private inner class JsPluginUiPresentation(
+        private val request: PluginUiPresentationRequest,
+        private val presentationHandle: Int
+    ) : PluginUiPresentation {
+
+        override val host: PluginUiHost get() = request.host
+        override val role: PluginUiPresentationRole get() = request.role
+        override val mode: PluginUiPresentationMode get() = request.mode
+        override val isVisible: Boolean get() = jsMod._uapmd_ui_presentation_is_visible(presentationHandle) as Boolean
+        override val canResize: Boolean get() = jsMod._uapmd_ui_presentation_can_resize(presentationHandle) as Boolean
+
+        override fun show(): Boolean = jsMod._uapmd_ui_presentation_show(presentationHandle) as Boolean
+
+        override fun hide() {
+            jsMod._uapmd_ui_presentation_hide(presentationHandle)
+        }
+
+        override fun close() {
+            jsMod._uapmd_ui_presentation_destroy(presentationHandle)
+            activeUiPresentations.remove(this)
+        }
+
+        override fun setSize(width: UInt, height: UInt): Boolean =
+            jsMod._uapmd_ui_presentation_set_size(presentationHandle, width.toInt(), height.toInt()) as Boolean
+
+        override fun getSize(): UiSize? = getUiSizeInternal(presentationHandle)
+    }
 }
 
 // ─── JsPluginHost ─────────────────────────────────────────────────────────────

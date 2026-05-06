@@ -109,6 +109,13 @@ internal fun jsSetI32(ptr: Int, v: Int)    { jsMod.setValue(ptr, v, "i32") }
 internal fun jsSetI8(ptr: Int, v: Int)     { jsMod.setValue(ptr, v, "i8") }
 internal fun jsSetF32(ptr: Int, v: Float)  { jsMod.setValue(ptr, v, "float") }
 
+internal fun jsDecodeUiCapabilities(ptr: Int): PluginUiCapabilities = PluginUiCapabilities(
+    hasUiSupport = jsGetBool(ptr),
+    supportsEmbeddedPresentations = jsGetBool(ptr + 1),
+    supportsFloatingPresentations = jsGetBool(ptr + 2),
+    supportsMultiplePresentations = jsGetBool(ptr + 3)
+)
+
 // ── Struct decoders ───────────────────────────────────────────────────────────
 
 internal fun jsDecodeTimelinePosition(ptr: Int) =

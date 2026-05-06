@@ -380,6 +380,20 @@ JNIEXPORT jboolean JNICALL Java_dev_atsushieno_uapmd_JniBridge_uapmdInstanceHasU
         JNIEnv*, jclass, jlong h) {
     return uapmd_instance_has_ui_support(j2p<uapmd_plugin_instance_t>(h));
 }
+JNIEXPORT jbooleanArray JNICALL Java_dev_atsushieno_uapmd_JniBridge_uapmdInstanceGetUiCapabilities(
+        JNIEnv* env, jclass, jlong h) {
+    uapmd_ui_capabilities_t caps{};
+    uapmd_instance_get_ui_capabilities(j2p<uapmd_plugin_instance_t>(h), &caps);
+    jbooleanArray arr = env->NewBooleanArray(4);
+    jboolean vals[4] = {
+        static_cast<jboolean>(caps.has_ui_support),
+        static_cast<jboolean>(caps.supports_embedded_presentations),
+        static_cast<jboolean>(caps.supports_floating_presentations),
+        static_cast<jboolean>(caps.supports_multiple_presentations)
+    };
+    env->SetBooleanArrayRegion(arr, 0, 4, vals);
+    return arr;
+}
 JNIEXPORT jboolean JNICALL Java_dev_atsushieno_uapmd_JniBridge_uapmdInstanceCreateUi(
         JNIEnv* env, jclass, jlong h, jboolean floating, jlong parent, jobject resizeCb) {
     struct RCtx { jobject obj; jmethodID mid; };
@@ -397,6 +411,37 @@ JNIEXPORT jboolean JNICALL Java_dev_atsushieno_uapmd_JniBridge_uapmdInstanceCrea
     return uapmd_instance_create_ui(j2p<uapmd_plugin_instance_t>(h), floating,
                                     reinterpret_cast<void*>(static_cast<uintptr_t>(parent)),
                                     rctx, handler);
+}
+JNIEXPORT jlong JNICALL Java_dev_atsushieno_uapmd_JniBridge_uapmdInstanceCreateUiPresentation(
+        JNIEnv* env, jclass, jlong h, jint hostKind, jint role, jlong parent, jstring webContainerId, jobject resizeCb) {
+    struct RCtx { jobject obj; jmethodID mid; };
+    RCtx* rctx = nullptr;
+    uapmd_ui_resize_handler_t handler = nullptr;
+    if (resizeCb) {
+        rctx = new RCtx{env->NewGlobalRef(resizeCb),
+                        env->GetMethodID(env->GetObjectClass(resizeCb), "invoke", "(II)Z")};
+        handler = [](uint32_t w, uint32_t h, void* ud) -> bool {
+            auto* r = static_cast<RCtx*>(ud);
+            return jni_env()->CallBooleanMethod(r->obj, r->mid,
+                                                static_cast<jint>(w), static_cast<jint>(h));
+        };
+    }
+    uapmd_ui_presentation_request_t request{};
+    request.host_kind = static_cast<uapmd_ui_host_kind_t>(hostKind);
+    request.role = static_cast<uapmd_ui_presentation_role_t>(role);
+    request.parent_handle = reinterpret_cast<void*>(static_cast<uintptr_t>(parent));
+    const char* webId = nullptr;
+    if (webContainerId)
+        webId = jstr(env, webContainerId);
+    request.web_container_id = webId;
+    auto ret = uapmd_instance_create_ui_presentation(
+        j2p<uapmd_plugin_instance_t>(h),
+        &request,
+        rctx,
+        handler);
+    if (webContainerId)
+        jstr_release(env, webContainerId, webId);
+    return p2j(ret);
 }
 JNIEXPORT void JNICALL Java_dev_atsushieno_uapmd_JniBridge_uapmdInstanceDestroyUi(
         JNIEnv*, jclass, jlong h) { uapmd_instance_destroy_ui(j2p<uapmd_plugin_instance_t>(h)); }
@@ -422,6 +467,29 @@ JNIEXPORT jintArray JNICALL Java_dev_atsushieno_uapmd_JniBridge_uapmdInstanceGet
 }
 JNIEXPORT jboolean JNICALL Java_dev_atsushieno_uapmd_JniBridge_uapmdInstanceCanUiResize(
         JNIEnv*, jclass, jlong h) { return uapmd_instance_can_ui_resize(j2p<uapmd_plugin_instance_t>(h)); }
+JNIEXPORT void JNICALL Java_dev_atsushieno_uapmd_JniBridge_uapmdUiPresentationDestroy(
+        JNIEnv*, jclass, jlong h) { uapmd_ui_presentation_destroy(j2p<uapmd_ui_presentation_t>(h)); }
+JNIEXPORT jboolean JNICALL Java_dev_atsushieno_uapmd_JniBridge_uapmdUiPresentationShow(
+        JNIEnv*, jclass, jlong h) { return uapmd_ui_presentation_show(j2p<uapmd_ui_presentation_t>(h)); }
+JNIEXPORT void JNICALL Java_dev_atsushieno_uapmd_JniBridge_uapmdUiPresentationHide(
+        JNIEnv*, jclass, jlong h) { uapmd_ui_presentation_hide(j2p<uapmd_ui_presentation_t>(h)); }
+JNIEXPORT jboolean JNICALL Java_dev_atsushieno_uapmd_JniBridge_uapmdUiPresentationIsVisible(
+        JNIEnv*, jclass, jlong h) { return uapmd_ui_presentation_is_visible(j2p<uapmd_ui_presentation_t>(h)); }
+JNIEXPORT jboolean JNICALL Java_dev_atsushieno_uapmd_JniBridge_uapmdUiPresentationSetUiSize(
+        JNIEnv*, jclass, jlong h, jint w, jint ht) {
+    return uapmd_ui_presentation_set_size(j2p<uapmd_ui_presentation_t>(h), w, ht);
+}
+JNIEXPORT jintArray JNICALL Java_dev_atsushieno_uapmd_JniBridge_uapmdUiPresentationGetUiSize(
+        JNIEnv* env, jclass, jlong h) {
+    uint32_t w = 0, ht = 0;
+    if (!uapmd_ui_presentation_get_size(j2p<uapmd_ui_presentation_t>(h), &w, &ht)) return nullptr;
+    jintArray arr = env->NewIntArray(2);
+    jint vals[2] = {static_cast<jint>(w), static_cast<jint>(ht)};
+    env->SetIntArrayRegion(arr, 0, 2, vals);
+    return arr;
+}
+JNIEXPORT jboolean JNICALL Java_dev_atsushieno_uapmd_JniBridge_uapmdUiPresentationCanUiResize(
+        JNIEnv*, jclass, jlong h) { return uapmd_ui_presentation_can_resize(j2p<uapmd_ui_presentation_t>(h)); }
 
 // ─── PluginHost ───────────────────────────────────────────────────────────────
 

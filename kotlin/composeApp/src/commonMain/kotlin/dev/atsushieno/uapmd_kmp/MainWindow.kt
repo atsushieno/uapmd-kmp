@@ -2,6 +2,8 @@ package dev.atsushieno.uapmd_kmp
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -133,20 +135,44 @@ private fun MainWindowContent(model: UapmdModel) {
                 onTracksChange      = { model.refreshTimeline() },
                 onContextMenuChange = { contextMenu = it }
             )
-            1 -> TrackList(
-                entries = model.trackEntries,
-                catalogEntries = model.catalogEntries,
-                onEnabledChanged = { id, en -> model.setInstanceEnabled(id, en) },
-                onDetailsRequested = { id -> model.openInstance(id) },
-                onRemoveInstance = { id -> model.removeInstance(id) },
-                onAddTrack = { model.addEmptyTrack() },
-                onAddPluginToTrack = { ti, fmt, pid ->
-                    scope.launch(Dispatchers.IO) {
-                        model.addPluginToTrack(ti, fmt, pid)
-                    }
-                },
-                modifier = Modifier.fillMaxSize().padding(4.dp)
-            )
+            1 -> Row(modifier = Modifier.fillMaxSize()) {
+                TrackList(
+                    entries = model.trackEntries,
+                    catalogEntries = model.catalogEntries,
+                    onEnabledChanged = { id, en -> model.setInstanceEnabled(id, en) },
+                    onDetailsRequested = { id -> model.openInstance(id) },
+                    onRemoveInstance = { id -> model.removeInstance(id) },
+                    onAddTrack = { model.addEmptyTrack() },
+                    onAddPluginToTrack = { ti, fmt, pid ->
+                        scope.launch(Dispatchers.IO) {
+                            model.addPluginToTrack(ti, fmt, pid)
+                        }
+                    },
+                    modifier = Modifier.weight(1f).fillMaxHeight().padding(4.dp)
+                )
+                val selectedInfo = model.selectedInstanceInfo
+                if (selectedInfo != null) {
+                    VerticalDivider(modifier = Modifier.fillMaxHeight())
+                    PluginEditorPane(
+                        info = selectedInfo,
+                        statusMessage = model.pluginUiStatusMessage,
+                        onClose = { model.selectInstance(null) },
+                        onEnabledChanged = { en -> model.setInstanceEnabled(selectedInfo.instanceId, en) },
+                        onGroupChanged = { g -> model.setInstanceGroup(selectedInfo.instanceId, g) },
+                        onPresetSelected = { p -> model.loadPreset(selectedInfo.instanceId, p) },
+                        onParameterChanged = { idx, v -> model.setParameterValue(selectedInfo.instanceId, idx, v) },
+                        onNoteOn = { note -> model.sendNoteOn(selectedInfo.instanceId, note) },
+                        onNoteOff = { note -> model.sendNoteOff(selectedInfo.instanceId, note) },
+                        onShowUi = {
+                            scope.launch(Dispatchers.IO) {
+                                model.showPluginUi(selectedInfo.instanceId)
+                            }
+                        },
+                        onDismissStatus = { model.clearPluginUiStatus() },
+                        modifier = Modifier.width(420.dp).fillMaxHeight()
+                    )
+                }
+            }
             2 -> Box(modifier = Modifier.fillMaxSize()) {
                 PluginList(
                     plugins      = model.catalogEntries,
@@ -306,21 +332,6 @@ private fun MainWindowContent(model: UapmdModel) {
             }
         }
 
-        // ── Floating instance-details panels (one per open instance) ──────
-        model.instanceInfos.values.forEachIndexed { i, info ->
-            InstanceDetailsPanel(
-                info            = info,
-                initialOffset   = androidx.compose.ui.geometry.Offset(40f + i * 30f, 60f + i * 30f),
-                onClose         = { model.closeInstance(info.instanceId) },
-                onEnabledChanged = { en -> model.setInstanceEnabled(info.instanceId, en) },
-                onGroupChanged   = { g  -> model.setInstanceGroup(info.instanceId, g) },
-                onPresetSelected = { p  -> model.loadPreset(info.instanceId, p) },
-                onParameterChanged = { idx, v -> model.setParameterValue(info.instanceId, idx, v) },
-                onNoteOn         = { note -> model.sendNoteOn(info.instanceId, note) },
-                onNoteOff        = { note -> model.sendNoteOff(info.instanceId, note) },
-            )
-        }
-
         if (showMidiDump) {
             AppDialog(title = "MIDI Event Dump", onDismiss = { showMidiDump = false }, wide = true) {
                 MidiDumpWindow(
@@ -328,6 +339,102 @@ private fun MainWindowContent(model: UapmdModel) {
                     modifier = Modifier.fillMaxWidth().height(360.dp)
                 )
             }
+        }
+    }
+}
+
+@Composable
+private fun PluginEditorPane(
+    info: InstanceInfo,
+    statusMessage: String?,
+    onClose: () -> Unit,
+    onEnabledChanged: (Boolean) -> Unit,
+    onGroupChanged: (Int) -> Unit,
+    onPresetSelected: (PresetEntry) -> Unit,
+    onParameterChanged: (Int, Float) -> Unit,
+    onNoteOn: (Int) -> Unit,
+    onNoteOff: (Int) -> Unit,
+    onShowUi: () -> Unit,
+    onDismissStatus: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    Surface(
+        tonalElevation = 2.dp,
+        modifier = modifier
+    ) {
+        Column(modifier = Modifier.fillMaxSize()) {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 12.dp, vertical = 10.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Column(modifier = Modifier.weight(1f)) {
+                    Text("Plugin Editor", style = MaterialTheme.typography.titleMedium)
+                    Text(
+                        info.displayName,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+                TextButton(onClick = onClose) { Text("Close") }
+            }
+            HorizontalDivider()
+            if (statusMessage != null) {
+                Surface(
+                    color = MaterialTheme.colorScheme.secondaryContainer,
+                    modifier = Modifier.fillMaxWidth().padding(12.dp)
+                ) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth().padding(horizontal = 10.dp, vertical = 8.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text(
+                            statusMessage,
+                            modifier = Modifier.weight(1f),
+                            style = MaterialTheme.typography.bodySmall
+                        )
+                        TextButton(onClick = onDismissStatus) { Text("Dismiss") }
+                    }
+                }
+            }
+            if (info.hasUiSupport) {
+                Text(
+                    if (info.nativeUiVisible) "Native UI is active in a separate presentation."
+                    else "Native UI is available. Open it from here while keeping parameters docked.",
+                    modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            } else {
+                Text(
+                    "This plugin does not expose a native UI. Parameter editing remains available here.",
+                    modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+            Box(
+                modifier = Modifier
+                    .weight(1f)
+                    .fillMaxWidth()
+            ) {
+                InstanceDetails(
+                    info = info,
+                    onEnabledChanged = onEnabledChanged,
+                    onGroupChanged = onGroupChanged,
+                    onPresetSelected = onPresetSelected,
+                    onParameterChanged = onParameterChanged,
+                    onShowUi = onShowUi,
+                    modifier = Modifier.fillMaxSize()
+                )
+            }
+            HorizontalDivider()
+            MidiKeyboard(
+                onNoteOn = onNoteOn,
+                onNoteOff = onNoteOff,
+                modifier = Modifier.padding(horizontal = 8.dp, vertical = 6.dp)
+            )
         }
     }
 }

@@ -6,8 +6,7 @@ class AndroidPluginInstance internal constructor(
     internal val handle: Long
 ) : PluginInstance {
 
-    // Keep strong reference to prevent GC of resize handler while UI is alive.
-    private var resizeHandlerRef: Any? = null
+    private val activeUiPresentations = linkedSetOf<AndroidPluginUiPresentation>()
 
     override val displayName: String
         get() = JniBridge.uapmdInstanceDisplayName(handle)
@@ -119,40 +118,101 @@ class AndroidPluginInstance internal constructor(
         JniBridge.uapmdInstanceLoadState(handle, data, ctx.nativeValue, includeUiState, cb)
     }
 
-    override val hasUiSupport: Boolean get() = JniBridge.uapmdInstanceHasUiSupport(handle)
+    override val uiCapabilities: PluginUiCapabilities
+        get() {
+            val caps = JniBridge.uapmdInstanceGetUiCapabilities(handle)
+            return PluginUiCapabilities(
+                hasUiSupport = caps.getOrElse(0) { false },
+                supportsEmbeddedPresentations = caps.getOrElse(1) { false },
+                supportsFloatingPresentations = caps.getOrElse(2) { false },
+                supportsMultiplePresentations = caps.getOrElse(3) { false }
+            )
+        }
 
-    override fun createUi(
-        isFloating: Boolean,
-        parentHandle: Long,
-        resizeHandler: ((UInt, UInt) -> Boolean)?
-    ): Boolean {
-        resizeHandlerRef = resizeHandler?.let { handler ->
+    override fun createUiPresentation(request: PluginUiPresentationRequest): PluginUiPresentation? {
+        if (!uiCapabilities.hasUiSupport)
+            return null
+        if (activeUiPresentations.isNotEmpty() && !uiCapabilities.supportsMultiplePresentations)
+            return null
+
+        val resizeHandlerRef = request.resizeHandler?.let { handler ->
             object : Any() {
                 @Suppress("unused")
                 fun invoke(w: Int, h: Int): Boolean = handler(w.toUInt(), h.toUInt())
             }
         }
-        return JniBridge.uapmdInstanceCreateUi(handle, isFloating, parentHandle, resizeHandlerRef)
+        val hostKind: Int
+        val parent: Long
+        val webContainerId: String?
+        when (val host = request.host) {
+            PluginUiHost.FloatingWindow -> {
+                hostKind = 0
+                parent = 0L
+                webContainerId = null
+            }
+            is PluginUiHost.NativeEmbedded -> {
+                hostKind = 1
+                parent = host.parentHandle
+                webContainerId = null
+            }
+            is PluginUiHost.WebEmbedded -> {
+                hostKind = 2
+                parent = 0L
+                webContainerId = host.containerId
+            }
+        }
+        val role = when (request.role) {
+            PluginUiPresentationRole.COMPACT -> 0
+            PluginUiPresentationRole.FULL -> 1
+            PluginUiPresentationRole.AUXILIARY -> 2
+        }
+        val presentationHandle = JniBridge.uapmdInstanceCreateUiPresentation(
+            handle,
+            hostKind,
+            role,
+            parent,
+            webContainerId,
+            resizeHandlerRef
+        )
+        if (presentationHandle == 0L)
+            return null
+
+        return AndroidPluginUiPresentation(request, presentationHandle, resizeHandlerRef).also { activeUiPresentations += it }
     }
 
-    override fun destroyUi() {
-        JniBridge.uapmdInstanceDestroyUi(handle)
-        resizeHandlerRef = null
-    }
-
-    override fun showUi(): Boolean = JniBridge.uapmdInstanceShowUi(handle)
-    override fun hideUi() = JniBridge.uapmdInstanceHideUi(handle)
-    override val isUiVisible: Boolean get() = JniBridge.uapmdInstanceIsUiVisible(handle)
-
-    override fun setUiSize(width: UInt, height: UInt): Boolean =
-        JniBridge.uapmdInstanceSetUiSize(handle, width.toInt(), height.toInt())
-
-    override fun getUiSize(): UiSize? {
-        val arr = JniBridge.uapmdInstanceGetUiSize(handle) ?: return null
+    private fun getUiSizeInternal(presentationHandle: Long): UiSize? {
+        val arr = JniBridge.uapmdUiPresentationGetUiSize(presentationHandle) ?: return null
         return UiSize(arr[0].toUInt(), arr[1].toUInt())
     }
 
-    override val canUiResize: Boolean get() = JniBridge.uapmdInstanceCanUiResize(handle)
+    private inner class AndroidPluginUiPresentation(
+        private val request: PluginUiPresentationRequest,
+        private val presentationHandle: Long,
+        private val resizeHandlerRef: Any?
+    ) : PluginUiPresentation {
+
+        override val host: PluginUiHost get() = request.host
+        override val role: PluginUiPresentationRole get() = request.role
+        override val mode: PluginUiPresentationMode get() = request.mode
+        override val isVisible: Boolean get() = JniBridge.uapmdUiPresentationIsVisible(presentationHandle)
+        override val canResize: Boolean get() = JniBridge.uapmdUiPresentationCanUiResize(presentationHandle)
+
+        override fun show(): Boolean = JniBridge.uapmdUiPresentationShow(presentationHandle)
+
+        override fun hide() {
+            JniBridge.uapmdUiPresentationHide(presentationHandle)
+        }
+
+        override fun close() {
+            JniBridge.uapmdUiPresentationDestroy(presentationHandle)
+            activeUiPresentations.remove(this)
+        }
+
+        override fun setSize(width: UInt, height: UInt): Boolean =
+            JniBridge.uapmdUiPresentationSetUiSize(presentationHandle, width.toInt(), height.toInt())
+
+        override fun getSize(): UiSize? = getUiSizeInternal(presentationHandle)
+    }
 }
 
 // ─── AndroidPluginHost ───────────────────────────────────────────────────────

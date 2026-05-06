@@ -125,6 +125,27 @@ open class UapmdPresetMetadata : Structure() {
     @JvmField var path: String? = null
 }
 
+@FieldOrder(
+    "has_ui_support",
+    "supports_embedded_presentations",
+    "supports_floating_presentations",
+    "supports_multiple_presentations"
+)
+open class UapmdUiCapabilities : Structure() {
+    @JvmField var has_ui_support: Byte = 0
+    @JvmField var supports_embedded_presentations: Byte = 0
+    @JvmField var supports_floating_presentations: Byte = 0
+    @JvmField var supports_multiple_presentations: Byte = 0
+}
+
+@FieldOrder("host_kind", "role", "parent_handle", "web_container_id")
+open class UapmdUiPresentationRequest : Structure() {
+    @JvmField var host_kind: Int = 0
+    @JvmField var role: Int = 1
+    @JvmField var parent_handle: Pointer? = null
+    @JvmField var web_container_id: String? = null
+}
+
 @FieldOrder("samples", "legacy_beats")
 open class UapmdTimelinePosition : Structure() {
     @JvmField var samples: Long = 0L
@@ -380,6 +401,13 @@ interface UapmdLibrary : Library {
     )
 
     fun uapmd_instance_has_ui_support(inst: Pointer?): Boolean
+    fun uapmd_instance_get_ui_capabilities(inst: Pointer?, out: UapmdUiCapabilities)
+    fun uapmd_instance_create_ui_presentation(
+        inst: Pointer?,
+        request: UapmdUiPresentationRequest,
+        resizeUserData: Pointer?,
+        resizeHandler: UiResizeHandler?
+    ): Pointer?
     fun uapmd_instance_create_ui(
         inst: Pointer?,
         isFloating: Boolean,
@@ -394,6 +422,13 @@ interface UapmdLibrary : Library {
     fun uapmd_instance_set_ui_size(inst: Pointer?, width: Int, height: Int): Boolean
     fun uapmd_instance_get_ui_size(inst: Pointer?, width: IntByReference, height: IntByReference): Boolean
     fun uapmd_instance_can_ui_resize(inst: Pointer?): Boolean
+    fun uapmd_ui_presentation_destroy(presentation: Pointer?)
+    fun uapmd_ui_presentation_show(presentation: Pointer?): Boolean
+    fun uapmd_ui_presentation_hide(presentation: Pointer?)
+    fun uapmd_ui_presentation_is_visible(presentation: Pointer?): Boolean
+    fun uapmd_ui_presentation_set_size(presentation: Pointer?, width: Int, height: Int): Boolean
+    fun uapmd_ui_presentation_get_size(presentation: Pointer?, width: IntByReference, height: IntByReference): Boolean
+    fun uapmd_ui_presentation_can_resize(presentation: Pointer?): Boolean
 
     // ── PluginHost ───────────────────────────────────────────────────────────
 

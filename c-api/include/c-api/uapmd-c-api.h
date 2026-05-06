@@ -65,9 +65,15 @@ UAPMD_C_EXPORT void uapmd_instance_load_state(uapmd_plugin_instance_t inst,
 
 /* UI */
 UAPMD_C_EXPORT bool uapmd_instance_has_ui_support(uapmd_plugin_instance_t inst);
+UAPMD_C_EXPORT void uapmd_instance_get_ui_capabilities(uapmd_plugin_instance_t inst, uapmd_ui_capabilities_t* out);
 
 typedef bool (*uapmd_ui_resize_handler_t)(uint32_t width, uint32_t height, void* user_data);
 
+UAPMD_C_EXPORT uapmd_ui_presentation_t uapmd_instance_create_ui_presentation(
+                                               uapmd_plugin_instance_t inst,
+                                               const uapmd_ui_presentation_request_t* request,
+                                               void* resize_user_data,
+                                               uapmd_ui_resize_handler_t resize_handler);
 UAPMD_C_EXPORT bool uapmd_instance_create_ui(uapmd_plugin_instance_t inst,
                                                bool is_floating,
                                                void* parent_handle,
@@ -80,6 +86,14 @@ UAPMD_C_EXPORT bool uapmd_instance_is_ui_visible(uapmd_plugin_instance_t inst);
 UAPMD_C_EXPORT bool uapmd_instance_set_ui_size(uapmd_plugin_instance_t inst, uint32_t width, uint32_t height);
 UAPMD_C_EXPORT bool uapmd_instance_get_ui_size(uapmd_plugin_instance_t inst, uint32_t* width, uint32_t* height);
 UAPMD_C_EXPORT bool uapmd_instance_can_ui_resize(uapmd_plugin_instance_t inst);
+
+UAPMD_C_EXPORT void uapmd_ui_presentation_destroy(uapmd_ui_presentation_t presentation);
+UAPMD_C_EXPORT bool uapmd_ui_presentation_show(uapmd_ui_presentation_t presentation);
+UAPMD_C_EXPORT void uapmd_ui_presentation_hide(uapmd_ui_presentation_t presentation);
+UAPMD_C_EXPORT bool uapmd_ui_presentation_is_visible(uapmd_ui_presentation_t presentation);
+UAPMD_C_EXPORT bool uapmd_ui_presentation_set_size(uapmd_ui_presentation_t presentation, uint32_t width, uint32_t height);
+UAPMD_C_EXPORT bool uapmd_ui_presentation_get_size(uapmd_ui_presentation_t presentation, uint32_t* width, uint32_t* height);
+UAPMD_C_EXPORT bool uapmd_ui_presentation_can_resize(uapmd_ui_presentation_t presentation);
 
 /* ═══════════════════════════════════════════════════════════════════════════
  *  AudioPluginHostingAPI

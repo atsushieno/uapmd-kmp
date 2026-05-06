@@ -66,8 +66,17 @@ object JniBridge {
     @JvmStatic external fun uapmdInstanceLoadState(h: Long, data: ByteArray, ctx: Int, includeUi: Boolean, cb: Any)
 
     @JvmStatic external fun uapmdInstanceHasUiSupport(h: Long): Boolean
+    @JvmStatic external fun uapmdInstanceGetUiCapabilities(h: Long): BooleanArray
     /** resizeCb: (width: Int, height: Int) -> Boolean, nullable */
     @JvmStatic external fun uapmdInstanceCreateUi(h: Long, floating: Boolean, parent: Long, resizeCb: Any?): Boolean
+    @JvmStatic external fun uapmdInstanceCreateUiPresentation(
+        h: Long,
+        hostKind: Int,
+        role: Int,
+        parent: Long,
+        webContainerId: String?,
+        resizeCb: Any?
+    ): Long
     @JvmStatic external fun uapmdInstanceDestroyUi(h: Long)
     @JvmStatic external fun uapmdInstanceShowUi(h: Long): Boolean
     @JvmStatic external fun uapmdInstanceHideUi(h: Long)
@@ -76,6 +85,13 @@ object JniBridge {
     /** Returns int[2]{width, height} or null */
     @JvmStatic external fun uapmdInstanceGetUiSize(h: Long): IntArray?
     @JvmStatic external fun uapmdInstanceCanUiResize(h: Long): Boolean
+    @JvmStatic external fun uapmdUiPresentationDestroy(h: Long)
+    @JvmStatic external fun uapmdUiPresentationShow(h: Long): Boolean
+    @JvmStatic external fun uapmdUiPresentationHide(h: Long)
+    @JvmStatic external fun uapmdUiPresentationIsVisible(h: Long): Boolean
+    @JvmStatic external fun uapmdUiPresentationSetUiSize(h: Long, w: Int, ht: Int): Boolean
+    @JvmStatic external fun uapmdUiPresentationGetUiSize(h: Long): IntArray?
+    @JvmStatic external fun uapmdUiPresentationCanUiResize(h: Long): Boolean
 
     // ─── PluginHost ───────────────────────────────────────────────────────────
 

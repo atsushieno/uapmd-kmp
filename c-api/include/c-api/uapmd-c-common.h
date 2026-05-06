@@ -31,6 +31,7 @@ typedef int64_t  uapmd_timestamp_t;
 /* ── Opaque handles ──────────────────────────────────────────────────────── */
 
 typedef struct uapmd_plugin_instance*       uapmd_plugin_instance_t;
+typedef struct uapmd_ui_presentation*       uapmd_ui_presentation_t;
 typedef struct uapmd_plugin_host*           uapmd_plugin_host_t;
 typedef struct uapmd_plugin_graph*          uapmd_plugin_graph_t;
 typedef struct uapmd_plugin_node*           uapmd_plugin_node_t;
@@ -96,6 +97,32 @@ typedef enum uapmd_state_context_type {
     UAPMD_STATE_CONTEXT_PRESET   = 2,
     UAPMD_STATE_CONTEXT_PROJECT  = 3
 } uapmd_state_context_type_t;
+
+typedef enum uapmd_ui_host_kind {
+    UAPMD_UI_HOST_FLOATING = 0,
+    UAPMD_UI_HOST_NATIVE_EMBEDDED = 1,
+    UAPMD_UI_HOST_WEB_EMBEDDED = 2
+} uapmd_ui_host_kind_t;
+
+typedef enum uapmd_ui_presentation_role {
+    UAPMD_UI_ROLE_COMPACT = 0,
+    UAPMD_UI_ROLE_FULL = 1,
+    UAPMD_UI_ROLE_AUXILIARY = 2
+} uapmd_ui_presentation_role_t;
+
+typedef struct uapmd_ui_capabilities {
+    bool has_ui_support;
+    bool supports_embedded_presentations;
+    bool supports_floating_presentations;
+    bool supports_multiple_presentations;
+} uapmd_ui_capabilities_t;
+
+typedef struct uapmd_ui_presentation_request {
+    uapmd_ui_host_kind_t host_kind;
+    uapmd_ui_presentation_role_t role;
+    void* parent_handle;
+    const char* web_container_id;
+} uapmd_ui_presentation_request_t;
 
 #ifdef __cplusplus
 }

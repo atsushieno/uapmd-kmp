@@ -5,3 +5,36 @@ html, body {
     padding: 0;
     overflow: hidden;
 }
+
+body {
+    position: relative;
+}
+
+#compose-loading-spinner {
+    position: absolute;
+    inset: 50% auto auto 50%;
+    transform: translate(-50%, -50%);
+}
+
+#plugin-ui-host {
+    position: absolute;
+    top: 72px;
+    right: 12px;
+    width: min(420px, calc(100vw - 24px));
+    height: calc(100vh - 84px);
+    pointer-events: auto;
+    background: rgba(18, 18, 18, 0.04);
+    border: 1px solid rgba(0, 0, 0, 0.12);
+    border-radius: 12px;
+    overflow: hidden;
+    z-index: 20;
+}
+
+@media (max-width: 900px) {
+    #plugin-ui-host {
+        top: 25vh;
+        left: 12px;
+        width: auto;
+        height: calc(75vh - 12px);
+    }
+}

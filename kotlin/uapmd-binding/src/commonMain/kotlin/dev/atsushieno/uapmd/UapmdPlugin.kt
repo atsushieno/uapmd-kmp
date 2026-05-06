@@ -30,16 +30,59 @@ interface PluginInstance {
     fun requestState(ctx: StateContextType, includeUiState: Boolean, callback: (ByteArray?, String?) -> Unit)
     fun loadState(data: ByteArray, ctx: StateContextType, includeUiState: Boolean, callback: (String?) -> Unit)
 
-    val hasUiSupport: Boolean
-    /** parentHandle is platform-specific (e.g. NSView* on iOS cast to Long). */
-    fun createUi(isFloating: Boolean, parentHandle: Long, resizeHandler: ((UInt, UInt) -> Boolean)?): Boolean
-    fun destroyUi()
-    fun showUi(): Boolean
-    fun hideUi()
-    val isUiVisible: Boolean
-    fun setUiSize(width: UInt, height: UInt): Boolean
-    fun getUiSize(): UiSize?
-    val canUiResize: Boolean
+    val uiCapabilities: PluginUiCapabilities
+    val hasUiSupport: Boolean get() = uiCapabilities.hasUiSupport
+    fun createUiPresentation(request: PluginUiPresentationRequest = PluginUiPresentationRequest()): PluginUiPresentation?
+}
+
+data class PluginUiCapabilities(
+    val hasUiSupport: Boolean,
+    val supportsEmbeddedPresentations: Boolean = hasUiSupport,
+    val supportsFloatingPresentations: Boolean = hasUiSupport,
+    val supportsMultiplePresentations: Boolean = false
+)
+
+sealed interface PluginUiHost {
+    data object FloatingWindow : PluginUiHost
+    data class NativeEmbedded(val parentHandle: Long) : PluginUiHost
+    data class WebEmbedded(val containerId: String) : PluginUiHost
+}
+
+enum class PluginUiPresentationRole {
+    COMPACT,
+    FULL,
+    AUXILIARY
+}
+
+enum class PluginUiPresentationMode {
+    EMBEDDED,
+    FLOATING
+}
+
+data class PluginUiPresentationRequest(
+    val host: PluginUiHost = PluginUiHost.FloatingWindow,
+    val role: PluginUiPresentationRole = PluginUiPresentationRole.FULL,
+    val resizeHandler: ((UInt, UInt) -> Boolean)? = null
+) {
+    val mode: PluginUiPresentationMode
+        get() = when (host) {
+            PluginUiHost.FloatingWindow -> PluginUiPresentationMode.FLOATING
+            is PluginUiHost.NativeEmbedded, is PluginUiHost.WebEmbedded -> PluginUiPresentationMode.EMBEDDED
+        }
+}
+
+interface PluginUiPresentation {
+    val host: PluginUiHost
+    val role: PluginUiPresentationRole
+    val mode: PluginUiPresentationMode
+    val isVisible: Boolean
+    val canResize: Boolean
+
+    fun show(): Boolean
+    fun hide()
+    fun close()
+    fun setSize(width: UInt, height: UInt): Boolean
+    fun getSize(): UiSize?
 }
 
 interface PluginHost : AutoCloseable {

@@ -3,10 +3,9 @@ package dev.atsushieno.uapmd_kmp
 import dev.atsushieno.uapmd.*
 
 actual fun createUapmdModel(): UapmdModel {
-    // Must be called before creating any engine/sequencer: installs a
-    // dedicated JVM thread as the remidy "native main" thread so that
-    // plugin instantiation (which uses EventLoop::runTaskOnMainThread) does
-    // not deadlock against the absent Cocoa/Win32 run-loop.
+    // Must be called before creating any engine/sequencer. The desktop entry
+    // point installs the JVM event loop first; this call remains as an
+    // idempotent fallback for tests or alternate launchers.
     initJvmEventLoop()
     val dispatcher = getDefaultDeviceIODispatcher()
     val sequencer  = createRealtimeSequencer(

@@ -86,6 +86,8 @@ external interface UapmdCApiModule : JsAny {
     fun uapmdInstancePluginId(inst: Int, buf: Int, bufSize: Int): Int
     @JsName("_uapmd_instance_has_ui_support")
     fun uapmdInstanceHasUiSupport(inst: Int): Boolean
+    @JsName("_uapmd_instance_get_ui_capabilities")
+    fun uapmdInstanceGetUiCapabilities(inst: Int, outPtr: Int)
     @JsName("_uapmd_instance_can_ui_resize")
     fun uapmdInstanceCanUiResize(inst: Int): Boolean
     @JsName("_uapmd_instance_is_ui_visible")
@@ -132,10 +134,26 @@ external interface UapmdCApiModule : JsAny {
     fun uapmdInstanceGetUiSize(inst: Int, widthPtr: Int, heightPtr: Int): Boolean
     @JsName("_uapmd_instance_set_ui_size")
     fun uapmdInstanceSetUiSize(inst: Int, width: Int, height: Int): Boolean
+    @JsName("_uapmd_instance_create_ui_presentation")
+    fun uapmdInstanceCreateUiPresentation(inst: Int, requestPtr: Int, resizeCb: Int, ctx: Int): Int
     @JsName("_uapmd_instance_create_ui")
     fun uapmdInstanceCreateUi(inst: Int, isFloating: Boolean, parentHandle: Int, resizeCb: Int, ctx: Int): Boolean
     @JsName("_uapmd_instance_destroy_ui")
     fun uapmdInstanceDestroyUi(inst: Int)
+    @JsName("_uapmd_ui_presentation_destroy")
+    fun uapmdUiPresentationDestroy(presentation: Int)
+    @JsName("_uapmd_ui_presentation_show")
+    fun uapmdUiPresentationShow(presentation: Int): Boolean
+    @JsName("_uapmd_ui_presentation_hide")
+    fun uapmdUiPresentationHide(presentation: Int)
+    @JsName("_uapmd_ui_presentation_is_visible")
+    fun uapmdUiPresentationIsVisible(presentation: Int): Boolean
+    @JsName("_uapmd_ui_presentation_set_size")
+    fun uapmdUiPresentationSetSize(presentation: Int, width: Int, height: Int): Boolean
+    @JsName("_uapmd_ui_presentation_get_size")
+    fun uapmdUiPresentationGetSize(presentation: Int, widthPtr: Int, heightPtr: Int): Boolean
+    @JsName("_uapmd_ui_presentation_can_resize")
+    fun uapmdUiPresentationCanResize(presentation: Int): Boolean
     @JsName("_uapmd_instance_save_state_sync")
     fun uapmdInstanceSaveStateSync(inst: Int, outBuf: Int, outBufSize: Int, outActual: Int): Boolean
     @JsName("_uapmd_instance_load_state_sync")

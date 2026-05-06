@@ -88,8 +88,9 @@ fun InstanceDetailsPanel(
                         Spacer(Modifier.weight(1f))
                         OutlinedButton(
                             onClick = onShowUi,
+                            enabled = info.hasUiSupport,
                             contentPadding = PaddingValues(horizontal = 8.dp, vertical = 4.dp)
-                        ) { Text("Show UI", fontSize = 11.sp) }
+                        ) { Text(if (info.nativeUiVisible) "Show UI Again" else "Show UI", fontSize = 11.sp) }
                     }
 
                     // Group selector

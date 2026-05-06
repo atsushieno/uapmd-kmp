@@ -10,6 +10,8 @@ class WasmJsPluginInstance internal constructor(
     internal val handle: Int
 ) : PluginInstance {
 
+    private val activeUiPresentations = linkedSetOf<WasmJsPluginUiPresentation>()
+
     override val displayName: String
         get() = readString(handle) { h, buf, size -> uapmdInstanceDisplayName(h, buf, size) }
 
@@ -135,25 +137,72 @@ class WasmJsPluginInstance internal constructor(
         } finally { mod.free(ptr) }
     }
 
-    override val hasUiSupport: Boolean   get() = wasmMod.uapmdInstanceHasUiSupport(handle)
-    override val isUiVisible: Boolean    get() = wasmMod.uapmdInstanceIsUiVisible(handle)
-    override val canUiResize: Boolean    get() = wasmMod.uapmdInstanceCanUiResize(handle)
+    override val uiCapabilities: PluginUiCapabilities
+        get() {
+            val capsPtr = wasmMod.malloc(4)
+            return try {
+                wasmMod.uapmdInstanceGetUiCapabilities(handle, capsPtr)
+                PluginUiCapabilities(
+                    hasUiSupport = wasmMod.getValue(capsPtr, "i8").toInt() != 0,
+                    supportsEmbeddedPresentations = wasmMod.getValue(capsPtr + 1, "i8").toInt() != 0,
+                    supportsFloatingPresentations = wasmMod.getValue(capsPtr + 2, "i8").toInt() != 0,
+                    supportsMultiplePresentations = wasmMod.getValue(capsPtr + 3, "i8").toInt() != 0
+                )
+            } finally {
+                wasmMod.free(capsPtr)
+            }
+        }
 
-    override fun createUi(isFloating: Boolean, parentHandle: Long, resizeHandler: ((UInt, UInt) -> Boolean)?): Boolean {
-        // parentHandle not meaningful in browser context; pass 0
-        return wasmMod.uapmdInstanceCreateUi(handle, isFloating, 0, 0, 0)
+    override fun createUiPresentation(request: PluginUiPresentationRequest): PluginUiPresentation? {
+        if (!uiCapabilities.hasUiSupport)
+            return null
+        if (activeUiPresentations.isNotEmpty() && !uiCapabilities.supportsMultiplePresentations)
+            return null
+
+        val presentationHandle = wasmMod.malloc(16).let { reqPtr ->
+            try {
+                wasmMod.setValue(reqPtr + 4, when (request.role) {
+                    PluginUiPresentationRole.COMPACT -> 0.0
+                    PluginUiPresentationRole.FULL -> 1.0
+                    PluginUiPresentationRole.AUXILIARY -> 2.0
+                }, "i32")
+                when (val host = request.host) {
+                    PluginUiHost.FloatingWindow -> {
+                        wasmMod.setValue(reqPtr, 0.0, "i32")
+                        wasmMod.setValue(reqPtr + 8, 0.0, "i32")
+                        wasmMod.setValue(reqPtr + 12, 0.0, "i32")
+                        wasmMod.uapmdInstanceCreateUiPresentation(handle, reqPtr, 0, 0)
+                    }
+                    is PluginUiHost.NativeEmbedded -> {
+                        wasmMod.setValue(reqPtr, 1.0, "i32")
+                        wasmMod.setValue(reqPtr + 8, host.parentHandle.toDouble(), "i32")
+                        wasmMod.setValue(reqPtr + 12, 0.0, "i32")
+                        wasmMod.uapmdInstanceCreateUiPresentation(handle, reqPtr, 0, 0)
+                    }
+                    is PluginUiHost.WebEmbedded ->
+                        withCStringKt(host.containerId) { ptr ->
+                            wasmMod.setValue(reqPtr, 2.0, "i32")
+                            wasmMod.setValue(reqPtr + 8, 0.0, "i32")
+                            wasmMod.setValue(reqPtr + 12, ptr.toDouble(), "i32")
+                            wasmMod.uapmdInstanceCreateUiPresentation(handle, reqPtr, 0, 0)
+                        }
+                }
+            } finally {
+                wasmMod.free(reqPtr)
+            }
+        }
+        if (presentationHandle == 0)
+            return null
+
+        return WasmJsPluginUiPresentation(request, presentationHandle).also { activeUiPresentations += it }
     }
 
-    override fun destroyUi()         = wasmMod.uapmdInstanceDestroyUi(handle)
-    override fun showUi(): Boolean   = wasmMod.uapmdInstanceShowUi(handle)
-    override fun hideUi()            = wasmMod.uapmdInstanceHideUi(handle)
-
-    override fun getUiSize(): UiSize? {
+    private fun getUiSizeInternal(presentationHandle: Int): UiSize? {
         val mod = wasmMod
         val wPtr = mod.malloc(4)
         val hPtr = mod.malloc(4)
         return try {
-            if (!mod.uapmdInstanceGetUiSize(handle, wPtr, hPtr)) null
+            if (!mod.uapmdUiPresentationGetSize(presentationHandle, wPtr, hPtr)) null
             else UiSize(
                 mod.getValue(wPtr, "i32").toInt().toUInt(),
                 mod.getValue(hPtr, "i32").toInt().toUInt()
@@ -161,8 +210,33 @@ class WasmJsPluginInstance internal constructor(
         } finally { mod.free(wPtr); mod.free(hPtr) }
     }
 
-    override fun setUiSize(width: UInt, height: UInt): Boolean =
-        wasmMod.uapmdInstanceSetUiSize(handle, width.toInt(), height.toInt())
+    private inner class WasmJsPluginUiPresentation(
+        private val request: PluginUiPresentationRequest,
+        private val presentationHandle: Int
+    ) : PluginUiPresentation {
+
+        override val host: PluginUiHost get() = request.host
+        override val role: PluginUiPresentationRole get() = request.role
+        override val mode: PluginUiPresentationMode get() = request.mode
+        override val isVisible: Boolean get() = wasmMod.uapmdUiPresentationIsVisible(presentationHandle)
+        override val canResize: Boolean get() = wasmMod.uapmdUiPresentationCanResize(presentationHandle)
+
+        override fun show(): Boolean = wasmMod.uapmdUiPresentationShow(presentationHandle)
+
+        override fun hide() {
+            wasmMod.uapmdUiPresentationHide(presentationHandle)
+        }
+
+        override fun close() {
+            wasmMod.uapmdUiPresentationDestroy(presentationHandle)
+            activeUiPresentations.remove(this)
+        }
+
+        override fun setSize(width: UInt, height: UInt): Boolean =
+            wasmMod.uapmdUiPresentationSetSize(presentationHandle, width.toInt(), height.toInt())
+
+        override fun getSize(): UiSize? = getUiSizeInternal(presentationHandle)
+    }
 
     // ── Helpers ────────────────────────────────────────────────────────────
 

@@ -26,6 +26,7 @@ expect fun createUapmdModel(): UapmdModel
 class UapmdModel(val sequencer: RealtimeSequencer) {
 
     private val engine: SequencerEngine get() = sequencer.engine
+    private val nativeUiPresentations = mutableMapOf<Int, PluginUiPresentation>()
 
     // ── Audio engine ───────────────────────────────────────────────────────
 
@@ -110,10 +111,12 @@ class UapmdModel(val sequencer: RealtimeSequencer) {
     }
 
     fun removeInstance(instanceId: Int) {
+        closePluginUi(instanceId)
         engine.removePluginInstance(instanceId)
         engine.cleanupEmptyTracks()
         refreshTracks()
         refreshTimeline()
+        closeInstance(instanceId)
     }
 
     fun addEmptyTrack(): Int {
@@ -236,14 +239,30 @@ class UapmdModel(val sequencer: RealtimeSequencer) {
 
     var instanceInfos by mutableStateOf<Map<Int, InstanceInfo>>(emptyMap())
         private set
+    var selectedInstanceId by mutableStateOf<Int?>(null)
+        private set
+    var pluginUiStatusMessage by mutableStateOf<String?>(null)
+        private set
+
+    val selectedInstanceInfo: InstanceInfo?
+        get() = selectedInstanceId?.let { instanceInfos[it] }
 
     fun openInstance(instanceId: Int) {
         val info = buildInstanceInfo(instanceId) ?: return
         instanceInfos = instanceInfos + (instanceId to info)
+        selectedInstanceId = instanceId
     }
 
     fun closeInstance(instanceId: Int) {
         instanceInfos = instanceInfos - instanceId
+        if (selectedInstanceId == instanceId)
+            selectedInstanceId = null
+    }
+
+    fun selectInstance(instanceId: Int?) {
+        selectedInstanceId = instanceId
+        if (instanceId != null && instanceId !in instanceInfos)
+            openInstance(instanceId)
     }
 
     private fun refreshOpenInstance(instanceId: Int) {
@@ -280,6 +299,7 @@ class UapmdModel(val sequencer: RealtimeSequencer) {
             val track = engine.getTrack(trackIdx.toUInt())
             track.findAvailableGroup().toInt() + 1
         } else 1
+        val uiCapabilities = inst.uiCapabilities
 
         return InstanceInfo(
             instanceId   = instanceId,
@@ -287,9 +307,80 @@ class UapmdModel(val sequencer: RealtimeSequencer) {
             isEnabled    = !inst.bypassed,
             groupIndex   = groupIndex,
             groupCount   = groupCount,
+            hasUiSupport = uiCapabilities.hasUiSupport,
+            nativeUiVisible = nativeUiPresentations[instanceId]?.isVisible == true,
             parameters   = params,
             presets      = presets
         )
+    }
+
+    fun showPluginUi(instanceId: Int) {
+        val inst = engine.getPluginInstance(instanceId) ?: return
+        val existing = nativeUiPresentations[instanceId]
+        if (existing != null) {
+            if (!existing.show())
+                pluginUiStatusMessage = "Failed to show native UI for ${inst.displayName}."
+            refreshOpenInstance(instanceId)
+            return
+        }
+        val uiCapabilities = inst.uiCapabilities
+        if (!uiCapabilities.hasUiSupport) {
+            pluginUiStatusMessage = "${inst.displayName} does not expose a native UI."
+            refreshOpenInstance(instanceId)
+            return
+        }
+        val preferredTarget = defaultPluginUiPresentationTarget(instanceId)
+        val request = when {
+            preferredTarget != null && uiCapabilities.supportsEmbeddedPresentations ->
+                PluginUiPresentationRequest(
+                    host = preferredTarget.host,
+                    role = PluginUiPresentationRole.FULL
+                )
+            uiCapabilities.supportsFloatingPresentations && supportsFloatingPluginUiPresentations() ->
+                PluginUiPresentationRequest(
+                    host = PluginUiHost.FloatingWindow,
+                    role = PluginUiPresentationRole.FULL
+                )
+            preferredTarget != null ->
+                PluginUiPresentationRequest(
+                    host = preferredTarget.host,
+                    role = PluginUiPresentationRole.FULL
+                )
+            else -> null
+        }
+        if (request == null) {
+            pluginUiStatusMessage =
+                unsupportedFloatingPluginUiMessage()
+                    ?: "No supported native UI presentation target is available for ${inst.displayName}."
+            refreshOpenInstance(instanceId)
+            return
+        }
+        val presentation = inst.createUiPresentation(
+            request
+        )
+        if (presentation == null) {
+            pluginUiStatusMessage = "Failed to create a native UI presentation for ${inst.displayName}."
+            refreshOpenInstance(instanceId)
+            return
+        }
+        nativeUiPresentations[instanceId] = presentation
+        if (!presentation.show())
+            pluginUiStatusMessage = "Created the native UI presentation for ${inst.displayName}, but show() failed."
+        else
+            pluginUiStatusMessage = when (request.host) {
+                PluginUiHost.FloatingWindow -> null
+                else -> "Attached ${inst.displayName} to the ${preferredTarget?.description ?: "embedded editor surface"}."
+            }
+        refreshOpenInstance(instanceId)
+    }
+
+    fun closePluginUi(instanceId: Int) {
+        nativeUiPresentations.remove(instanceId)?.close()
+        refreshOpenInstance(instanceId)
+    }
+
+    fun clearPluginUiStatus() {
+        pluginUiStatusMessage = null
     }
 
     fun setParameterValue(instanceId: Int, paramIndex: Int, normalizedValue: Float) {
