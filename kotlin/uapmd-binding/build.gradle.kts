@@ -71,6 +71,7 @@ kotlin {
 android {
     namespace = "dev.atsushieno.uapmd"
     compileSdk = libs.versions.android.compileSdk.get().toInt()
+    ndkVersion = "28.2.13676358"
     defaultConfig {
         minSdk = libs.versions.android.minSdk.get().toInt()
         externalNativeBuild {
@@ -98,6 +99,7 @@ android {
     }
     buildFeatures {
         prefab = true
+        prefabPublishing = true
     }
 }
 

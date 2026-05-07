@@ -6,9 +6,11 @@ import com.sun.jna.NativeLibrary
 import com.sun.jna.Pointer
 import dev.atsushieno.uapmd.jna.EventLoopEnqueueCb
 import dev.atsushieno.uapmd.jna.EventLoopIsMainThreadCb
+import java.awt.EventQueue
+import java.util.concurrent.locks.ReentrantLock
 import java.util.concurrent.ConcurrentHashMap
-import java.util.concurrent.Executors
 import java.util.concurrent.atomic.AtomicLong
+import kotlin.concurrent.withLock
 
 private interface JvmEventLoopDispatcher {
     fun isMainThread(): Boolean
@@ -16,27 +18,21 @@ private interface JvmEventLoopDispatcher {
     fun <T> runSync(action: () -> T): T
 }
 
-private class ExecutorJvmEventLoopDispatcher : JvmEventLoopDispatcher {
-    private val executor = Executors.newSingleThreadExecutor { r ->
-        Thread(r, "uapmd-native-main").also { it.isDaemon = true }
-    }
-
-    @Volatile
-    private var nativeMainThread: Thread? = null
-
+private class AwtJvmEventLoopDispatcher : JvmEventLoopDispatcher {
     fun install(block: () -> Unit) {
-        executor.submit {
-            nativeMainThread = Thread.currentThread()
+        EventQueue.invokeAndWait {
+            debugJvmThread("AwtJvmEventLoopDispatcher.install")
             block()
-        }.get()
+        }
     }
 
     override fun isMainThread(): Boolean =
-        Thread.currentThread() === nativeMainThread
+        EventQueue.isDispatchThread()
 
     override fun enqueueNative(taskFn: Pointer?, taskCtx: Pointer?) {
         if (taskFn == null) return
-        executor.submit {
+        EventQueue.invokeLater {
+            debugJvmThread("AwtJvmEventLoopDispatcher.enqueueNative")
             Function.getFunction(taskFn).invoke(Void::class.java, arrayOf<Any?>(taskCtx))
         }
     }
@@ -44,7 +40,11 @@ private class ExecutorJvmEventLoopDispatcher : JvmEventLoopDispatcher {
     override fun <T> runSync(action: () -> T): T {
         if (isMainThread())
             return action()
-        return executor.submit<T> { action() }.get()
+        var result: Result<T>? = null
+        EventQueue.invokeAndWait {
+            result = runCatching(action)
+        }
+        return result!!.getOrThrow()
     }
 }
 
@@ -52,6 +52,7 @@ private object AppleMainQueueDispatcher {
     private val library = NativeLibrary.getInstance("System")
     private val dispatchAsync = library.getFunction("dispatch_async_f")
     private val dispatchSync = library.getFunction("dispatch_sync_f")
+    private val pthreadMainNp = library.getFunction("pthread_main_np")
     private val mainQueue = library.getGlobalVariableAddress("_dispatch_main_q")
     private val nextToken = AtomicLong(1L)
     private val pendingWork = ConcurrentHashMap<Long, () -> Unit>()
@@ -62,16 +63,32 @@ private object AppleMainQueueDispatcher {
             pendingWork.remove(token)?.invoke()
         }
     }
+    private val captureThreadCallback = object : Callback {
+        @Suppress("unused")
+        fun invoke(context: Pointer?) = Unit
+    }
+
+    fun install() {
+        debugJvmThread("AppleMainQueueDispatcher.install.request")
+        dispatchSync.invoke(Void::class.java, arrayOf(mainQueue, Pointer.NULL, captureThreadCallback))
+        debugJvmThread("AppleMainQueueDispatcher.install.captured")
+    }
+
+    fun isMainQueueThread(): Boolean =
+        (pthreadMainNp.invokeInt(emptyArray()) != 0)
 
     fun enqueueNative(taskFn: Pointer?, taskCtx: Pointer?) {
         if (taskFn == null) return
+        debugJvmThread("AppleMainQueueDispatcher.enqueueNative")
         dispatchAsync.invoke(Void::class.java, arrayOf(mainQueue, taskCtx, taskFn))
     }
 
     fun <T> runSync(action: () -> T): T {
+        debugJvmThread("AppleMainQueueDispatcher.runSync.request")
         var result: Result<T>? = null
         val token = nextToken.getAndIncrement()
         pendingWork[token] = {
+            debugJvmThread("AppleMainQueueDispatcher.runSync.invoke")
             result = runCatching(action)
         }
         dispatchSync.invoke(Void::class.java, arrayOf(mainQueue, Pointer.createConstant(token), workCallback))
@@ -79,11 +96,9 @@ private object AppleMainQueueDispatcher {
     }
 }
 
-private class SystemMainThreadJvmEventLoopDispatcher(
-    private val uiMainThread: Thread
-) : JvmEventLoopDispatcher {
+private class SystemMainThreadJvmEventLoopDispatcher : JvmEventLoopDispatcher {
     override fun isMainThread(): Boolean =
-        Thread.currentThread() === uiMainThread
+        AppleMainQueueDispatcher.isMainQueueThread()
 
     override fun enqueueNative(taskFn: Pointer?, taskCtx: Pointer?) {
         AppleMainQueueDispatcher.enqueueNative(taskFn, taskCtx)
@@ -101,6 +116,7 @@ private val isMacOs: Boolean
 
 @Volatile
 private var installedDispatcher: JvmEventLoopDispatcher? = null
+private val eventLoopDispatcherLock = ReentrantLock()
 
 private val isMainThreadCb = object : EventLoopIsMainThreadCb {
     override fun invoke(userData: Pointer?): Boolean =
@@ -119,19 +135,42 @@ fun initJvmEventLoop() {
     if (installedDispatcher != null)
         return
 
-    if (isMacOs) {
-        val dispatcher = SystemMainThreadJvmEventLoopDispatcher(Thread.currentThread())
+    debugJvmThread("initJvmEventLoop")
+    val dispatcher = AwtJvmEventLoopDispatcher()
+    dispatcher.install {
         installedDispatcher = dispatcher
         lib.uapmd_set_event_loop(null, null, isMainThreadCb, enqueueTaskCb)
-    } else {
-        val dispatcher = ExecutorJvmEventLoopDispatcher()
-        dispatcher.install {
-            installedDispatcher = dispatcher
-            lib.uapmd_set_event_loop(null, null, isMainThreadCb, enqueueTaskCb)
-        }
     }
 }
 
+private inline fun <T> withInstalledDispatcher(dispatcher: JvmEventLoopDispatcher, action: () -> T): T =
+    eventLoopDispatcherLock.withLock {
+        val previous = installedDispatcher
+        installedDispatcher = dispatcher
+        try {
+            action()
+        } finally {
+            installedDispatcher = previous
+        }
+    }
+
 internal fun <T> runOnJvmEventLoopThread(action: () -> T): T =
-    installedDispatcher?.runSync(action)
+    installedDispatcher?.runSync {
+        debugJvmThread("runOnJvmEventLoopThread")
+        action()
+    }
         ?: error("uapmd JVM event loop is not initialized.")
+
+internal fun <T> runOnJvmNativeUiThread(action: () -> T): T {
+    if (!isMacOs)
+        return runOnJvmEventLoopThread(action)
+    AppleMainQueueDispatcher.install()
+    val dispatcher = SystemMainThreadJvmEventLoopDispatcher()
+    return if (AppleMainQueueDispatcher.isMainQueueThread()) {
+        withInstalledDispatcher(dispatcher) { action() }
+    } else {
+        AppleMainQueueDispatcher.runSync {
+            withInstalledDispatcher(dispatcher) { action() }
+        }
+    }
+}

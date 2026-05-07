@@ -3,10 +3,10 @@ package dev.atsushieno.uapmd_kmp.timeline
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.gestures.awaitEachGesture
 import androidx.compose.foundation.gestures.awaitFirstDown
-import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.*
+import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Rect
@@ -156,10 +156,16 @@ private object TimelineColors {
 fun ClipTimeline(
     tracks: List<TimelineTrack>,
     playheadMs: Long = -1L,
+    masterTrackIndex: Int = 0,
     modifier: Modifier = Modifier,
     onClipMoved: (trackIndex: Int, clipId: Int, newStartMs: Long) -> Unit = { _, _, _ -> },
     onClipDoubleClicked: (trackIndex: Int, clipId: Int) -> Unit = { _, _ -> },
-    onEmptyDoubleClicked: (trackIndex: Int, positionMs: Long) -> Unit = { _, _ -> }
+    onEmptyDoubleClicked: (trackIndex: Int, positionMs: Long) -> Unit = { _, _ -> },
+    onSavePluginState: (trackIndex: Int) -> Unit = {},
+    onOpenGraph: (trackIndex: Int) -> Unit = {},
+    onToggleMonitor: (trackIndex: Int) -> Unit = {},
+    onRemoveTrack: (trackIndex: Int) -> Unit = {},
+    onAddPlugin: (trackIndex: Int) -> Unit = {}
 ) {
     val state = remember { TimelineState() }
     val density = LocalDensity.current
@@ -185,6 +191,10 @@ fun ClipTimeline(
             (state.sectionHeight * laneCount).toDouble()
         }.toFloat() + state.scrollbarHeight).toDp()
     }
+
+    val headerHeightDp  = with(density) { state.headerHeight.toDp() }
+    val sectionHeightDp = with(density) { state.sectionHeight.toDp() }
+    val legendWidthDp   = with(density) { state.legendWidth.toDp() }
 
     Box(modifier = modifier.height(totalHeight)) {
         Canvas(
@@ -259,6 +269,93 @@ fun ClipTimeline(
             drawScrollbar(state, totalMs)
             if (state.drag.target == DragTarget.Clip) drawDragGhost(state, laidOutTracks)
         }
+
+        // ── Interactive legend overlay ──────────────────────────────────────
+        // Compose buttons laid out on top of the canvas-drawn legend column.
+        Column(
+            modifier = Modifier
+                .width(legendWidthDp)
+                .padding(top = headerHeightDp)
+        ) {
+            laidOutTracks.forEach { (track, laid) ->
+                val laneCount = (laid.maxOfOrNull { it.laneCount } ?: 1).coerceAtLeast(1)
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(sectionHeightDp * laneCount),
+                    contentAlignment = Alignment.BottomStart
+                ) {
+                    TrackLegendButtons(
+                        isMaster      = track.index == masterTrackIndex,
+                        onSaveState   = { onSavePluginState(track.index) },
+                        onOpenGraph   = { onOpenGraph(track.index) },
+                        onMonitor     = { onToggleMonitor(track.index) },
+                        onRemove      = { onRemoveTrack(track.index) },
+                        onAddPlugin   = { onAddPlugin(track.index) }
+                    )
+                }
+            }
+        }
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Legend overlay — interactive Compose buttons
+// ---------------------------------------------------------------------------
+
+@Composable
+private fun TrackLegendButtons(
+    isMaster: Boolean,
+    onSaveState: () -> Unit,
+    onOpenGraph: () -> Unit,
+    onMonitor: () -> Unit,
+    onRemove: () -> Unit,
+    onAddPlugin: () -> Unit
+) {
+    Surface(
+        color = Color.Transparent,
+        modifier = Modifier.fillMaxWidth()
+    ) {
+        Column(modifier = Modifier.fillMaxWidth().padding(horizontal = 2.dp, vertical = 2.dp)) {
+            // Icon buttons row
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(2.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                LegendIconButton("💾", onSaveState)
+                LegendIconButton("⊛",  onOpenGraph)
+                LegendIconButton("👁", onMonitor)
+                if (!isMaster) {
+                    LegendIconButton("✕", onRemove, isDestructive = true)
+                }
+                Spacer(Modifier.weight(1f))
+            }
+            // Add Plugin button
+            TextButton(
+                onClick = onAddPlugin,
+                contentPadding = PaddingValues(horizontal = 4.dp, vertical = 0.dp),
+                modifier = Modifier.height(22.dp).fillMaxWidth()
+            ) {
+                Text("+ Plugin", fontSize = 10.sp)
+            }
+        }
+    }
+}
+
+@Composable
+private fun LegendIconButton(label: String, onClick: () -> Unit, isDestructive: Boolean = false) {
+    val contentColor = if (isDestructive)
+        MaterialTheme.colorScheme.error
+    else
+        MaterialTheme.colorScheme.onSurface.copy(alpha = 0.8f)
+    TextButton(
+        onClick = onClick,
+        contentPadding = PaddingValues(0.dp),
+        modifier = Modifier.size(22.dp),
+        colors = ButtonDefaults.textButtonColors(contentColor = contentColor)
+    ) {
+        Text(label, fontSize = 11.sp)
     }
 }
 

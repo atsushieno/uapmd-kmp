@@ -19,6 +19,11 @@ import dev.atsushieno.uapmd_kmp.ui.PluginEntry
 import dev.atsushieno.uapmd_kmp.ui.PresetEntry
 import dev.atsushieno.uapmd_kmp.ui.InstanceInfo
 import dev.atsushieno.uapmd_kmp.ui.TrackInstanceEntry
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
 
 /** Platform provides a ready-to-use [RealtimeSequencer]. */
 expect fun createUapmdModel(): UapmdModel
@@ -27,10 +32,19 @@ class UapmdModel(val sequencer: RealtimeSequencer) {
 
     private val engine: SequencerEngine get() = sequencer.engine
     private val nativeUiPresentations = mutableMapOf<Int, PluginUiPresentation>()
+    private val uiScope = CoroutineScope(SupervisorJob() + Dispatchers.Main)
+    private var pluginLoadRequestSerial = 0L
+    private var pendingPluginLoadCount = 0
+
+    private fun dispatchUiStateUpdate(block: () -> Unit) {
+        uiScope.launch { block() }
+    }
 
     // ── Audio engine ───────────────────────────────────────────────────────
 
     var isAudioEngineRunning by mutableStateOf(true)
+        private set
+    var isPluginLoadPending by mutableStateOf(false)
         private set
 
     fun toggleAudioEngine() {
@@ -87,17 +101,26 @@ class UapmdModel(val sequencer: RealtimeSequencer) {
             val track = engine.getTrack(ti.toUInt())
             val ids = track.getOrderedInstanceIds()
             if (ids.isEmpty()) {
-                list += TrackInstanceEntry(ti, "Track ${ti + 1}", -1, "", "", true)
+                list += TrackInstanceEntry(
+                    trackIndex   = ti,
+                    trackName    = "Track ${ti + 1}",
+                    instanceId   = -1,
+                    pluginName   = "",
+                    pluginFormat = "",
+                    deviceName   = "",
+                    enabled      = true
+                )
             } else {
                 for (id in ids) {
                     val inst = engine.getPluginInstance(id) ?: continue
                     list += TrackInstanceEntry(
-                        trackIndex  = ti,
-                        trackName   = "Track ${ti + 1}",
-                        instanceId  = id,
-                        pluginName  = inst.displayName,
-                        deviceName  = "",
-                        enabled     = !inst.bypassed
+                        trackIndex   = ti,
+                        trackName    = "Track ${ti + 1}",
+                        instanceId   = id,
+                        pluginName   = inst.displayName,
+                        pluginFormat = inst.formatName,
+                        deviceName   = "",
+                        enabled      = !inst.bypassed
                     )
                 }
             }
@@ -132,14 +155,57 @@ class UapmdModel(val sequencer: RealtimeSequencer) {
         refreshTimeline()
     }
 
+    fun saveTrackPluginStates(trackIndex: Int) {
+        val track = engine.getTrack(trackIndex.toUInt())
+        for (id in track.getOrderedInstanceIds()) {
+            engine.getPluginInstance(id)?.saveStateSync()
+        }
+    }
+
+    fun toggleMonitor(trackIndex: Int) {
+        // TODO: monitor API not yet in engine binding
+    }
+
+    fun enableUmpDevice(instanceId: Int) {
+        // TODO: UMP device enable not yet in engine binding
+    }
+
+    fun disableUmpDevice(instanceId: Int) {
+        // TODO: UMP device disable not yet in engine binding
+    }
+
+    fun setUmpDeviceName(instanceId: Int, name: String) {
+        // TODO: UMP device name assignment not yet in engine binding
+    }
+
     fun addPluginToTrack(trackIndex: Int, format: String, pluginId: String) {
         val existingCount = engine.trackCount.toInt()
         if (trackIndex >= existingCount) {
             repeat(trackIndex - existingCount + 1) { engine.addEmptyTrack() }
         }
-        engine.addPluginToTrack(trackIndex, format, pluginId) { _, _, _ ->
-            refreshTracks()
-            refreshTimeline()
+        val requestSerial = ++pluginLoadRequestSerial
+        dispatchUiStateUpdate {
+            pendingPluginLoadCount += 1
+            isPluginLoadPending = pendingPluginLoadCount > 0
+            pluginLoadStatusMessage = "Loading $format plugin…"
+        }
+        uiScope.launch {
+            delay(5000)
+            if (pluginLoadRequestSerial == requestSerial && pluginLoadStatusMessage == "Loading $format plugin…") {
+                pluginLoadStatusMessage =
+                    "Plugin instantiation did not complete within 5 seconds for $format ($pluginId)."
+            }
+        }
+        engine.addPluginToTrack(trackIndex, format, pluginId) { _, _, error ->
+            dispatchUiStateUpdate {
+                pendingPluginLoadCount = (pendingPluginLoadCount - 1).coerceAtLeast(0)
+                isPluginLoadPending = pendingPluginLoadCount > 0
+                if (pluginLoadRequestSerial == requestSerial) {
+                    pluginLoadStatusMessage = error
+                }
+                refreshTracks()
+                refreshTimeline()
+            }
         }
     }
 
@@ -243,6 +309,8 @@ class UapmdModel(val sequencer: RealtimeSequencer) {
         private set
     var pluginUiStatusMessage by mutableStateOf<String?>(null)
         private set
+    var pluginLoadStatusMessage by mutableStateOf<String?>(null)
+        private set
 
     val selectedInstanceInfo: InstanceInfo?
         get() = selectedInstanceId?.let { instanceInfos[it] }
@@ -318,15 +386,19 @@ class UapmdModel(val sequencer: RealtimeSequencer) {
         val inst = engine.getPluginInstance(instanceId) ?: return
         val existing = nativeUiPresentations[instanceId]
         if (existing != null) {
-            if (!existing.show())
-                pluginUiStatusMessage = "Failed to show native UI for ${inst.displayName}."
-            refreshOpenInstance(instanceId)
+            val status = if (!existing.show()) "Failed to show native UI for ${inst.displayName}." else null
+            dispatchUiStateUpdate {
+                pluginUiStatusMessage = status
+                refreshOpenInstance(instanceId)
+            }
             return
         }
         val uiCapabilities = inst.uiCapabilities
         if (!uiCapabilities.hasUiSupport) {
-            pluginUiStatusMessage = "${inst.displayName} does not expose a native UI."
-            refreshOpenInstance(instanceId)
+            dispatchUiStateUpdate {
+                pluginUiStatusMessage = "${inst.displayName} does not expose a native UI."
+                refreshOpenInstance(instanceId)
+            }
             return
         }
         val preferredTarget = defaultPluginUiPresentationTarget(instanceId)
@@ -349,38 +421,56 @@ class UapmdModel(val sequencer: RealtimeSequencer) {
             else -> null
         }
         if (request == null) {
-            pluginUiStatusMessage =
+            val status =
                 unsupportedFloatingPluginUiMessage()
                     ?: "No supported native UI presentation target is available for ${inst.displayName}."
-            refreshOpenInstance(instanceId)
+            dispatchUiStateUpdate {
+                pluginUiStatusMessage = status
+                refreshOpenInstance(instanceId)
+            }
             return
         }
         val presentation = inst.createUiPresentation(
             request
         )
         if (presentation == null) {
-            pluginUiStatusMessage = "Failed to create a native UI presentation for ${inst.displayName}."
-            refreshOpenInstance(instanceId)
+            dispatchUiStateUpdate {
+                pluginUiStatusMessage = "Failed to create a native UI presentation for ${inst.displayName}."
+                refreshOpenInstance(instanceId)
+            }
             return
         }
         nativeUiPresentations[instanceId] = presentation
-        if (!presentation.show())
-            pluginUiStatusMessage = "Created the native UI presentation for ${inst.displayName}, but show() failed."
+        val status = if (!presentation.show())
+            "Created the native UI presentation for ${inst.displayName}, but show() failed."
         else
-            pluginUiStatusMessage = when (request.host) {
+            when (request.host) {
                 PluginUiHost.FloatingWindow -> null
                 else -> "Attached ${inst.displayName} to the ${preferredTarget?.description ?: "embedded editor surface"}."
             }
-        refreshOpenInstance(instanceId)
+        dispatchUiStateUpdate {
+            pluginUiStatusMessage = status
+            refreshOpenInstance(instanceId)
+        }
     }
 
     fun closePluginUi(instanceId: Int) {
         nativeUiPresentations.remove(instanceId)?.close()
-        refreshOpenInstance(instanceId)
+        dispatchUiStateUpdate {
+            refreshOpenInstance(instanceId)
+        }
     }
 
     fun clearPluginUiStatus() {
-        pluginUiStatusMessage = null
+        dispatchUiStateUpdate {
+            pluginUiStatusMessage = null
+        }
+    }
+
+    fun clearPluginLoadStatus() {
+        dispatchUiStateUpdate {
+            pluginLoadStatusMessage = null
+        }
     }
 
     fun setParameterValue(instanceId: Int, paramIndex: Int, normalizedValue: Float) {
