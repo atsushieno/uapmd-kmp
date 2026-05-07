@@ -3,6 +3,7 @@ package dev.atsushieno.uapmd_kmp
 import dev.atsushieno.uapmd.*
 
 actual fun createUapmdModel(): UapmdModel {
+    debugJvmThread("createUapmdModel")
     // Must be called before creating any engine/sequencer. The desktop entry
     // point installs the JVM event loop first; this call remains as an
     // idempotent fallback for tests or alternate launchers.

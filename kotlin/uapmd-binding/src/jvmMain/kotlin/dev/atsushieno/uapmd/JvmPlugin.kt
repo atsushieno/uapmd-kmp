@@ -182,7 +182,7 @@ class JvmPluginInstance internal constructor(
             }
             write()
         }
-        val presentationHandle = runOnJvmEventLoopThread {
+        val presentationHandle = runOnJvmNativeUiThread {
             lib.uapmd_instance_create_ui_presentation(handle, nativeRequest, null, resizeHandlerRef)
         }
         if (presentationHandle == null)
@@ -208,33 +208,33 @@ class JvmPluginInstance internal constructor(
         override val role: PluginUiPresentationRole get() = request.role
         override val mode: PluginUiPresentationMode get() = request.mode
         override val isVisible: Boolean
-            get() = runOnJvmEventLoopThread { lib.uapmd_ui_presentation_is_visible(presentationHandle) }
+            get() = runOnJvmNativeUiThread { lib.uapmd_ui_presentation_is_visible(presentationHandle) }
         override val canResize: Boolean
-            get() = runOnJvmEventLoopThread { lib.uapmd_ui_presentation_can_resize(presentationHandle) }
+            get() = runOnJvmNativeUiThread { lib.uapmd_ui_presentation_can_resize(presentationHandle) }
 
         override fun show(): Boolean =
-            runOnJvmEventLoopThread { lib.uapmd_ui_presentation_show(presentationHandle) }
+            runOnJvmNativeUiThread { lib.uapmd_ui_presentation_show(presentationHandle) }
 
         override fun hide() {
-            runOnJvmEventLoopThread {
+            runOnJvmNativeUiThread {
                 lib.uapmd_ui_presentation_hide(presentationHandle)
             }
         }
 
         override fun close() {
-            runOnJvmEventLoopThread {
+            runOnJvmNativeUiThread {
                 lib.uapmd_ui_presentation_destroy(presentationHandle)
             }
             activeUiPresentations.remove(this)
         }
 
         override fun setSize(width: UInt, height: UInt): Boolean =
-            runOnJvmEventLoopThread {
+            runOnJvmNativeUiThread {
                 lib.uapmd_ui_presentation_set_size(presentationHandle, width.toInt(), height.toInt())
             }
 
         override fun getSize(): UiSize? =
-            runOnJvmEventLoopThread { getUiSizeInternal(presentationHandle) }
+            runOnJvmNativeUiThread { getUiSizeInternal(presentationHandle) }
     }
 }
 

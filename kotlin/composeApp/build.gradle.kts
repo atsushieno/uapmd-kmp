@@ -1,6 +1,9 @@
 import org.jetbrains.compose.desktop.application.dsl.TargetFormat
 import org.jetbrains.kotlin.gradle.ExperimentalWasmDsl
 import org.jetbrains.kotlin.gradle.dsl.JvmTarget
+import org.gradle.api.tasks.Exec
+import org.gradle.api.tasks.JavaExec
+import java.io.File
 
 plugins {
     alias(libs.plugins.kotlinMultiplatform)
@@ -96,11 +99,66 @@ dependencies {
 compose.desktop {
     application {
         mainClass = "dev.atsushieno.uapmd_kmp.MainKt"
+        jvmArgs += listOf(
+            "-Dapple.awt.application.name=uapmd-kmp",
+            "-Xdock:name=uapmd-kmp"
+        )
 
         nativeDistributions {
             targetFormats(TargetFormat.Dmg, TargetFormat.Msi, TargetFormat.Deb)
-            packageName = "dev.atsushieno.uapmd_kmp"
+            packageName = "uapmd-kmp"
             packageVersion = "1.0.0"
         }
+    }
+}
+
+val jvmMainCompilation = kotlin.targets.getByName("jvm").compilations.getByName("main")
+val macAppBundleDir = layout.buildDirectory.dir("compose/binaries/main/app/uapmd-kmp.app")
+val macAppExecutable = macAppBundleDir.map { File(it.asFile, "Contents/MacOS/uapmd-kmp").absolutePath }
+
+tasks.register<JavaExec>("runJvmInstantiationProbe") {
+    group = "application"
+    description = "Runs the CMP desktop instantiation probe under the JVM host runtime."
+    dependsOn("jvmJar")
+    mainClass.set("dev.atsushieno.uapmd_kmp.InstantiationProbeMainKt")
+    classpath(
+        files(tasks.named("jvmJar")),
+        jvmMainCompilation.runtimeDependencyFiles
+    )
+    jvmArgs(
+        "-Dapple.awt.application.name=uapmd-kmp",
+        "-Xdock:name=uapmd-kmp"
+    )
+    listOf(
+        "uapmd.debug.threads",
+        "uapmd.probe.formats",
+        "uapmd.probe.attemptsPerFormat",
+        "uapmd.probe.timeoutMs",
+        "uapmd.probe.startAudio"
+    ).forEach { key ->
+        System.getProperty(key)?.let { value -> systemProperty(key, value) }
+    }
+}
+
+tasks.register<Exec>("runJvmBundle") {
+    group = "application"
+    description = "Runs the native Compose Desktop app bundle launcher."
+    dependsOn("createDistributable")
+    doFirst {
+        commandLine(macAppExecutable.get())
+    }
+}
+
+tasks.register<Exec>("runJvmDebugBundle") {
+    group = "application"
+    description = "Runs the native Compose Desktop app bundle launcher with JDWP enabled for IDE attach debugging."
+    dependsOn("createDistributable")
+    environment(
+        "JAVA_TOOL_OPTIONS",
+        System.getProperty("uapmd.debug.javaToolOptions")
+            ?: "-agentlib:jdwp=transport=dt_socket,server=y,suspend=n,address=*:5005"
+    )
+    doFirst {
+        commandLine(macAppExecutable.get())
     }
 }

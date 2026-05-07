@@ -37,9 +37,12 @@ class JvmSequencerEngine internal constructor(
         trackIndex: Int, format: String, pluginId: String,
         callback: (Int, Int, String?) -> Unit
     ) {
+        debugJvmThread("JvmSequencerEngine.addPluginToTrack.request format=$format pluginId=$pluginId")
         val cb = object : AddPluginCb {
             override fun invoke(instanceId: Int, trackIdx: Int, error: String?, userData: Pointer?) =
-                callback(instanceId, trackIdx, error)
+                callback(instanceId, trackIdx, error).also {
+                    debugJvmThread("JvmSequencerEngine.addPluginToTrack.callback format=$format pluginId=$pluginId instanceId=$instanceId error=${error ?: ""}")
+                }
         }
         lib.uapmd_engine_add_plugin_to_track(handle, trackIndex, format, pluginId, null, cb)
     }

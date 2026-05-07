@@ -30,8 +30,10 @@ fun MainWindow() {
     // Polling tick: transport position + spectrum ~60fps
     LaunchedEffect(model) {
         while (true) {
-            model.tick()
-            model.refreshSpectrum()
+            if (!model.isPluginLoadPending) {
+                model.tick()
+                model.refreshSpectrum()
+            }
             delay(16)
         }
     }
@@ -135,42 +137,65 @@ private fun MainWindowContent(model: UapmdModel) {
                 onTracksChange      = { model.refreshTimeline() },
                 onContextMenuChange = { contextMenu = it }
             )
-            1 -> Row(modifier = Modifier.fillMaxSize()) {
-                TrackList(
-                    entries = model.trackEntries,
-                    catalogEntries = model.catalogEntries,
-                    onEnabledChanged = { id, en -> model.setInstanceEnabled(id, en) },
-                    onDetailsRequested = { id -> model.openInstance(id) },
-                    onRemoveInstance = { id -> model.removeInstance(id) },
-                    onAddTrack = { model.addEmptyTrack() },
-                    onAddPluginToTrack = { ti, fmt, pid ->
-                        scope.launch(Dispatchers.IO) {
-                            model.addPluginToTrack(ti, fmt, pid)
+            1 -> Column(modifier = Modifier.fillMaxSize()) {
+                val loadStatus = model.pluginLoadStatusMessage
+                if (loadStatus != null) {
+                    Card(
+                        modifier = Modifier.fillMaxWidth().padding(horizontal = 4.dp, vertical = 4.dp),
+                        colors = CardDefaults.cardColors(
+                            containerColor = MaterialTheme.colorScheme.errorContainer
+                        )
+                    ) {
+                        Row(
+                            modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 10.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Text(
+                                loadStatus,
+                                color = MaterialTheme.colorScheme.onErrorContainer,
+                                modifier = Modifier.weight(1f)
+                            )
+                            TextButton(onClick = { model.clearPluginLoadStatus() }) { Text("Dismiss") }
                         }
-                    },
-                    modifier = Modifier.weight(1f).fillMaxHeight().padding(4.dp)
-                )
-                val selectedInfo = model.selectedInstanceInfo
-                if (selectedInfo != null) {
-                    VerticalDivider(modifier = Modifier.fillMaxHeight())
-                    PluginEditorPane(
-                        info = selectedInfo,
-                        statusMessage = model.pluginUiStatusMessage,
-                        onClose = { model.selectInstance(null) },
-                        onEnabledChanged = { en -> model.setInstanceEnabled(selectedInfo.instanceId, en) },
-                        onGroupChanged = { g -> model.setInstanceGroup(selectedInfo.instanceId, g) },
-                        onPresetSelected = { p -> model.loadPreset(selectedInfo.instanceId, p) },
-                        onParameterChanged = { idx, v -> model.setParameterValue(selectedInfo.instanceId, idx, v) },
-                        onNoteOn = { note -> model.sendNoteOn(selectedInfo.instanceId, note) },
-                        onNoteOff = { note -> model.sendNoteOff(selectedInfo.instanceId, note) },
-                        onShowUi = {
+                    }
+                }
+                Row(modifier = Modifier.fillMaxSize()) {
+                    TrackList(
+                        entries = model.trackEntries,
+                        catalogEntries = model.catalogEntries,
+                        onEnabledChanged = { id, en -> model.setInstanceEnabled(id, en) },
+                        onDetailsRequested = { id -> model.openInstance(id) },
+                        onRemoveInstance = { id -> model.removeInstance(id) },
+                        onAddTrack = { model.addEmptyTrack() },
+                        onAddPluginToTrack = { ti, fmt, pid ->
                             scope.launch(Dispatchers.IO) {
-                                model.showPluginUi(selectedInfo.instanceId)
+                                model.addPluginToTrack(ti, fmt, pid)
                             }
                         },
-                        onDismissStatus = { model.clearPluginUiStatus() },
-                        modifier = Modifier.width(420.dp).fillMaxHeight()
+                        modifier = Modifier.weight(1f).fillMaxHeight().padding(4.dp)
                     )
+                    val selectedInfo = model.selectedInstanceInfo
+                    if (selectedInfo != null) {
+                        VerticalDivider(modifier = Modifier.fillMaxHeight())
+                        PluginEditorPane(
+                            info = selectedInfo,
+                            statusMessage = model.pluginUiStatusMessage,
+                            onClose = { model.selectInstance(null) },
+                            onEnabledChanged = { en -> model.setInstanceEnabled(selectedInfo.instanceId, en) },
+                            onGroupChanged = { g -> model.setInstanceGroup(selectedInfo.instanceId, g) },
+                            onPresetSelected = { p -> model.loadPreset(selectedInfo.instanceId, p) },
+                            onParameterChanged = { idx, v -> model.setParameterValue(selectedInfo.instanceId, idx, v) },
+                            onNoteOn = { note -> model.sendNoteOn(selectedInfo.instanceId, note) },
+                            onNoteOff = { note -> model.sendNoteOff(selectedInfo.instanceId, note) },
+                            onShowUi = {
+                                scope.launch(Dispatchers.IO) {
+                                    model.showPluginUi(selectedInfo.instanceId)
+                                }
+                            },
+                            onDismissStatus = { model.clearPluginUiStatus() },
+                            modifier = Modifier.width(420.dp).fillMaxHeight()
+                        )
+                    }
                 }
             }
             2 -> Box(modifier = Modifier.fillMaxSize()) {
