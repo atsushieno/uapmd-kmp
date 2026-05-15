@@ -21,6 +21,7 @@
 #include "c-api/uapmd-c-api.h"
 #include "c-api/uapmd-c-data.h"
 #include "c-api/uapmd-c-engine.h"
+#include "c-api/uapmd-c-file.h"
 #include "c-api/uapmd-c-tooling.h"
 
 #define LOG_TAG "uapmd-jni"
@@ -178,9 +179,185 @@ static void midi_ump_trampoline(void* context, uapmd_ump_t* ump, size_t size, ua
 #define PKG "dev/atsushieno/uapmd/"
 #define JNI_BRIDGE PKG "JniBridge"
 
+namespace uapmd {
+void initDocumentProvider(JNIEnv* env, jobject activity);
+void documentProvider_onActivityResult(JNIEnv* env, int requestCode, int resultCode, jobject intent);
+}
+
+struct DocumentPathCtx : AsyncCtx {
+    uapmd_document_provider_t provider;
+
+    DocumentPathCtx(JNIEnv* env, jobject o, jmethodID m, uapmd_document_provider_t provider_)
+        : AsyncCtx(env, o, m), provider(provider_) {}
+};
+
+static std::vector<const char*> document_filter_extensions(int kind) {
+    switch (kind) {
+        case 0:
+            return {"*.uapmdz", "*.uapmd"};
+        case 1:
+            return {"*.wav", "*.flac", "*.ogg"};
+        case 2:
+            return {"*.mid", "*.midi", "*.smf", "*.midi2"};
+        default:
+            return {"*"};
+    }
+}
+
+static const char* document_filter_label(int kind) {
+    switch (kind) {
+        case 0: return "Project Files";
+        case 1: return "Audio Files";
+        case 2: return "MIDI Files";
+        default: return "All Files";
+    }
+}
+
+static void document_pick_resolve_path_callback(
+    uapmd_document_io_result_t result,
+    const char* path,
+    void* user_data
+) {
+    auto* ctx = static_cast<DocumentPathCtx*>(user_data);
+    JNIEnv* env = ctx->env();
+    if (!env) {
+        delete ctx;
+        return;
+    }
+    jstring jpath = path ? env->NewStringUTF(path) : nullptr;
+    jstring jerror = result.error ? env->NewStringUTF(result.error) : nullptr;
+    env->CallVoidMethod(ctx->obj, ctx->mid, static_cast<jboolean>(result.success), jpath, jerror);
+    if (jpath) env->DeleteLocalRef(jpath);
+    if (jerror) env->DeleteLocalRef(jerror);
+    if (env->ExceptionCheck()) env->ExceptionDescribe();
+    delete ctx;
+}
+
+static void document_pick_callback(uapmd_document_pick_result_t result, void* user_data) {
+    auto* ctx = static_cast<DocumentPathCtx*>(user_data);
+    JNIEnv* env = ctx->env();
+    if (!env) {
+        delete ctx;
+        return;
+    }
+    if (!result.success) {
+        jstring jerror = result.error ? env->NewStringUTF(result.error) : nullptr;
+        env->CallVoidMethod(ctx->obj, ctx->mid, static_cast<jboolean>(false), nullptr, jerror);
+        if (jerror) env->DeleteLocalRef(jerror);
+        if (env->ExceptionCheck()) env->ExceptionDescribe();
+        delete ctx;
+        return;
+    }
+    if (result.handle_count == 0 || !result.handles) {
+        env->CallVoidMethod(ctx->obj, ctx->mid, static_cast<jboolean>(false), nullptr, nullptr);
+        if (env->ExceptionCheck()) env->ExceptionDescribe();
+        delete ctx;
+        return;
+    }
+    uapmd_document_handle_t handle = result.handles[0];
+    uapmd_document_provider_resolve_to_path(
+        ctx->provider,
+        handle,
+        ctx,
+        document_pick_resolve_path_callback
+    );
+}
+
 // ─── PluginInstance ───────────────────────────────────────────────────────────
 
 extern "C" {
+
+JNIEXPORT void JNICALL Java_dev_atsushieno_uapmd_JniBridge_uapmdDocumentProviderInit(
+        JNIEnv* env, jclass, jobject activity) {
+    uapmd::initDocumentProvider(env, activity);
+}
+
+JNIEXPORT void JNICALL Java_dev_atsushieno_uapmd_JniBridge_uapmdDocumentProviderOnActivityResult(
+        JNIEnv* env, jclass, jint requestCode, jint resultCode, jobject intent) {
+    uapmd::documentProvider_onActivityResult(env, requestCode, resultCode, intent);
+}
+
+JNIEXPORT jlong JNICALL Java_dev_atsushieno_uapmd_JniBridge_uapmdDocumentProviderCreate(
+        JNIEnv*, jclass) {
+    return p2j(uapmd_document_provider_create());
+}
+
+JNIEXPORT void JNICALL Java_dev_atsushieno_uapmd_JniBridge_uapmdDocumentProviderDestroy(
+        JNIEnv*, jclass, jlong h) {
+    uapmd_document_provider_destroy(j2p<uapmd_document_provider_t>(h));
+}
+
+JNIEXPORT void JNICALL Java_dev_atsushieno_uapmd_JniBridge_uapmdDocumentProviderTick(
+        JNIEnv*, jclass, jlong h) {
+    uapmd_document_provider_tick(j2p<uapmd_document_provider_t>(h));
+}
+
+JNIEXPORT void JNICALL Java_dev_atsushieno_uapmd_JniBridge_uapmdDocumentProviderPickOpenPath(
+        JNIEnv* env, jclass, jlong h, jint kind, jobject callback) {
+    auto provider = j2p<uapmd_document_provider_t>(h);
+    jclass cls = env->GetObjectClass(callback);
+    jmethodID mid = env->GetMethodID(
+        cls, "onResult", "(ZLjava/lang/String;Ljava/lang/String;)V");
+    env->DeleteLocalRef(cls);
+    if (!mid) {
+        LOGE("uapmdDocumentProviderPickOpenPath: callback.onResult() not found");
+        return;
+    }
+
+    auto extensions = document_filter_extensions(kind);
+    uapmd_document_filter_t filters[2]{};
+    filters[0].label = document_filter_label(kind);
+    filters[0].mime_types = nullptr;
+    filters[0].mime_type_count = 0;
+    filters[0].extensions = extensions.data();
+    filters[0].extension_count = static_cast<uint32_t>(extensions.size());
+    static const char* all_files[] = {"*"};
+    filters[1].label = "All Files";
+    filters[1].mime_types = nullptr;
+    filters[1].mime_type_count = 0;
+    filters[1].extensions = all_files;
+    filters[1].extension_count = 1;
+
+    auto* ctx = new DocumentPathCtx(env, callback, mid, provider);
+    uapmd_document_provider_pick_open(
+        provider,
+        filters,
+        2,
+        false,
+        ctx,
+        document_pick_callback
+    );
+}
+
+JNIEXPORT jlong JNICALL Java_dev_atsushieno_uapmd_JniBridge_uapmdPrepareProjectLoad(
+        JNIEnv* env, jclass, jstring filePath) {
+    auto cpath = jstr(env, filePath);
+    auto result = uapmd_prepare_project_load(cpath);
+    jstr_release(env, filePath, cpath);
+    return p2j(result);
+}
+
+JNIEXPORT jboolean JNICALL Java_dev_atsushieno_uapmd_JniBridge_uapmdPreparedProjectSuccess(
+        JNIEnv*, jclass, jlong h) {
+    return uapmd_prepared_project_success(j2p<uapmd_prepared_project_t>(h));
+}
+
+JNIEXPORT jstring JNICALL Java_dev_atsushieno_uapmd_JniBridge_uapmdPreparedProjectPath(
+        JNIEnv* env, jclass, jlong h) {
+    auto prepared = j2p<uapmd_prepared_project_t>(h);
+    return cstr(env, [&](char* b, size_t n){ return uapmd_prepared_project_path(prepared, b, n); });
+}
+
+JNIEXPORT jstring JNICALL Java_dev_atsushieno_uapmd_JniBridge_uapmdPreparedProjectError(
+        JNIEnv* env, jclass, jlong h) {
+    auto prepared = j2p<uapmd_prepared_project_t>(h);
+    return cstr(env, [&](char* b, size_t n){ return uapmd_prepared_project_error(prepared, b, n); });
+}
+
+JNIEXPORT void JNICALL Java_dev_atsushieno_uapmd_JniBridge_uapmdPreparedProjectDestroy(
+        JNIEnv*, jclass, jlong h) {
+    uapmd_prepared_project_destroy(j2p<uapmd_prepared_project_t>(h));
+}
 
 JNIEXPORT jstring JNICALL Java_dev_atsushieno_uapmd_JniBridge_uapmdInstanceDisplayName(
         JNIEnv* env, jclass, jlong h) {

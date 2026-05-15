@@ -71,6 +71,14 @@ interface InstancingCb : Callback {
     fun invoke(error: String?, userData: Pointer?)
 }
 
+interface DocumentPickCb : Callback {
+    fun invoke(result: UapmdDocumentPickResult.ByValue, userData: Pointer?)
+}
+
+interface DocumentPathCb : Callback {
+    fun invoke(result: UapmdDocumentIoResult.ByValue, path: String?, userData: Pointer?)
+}
+
 // ─── Event loop callbacks ─────────────────────────────────────────────────────
 
 interface EventLoopInitializeCb : Callback {
@@ -302,6 +310,40 @@ open class UapmdBlocklistEntry : Structure() {
     @JvmField var reason: String? = null
 }
 
+@FieldOrder("id", "display_name", "mime_type")
+open class UapmdDocumentHandle(p: Pointer? = null) : Structure(p) {
+    @JvmField var id: String? = null
+    @JvmField var display_name: String? = null
+    @JvmField var mime_type: String? = null
+}
+
+@FieldOrder("label", "mime_types", "mime_type_count", "extensions", "extension_count")
+open class UapmdDocumentFilter : Structure() {
+    @JvmField var label: String? = null
+    @JvmField var mime_types: Pointer? = null
+    @JvmField var mime_type_count: Int = 0
+    @JvmField var extensions: Pointer? = null
+    @JvmField var extension_count: Int = 0
+}
+
+@FieldOrder("success", "handle_count", "handles", "error")
+open class UapmdDocumentPickResult : Structure() {
+    @JvmField var success: Byte = 0
+    @JvmField var handle_count: Int = 0
+    @JvmField var handles: Pointer? = null
+    @JvmField var error: String? = null
+
+    class ByValue : UapmdDocumentPickResult(), Structure.ByValue
+}
+
+@FieldOrder("success", "error")
+open class UapmdDocumentIoResult : Structure() {
+    @JvmField var success: Byte = 0
+    @JvmField var error: String? = null
+
+    class ByValue : UapmdDocumentIoResult(), Structure.ByValue
+}
+
 @FieldOrder(
     "user_data",
     "slow_scan_started", "bundle_scan_started", "bundle_scan_completed",
@@ -350,6 +392,31 @@ interface UapmdLibrary : Library {
         dest: Array<Pointer?>,
         numChannels: Int
     )
+
+    // ── DocumentProvider ────────────────────────────────────────────────────
+
+    fun uapmd_document_provider_create(): Pointer?
+    fun uapmd_document_provider_destroy(provider: Pointer?)
+    fun uapmd_document_provider_pick_open(
+        provider: Pointer?,
+        filters: Array<UapmdDocumentFilter>,
+        filterCount: Int,
+        allowMultiple: Boolean,
+        userData: Pointer?,
+        callback: DocumentPickCb?
+    )
+    fun uapmd_document_provider_resolve_to_path(
+        provider: Pointer?,
+        handle: UapmdDocumentHandle,
+        userData: Pointer?,
+        callback: DocumentPathCb?
+    )
+    fun uapmd_document_provider_tick(provider: Pointer?)
+    fun uapmd_prepare_project_load(filePath: String): Pointer?
+    fun uapmd_prepared_project_success(prepared: Pointer?): Boolean
+    fun uapmd_prepared_project_path(prepared: Pointer?, buf: ByteArray?, bufSize: Long): Long
+    fun uapmd_prepared_project_error(prepared: Pointer?, buf: ByteArray?, bufSize: Long): Long
+    fun uapmd_prepared_project_destroy(prepared: Pointer?)
 
     // ── PluginInstance ───────────────────────────────────────────────────────
 

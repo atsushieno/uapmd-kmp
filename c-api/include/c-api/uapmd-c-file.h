@@ -11,6 +11,7 @@ extern "C" {
 /* ── Opaque handles (uapmd-file) ─────────────────────────────────────────── */
 
 typedef struct uapmd_document_provider* uapmd_document_provider_t;
+typedef struct uapmd_prepared_project* uapmd_prepared_project_t;
 
 /* ═══════════════════════════════════════════════════════════════════════════
  *  DocumentHandle (value type — exposed as a C struct)
@@ -111,6 +112,16 @@ UAPMD_C_EXPORT bool uapmd_document_provider_restore_handle(uapmd_document_provid
 
 /* Result cleanup */
 UAPMD_C_EXPORT void uapmd_document_pick_result_free(uapmd_document_pick_result_t* result);
+
+/* ═══════════════════════════════════════════════════════════════════════════
+ *  Project archive staging
+ * ═══════════════════════════════════════════════════════════════════════════ */
+
+UAPMD_C_EXPORT uapmd_prepared_project_t uapmd_prepare_project_load(const char* file_path);
+UAPMD_C_EXPORT bool uapmd_prepared_project_success(uapmd_prepared_project_t prepared);
+UAPMD_C_EXPORT size_t uapmd_prepared_project_path(uapmd_prepared_project_t prepared, char* buf, size_t buf_size);
+UAPMD_C_EXPORT size_t uapmd_prepared_project_error(uapmd_prepared_project_t prepared, char* buf, size_t buf_size);
+UAPMD_C_EXPORT void uapmd_prepared_project_destroy(uapmd_prepared_project_t prepared);
 
 #ifdef __cplusplus
 }

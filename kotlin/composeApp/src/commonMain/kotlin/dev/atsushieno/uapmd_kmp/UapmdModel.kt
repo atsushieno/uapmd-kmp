@@ -35,6 +35,7 @@ class UapmdModel(val sequencer: RealtimeSequencer) {
     private val uiScope = CoroutineScope(SupervisorJob() + Dispatchers.Main)
     private var pluginLoadRequestSerial = 0L
     private var pendingPluginLoadCount = 0
+    private var activeLoadedProjectTempDirectory: String? = null
 
     private fun dispatchUiStateUpdate(block: () -> Unit) {
         uiScope.launch { block() }
@@ -44,16 +45,46 @@ class UapmdModel(val sequencer: RealtimeSequencer) {
 
     var isAudioEngineRunning by mutableStateOf(true)
         private set
+    var audioEngineStatusMessage by mutableStateOf<String?>(null)
+        private set
     var isPluginLoadPending by mutableStateOf(false)
         private set
 
+    init {
+        refreshAudioEngineState()
+    }
+
+    private fun refreshAudioEngineState() {
+        isAudioEngineRunning = sequencer.isAudioPlaying() != 0
+    }
+
+    private fun stopAudioEngineInternal() {
+        engine.setActive(false)
+        val result = sequencer.stopAudio()
+        refreshAudioEngineState()
+        audioEngineStatusMessage =
+            if (!isAudioEngineRunning) null
+            else "Failed to stop audio engine (result=$result)."
+    }
+
+    private fun startAudioEngineInternal(context: String) {
+        engine.setActive(true)
+        val result = sequencer.startAudio()
+        refreshAudioEngineState()
+        audioEngineStatusMessage = when {
+            isAudioEngineRunning -> null
+            else -> {
+                engine.setActive(false)
+                "Failed to start audio engine after $context (result=$result)."
+            }
+        }
+    }
+
     fun toggleAudioEngine() {
         if (isAudioEngineRunning) {
-            sequencer.stopAudio()
-            isAudioEngineRunning = false
+            stopAudioEngineInternal()
         } else {
-            sequencer.startAudio()
-            isAudioEngineRunning = true
+            startAudioEngineInternal("manual toggle")
         }
     }
 
@@ -244,6 +275,13 @@ class UapmdModel(val sequencer: RealtimeSequencer) {
             val master = tl.masterTimelineTrack
             TimelineTrack(index = count, name = "Master", clips = master.getClips().map { clipDataToUi(it) })
         }
+    }
+
+    private fun refreshArrangementState() {
+        refreshTracks()
+        refreshTimeline()
+        refreshGraph()
+        tick()
     }
 
     // ── Plugin graph nodes ─────────────────────────────────────────────────
@@ -473,6 +511,12 @@ class UapmdModel(val sequencer: RealtimeSequencer) {
         }
     }
 
+    fun clearAudioEngineStatus() {
+        dispatchUiStateUpdate {
+            audioEngineStatusMessage = null
+        }
+    }
+
     fun setParameterValue(instanceId: Int, paramIndex: Int, normalizedValue: Float) {
         val inst = engine.getPluginInstance(instanceId) ?: return
         val meta = inst.getParameterMetadata(paramIndex.toUInt()) ?: return
@@ -489,6 +533,90 @@ class UapmdModel(val sequencer: RealtimeSequencer) {
     fun setInstanceGroup(instanceId: Int, group: Int) {
         engine.setInstanceGroup(instanceId, group.toUByte())
         refreshOpenInstance(instanceId)
+    }
+
+    fun existingTrackIndices(): List<Int> =
+        (0 until engine.trackCount.toInt()).toList()
+
+    private fun resolveImportTrackIndex(requestedTrackIndex: Int): Int {
+        if (requestedTrackIndex >= 0)
+            return requestedTrackIndex
+        return addEmptyTrack()
+    }
+
+    fun loadProject(filePath: String): ProjectResult {
+        val prepared = PlatformProjectArchiveLoader.prepareProjectLoad(filePath)
+        val preparedProjectPath = prepared.projectPath
+            ?: return ProjectResult(false, prepared.error ?: "Failed to prepare project file.")
+        val wasRunning = isAudioEngineRunning
+        if (wasRunning)
+            stopAudioEngineInternal()
+        val result = try {
+            engine.timeline.loadProject(preparedProjectPath)
+        } finally {
+            if (wasRunning)
+                startAudioEngineInternal("project load")
+            else
+                refreshAudioEngineState()
+        }
+        if (result.success) {
+            nativeUiPresentations.values.forEach { it.close() }
+            nativeUiPresentations.clear()
+            instanceInfos = emptyMap()
+            selectedInstanceId = null
+            activeLoadedProjectTempDirectory?.let { PlatformProjectArchiveLoader.cleanupPreparedProject(it) }
+            activeLoadedProjectTempDirectory = prepared.tempDirectory
+            refreshArrangementState()
+        } else {
+            prepared.tempDirectory?.let { PlatformProjectArchiveLoader.cleanupPreparedProject(it) }
+        }
+        return result
+    }
+
+    fun importMidiClip(
+        filePath: String,
+        trackIndex: Int,
+        position: TimelinePosition = TimelinePosition(0L, 0.0),
+        nrpnToParameterMapping: Boolean = false
+    ): ClipAddResult {
+        val resolvedTrackIndex = resolveImportTrackIndex(trackIndex)
+        val result = engine.timeline.addMidiClipFromFile(
+            trackIndex = resolvedTrackIndex,
+            position = position,
+            filepath = filePath,
+            nrpnToParameterMapping = nrpnToParameterMapping
+        )
+        if (result.success)
+            refreshArrangementState()
+        return result
+    }
+
+    fun importAudioClip(
+        filePath: String,
+        trackIndex: Int,
+        position: TimelinePosition = TimelinePosition(0L, 0.0)
+    ): ClipAddResult {
+        val reader = createAudioFileReader(filePath)
+        val properties = reader.getProperties()
+        if (properties == null) {
+            reader.close()
+            return ClipAddResult(
+                clipId = -1,
+                sourceNodeId = -1,
+                success = false,
+                error = "Failed to open audio file: $filePath"
+            )
+        }
+        val resolvedTrackIndex = resolveImportTrackIndex(trackIndex)
+        val result = engine.timeline.addAudioClip(
+            trackIndex = resolvedTrackIndex,
+            position = position,
+            reader = reader,
+            filepath = filePath
+        )
+        if (result.success)
+            refreshArrangementState()
+        return result
     }
 
     // ── Plugin catalog & scanning ──────────────────────────────────────────
@@ -586,7 +714,11 @@ class UapmdModel(val sequencer: RealtimeSequencer) {
     fun applyDeviceSettings() {
         val inId  = selectedInputId  ?: -1
         val outId = selectedOutputId ?: -1
-        sequencer.reconfigureAudioDevice(inId, outId, selectedSampleRate.toUInt(), selectedBufferSize.toUInt())
+        val ok = sequencer.reconfigureAudioDevice(inId, outId, selectedSampleRate.toUInt(), selectedBufferSize.toUInt())
+        refreshAudioEngineState()
+        audioEngineStatusMessage =
+            if (ok) null
+            else "Failed to reconfigure audio device."
     }
 
     // ── Spectrum ───────────────────────────────────────────────────────────
@@ -640,6 +772,7 @@ class UapmdModel(val sequencer: RealtimeSequencer) {
     // ── Polling tick (call from LaunchedEffect every ~16ms) ────────────────
 
     fun tick() {
+        refreshAudioEngineState()
         isPlaying  = engine.isPlaybackActive
         val sampleRate = sequencer.sampleRate.takeIf { it > 0 } ?: 48000
         playheadMs = engine.playbackPosition * 1000L / sampleRate

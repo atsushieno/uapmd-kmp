@@ -35,6 +35,7 @@ fun MainWindow() {
                 model.tick()
                 model.refreshSpectrum()
             }
+            PlatformDocumentPicker.tick()
             delay(16)
         }
     }
@@ -110,6 +111,7 @@ private fun MainWindowContent(
     var showTrackPanel  by remember { mutableStateOf(false) }
     var showPluginPanel by remember { mutableStateOf(false) }
     var pluginPanelPreselectedTrack by remember { mutableStateOf(-1) }
+    var actionStatusMessage by remember { mutableStateOf<String?>(null) }
 
     // ── Toolbar ────────────────────────────────────────────────────────────
     Toolbar(
@@ -126,9 +128,51 @@ private fun MainWindowContent(
         onPlugins            = { showPluginSelector   = !showPluginSelector  },
         onScript             = { showScriptEditor     = !showScriptEditor    },
         onImportAudio        = { showAudioImport      = !showAudioImport     },
+        onImportAudioClip    = {
+            scope.launch {
+                val picked = PlatformDocumentPicker.pickOpenPath(DocumentPickerKind.Audio)
+                actionStatusMessage = when {
+                    picked.path == null && picked.error.isNullOrBlank() -> null
+                    picked.path == null -> "Import audio failed: ${picked.error}"
+                    else -> {
+                        val result = model.importAudioClip(picked.path, trackIndex = -1)
+                        if (result.success) "Imported audio clip from ${picked.path.substringAfterLast('/').substringAfterLast('\\')}."
+                        else "Import audio failed: ${result.error}"
+                    }
+                }
+            }
+        },
+        onImportMidiClip     = {
+            scope.launch {
+                val picked = PlatformDocumentPicker.pickOpenPath(DocumentPickerKind.Midi)
+                actionStatusMessage = when {
+                    picked.path == null && picked.error.isNullOrBlank() -> null
+                    picked.path == null -> "Import MIDI failed: ${picked.error}"
+                    else -> {
+                        val result = model.importMidiClip(picked.path, trackIndex = -1)
+                        if (result.success) "Imported MIDI clip from ${picked.path.substringAfterLast('/').substringAfterLast('\\')}."
+                        else "Import MIDI failed: ${result.error}"
+                    }
+                }
+            }
+        },
         onExport             = { showExporter         = !showExporter        },
         onPluginList         = { showPluginPanel      = !showPluginPanel     },
         onMidiDump           = { showMidiDump         = !showMidiDump        },
+        onLoadProject        = {
+            scope.launch {
+                val picked = PlatformDocumentPicker.pickOpenPath(DocumentPickerKind.Project)
+                actionStatusMessage = when {
+                    picked.path == null && picked.error.isNullOrBlank() -> null
+                    picked.path == null -> "Load project failed: ${picked.error}"
+                    else -> {
+                        val result = model.loadProject(picked.path)
+                        if (result.success) "Loaded project ${picked.path.substringAfterLast('/').substringAfterLast('\\')}."
+                        else "Load project failed: ${result.error}"
+                    }
+                }
+            }
+        },
         onThemeToggled       = onThemeToggled,
         onScaleChanged       = onScaleChanged,
         inputSpectrum        = model.inputSpectrum,
@@ -140,6 +184,7 @@ private fun MainWindowContent(
     Box(modifier = Modifier.fillMaxSize()) {
         // Plugin load status banner (shown across the top of the content area)
         val loadStatus = model.pluginLoadStatusMessage
+        val audioStatus = model.audioEngineStatusMessage
 
         Column(modifier = Modifier.fillMaxSize()) {
             if (loadStatus != null) {
@@ -159,6 +204,48 @@ private fun MainWindowContent(
                             modifier = Modifier.weight(1f)
                         )
                         TextButton(onClick = { model.clearPluginLoadStatus() }) { Text("Dismiss") }
+                    }
+                }
+            }
+
+            if (audioStatus != null) {
+                Card(
+                    modifier = Modifier.fillMaxWidth().padding(horizontal = 4.dp, vertical = 4.dp),
+                    colors = CardDefaults.cardColors(
+                        containerColor = MaterialTheme.colorScheme.tertiaryContainer
+                    )
+                ) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 10.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text(
+                            audioStatus,
+                            color = MaterialTheme.colorScheme.onTertiaryContainer,
+                            modifier = Modifier.weight(1f)
+                        )
+                        TextButton(onClick = { model.clearAudioEngineStatus() }) { Text("Dismiss") }
+                    }
+                }
+            }
+
+            if (actionStatusMessage != null) {
+                Card(
+                    modifier = Modifier.fillMaxWidth().padding(horizontal = 4.dp, vertical = 4.dp),
+                    colors = CardDefaults.cardColors(
+                        containerColor = MaterialTheme.colorScheme.secondaryContainer
+                    )
+                ) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 10.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text(
+                            actionStatusMessage ?: "",
+                            color = MaterialTheme.colorScheme.onSecondaryContainer,
+                            modifier = Modifier.weight(1f)
+                        )
+                        TextButton(onClick = { actionStatusMessage = null }) { Text("Dismiss") }
                     }
                 }
             }
@@ -479,9 +566,12 @@ private fun Toolbar(
     onPlugins: () -> Unit,
     onScript: () -> Unit,
     onImportAudio: () -> Unit,
+    onImportAudioClip: () -> Unit,
+    onImportMidiClip: () -> Unit,
     onExport: () -> Unit,
     onPluginList: () -> Unit,
     onMidiDump: () -> Unit,
+    onLoadProject: () -> Unit,
     onThemeToggled: () -> Unit,
     onScaleChanged: (Float) -> Unit,
     inputSpectrum: FloatArray,
@@ -589,6 +679,13 @@ private fun Toolbar(
                 Box {
                     ToolbarButton("Import", { importMenuExpanded = true })
                     DropdownMenu(expanded = importMenuExpanded, onDismissRequest = { importMenuExpanded = false }) {
+                        DropdownMenuItem(text = { Text("Import Audio Clip…") }, onClick = {
+                            importMenuExpanded = false; onImportAudioClip()
+                        })
+                        DropdownMenuItem(text = { Text("Import MIDI Clip…") }, onClick = {
+                            importMenuExpanded = false; onImportMidiClip()
+                        })
+                        HorizontalDivider()
                         DropdownMenuItem(text = { Text("Import Audio (Demucs)") }, onClick = {
                             importMenuExpanded = false; onImportAudio()
                         })
@@ -601,7 +698,7 @@ private fun Toolbar(
                 Box {
                     ToolbarButton("Project", { projectMenuExpanded = true })
                     DropdownMenu(expanded = projectMenuExpanded, onDismissRequest = { projectMenuExpanded = false }) {
-                        DropdownMenuItem(text = { Text("Load Project") },  onClick = { projectMenuExpanded = false; println("Load project") })
+                        DropdownMenuItem(text = { Text("Load Project") },  onClick = { projectMenuExpanded = false; onLoadProject() })
                         DropdownMenuItem(text = { Text("Save Project") },  onClick = { projectMenuExpanded = false; println("Save project") })
                         HorizontalDivider()
                         DropdownMenuItem(text = { Text("Render To File…") }, onClick = { projectMenuExpanded = false; onExport() })

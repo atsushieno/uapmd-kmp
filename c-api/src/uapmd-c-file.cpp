@@ -2,7 +2,12 @@
 
 #include "c-api/uapmd-c-file.h"
 #include <uapmd-file/IDocumentProvider.hpp>
+#include <uapmd-data/detail/project/ProjectArchive.hpp>
+#include <chrono>
 #include <cstring>
+#include <filesystem>
+#include <format>
+#include <optional>
 #include <string>
 #include <vector>
 #include <unordered_map>
@@ -36,6 +41,38 @@ static uapmd::DocumentHandle to_cpp(uapmd_document_handle_t h) {
 
 static std::mutex s_dp_mutex;
 static std::unordered_map<uapmd::IDocumentProvider*, std::unique_ptr<uapmd::IDocumentProvider>> s_owned_providers;
+
+struct PreparedProject {
+    bool success{false};
+    std::string error;
+    std::filesystem::path project_file;
+    std::filesystem::path temp_dir;
+};
+
+static PreparedProject* PP(uapmd_prepared_project_t h) { return reinterpret_cast<PreparedProject*>(h); }
+
+static std::optional<std::filesystem::path> create_temp_project_directory(std::string& error) {
+    try {
+        auto base = std::filesystem::temp_directory_path() / "uapmd";
+        std::filesystem::create_directories(base);
+        auto seed = std::chrono::steady_clock::now().time_since_epoch().count();
+        for (int attempt = 0; attempt < 32; ++attempt) {
+            auto candidate = base / std::filesystem::path(std::format("project-{}-{}", seed, attempt));
+            std::error_code ec;
+            if (std::filesystem::create_directories(candidate, ec))
+                return candidate;
+            if (ec && ec != std::errc::file_exists) {
+                error = ec.message();
+                return std::nullopt;
+            }
+        }
+        error = "Unable to allocate a temporary project directory.";
+        return std::nullopt;
+    } catch (const std::exception& ex) {
+        error = ex.what();
+        return std::nullopt;
+    }
+}
 
 /* ═══════════════════════════════════════════════════════════════════════════
  *  IDocumentProvider
@@ -254,4 +291,78 @@ void uapmd_document_pick_result_free(uapmd_document_pick_result_t* result) {
     /* Currently a no-op since we delete storage in the callback.
      * This function exists as a future-proof API entry point. */
     (void)result;
+}
+
+uapmd_prepared_project_t uapmd_prepare_project_load(const char* file_path) {
+    auto prepared = std::make_unique<PreparedProject>();
+    try {
+        std::filesystem::path project_file = file_path ? std::filesystem::path(file_path) : std::filesystem::path();
+        std::error_code exists_ec;
+        if (project_file.empty() || !std::filesystem::exists(project_file, exists_ec)) {
+            prepared->error = exists_ec ? exists_ec.message() : "Project file is unavailable.";
+            return reinterpret_cast<uapmd_prepared_project_t>(prepared.release());
+        }
+        if (!uapmd::ProjectArchive::isArchive(project_file)) {
+            prepared->success = true;
+            prepared->project_file = project_file;
+            return reinterpret_cast<uapmd_prepared_project_t>(prepared.release());
+        }
+
+        std::string temp_dir_error;
+        auto temp_dir = create_temp_project_directory(temp_dir_error);
+        if (!temp_dir) {
+            prepared->error = temp_dir_error;
+            return reinterpret_cast<uapmd_prepared_project_t>(prepared.release());
+        }
+        prepared->temp_dir = *temp_dir;
+
+        auto extract = uapmd::ProjectArchive::extractArchive(project_file, prepared->temp_dir);
+        if (!extract.success) {
+            prepared->error = extract.error;
+            std::error_code ec;
+            std::filesystem::remove_all(prepared->temp_dir, ec);
+            prepared->temp_dir.clear();
+            return reinterpret_cast<uapmd_prepared_project_t>(prepared.release());
+        }
+        if (extract.projectFile.empty()) {
+            prepared->error = "Project archive missing .uapmd file.";
+            std::error_code ec;
+            std::filesystem::remove_all(prepared->temp_dir, ec);
+            prepared->temp_dir.clear();
+            return reinterpret_cast<uapmd_prepared_project_t>(prepared.release());
+        }
+
+        prepared->success = true;
+        prepared->project_file = extract.projectFile;
+        return reinterpret_cast<uapmd_prepared_project_t>(prepared.release());
+    } catch (const std::exception& ex) {
+        prepared->error = ex.what();
+        return reinterpret_cast<uapmd_prepared_project_t>(prepared.release());
+    }
+}
+
+bool uapmd_prepared_project_success(uapmd_prepared_project_t prepared) {
+    return prepared && PP(prepared)->success;
+}
+
+size_t uapmd_prepared_project_path(uapmd_prepared_project_t prepared, char* buf, size_t buf_size) {
+    if (!prepared)
+        return copy_string({}, buf, buf_size);
+    return copy_string(PP(prepared)->project_file.string(), buf, buf_size);
+}
+
+size_t uapmd_prepared_project_error(uapmd_prepared_project_t prepared, char* buf, size_t buf_size) {
+    if (!prepared)
+        return copy_string("Prepared project handle is null.", buf, buf_size);
+    return copy_string(PP(prepared)->error, buf, buf_size);
+}
+
+void uapmd_prepared_project_destroy(uapmd_prepared_project_t prepared) {
+    if (!prepared)
+        return;
+    auto owned = std::unique_ptr<PreparedProject>(PP(prepared));
+    if (!owned->temp_dir.empty()) {
+        std::error_code ec;
+        std::filesystem::remove_all(owned->temp_dir, ec);
+    }
 }

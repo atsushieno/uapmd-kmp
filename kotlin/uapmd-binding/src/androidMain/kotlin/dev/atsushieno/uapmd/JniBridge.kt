@@ -11,6 +11,19 @@ object JniBridge {
         System.loadLibrary("uapmd-jni")
     }
 
+    @JvmStatic external fun uapmdDocumentProviderInit(activity: Any)
+    @JvmStatic external fun uapmdDocumentProviderOnActivityResult(requestCode: Int, resultCode: Int, intent: Any?)
+    @JvmStatic external fun uapmdDocumentProviderCreate(): Long
+    @JvmStatic external fun uapmdDocumentProviderDestroy(h: Long)
+    @JvmStatic external fun uapmdDocumentProviderTick(h: Long)
+    /** cb: (success: Boolean, path: String?, error: String?) -> Unit */
+    @JvmStatic external fun uapmdDocumentProviderPickOpenPath(h: Long, kind: Int, cb: Any)
+    @JvmStatic external fun uapmdPrepareProjectLoad(filePath: String): Long
+    @JvmStatic external fun uapmdPreparedProjectSuccess(h: Long): Boolean
+    @JvmStatic external fun uapmdPreparedProjectPath(h: Long): String
+    @JvmStatic external fun uapmdPreparedProjectError(h: Long): String
+    @JvmStatic external fun uapmdPreparedProjectDestroy(h: Long)
+
     // ─── PluginInstance ───────────────────────────────────────────────────────
 
     @JvmStatic external fun uapmdInstanceDisplayName(h: Long): String

@@ -61,6 +61,7 @@ kotlin {
         jvmMain.dependencies {
             implementation(compose.desktop.currentOs)
             implementation(libs.kotlinx.coroutinesSwing)
+            implementation(libs.jna)
         }
     }
 }
@@ -137,6 +138,24 @@ tasks.register<JavaExec>("runJvmInstantiationProbe") {
         "uapmd.probe.startAudio"
     ).forEach { key ->
         System.getProperty(key)?.let { value -> systemProperty(key, value) }
+    }
+}
+
+tasks.register<JavaExec>("runJvmProjectPlaybackProbe") {
+    group = "application"
+    description = "Loads a project through the KMP desktop host and logs playback/spectrum state."
+    dependsOn("jvmJar")
+    mainClass.set("dev.atsushieno.uapmd_kmp.ProjectPlaybackProbeMainKt")
+    classpath(
+        files(tasks.named("jvmJar")),
+        jvmMainCompilation.runtimeDependencyFiles
+    )
+    jvmArgs(
+        "-Dapple.awt.application.name=uapmd-kmp",
+        "-Xdock:name=uapmd-kmp"
+    )
+    System.getProperty("uapmd.probe.project")?.let { value ->
+        systemProperty("uapmd.probe.project", value)
     }
 }
 

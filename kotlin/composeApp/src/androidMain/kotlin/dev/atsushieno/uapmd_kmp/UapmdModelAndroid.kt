@@ -14,6 +14,7 @@ actual fun createUapmdModel(): UapmdModel {
         sampleRate    = 48000,
         dispatcher    = dispatcher
     )
+    sequencer.engine.setActive(true)
     sequencer.startAudio()
     return UapmdModel(sequencer)
 }
