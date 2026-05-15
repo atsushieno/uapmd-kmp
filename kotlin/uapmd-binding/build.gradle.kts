@@ -217,6 +217,7 @@ afterEvaluate {
 val wasmSrcDir    = project.file("src/webMain/cpp")
 val wasmOutputDir = repoRoot.resolve("build-wasm")
 val wasmBuildDir  = layout.buildDirectory.dir("uapmd-c-api-wasm")
+val wclapOverrideDir = repoRoot.resolve("external/uapmd/source/tools/wclap-host/web-overrides")
 
 tasks.register("buildUapmdCApiWasm") {
     group       = "build"
@@ -268,7 +269,7 @@ tasks.register("buildUapmdCApiWasm") {
             commandLine(
                 "cmake",
                 "--build", buildDir.absolutePath,
-                "--target", "uapmd-c-api-web",
+                "--target", "uapmd-c-api-web", "uapmd-wclap-host",
                 "--parallel"
             )
         }
@@ -280,6 +281,31 @@ tasks.register("buildUapmdCApiWasm") {
                 throw GradleException("Expected Emscripten output not found: ${built.absolutePath}")
             }
             built.copyTo(File(wasmOutputDir, name), overwrite = true)
+        }
+
+        val wclapHostWasm = File(buildDir, "uapmd/tools/wclap-host/uapmd-wclap-host.wasm")
+        if (wclapHostWasm.exists()) {
+            wclapHostWasm.copyTo(File(wasmOutputDir, "uapmd-wclap-host.wasm"), overwrite = true)
+        }
+
+        val wclapModule = fileTree(cpmCacheDir.resolve("webclap-browser-test-host")) {
+            include("**/clap-audionode/wclap-js/wclap.mjs")
+        }.files.singleOrNull()
+            ?: throw GradleException("Unable to locate WebCLAP runtime module in $cpmCacheDir")
+        wclapModule.copyTo(File(wasmOutputDir, "wclap.mjs"), overwrite = true)
+
+        val wclapEs6Dir = wclapModule.parentFile.resolve("es6")
+        if (!wclapEs6Dir.isDirectory) {
+            throw GradleException("Expected WebCLAP es6 runtime directory at ${wclapEs6Dir.absolutePath}")
+        }
+        copy {
+            from(wclapEs6Dir)
+            into(File(wasmOutputDir, "es6"))
+        }
+
+        val overrideWclap = wclapOverrideDir.resolve("es6/wclap.mjs")
+        if (overrideWclap.exists()) {
+            overrideWclap.copyTo(File(wasmOutputDir, "es6/wclap.mjs"), overwrite = true)
         }
         logger.lifecycle("uapmd-c-api Wasm: outputs copied to $wasmOutputDir")
     }

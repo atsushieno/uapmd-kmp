@@ -31,10 +31,22 @@ set(UAPMD_TARGET_WASM  ON  CACHE BOOL "" FORCE)
 set(BUILD_SHARED_LIBS  OFF CACHE BOOL "" FORCE)
 set(UAPMD_BUILD_TESTS  OFF CACHE BOOL "" FORCE)
 set(MIDICCI_SKIP_TOOLS ON  CACHE BOOL "" FORCE)
+add_compile_options(-pthread -matomics -mbulk-memory)
 
 # Pull in the full uapmd source tree, then our owned C API wrapper.
 add_subdirectory("${UAPMD_SOURCE_DIR}" "${CMAKE_CURRENT_BINARY_DIR}/uapmd")
 add_subdirectory("${CAPI_DIR}" "${CMAKE_CURRENT_BINARY_DIR}/uapmd-c-api")
+
+# libremidi's Emscripten helper target exports its own tiny EXPORTED_FUNCTIONS
+# list for standalone samples. When it propagates into this final link step it
+# overrides the uapmd API export list, leaving only a few MIDI helpers visible.
+get_target_property(LIBREMIDI_INTERFACE_LINK_OPTIONS libremidi INTERFACE_LINK_OPTIONS)
+if(LIBREMIDI_INTERFACE_LINK_OPTIONS AND NOT LIBREMIDI_INTERFACE_LINK_OPTIONS STREQUAL "NOTFOUND")
+    list(FILTER LIBREMIDI_INTERFACE_LINK_OPTIONS EXCLUDE REGEX "EXPORTED_FUNCTIONS=.*_libremidi_devices_poll")
+    set_target_properties(libremidi PROPERTIES
+        INTERFACE_LINK_OPTIONS "${LIBREMIDI_INTERFACE_LINK_OPTIONS}"
+    )
+endif()
 
 # ── Exported C API symbols ────────────────────────────────────────────────────
 # Every public uapmd_* function that the KMP binding calls must appear here so
@@ -244,16 +256,6 @@ set(UAPMD_EXPORTED_FUNCTIONS
     "_uapmd_cm_set_clip_markers"
     "_uapmd_cm_set_audio_warps"
     # ── transport ─────────────────────────────────────────────────────────────
-    "_uapmd_transport_play"
-    "_uapmd_transport_pause"
-    "_uapmd_transport_resume"
-    "_uapmd_transport_stop"
-    "_uapmd_transport_record"
-    "_uapmd_transport_is_playing"
-    "_uapmd_transport_is_paused"
-    "_uapmd_transport_is_recording"
-    "_uapmd_transport_get_volume"
-    "_uapmd_transport_set_volume"
     # ── track ─────────────────────────────────────────────────────────────────
     "_uapmd_track_graph"
     "_uapmd_track_get_bypassed"
@@ -386,70 +388,6 @@ set(UAPMD_EXPORTED_FUNCTIONS
     "_uapmd_document_provider_restore_handle"
     "_uapmd_document_provider_supports_create_file_internal"
     # ── app model ─────────────────────────────────────────────────────────────
-    "_uapmd_app_instance"
-    "_uapmd_app_instantiate"
-    "_uapmd_app_cleanup"
-    "_uapmd_app_notify_ui_ready"
-    "_uapmd_app_notify_persistent_storage_ready"
-    "_uapmd_app_sequencer"
-    "_uapmd_app_transport"
-    "_uapmd_app_document_provider"
-    "_uapmd_app_timeline_track_count"
-    "_uapmd_app_get_timeline_track"
-    "_uapmd_app_master_timeline_track"
-    "_uapmd_app_track_count"
-    "_uapmd_app_add_track"
-    "_uapmd_app_remove_track"
-    "_uapmd_app_remove_all_tracks"
-    "_uapmd_app_sample_rate"
-    "_uapmd_app_is_audio_engine_enabled"
-    "_uapmd_app_set_audio_engine_enabled"
-    "_uapmd_app_toggle_audio_engine"
-    "_uapmd_app_auto_buffer_size_enabled"
-    "_uapmd_app_set_auto_buffer_size_enabled"
-    "_uapmd_app_update_audio_device_settings"
-    "_uapmd_app_perform_plugin_scanning"
-    "_uapmd_app_cancel_plugin_scanning"
-    "_uapmd_app_is_scanning"
-    "_uapmd_app_generate_scan_report"
-    "_uapmd_app_clear_plugin_blocklist"
-    "_uapmd_app_create_plugin_instance"
-    "_uapmd_app_remove_plugin_instance"
-    "_uapmd_app_request_show_plugin_ui"
-    "_uapmd_app_show_plugin_ui"
-    "_uapmd_app_hide_plugin_ui"
-    "_uapmd_app_request_show_instance_details"
-    "_uapmd_app_request_show_track_graph"
-    "_uapmd_app_get_instance_group"
-    "_uapmd_app_set_instance_group"
-    "_uapmd_app_load_plugin_state"
-    "_uapmd_app_save_plugin_state"
-    "_uapmd_app_add_midi_clip_to_track"
-    "_uapmd_app_add_midi_clip_from_data"
-    "_uapmd_app_create_empty_midi_clip"
-    "_uapmd_app_add_ump_event_to_clip"
-    "_uapmd_app_remove_ump_event_from_clip"
-    "_uapmd_app_get_midi_clip_ump_events"
-    "_uapmd_app_add_clip_to_track"
-    "_uapmd_app_remove_clip_from_track"
-    "_uapmd_app_get_clip_audio_events"
-    "_uapmd_app_set_clip_audio_events"
-    "_uapmd_app_add_device_input_to_track"
-    "_uapmd_app_ensure_track_uses_editor_graph"
-    "_uapmd_app_revert_track_to_simple_graph"
-    "_uapmd_app_connect_track_graph"
-    "_uapmd_app_disconnect_track_graph_connection"
-    "_uapmd_app_get_track_graph_connections"
-    "_uapmd_app_get_master_marker"
-    "_uapmd_app_master_marker_count"
-    "_uapmd_app_set_master_markers"
-    "_uapmd_app_get_render_status"
-    "_uapmd_app_clear_render_status"
-    "_uapmd_app_start_render"
-    "_uapmd_app_cancel_render"
-    "_uapmd_app_get_timeline_state"
-    "_uapmd_app_enable_ump_device"
-    "_uapmd_app_disable_ump_device"
     # ── container window ──────────────────────────────────────────────────────
     "_uapmd_container_window_create"
     "_uapmd_container_window_destroy"
@@ -474,7 +412,14 @@ set(UAPMD_EXPORTED_FUNCTIONS_ARG "[${_FUNCS_CSV}]")
 # ── Emscripten executable that becomes the JS+Wasm module ────────────────────
 add_executable(uapmd-c-api-web "${CMAKE_CURRENT_SOURCE_DIR}/stub_main.c")
 
-target_link_libraries(uapmd-c-api-web PRIVATE uapmd-c-api)
+# The web stub never references the C API symbols directly, so a normal link
+# against the static archive lets the linker discard the entire API surface.
+# Force-load the archive so EXPORTED_FUNCTIONS can retain the public C entrypoints.
+target_link_libraries(uapmd-c-api-web PRIVATE
+    "-Wl,--whole-archive"
+    uapmd-c-api
+    "-Wl,--no-whole-archive"
+)
 
 # Output filename: uapmd-c-api.js (+ uapmd-c-api.wasm generated alongside)
 set_target_properties(uapmd-c-api-web PROPERTIES
@@ -498,6 +443,12 @@ target_link_options(uapmd-c-api-web PRIVATE
     # Memory: 64 MB initial, allow growth
     "-sINITIAL_MEMORY=67108864"
     "-sALLOW_MEMORY_GROWTH=1"
+    # WebAudioWorklet-backed device I/O needs Emscripten's threaded audio flags.
+    "-sSHARED_MEMORY=1"
+    "-sWASM_WORKERS=1"
+    "-sAUDIO_WORKLET=1"
+    "-pthread"
+    "-sPTHREAD_POOL_SIZE=8"
     # 8 MB stack for C++ deep call stacks
     "-sSTACK_SIZE=8388608"
     # Target web + worker environments (no Node.js requirement)

@@ -181,3 +181,7 @@ tasks.register<Exec>("runJvmDebugBundle") {
         commandLine(macAppExecutable.get())
     }
 }
+
+afterEvaluate {
+    tasks.findByName("wasmJsResolveResourcesFromDependencies")?.dependsOn(":uapmd-binding:wasmJsProcessResources")
+}

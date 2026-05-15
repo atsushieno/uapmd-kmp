@@ -8,3 +8,11 @@ config.resolve.alias['uapmd-wasm-adapter'] = path.resolve(
     __dirname,
     '../../../../uapmd-binding/build/processedResources/wasmJs/main/uapmd-wasm-adapter.mjs'
 );
+config.resolve.alias['uapmd-c-api'] = path.resolve(
+    __dirname,
+    '../../../../../build-wasm/uapmd-c-api.js'
+);
+config.resolve.alias['uapmd-c-api.wasm'] = path.resolve(
+    __dirname,
+    '../../../../../build-wasm/uapmd-c-api.wasm'
+);

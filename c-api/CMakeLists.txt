@@ -21,6 +21,10 @@ set(UAPMD_C_API_SOURCES
     src/uapmd-c-app.cpp
 )
 
+if(EMSCRIPTEN)
+    list(REMOVE_ITEM UAPMD_C_API_SOURCES src/uapmd-c-app.cpp)
+endif()
+
 if(ANDROID OR IOS OR EMSCRIPTEN)
     add_library(uapmd-c-api STATIC ${UAPMD_C_API_HEADERS} ${UAPMD_C_API_SOURCES})
 else()

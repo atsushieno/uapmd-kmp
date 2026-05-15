@@ -16,7 +16,6 @@ import dev.atsushieno.uapmd_kmp.nodegraph.GraphLink
 import dev.atsushieno.uapmd_kmp.nodegraph.NodeGraphEditor
 import dev.atsushieno.uapmd_kmp.timeline.*
 import dev.atsushieno.uapmd_kmp.ui.*
-import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
@@ -274,10 +273,10 @@ private fun MainWindowContent(
                         contextMenu   = contextMenu,
                         onTracksChange      = { model.refreshTimeline() },
                         onContextMenuChange = { contextMenu = it },
-                        onSavePluginState   = { ti -> scope.launch(Dispatchers.IO) { model.saveTrackPluginStates(ti) } },
+                        onSavePluginState   = { ti -> scope.launchPlatformBackground { model.saveTrackPluginStates(ti) } },
                         onOpenGraph         = { showNodeGraph = true },
                         onToggleMonitor     = { ti -> model.toggleMonitor(ti) },
-                        onRemoveTrack       = { ti -> scope.launch(Dispatchers.IO) { model.removeTrack(ti) } },
+                        onRemoveTrack       = { ti -> scope.launchPlatformBackground { model.removeTrack(ti) } },
                         onAddPlugin         = { ti ->
                             pluginPanelPreselectedTrack = ti
                             showPluginPanel = true
@@ -302,7 +301,7 @@ private fun MainWindowContent(
                             val ti = if (trackIdx < 0)
                                 (model.trackEntries.map { it.trackIndex }.maxOrNull() ?: -1) + 1
                             else trackIdx
-                            scope.launch(Dispatchers.IO) { model.addPluginToTrack(ti, fmt, pid) }
+                            scope.launchPlatformBackground { model.addPluginToTrack(ti, fmt, pid) }
                         },
                         modifier = Modifier.width(380.dp).fillMaxHeight()
                     )
@@ -323,7 +322,7 @@ private fun MainWindowContent(
                         onNoteOn = { note -> model.sendNoteOn(selectedInfo.instanceId, note) },
                         onNoteOff = { note -> model.sendNoteOff(selectedInfo.instanceId, note) },
                         onShowUi = {
-                            scope.launch(Dispatchers.IO) {
+                            scope.launchPlatformBackground {
                                 model.showPluginUi(selectedInfo.instanceId)
                             }
                         },
@@ -335,7 +334,7 @@ private fun MainWindowContent(
 
             // ── Bottom bar ─────────────────────────────────────────────────
             BottomBar(
-                onAddTrack          = { scope.launch(Dispatchers.IO) { model.addEmptyTrack() } },
+                onAddTrack          = { scope.launchPlatformBackground { model.addEmptyTrack() } },
                 onMixerMonitor      = { showMixerMonitor = !showMixerMonitor },
                 onPluginInstances   = { showTrackPanel   = !showTrackPanel   },
                 modifier = Modifier.fillMaxWidth()
@@ -433,7 +432,7 @@ private fun MainWindowContent(
                         val ti = if (trackIdx < 0)
                             (model.trackEntries.map { it.trackIndex }.maxOrNull() ?: -1) + 1
                         else trackIdx
-                        scope.launch(Dispatchers.IO) { model.addPluginToTrack(ti, fmt, pid) }
+                        scope.launchPlatformBackground { model.addPluginToTrack(ti, fmt, pid) }
                     },
                     modifier = Modifier.fillMaxWidth().height(560.dp)
                 )

@@ -532,16 +532,14 @@ external interface UapmdCApiModule : JsAny {
 // ── External adapter declarations ────────────────────────────────────────────
 
 @JsModule("uapmd-wasm-adapter")
-@JsFun("(factory) => factory()")
-private external fun invokeFactory(factory: JsAny): Promise<UapmdCApiModule>
+@JsFun("(factory, wasmUrl) => factory({ locateFile: () => wasmUrl })")
+private external fun invokeFactory(factory: JsAny, wasmUrl: String): Promise<UapmdCApiModule>
 
+@JsFun("(mod) => globalThis.__uapmdWasmAdapter.setUapmdModule(mod)")
 private external fun setUapmdModule(mod: JsAny)
 
 @JsModule("uapmd-wasm-adapter")
 private external fun getUapmdModule(): JsAny?
-
-@JsModule("uapmd-wasm-adapter")
-private external fun isReady(): Boolean
 
 @JsModule("uapmd-wasm-adapter")
 internal external fun readCStringFromHandle(fn: JsAny, handle: Int): String
@@ -585,13 +583,13 @@ internal external fun registerCallback(obj: JsAny): Int
 @JsModule("uapmd-wasm-adapter")
 internal external fun unregisterCallback(id: Int)
 
-@JsModule("uapmd-wasm-adapter")
+@JsFun("(cbId, dispatchName, sig) => globalThis.__uapmdWasmAdapter.makeCFunctionPtr(cbId, dispatchName, sig)")
 internal external fun makeCFunctionPtr(cbId: Int, dispatchName: String, sig: String): Int
 
-@JsModule("uapmd-wasm-adapter")
+@JsFun("(ptr) => globalThis.__uapmdWasmAdapter.removeCFunctionPtr(ptr)")
 internal external fun removeCFunctionPtr(ptr: Int)
 
-@JsModule("uapmd-wasm-adapter")
+@JsFun("(cbId, dispatchName) => globalThis.__uapmdWasmAdapter.makeStateCallbackPtr(cbId, dispatchName)")
 internal external fun makeStateCallbackPtr(cbId: Int, dispatchName: String): Int
 
 // ── Module singleton ──────────────────────────────────────────────────────────
@@ -612,9 +610,9 @@ internal val wasmMod: UapmdCApiModule
  *
  * @param factory The default export of `uapmd-c-api.js` (an async factory function).
  */
-suspend fun initUapmdWasm(factory: JsAny) {
+suspend fun initUapmdWasm(factory: JsAny, wasmUrl: String = "uapmd-c-api.wasm") {
     if (_uapmdModule != null) return
-    val mod: UapmdCApiModule = invokeFactory(factory).await()
+    val mod: UapmdCApiModule = invokeFactory(factory, wasmUrl).await()
     _uapmdModule = mod
     setUapmdModule(mod)
 }
