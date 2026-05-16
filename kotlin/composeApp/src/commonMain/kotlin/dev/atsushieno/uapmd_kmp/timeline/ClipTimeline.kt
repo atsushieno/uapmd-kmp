@@ -458,7 +458,9 @@ private fun DrawScope.drawClip(
     laneH: Float,
     measurer: TextMeasurer
 ) {
-    val x1 = state.msToX(clip.startMs).coerceAtLeast(state.legendWidth)
+    val clipFullLeft = state.msToX(clip.startMs)
+    val clipFullWidth = state.msToX(clip.endMs) - clipFullLeft
+    val x1 = clipFullLeft.coerceAtLeast(state.legendWidth)
     val x2 = state.msToX(clip.endMs).coerceAtMost(size.width)
     if (x2 <= x1) return
 
@@ -470,11 +472,14 @@ private fun DrawScope.drawClip(
 
     // Preview content (rendered before border so border draws on top)
     val previewRect = Rect(rect.left + 2f, rect.top + CLIP_LABEL_H, rect.right - 2f, rect.bottom - 2f)
+    // Full (unclipped) content origin and width for correct content positioning when scrolled
+    val fullPreviewLeft = clipFullLeft + 2f
+    val fullPreviewWidth = (clipFullWidth - 4f).coerceAtLeast(0f)
     if (previewRect.width > 4f && previewRect.height > 4f) {
         when (val p = clip.previewData) {
-            is ClipPreviewData.Audio -> drawWaveformPreview(p, previewRect, measurer)
-            is ClipPreviewData.Midi -> drawMidiPreview(p, previewRect)
-            is ClipPreviewData.MasterMeta -> drawMasterMetaPreview(p, previewRect, measurer)
+            is ClipPreviewData.Audio -> drawWaveformPreview(p, previewRect, fullPreviewLeft, fullPreviewWidth, measurer)
+            is ClipPreviewData.Midi -> drawMidiPreview(p, previewRect, fullPreviewLeft, fullPreviewWidth)
+            is ClipPreviewData.MasterMeta -> drawMasterMetaPreview(p, previewRect, fullPreviewLeft, fullPreviewWidth, measurer)
             is ClipPreviewData.Loading -> drawPreviewPlaceholder("Loading…", previewRect, measurer)
             is ClipPreviewData.Error -> drawPreviewPlaceholder(p.message, previewRect, measurer)
             null -> Unit
@@ -517,6 +522,8 @@ private fun DrawScope.drawPreviewPlaceholder(text: String, rect: Rect, measurer:
 private fun DrawScope.drawWaveformPreview(
     data: ClipPreviewData.Audio,
     rect: Rect,
+    fullLeft: Float,
+    fullWidth: Float,
     measurer: TextMeasurer
 ) {
     if (data.waveform.isEmpty()) return
@@ -529,7 +536,8 @@ private fun DrawScope.drawWaveformPreview(
         val count = data.waveform.size
         data.waveform.forEachIndexed { i, pt ->
             val t = if (count > 1) i.toFloat() / (count - 1) else 0f
-            val x = rect.left + t * rect.width
+            val x = fullLeft + t * fullWidth
+            if (x < rect.left - 1f || x > rect.right + 1f) return@forEachIndexed
             val y1 = centerY - pt.maxValue.coerceIn(-1f, 1f) * halfH
             val y2 = centerY - pt.minValue.coerceIn(-1f, 1f) * halfH
             drawLine(lineColor, Offset(x, y1), Offset(x, y2.coerceAtLeast(y1 + 1f)), 1.2f)
@@ -537,7 +545,8 @@ private fun DrawScope.drawWaveformPreview(
 
         val markerColor = Color(0xDCFFDE59.toInt())
         for (marker in data.markers) {
-            val x = rect.left + (marker.clipPositionSeconds / safeDuration).toFloat().coerceIn(0f, 1f) * rect.width
+            val x = fullLeft + (marker.clipPositionSeconds / safeDuration).toFloat() * fullWidth
+            if (x < rect.left - 1f || x > rect.right + 1f) continue
             drawLine(markerColor, Offset(x, rect.top), Offset(x, rect.bottom), 1.5f)
             if (marker.name.isNotEmpty()) {
                 val ml = measurer.measure(marker.name, TextStyle(color = markerColor, fontSize = 7.sp))
@@ -547,7 +556,7 @@ private fun DrawScope.drawWaveformPreview(
     }
 }
 
-private fun DrawScope.drawMidiPreview(data: ClipPreviewData.Midi, rect: Rect) {
+private fun DrawScope.drawMidiPreview(data: ClipPreviewData.Midi, rect: Rect, fullLeft: Float, fullWidth: Float) {
     if (data.notes.isEmpty()) return
     val noteRange = (data.maxNote - data.minNote + 1).coerceAtLeast(1)
     val safeDuration = data.durationSeconds.coerceAtLeast(0.01)
@@ -555,9 +564,10 @@ private fun DrawScope.drawMidiPreview(data: ClipPreviewData.Midi, rect: Rect) {
 
     clipRect(rect.left, rect.top, rect.right, rect.bottom) {
         for (note in data.notes) {
-            val x1 = rect.left + (note.startSeconds / safeDuration).toFloat().coerceIn(0f, 1f) * rect.width
-            val x2 = (rect.left + ((note.startSeconds + note.durationSeconds) / safeDuration).toFloat().coerceIn(0f, 1f) * rect.width)
+            val x1 = fullLeft + (note.startSeconds / safeDuration).toFloat() * fullWidth
+            val x2 = (fullLeft + ((note.startSeconds + note.durationSeconds) / safeDuration).toFloat() * fullWidth)
                 .coerceAtLeast(x1 + 1.5f)
+            if (x2 < rect.left || x1 > rect.right) continue
             val notePos = (data.maxNote - note.note).toFloat() / noteRange
             val y1 = rect.top + notePos * rect.height
             val y2 = (y1 + laneH.coerceAtLeast(4f) * 0.85f).coerceAtMost(rect.bottom)
@@ -571,6 +581,8 @@ private fun DrawScope.drawMidiPreview(data: ClipPreviewData.Midi, rect: Rect) {
 private fun DrawScope.drawMasterMetaPreview(
     data: ClipPreviewData.MasterMeta,
     rect: Rect,
+    fullLeft: Float,
+    fullWidth: Float,
     measurer: TextMeasurer
 ) {
     val safeDuration = data.durationSeconds.coerceAtLeast(0.001)
@@ -579,7 +591,7 @@ private fun DrawScope.drawMasterMetaPreview(
     val maxBpm = validTempos.maxOfOrNull { it.bpm } ?: 200.0
     val bpmRange = (maxBpm - minBpm).coerceAtLeast(1.0)
 
-    fun toX(sec: Double) = rect.left + (sec / safeDuration).toFloat().coerceIn(0f, 1f) * rect.width
+    fun toX(sec: Double) = fullLeft + (sec / safeDuration).toFloat() * fullWidth
     fun toY(bpm: Double) = rect.bottom - ((bpm - minBpm) / bpmRange).toFloat().coerceIn(0f, 1f) * rect.height
 
     clipRect(rect.left, rect.top, rect.right, rect.bottom) {
