@@ -43,6 +43,10 @@ interface RenderProgressCb : Callback {
     fun invoke(progress: UapmdOfflineRenderProgress?, userData: Pointer?)
 }
 
+interface TimelineChangedCb : Callback {
+    fun invoke(userData: Pointer?)
+}
+
 interface RenderShouldCancelCb : Callback {
     fun invoke(userData: Pointer?): Boolean
 }
@@ -206,6 +210,15 @@ open class UapmdContentBounds : Structure() {
     @JvmField var last_seconds: Double = 0.0
 
     class ByVal : UapmdContentBounds(), Structure.ByValue
+}
+
+@FieldOrder("start_seconds", "duration_seconds", "velocity", "note", "_pad")
+open class UapmdMidiNote : Structure() {
+    @JvmField var start_seconds: Double = 0.0
+    @JvmField var duration_seconds: Double = 0.0
+    @JvmField var velocity: Float = 0f
+    @JvmField var note: Byte = 0
+    @JvmField var _pad: ByteArray = ByteArray(3)
 }
 
 // Maps uapmd_clip_data_t — only the fields needed for UI; pointer fields for markers/warps
@@ -716,6 +729,11 @@ interface UapmdLibrary : Library {
 
     fun uapmd_tl_load_project(tl: Pointer?, filePath: String?): UapmdProjectResult.ByVal
     fun uapmd_tl_calculate_content_bounds(tl: Pointer?): UapmdContentBounds.ByVal
+
+    fun uapmd_tl_get_clip_midi_notes(tl: Pointer?, trackIndex: Int, clipId: Int,
+                                      outNotes: UapmdMidiNote?, maxNotes: Int,
+                                      outMinNote: com.sun.jna.ptr.IntByReference?, outMaxNote: com.sun.jna.ptr.IntByReference?): Int
+    fun uapmd_tl_set_timeline_changed_callback(tl: Pointer?, cb: TimelineChangedCb?, userData: Pointer?)
 
     // ── TimelineTrack / ClipManager ──────────────────────────────────────────
 

@@ -220,6 +220,41 @@ typedef struct uapmd_content_bounds {
 
 UAPMD_C_EXPORT uapmd_content_bounds_t uapmd_tl_calculate_content_bounds(uapmd_timeline_facade_t tl);
 
+/* ─── MIDI clip note preview ─────────────────────────────────────────────── */
+
+typedef struct uapmd_midi_note {
+    double  start_seconds;
+    double  duration_seconds;
+    float   velocity;        /* 0.0 – 1.0 */
+    uint8_t note;            /* 0 – 127   */
+    uint8_t _pad[3];
+} uapmd_midi_note_t;
+
+/* Returns the number of notes in the clip, or -1 if the track/clip is not
+ * found or is not a MIDI clip. If out_notes is non-NULL and max_notes > 0,
+ * fills up to max_notes entries. Call with out_notes=NULL/max_notes=0 first
+ * to query the count, then allocate and call again. */
+UAPMD_C_EXPORT int32_t uapmd_tl_get_clip_midi_notes(
+    uapmd_timeline_facade_t tl,
+    int32_t  track_index,    /* UAPMD_MASTER_TRACK_INDEX for the master track */
+    int32_t  clip_id,
+    uapmd_midi_note_t* out_notes,   /* nullable */
+    int32_t  max_notes,
+    int32_t* out_min_note,          /* nullable */
+    int32_t* out_max_note           /* nullable */);
+
+/* ─── Timeline change notification ──────────────────────────────────────── */
+
+typedef void (*uapmd_timeline_changed_cb_t)(void* user_data);
+
+/* Register a callback that is invoked (on the calling thread, synchronously)
+ * after any clip is added or removed, and after loadProject() completes.
+ * Pass cb=NULL to unregister. */
+UAPMD_C_EXPORT void uapmd_tl_set_timeline_changed_callback(
+    uapmd_timeline_facade_t tl,
+    uapmd_timeline_changed_cb_t cb,
+    void* user_data);
+
 /* ═══════════════════════════════════════════════════════════════════════════
  *  AudioIODeviceManager
  * ═══════════════════════════════════════════════════════════════════════════ */

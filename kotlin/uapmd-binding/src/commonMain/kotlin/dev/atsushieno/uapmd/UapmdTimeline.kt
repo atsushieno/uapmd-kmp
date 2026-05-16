@@ -40,4 +40,12 @@ interface TimelineFacade {
     fun removeClip(trackIndex: Int, clipId: Int): Boolean
     fun loadProject(filePath: String): ProjectResult
     fun calculateContentBounds(): ContentBounds
+
+    /** Returns MIDI notes for the given clip, or null if the track/clip is not found
+     *  or is not a MIDI clip. Empty list means a valid MIDI clip with no notes. */
+    fun getMidiClipNotes(trackIndex: Int, clipId: Int): List<MidiNoteData>?
+
+    /** Registers a callback invoked after every clip add/remove and after loadProject().
+     *  Pass null to unregister. */
+    fun setTimelineChangedCallback(callback: (() -> Unit)?)
 }

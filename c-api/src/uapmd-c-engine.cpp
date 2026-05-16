@@ -357,6 +357,45 @@ uapmd_content_bounds_t uapmd_tl_calculate_content_bounds(uapmd_timeline_facade_t
     return { b.hasContent, b.firstSample, b.lastSample, b.firstSeconds, b.lastSeconds };
 }
 
+int32_t uapmd_tl_get_clip_midi_notes(uapmd_timeline_facade_t tl,
+                                       int32_t track_index,
+                                       int32_t clip_id,
+                                       uapmd_midi_note_t* out_notes,
+                                       int32_t max_notes,
+                                       int32_t* out_min_note,
+                                       int32_t* out_max_note) {
+    auto result = TF(tl)->getMidiClipNotes(track_index, clip_id);
+    if (!result.has_value()) return -1;
+    const auto& notes = *result;
+    const int32_t count = static_cast<int32_t>(notes.size());
+    if (out_notes && max_notes > 0) {
+        const int32_t n = std::min(count, max_notes);
+        for (int32_t i = 0; i < n; ++i) {
+            out_notes[i].start_seconds    = notes[i].startSeconds;
+            out_notes[i].duration_seconds = notes[i].durationSeconds;
+            out_notes[i].velocity         = notes[i].velocity;
+            out_notes[i].note             = notes[i].note;
+            out_notes[i]._pad[0] = out_notes[i]._pad[1] = out_notes[i]._pad[2] = 0;
+        }
+    }
+    if (out_min_note || out_max_note) {
+        uint8_t mn = 127, mx = 0;
+        for (const auto& n : notes) { mn = std::min(mn, n.note); mx = std::max(mx, n.note); }
+        if (out_min_note) *out_min_note = notes.empty() ? 60 : mn;
+        if (out_max_note) *out_max_note = notes.empty() ? 72 : mx;
+    }
+    return count;
+}
+
+void uapmd_tl_set_timeline_changed_callback(uapmd_timeline_facade_t tl,
+                                              uapmd_timeline_changed_cb_t cb,
+                                              void* user_data) {
+    if (cb)
+        TF(tl)->setTimelineChangedCallback([cb, user_data]{ cb(user_data); });
+    else
+        TF(tl)->setTimelineChangedCallback(nullptr);
+}
+
 /* ═══════════════════════════════════════════════════════════════════════════
  *  AudioIODeviceManager
  * ═══════════════════════════════════════════════════════════════════════════ */

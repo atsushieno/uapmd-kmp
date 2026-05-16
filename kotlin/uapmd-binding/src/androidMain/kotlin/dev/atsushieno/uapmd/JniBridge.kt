@@ -290,6 +290,8 @@ object JniBridge {
     @JvmStatic external fun uapmdTlLoadProject(h: Long, path: String): Array<String?>
     /** Returns double[5]{hasContent, firstSample, lastSample, firstSecs, lastSecs} */
     @JvmStatic external fun uapmdTlCalculateContentBounds(h: Long): DoubleArray
+    @JvmStatic external fun uapmdTlGetClipMidiNotes(h: Long, trackIdx: Int, clipId: Int): DoubleArray?
+    @JvmStatic external fun uapmdTlSetTimelineChangedCallback(h: Long, callback: Runnable?)
 
     // ─── TimelineTrack (clip data) ────────────────────────────────────────────
 

@@ -52,6 +52,9 @@ class UapmdModel(val sequencer: RealtimeSequencer) {
 
     init {
         refreshAudioEngineState()
+        engine.timeline.setTimelineChangedCallback {
+            dispatchUiStateUpdate { refreshTimeline() }
+        }
     }
 
     private fun refreshAudioEngineState() {
@@ -254,26 +257,50 @@ class UapmdModel(val sequencer: RealtimeSequencer) {
         val engCount = engine.trackCount.toInt()
         val count = maxOf(tlCount, engCount)
         val sampleRate = sequencer.sampleRate.takeIf { it > 0 } ?: 48000
-        fun clipDataToUi(clip: dev.atsushieno.uapmd.ClipData): TimelineClip {
+        fun clipDataToUi(trackIndex: Int, clip: dev.atsushieno.uapmd.ClipData): TimelineClip {
             val startMs = clip.positionSamples * 1000L / sampleRate
             val endMs = (clip.positionSamples + clip.durationSamples) * 1000L / sampleRate
             val label = clip.name.ifEmpty { clip.filepath.substringAfterLast('/').substringAfterLast('\\') }
+            val durationSeconds = clip.durationSamples.toDouble() / sampleRate
+            val previewData: dev.atsushieno.uapmd_kmp.timeline.ClipPreviewData = when (clip.clipType) {
+                dev.atsushieno.uapmd.ClipType.Midi -> {
+                    val notes = engine.timeline.getMidiClipNotes(trackIndex, clip.clipId)
+                    if (notes != null) {
+                        val mapped = notes.map { n ->
+                            dev.atsushieno.uapmd_kmp.timeline.MidiNote(n.startSeconds, n.durationSeconds, n.note, n.velocity)
+                        }
+                        if (mapped.isEmpty()) {
+                            dev.atsushieno.uapmd_kmp.timeline.ClipPreviewData.Midi(emptyList(), durationSeconds)
+                        } else {
+                            dev.atsushieno.uapmd_kmp.timeline.ClipPreviewData.Midi(
+                                notes = mapped,
+                                durationSeconds = durationSeconds,
+                                minNote = mapped.minOf { it.note },
+                                maxNote = mapped.maxOf { it.note }
+                            )
+                        }
+                    } else {
+                        dev.atsushieno.uapmd_kmp.timeline.ClipPreviewData.Loading
+                    }
+                }
+                else -> dev.atsushieno.uapmd_kmp.timeline.ClipPreviewData.Loading
+            }
             return TimelineClip(
                 id = clip.clipId,
                 startMs = startMs,
                 endMs = endMs.coerceAtLeast(startMs + 1L),
                 label = label,
-                previewData = dev.atsushieno.uapmd_kmp.timeline.ClipPreviewData.Loading
+                previewData = previewData
             )
         }
         timelineTracks = (0 until count).map { i ->
             // tl.getTrack() throws if index >= tlCount; use empty clips for engine-only tracks
-            val clips = if (i < tlCount) tl.getTrack(i.toUInt()).getClips().map { clipDataToUi(it) }
+            val clips = if (i < tlCount) tl.getTrack(i.toUInt()).getClips().map { clipDataToUi(i, it) }
                         else emptyList()
             TimelineTrack(index = i, name = "Track ${i + 1}", clips = clips)
         } + run {
             val master = tl.masterTimelineTrack
-            TimelineTrack(index = count, name = "Master", clips = master.getClips().map { clipDataToUi(it) })
+            TimelineTrack(index = count, name = "Master", clips = master.getClips().map { clipDataToUi(Int.MIN_VALUE, it) })
         }
     }
 

@@ -129,4 +129,21 @@ class NativeTimelineFacade internal constructor(
         uapmd_tl_calculate_content_bounds(handle).useContents {
             ContentBounds(has_content, first_sample, last_sample, first_seconds, last_seconds)
         }
+
+    override fun getMidiClipNotes(trackIndex: Int, clipId: Int): List<MidiNoteData>? = memScoped {
+        val count = uapmd_tl_get_clip_midi_notes(handle, trackIndex, clipId, null, 0, null, null)
+        if (count < 0) return null
+        if (count == 0) return emptyList()
+        val buf = allocArray<uapmd_midi_note_t>(count)
+        uapmd_tl_get_clip_midi_notes(handle, trackIndex, clipId, buf, count, null, null)
+        (0 until count).map { i ->
+            val n = interpretCPointer<uapmd_midi_note_t>(buf.rawValue + i.toLong() * sizeOf<uapmd_midi_note_t>())!!.pointed
+            MidiNoteData(n.start_seconds, n.duration_seconds, n.note.toInt() and 0xFF, n.velocity)
+        }
+    }
+
+    override fun setTimelineChangedCallback(callback: (() -> Unit)?) {
+        // Native cinterop cannot store Kotlin lambdas in C callbacks directly; leave as no-op stub.
+        // Timeline refresh is triggered manually after project load on the native target.
+    }
 }

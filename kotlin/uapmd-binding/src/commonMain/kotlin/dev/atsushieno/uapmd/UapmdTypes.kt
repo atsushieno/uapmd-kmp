@@ -71,6 +71,13 @@ data class ContentBounds(
     val lastSeconds: Double
 )
 
+data class MidiNoteData(
+    val startSeconds: Double,
+    val durationSeconds: Double,
+    val note: Int,
+    val velocity: Float
+)
+
 data class TimelinePosition(val samples: Long, val legacyBeats: Double)
 
 data class TimelineState(

@@ -1280,6 +1280,72 @@ JNIEXPORT jdoubleArray JNICALL Java_dev_atsushieno_uapmd_JniBridge_uapmdTlCalcul
     return arr;
 }
 
+// Returns double[count*4] packed as [start, duration, velocity, note, ...] or null on error.
+JNIEXPORT jdoubleArray JNICALL Java_dev_atsushieno_uapmd_JniBridge_uapmdTlGetClipMidiNotes(
+        JNIEnv* env, jclass, jlong h, jint trackIdx, jint clipId) {
+    int32_t count = uapmd_tl_get_clip_midi_notes(
+        j2p<uapmd_timeline_facade_t>(h), trackIdx, clipId, nullptr, 0, nullptr, nullptr);
+    if (count < 0) return nullptr;
+    if (count == 0) return env->NewDoubleArray(0);
+    std::vector<uapmd_midi_note_t> buf(static_cast<size_t>(count));
+    uapmd_tl_get_clip_midi_notes(
+        j2p<uapmd_timeline_facade_t>(h), trackIdx, clipId, buf.data(), count, nullptr, nullptr);
+    std::vector<jdouble> flat(static_cast<size_t>(count) * 4);
+    for (int32_t i = 0; i < count; ++i) {
+        flat[i*4 + 0] = buf[i].start_seconds;
+        flat[i*4 + 1] = buf[i].duration_seconds;
+        flat[i*4 + 2] = static_cast<jdouble>(buf[i].velocity);
+        flat[i*4 + 3] = static_cast<jdouble>(buf[i].note);
+    }
+    jdoubleArray arr = env->NewDoubleArray(count * 4);
+    env->SetDoubleArrayRegion(arr, 0, count * 4, flat.data());
+    return arr;
+}
+
+// Persistent context for timeline changed callback
+struct TlChangedCtx {
+    JavaVM* jvm{nullptr};
+    jobject callbackRef{nullptr}; // global ref to a Runnable
+};
+static TlChangedCtx* g_tl_changed_ctx{nullptr};
+
+static void tl_changed_trampoline(void* /*user_data*/) {
+    if (!g_tl_changed_ctx) return;
+    JNIEnv* env = nullptr;
+    bool didAttach = false;
+    if (g_tl_changed_ctx->jvm->GetEnv(reinterpret_cast<void**>(&env), JNI_VERSION_1_6) == JNI_EDETACHED) {
+        g_tl_changed_ctx->jvm->AttachCurrentThread(&env, nullptr);
+        didAttach = true;
+    }
+    if (env && g_tl_changed_ctx->callbackRef) {
+        jclass runnableClass = env->FindClass("java/lang/Runnable");
+        jmethodID runMethod = env->GetMethodID(runnableClass, "run", "()V");
+        env->CallVoidMethod(g_tl_changed_ctx->callbackRef, runMethod);
+        env->DeleteLocalRef(runnableClass);
+    }
+    if (didAttach) g_tl_changed_ctx->jvm->DetachCurrentThread();
+}
+
+JNIEXPORT void JNICALL Java_dev_atsushieno_uapmd_JniBridge_uapmdTlSetTimelineChangedCallback(
+        JNIEnv* env, jclass, jlong h, jobject callback) {
+    // Cleanup previous context
+    if (g_tl_changed_ctx) {
+        if (g_tl_changed_ctx->callbackRef)
+            env->DeleteGlobalRef(g_tl_changed_ctx->callbackRef);
+        delete g_tl_changed_ctx;
+        g_tl_changed_ctx = nullptr;
+    }
+    if (callback == nullptr) {
+        uapmd_tl_set_timeline_changed_callback(j2p<uapmd_timeline_facade_t>(h), nullptr, nullptr);
+        return;
+    }
+    auto* ctx = new TlChangedCtx{};
+    env->GetJavaVM(&ctx->jvm);
+    ctx->callbackRef = env->NewGlobalRef(callback);
+    g_tl_changed_ctx = ctx;
+    uapmd_tl_set_timeline_changed_callback(j2p<uapmd_timeline_facade_t>(h), tl_changed_trampoline, nullptr);
+}
+
 // ─── TimelineTrack (clip data) ────────────────────────────────────────────────
 
 JNIEXPORT jint JNICALL Java_dev_atsushieno_uapmd_JniBridge_uapmdTtClipCount(

@@ -132,4 +132,16 @@ class AndroidTimelineFacade internal constructor(
             lastSeconds = d[4]
         )
     }
+
+    override fun getMidiClipNotes(trackIndex: Int, clipId: Int): List<MidiNoteData>? {
+        val flat = JniBridge.uapmdTlGetClipMidiNotes(handle, trackIndex, clipId) ?: return null
+        val count = flat.size / 4
+        return (0 until count).map { i ->
+            MidiNoteData(flat[i*4], flat[i*4+1], flat[i*4+3].toInt(), flat[i*4+2].toFloat())
+        }
+    }
+
+    override fun setTimelineChangedCallback(callback: (() -> Unit)?) {
+        JniBridge.uapmdTlSetTimelineChangedCallback(handle, callback?.let { Runnable { it() } })
+    }
 }

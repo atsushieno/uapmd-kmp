@@ -130,4 +130,7 @@ class JsTimelineFacade internal constructor(
                 lastSeconds  = jsGetF64(ptr + 32)
             )
         }
+
+    override fun getMidiClipNotes(trackIndex: Int, clipId: Int): List<MidiNoteData>? = null
+    override fun setTimelineChangedCallback(callback: (() -> Unit)?) {}
 }

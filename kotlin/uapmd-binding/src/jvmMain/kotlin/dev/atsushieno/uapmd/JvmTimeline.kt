@@ -50,6 +50,8 @@ class JvmTimelineFacade internal constructor(
     private val handle: Pointer
 ) : TimelineFacade {
 
+    private var tlChangedCbRef: dev.atsushieno.uapmd.jna.TimelineChangedCb? = null
+
     override fun getState(): TimelineState? {
         val out = UapmdTimelineState()
         if (!lib.uapmd_tl_get_state(handle, out)) return null
@@ -124,6 +126,29 @@ class JvmTimelineFacade internal constructor(
             firstSeconds = r.first_seconds,
             lastSeconds = r.last_seconds
         )
+    }
+
+    override fun getMidiClipNotes(trackIndex: Int, clipId: Int): List<MidiNoteData>? {
+        val count = lib.uapmd_tl_get_clip_midi_notes(handle, trackIndex, clipId, null, 0, null, null)
+        if (count < 0) return null
+        if (count == 0) return emptyList()
+        @Suppress("UNCHECKED_CAST")
+        val arr = dev.atsushieno.uapmd.jna.UapmdMidiNote().toArray(count) as Array<dev.atsushieno.uapmd.jna.UapmdMidiNote>
+        lib.uapmd_tl_get_clip_midi_notes(handle, trackIndex, clipId, arr[0], count, null, null)
+        return arr.map { n -> MidiNoteData(n.start_seconds, n.duration_seconds, n.note.toInt() and 0xFF, n.velocity) }
+    }
+
+    override fun setTimelineChangedCallback(callback: (() -> Unit)?) {
+        if (callback == null) {
+            lib.uapmd_tl_set_timeline_changed_callback(handle, null, null)
+            tlChangedCbRef = null
+        } else {
+            val cb = object : dev.atsushieno.uapmd.jna.TimelineChangedCb {
+                override fun invoke(userData: com.sun.jna.Pointer?) { callback() }
+            }
+            tlChangedCbRef = cb
+            lib.uapmd_tl_set_timeline_changed_callback(handle, cb, null)
+        }
     }
 }
 

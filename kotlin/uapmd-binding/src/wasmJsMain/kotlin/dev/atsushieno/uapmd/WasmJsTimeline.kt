@@ -217,4 +217,7 @@ class WasmJsTimelineFacade internal constructor(
         val error        = if (errPtr != 0) mod.utf8ToString(errPtr) else null
         return ClipAddResult(clipId, sourceNodeId, success, error)
     }
+
+    override fun getMidiClipNotes(trackIndex: Int, clipId: Int): List<MidiNoteData>? = null
+    override fun setTimelineChangedCallback(callback: (() -> Unit)?) {}
 }
