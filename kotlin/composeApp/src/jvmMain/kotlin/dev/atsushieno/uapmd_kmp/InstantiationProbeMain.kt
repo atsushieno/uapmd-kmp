@@ -22,7 +22,7 @@ import java.awt.EventQueue
 private fun probeThread(tag: String) {
     val thread = Thread.currentThread()
     println(
-        "[uapmd-probe-thread] $tag | name=${thread.name} id=${thread.threadId()} " +
+        "[uapmd-probe-thread] $tag | name=${thread.name} id=${thread.id} " +
             "edt=${EventQueue.isDispatchThread()}"
     )
 }

@@ -1,3 +1,5 @@
+@file:OptIn(kotlinx.cinterop.ExperimentalForeignApi::class)
+
 package dev.atsushieno.uapmd
 
 import kotlinx.cinterop.*
@@ -56,7 +58,9 @@ class NativeTimelineTrack internal constructor(
         val buf = allocArray<uapmd_clip_data_t>(count)
         val actual = uapmd_cm_get_all_clips(cm, buf, count.toUInt()).toInt()
         (0 until actual).map { i ->
-            val c = (buf + i)!!.pointed
+            val c = interpretCPointer<uapmd_clip_data_t>(
+                buf.rawValue + i.toLong() * sizeOf<uapmd_clip_data_t>()
+            )!!.pointed
             ClipData(
                 clipId              = c.clip_id,
                 positionSamples     = c.position.samples,
@@ -66,7 +70,7 @@ class NativeTimelineTrack internal constructor(
                 muted               = c.muted,
                 name                = c.name?.toKString() ?: "",
                 filepath            = c.filepath?.toKString() ?: "",
-                clipType            = ClipType.fromNative(c.clip_type.value.toInt())
+                clipType            = ClipType.fromNative(c.clip_type.toInt())
             )
         }
     }
