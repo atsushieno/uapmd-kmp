@@ -10,5 +10,5 @@ fun debugJvmThread(tag: String) {
         return
     val thread = Thread.currentThread()
     val isEdt = EventQueue.isDispatchThread()
-    println("[uapmd-thread] $tag | name=${thread.name} id=${thread.id} edt=$isEdt")
+    println("[uapmd-thread] $tag | name=${thread.name} id=${thread.threadId()} edt=$isEdt")
 }

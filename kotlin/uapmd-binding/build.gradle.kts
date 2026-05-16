@@ -99,6 +99,7 @@ android {
     }
     buildFeatures {
         prefab = true
+        prefabPublishing = true
     }
 }
 
