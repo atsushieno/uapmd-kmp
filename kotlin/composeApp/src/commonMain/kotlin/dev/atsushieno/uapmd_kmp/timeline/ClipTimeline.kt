@@ -12,6 +12,7 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.graphics.drawscope.DrawScope
 import androidx.compose.ui.graphics.drawscope.clipRect
 import androidx.compose.ui.input.pointer.AwaitPointerEventScope
@@ -130,23 +131,65 @@ private fun assignLanes(clips: List<TimelineClip>): List<LaidOutClip> {
 // Colours
 // ---------------------------------------------------------------------------
 
-private object TimelineColors {
-    val header = Color(0xFF3D3837)
-    val headerText = Color(0xFFC4C4C4)
-    val sectionBg = Color(0xFF283232)
-    val sectionBgHovered = Color(0x18201008)
-    val legendBg = Color(0xFF222222)
-    val legendText = Color(0xFFCCCCCC)
-    val clipBg = Color(0xFF4488AA)
-    val clipBgSelected = Color(0xFF66AACC)
-    val clipText = Color(0xFFFFFFFF)
-    val clipBorder = Color(0xFF88CCEE)
-    val clipDrag = Color(0x99224466)
-    val scrollbarBg = Color(0xFF222222)
-    val scrollbarTrack = Color(0xFF101010)
-    val scrollbarThumb = Color(0xFF505050)
-    val scrollbarThumbHovered = Color(0xFF707070)
+private data class TimelineColors(
+    val header: Color,
+    val headerText: Color,
+    val sectionBg: Color,
+    val legendBg: Color,
+    val legendText: Color,
+    val separator: Color,
+    val clipBg: Color,
+    val clipBgSelected: Color,
+    val clipText: Color,
+    val clipBorder: Color,
+    val clipDrag: Color,
+    val scrollbarBg: Color,
+    val scrollbarTrack: Color,
+    val scrollbarThumb: Color,
+    val scrollbarThumbHovered: Color,
+) {
+    companion object {
+        val Dark = TimelineColors(
+            header               = Color(0xFF3D3837),
+            headerText           = Color(0xFFC4C4C4),
+            sectionBg            = Color(0xFF283232),
+            legendBg             = Color(0xFF222222),
+            legendText           = Color(0xFFCCCCCC),
+            separator            = Color(0x33FFFFFF),
+            clipBg               = Color(0xFF4488AA),
+            clipBgSelected       = Color(0xFF66AACC),
+            clipText             = Color(0xFFFFFFFF),
+            clipBorder           = Color(0xFF88CCEE),
+            clipDrag             = Color(0x99224466),
+            scrollbarBg          = Color(0xFF222222),
+            scrollbarTrack       = Color(0xFF101010),
+            scrollbarThumb       = Color(0xFF505050),
+            scrollbarThumbHovered= Color(0xFF707070),
+        )
+        val Light = TimelineColors(
+            header               = Color(0xFFDDD9D5),
+            headerText           = Color(0xFF333333),
+            sectionBg            = Color(0xFFCCDDE8),
+            legendBg             = Color(0xFFE4E4E4),
+            legendText           = Color(0xFF222222),
+            separator            = Color(0x33000000),
+            clipBg               = Color(0xFF4488AA),
+            clipBgSelected       = Color(0xFF66AACC),
+            clipText             = Color(0xFFFFFFFF),
+            clipBorder           = Color(0xFF88CCEE),
+            clipDrag             = Color(0x99224466),
+            scrollbarBg          = Color(0xFFCCCCCC),
+            scrollbarTrack       = Color(0xFFBBBBBB),
+            scrollbarThumb       = Color(0xFF888888),
+            scrollbarThumbHovered= Color(0xFF606060),
+        )
+    }
 }
+
+@Composable
+private fun timelineColors(): TimelineColors =
+    if (MaterialTheme.colorScheme.surface.luminance() < 0.5f) TimelineColors.Dark
+    else TimelineColors.Light
 
 // ---------------------------------------------------------------------------
 // Main composable
@@ -170,6 +213,7 @@ fun ClipTimeline(
     val state = remember { TimelineState() }
     val density = LocalDensity.current
     val textMeasurer = rememberTextMeasurer()
+    val colors = timelineColors()
 
     with(density) {
         state.legendWidth = 160.dp.toPx()
@@ -263,11 +307,11 @@ fun ClipTimeline(
         ) {
             state.startMs = state.clampStartMs(state.startMs, totalMs, size.width)
 
-            drawHeader(state, totalMs, textMeasurer)
-            drawSections(state, laidOutTracks, textMeasurer)
+            drawHeader(state, totalMs, textMeasurer, colors)
+            drawSections(state, laidOutTracks, textMeasurer, colors)
             if (playheadMs >= 0L) drawPlayhead(state, playheadMs)
-            drawScrollbar(state, totalMs)
-            if (state.drag.target == DragTarget.Clip) drawDragGhost(state, laidOutTracks)
+            drawScrollbar(state, totalMs, colors)
+            if (state.drag.target == DragTarget.Clip) drawDragGhost(state, laidOutTracks, colors)
         }
 
         // ── Interactive legend overlay ──────────────────────────────────────
@@ -363,15 +407,15 @@ private fun LegendIconButton(label: String, onClick: () -> Unit, isDestructive: 
 // Drawing — header / ruler
 // ---------------------------------------------------------------------------
 
-private fun DrawScope.drawHeader(state: TimelineState, totalMs: Long, measurer: TextMeasurer) {
+private fun DrawScope.drawHeader(state: TimelineState, totalMs: Long, measurer: TextMeasurer, colors: TimelineColors) {
     drawRect(
-        color = TimelineColors.header,
+        color = colors.header,
         topLeft = Offset.Zero,
         size = Size(size.width, state.headerHeight)
     )
     // legend area within header
     drawRect(
-        color = TimelineColors.legendBg,
+        color = colors.legendBg,
         topLeft = Offset.Zero,
         size = Size(state.legendWidth, state.headerHeight)
     )
@@ -387,9 +431,9 @@ private fun DrawScope.drawHeader(state: TimelineState, totalMs: Long, measurer: 
     clipRect(left = state.legendWidth, top = 0f, right = size.width, bottom = state.headerHeight) {
         while (t <= state.startMs + visMs) {
             val x = state.msToX(t)
-            drawLine(TimelineColors.headerText, Offset(x, state.headerHeight * 0.5f), Offset(x, state.headerHeight), 1f)
+            drawLine(colors.headerText, Offset(x, state.headerHeight * 0.5f), Offset(x, state.headerHeight), 1f)
             val label = formatMs(t)
-            val layout = measurer.measure(label, TextStyle(color = TimelineColors.headerText, fontSize = 9.sp))
+            val layout = measurer.measure(label, TextStyle(color = colors.headerText, fontSize = 9.sp))
             drawText(layout, topLeft = Offset(x + 2f, 2f))
             t += tickInterval
         }
@@ -409,7 +453,8 @@ private fun formatMs(ms: Long): String {
 private fun DrawScope.drawSections(
     state: TimelineState,
     laidOutTracks: List<Pair<TimelineTrack, List<LaidOutClip>>>,
-    measurer: TextMeasurer
+    measurer: TextMeasurer,
+    colors: TimelineColors
 ) {
     var y = state.headerHeight
     for ((track, laid) in laidOutTracks) {
@@ -419,17 +464,17 @@ private fun DrawScope.drawSections(
         // section background
         val isHovered = state.hoveredTrackIndex == track.index
         drawRect(
-            color = if (isHovered) TimelineColors.sectionBg.copy(alpha = 0.9f) else TimelineColors.sectionBg,
+            color = if (isHovered) colors.sectionBg.copy(alpha = 0.9f) else colors.sectionBg,
             topLeft = Offset(0f, y),
             size = Size(size.width, trackH)
         )
         // legend
         drawRect(
-            color = TimelineColors.legendBg,
+            color = colors.legendBg,
             topLeft = Offset(0f, y),
             size = Size(state.legendWidth, trackH)
         )
-        val nameLayout = measurer.measure(track.name, TextStyle(color = TimelineColors.legendText, fontSize = 11.sp))
+        val nameLayout = measurer.measure(track.name, TextStyle(color = colors.legendText, fontSize = 11.sp))
         drawText(nameLayout, topLeft = Offset(6f, y + 6f))
 
         // clips
@@ -439,12 +484,12 @@ private fun DrawScope.drawSections(
                 if (state.drag.target == DragTarget.Clip && state.drag.clipId == clip.id) continue
                 val laneH = state.sectionHeight
                 val clipY = y + laidClip.lane * laneH
-                drawClip(state, clip, clipY, laneH, measurer)
+                drawClip(state, clip, clipY, laneH, measurer, colors)
             }
         }
 
         // separator line
-        drawLine(Color(0x33FFFFFF), Offset(0f, y + trackH), Offset(size.width, y + trackH), 1f)
+        drawLine(colors.separator, Offset(0f, y + trackH), Offset(size.width, y + trackH), 1f)
         y += trackH
     }
 }
@@ -456,7 +501,8 @@ private fun DrawScope.drawClip(
     clip: TimelineClip,
     clipY: Float,
     laneH: Float,
-    measurer: TextMeasurer
+    measurer: TextMeasurer,
+    colors: TimelineColors
 ) {
     val clipFullLeft = state.msToX(clip.startMs)
     val clipFullWidth = state.msToX(clip.endMs) - clipFullLeft
@@ -465,7 +511,7 @@ private fun DrawScope.drawClip(
     if (x2 <= x1) return
 
     val isSelected = state.selectedClipId == clip.id
-    val bg = if (isSelected) TimelineColors.clipBgSelected else TimelineColors.clipBg
+    val bg = if (isSelected) colors.clipBgSelected else colors.clipBg
     val rect = Rect(x1, clipY + 2f, x2, clipY + laneH - 2f)
 
     drawRoundRect(bg, rect.topLeft, rect.size, androidx.compose.ui.geometry.CornerRadius(4f))
@@ -480,14 +526,14 @@ private fun DrawScope.drawClip(
             is ClipPreviewData.Audio -> drawWaveformPreview(p, previewRect, fullPreviewLeft, fullPreviewWidth, measurer)
             is ClipPreviewData.Midi -> drawMidiPreview(p, previewRect, fullPreviewLeft, fullPreviewWidth)
             is ClipPreviewData.MasterMeta -> drawMasterMetaPreview(p, previewRect, fullPreviewLeft, fullPreviewWidth, measurer)
-            is ClipPreviewData.Loading -> drawPreviewPlaceholder("Loading…", previewRect, measurer)
-            is ClipPreviewData.Error -> drawPreviewPlaceholder(p.message, previewRect, measurer)
+            is ClipPreviewData.Loading -> drawPreviewPlaceholder("Loading…", previewRect, measurer, colors)
+            is ClipPreviewData.Error -> drawPreviewPlaceholder(p.message, previewRect, measurer, colors)
             null -> Unit
         }
     }
 
     drawRoundRect(
-        color = if (isSelected) TimelineColors.clipBorder else TimelineColors.clipBorder.copy(alpha = 0.5f),
+        color = if (isSelected) colors.clipBorder else colors.clipBorder.copy(alpha = 0.5f),
         topLeft = rect.topLeft, size = rect.size,
         cornerRadius = androidx.compose.ui.geometry.CornerRadius(4f),
         style = androidx.compose.ui.graphics.drawscope.Stroke(width = 1f)
@@ -500,18 +546,18 @@ private fun DrawScope.drawClip(
             else -> null
         }
         clipRect(left = rect.left + 2f, top = rect.top, right = rect.right - 2f, bottom = rect.top + CLIP_LABEL_H) {
-            val layout = measurer.measure(clip.label, TextStyle(color = TimelineColors.clipText, fontSize = 10.sp))
+            val layout = measurer.measure(clip.label, TextStyle(color = colors.clipText, fontSize = 10.sp))
             drawText(layout, topLeft = Offset(rect.left + 4f, rect.top + 2f))
             if (typeLabel != null) {
-                val tl = measurer.measure(typeLabel, TextStyle(color = TimelineColors.clipText.copy(alpha = 0.6f), fontSize = 8.sp))
+                val tl = measurer.measure(typeLabel, TextStyle(color = colors.clipText.copy(alpha = 0.6f), fontSize = 8.sp))
                 drawText(tl, topLeft = Offset(rect.right - tl.size.width - 4f, rect.top + 3f))
             }
         }
     }
 }
 
-private fun DrawScope.drawPreviewPlaceholder(text: String, rect: Rect, measurer: TextMeasurer) {
-    val layout = measurer.measure(text, TextStyle(color = TimelineColors.clipText.copy(alpha = 0.5f), fontSize = 8.sp))
+private fun DrawScope.drawPreviewPlaceholder(text: String, rect: Rect, measurer: TextMeasurer, colors: TimelineColors) {
+    val layout = measurer.measure(text, TextStyle(color = colors.clipText.copy(alpha = 0.5f), fontSize = 8.sp))
     val x = rect.left + (rect.width - layout.size.width) / 2
     val y = rect.top + (rect.height - layout.size.height) / 2
     clipRect(rect.left, rect.top, rect.right, rect.bottom) {
@@ -630,7 +676,8 @@ private fun DrawScope.drawMasterMetaPreview(
 
 private fun DrawScope.drawDragGhost(
     state: TimelineState,
-    laidOutTracks: List<Pair<TimelineTrack, List<LaidOutClip>>>
+    laidOutTracks: List<Pair<TimelineTrack, List<LaidOutClip>>>,
+    colors: TimelineColors
 ) {
     val d = state.drag
     if (d.target != DragTarget.Clip) return
@@ -643,7 +690,7 @@ private fun DrawScope.drawDragGhost(
         val laneCount = (laid.maxOfOrNull { it.laneCount } ?: 1).coerceAtLeast(1)
         val trackH = state.sectionHeight * laneCount
         if (track.index == d.trackIndex) {
-            drawRect(TimelineColors.clipDrag, Offset(x1, y + 2f), Size(x2 - x1, state.sectionHeight - 4f))
+            drawRect(colors.clipDrag, Offset(x1, y + 2f), Size(x2 - x1, state.sectionHeight - 4f))
             break
         }
         y += trackH
@@ -665,12 +712,12 @@ private fun DrawScope.drawPlayhead(state: TimelineState, playheadMs: Long) {
 // Drawing — scrollbar
 // ---------------------------------------------------------------------------
 
-private fun DrawScope.drawScrollbar(state: TimelineState, totalMs: Long) {
+private fun DrawScope.drawScrollbar(state: TimelineState, totalMs: Long, colors: TimelineColors) {
     val y = size.height - state.scrollbarHeight
     val trackW = size.width - state.legendWidth
 
-    drawRect(TimelineColors.scrollbarBg, Offset(state.legendWidth, y), Size(trackW, state.scrollbarHeight))
-    drawRect(TimelineColors.scrollbarTrack, Offset(state.legendWidth, y + 1f), Size(trackW, state.scrollbarHeight - 2f))
+    drawRect(colors.scrollbarBg, Offset(state.legendWidth, y), Size(trackW, state.scrollbarHeight))
+    drawRect(colors.scrollbarTrack, Offset(state.legendWidth, y + 1f), Size(trackW, state.scrollbarHeight - 2f))
 
     val visMs = state.visibleDurationMs(size.width).toFloat()
     val totalMsF = totalMs.toFloat().coerceAtLeast(visMs)
@@ -680,7 +727,7 @@ private fun DrawScope.drawScrollbar(state: TimelineState, totalMs: Long) {
 
     val thumbHovered = state.drag.target == DragTarget.Scrollbar
     drawRoundRect(
-        color = if (thumbHovered) TimelineColors.scrollbarThumbHovered else TimelineColors.scrollbarThumb,
+        color = if (thumbHovered) colors.scrollbarThumbHovered else colors.scrollbarThumb,
         topLeft = Offset(thumbX, y + 2f),
         size = Size(thumbW, state.scrollbarHeight - 4f),
         cornerRadius = androidx.compose.ui.geometry.CornerRadius(3f)
