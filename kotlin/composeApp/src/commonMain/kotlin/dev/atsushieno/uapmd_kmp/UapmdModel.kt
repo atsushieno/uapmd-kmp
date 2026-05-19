@@ -264,23 +264,31 @@ class UapmdModel(val sequencer: RealtimeSequencer) {
             val durationSeconds = clip.durationSamples.toDouble() / sampleRate
             val previewData: dev.atsushieno.uapmd_kmp.timeline.ClipPreviewData = when (clip.clipType) {
                 dev.atsushieno.uapmd.ClipType.Midi -> {
-                    val notes = engine.timeline.getMidiClipNotes(trackIndex, clip.clipId)
-                    if (notes != null) {
-                        val mapped = notes.map { n ->
-                            dev.atsushieno.uapmd_kmp.timeline.MidiNote(n.startSeconds, n.durationSeconds, n.note, n.velocity)
-                        }
-                        if (mapped.isEmpty()) {
-                            dev.atsushieno.uapmd_kmp.timeline.ClipPreviewData.Midi(emptyList(), durationSeconds)
-                        } else {
-                            dev.atsushieno.uapmd_kmp.timeline.ClipPreviewData.Midi(
-                                notes = mapped,
-                                durationSeconds = durationSeconds,
-                                minNote = mapped.minOf { it.note },
-                                maxNote = mapped.maxOf { it.note }
-                            )
-                        }
+                    if (trackIndex == Int.MIN_VALUE) {
+                        dev.atsushieno.uapmd_kmp.timeline.ClipPreviewData.MasterMeta(
+                            tempoPoints = emptyList(),
+                            timeSignatures = emptyList(),
+                            durationSeconds = durationSeconds
+                        )
                     } else {
-                        dev.atsushieno.uapmd_kmp.timeline.ClipPreviewData.Loading
+                        val notes = engine.timeline.getMidiClipNotes(trackIndex, clip.clipId)
+                        if (notes != null) {
+                            val mapped = notes.map { n ->
+                                dev.atsushieno.uapmd_kmp.timeline.MidiNote(n.startSeconds, n.durationSeconds, n.note, n.velocity)
+                            }
+                            if (mapped.isEmpty()) {
+                                dev.atsushieno.uapmd_kmp.timeline.ClipPreviewData.Midi(emptyList(), durationSeconds)
+                            } else {
+                                dev.atsushieno.uapmd_kmp.timeline.ClipPreviewData.Midi(
+                                    notes = mapped,
+                                    durationSeconds = durationSeconds,
+                                    minNote = mapped.minOf { it.note },
+                                    maxNote = mapped.maxOf { it.note }
+                                )
+                            }
+                        } else {
+                            dev.atsushieno.uapmd_kmp.timeline.ClipPreviewData.Loading
+                        }
                     }
                 }
                 else -> dev.atsushieno.uapmd_kmp.timeline.ClipPreviewData.Loading
