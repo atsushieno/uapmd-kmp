@@ -2,6 +2,8 @@ package dev.atsushieno.uapmd_kmp
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -810,9 +812,11 @@ private fun TimelineContent(
 ) {
     // Master track is the last track and carries the "Master" name
     val masterTrackIndex = tracks.firstOrNull { it.name == "Master" }?.index ?: -1
+    val verticalScrollState = rememberScrollState()
 
     Box(modifier = Modifier.fillMaxSize()) {
-        ClipTimeline(
+        Column(modifier = Modifier.fillMaxWidth().verticalScroll(verticalScrollState)) {
+            ClipTimeline(
             tracks           = tracks,
             playheadMs       = playheadMs,
             masterTrackIndex = masterTrackIndex,
@@ -839,7 +843,8 @@ private fun TimelineContent(
                 onContextMenuChange(ClipContextMenuInfo(trackIdx, -1, posMs,
                     DpOffset(120.dp, (trackIdx * 64 + 28).dp)))
             }
-        )
+            )
+        } // Column
 
         DropdownMenu(
             expanded = contextMenu != null,
