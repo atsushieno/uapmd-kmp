@@ -3,6 +3,7 @@ package dev.atsushieno.uapmd_kmp.timeline
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.gestures.awaitEachGesture
 import androidx.compose.foundation.gestures.awaitFirstDown
+import androidx.compose.foundation.gestures.detectTransformGestures
 import androidx.compose.foundation.layout.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -284,6 +285,19 @@ fun ClipTimeline(
                                 }
                                 event.changes.forEach { it.consume() }
                             }
+                        }
+                    }
+                }
+                // pinch-to-zoom (touch / trackpad)
+                .pointerInput(totalMs) {
+                    detectTransformGestures { centroid, _, zoom, _ ->
+                        if (zoom != 1f) {
+                            val msAtCentroid = state.xToMs(centroid.x)
+                            state.zoom = (state.zoom * zoom).coerceIn(0.01f, 5f)
+                            state.startMs = state.clampStartMs(
+                                msAtCentroid - ((centroid.x - state.legendWidth) / state.zoom).roundToLong(),
+                                totalMs, size.width.toFloat()
+                            )
                         }
                     }
                 }
