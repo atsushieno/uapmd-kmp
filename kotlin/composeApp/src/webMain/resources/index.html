@@ -16,6 +16,38 @@
                           repeatCount="indefinite"/>
     </circle>
 </svg>
-<script type="application/javascript" src="composeApp.js"></script>
+<div id="isolation-message" role="status"></div>
+<script>
+    const isolationMessage = document.getElementById('isolation-message');
+
+    function loadComposeApp() {
+        const script = document.createElement('script');
+        script.type = 'application/javascript';
+        script.src = 'composeApp.js';
+        document.body.appendChild(script);
+    }
+
+    if (crossOriginIsolated) {
+        loadComposeApp();
+    } else if ('serviceWorker' in navigator) {
+        isolationMessage.textContent = 'Preparing WebAssembly runtime...';
+        navigator.serviceWorker.register('./coop-coep-sw.js').then(() => {
+            if (sessionStorage.getItem('uapmd-coop-coep-reloaded') !== 'true') {
+                sessionStorage.setItem('uapmd-coop-coep-reloaded', 'true');
+                window.location.reload();
+            } else if (crossOriginIsolated) {
+                loadComposeApp();
+            } else {
+                isolationMessage.textContent =
+                    'This browser context is not cross-origin isolated. SharedArrayBuffer is required for uapmd Wasm audio.';
+            }
+        }).catch((error) => {
+            isolationMessage.textContent = `Failed to prepare WebAssembly runtime: ${error}`;
+        });
+    } else {
+        isolationMessage.textContent =
+            'This browser does not support service workers. SharedArrayBuffer is required for uapmd Wasm audio.';
+    }
+</script>
 </body>
 </html>

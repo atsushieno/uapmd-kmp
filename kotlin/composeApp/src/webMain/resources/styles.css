@@ -16,6 +16,14 @@ body {
     transform: translate(-50%, -50%);
 }
 
+#isolation-message {
+    position: absolute;
+    inset: calc(50% + 36px) 16px auto;
+    color: #d9d9df;
+    font: 14px/1.45 sans-serif;
+    text-align: center;
+}
+
 #plugin-ui-host {
     position: absolute;
     top: 72px;

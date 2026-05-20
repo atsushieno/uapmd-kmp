@@ -18,6 +18,7 @@ import dev.atsushieno.uapmd_kmp.nodegraph.GraphLink
 import dev.atsushieno.uapmd_kmp.nodegraph.NodeGraphEditor
 import dev.atsushieno.uapmd_kmp.timeline.*
 import dev.atsushieno.uapmd_kmp.ui.*
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
@@ -32,22 +33,35 @@ fun MainWindow() {
     // Polling tick: transport position + spectrum ~60fps
     LaunchedEffect(model) {
         while (true) {
-            if (!model.isPluginLoadPending) {
-                model.tick()
-                model.refreshSpectrum()
+            try {
+                if (!model.isPluginLoadPending) {
+                    model.tick()
+                    model.refreshSpectrum()
+                }
+                PlatformDocumentPicker.tick()
+                delay(16)
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Throwable) {
+                println("uapmd-kmp polling failed: ${e.stackTraceToString()}")
+                delay(1000)
             }
-            PlatformDocumentPicker.tick()
-            delay(16)
         }
     }
 
     // One-time initialisation
     LaunchedEffect(model) {
-        model.refreshDevices()
-        model.refreshCatalog()
-        model.refreshTracks()
-        model.refreshTimeline()
-        model.refreshGraph()
+        try {
+            model.refreshDevices()
+            model.refreshCatalog()
+            model.refreshTracks()
+            model.refreshTimeline()
+            model.refreshGraph()
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Throwable) {
+            println("uapmd-kmp startup refresh failed: ${e.stackTraceToString()}")
+        }
     }
 
     val colorScheme = if (isDarkTheme) darkColorScheme() else lightColorScheme()

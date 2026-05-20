@@ -89,11 +89,11 @@ class WasmJsSequencerEngine internal constructor(
         get() = wasmMod.uapmdEngineIsPlaybackActive(handle)
 
     override var playbackPosition: Long
-        get() = wasmMod.uapmdEngineGetPlaybackPosition(handle).toLong()
-        set(value) { wasmMod.uapmdEngineSetPlaybackPosition(handle, value.toDouble()) }
+        get() = wasmMod.uapmdEngineGetPlaybackPosition(handle)
+        set(value) { wasmMod.uapmdEngineSetPlaybackPosition(handle, value) }
 
     override val renderPlaybackPosition: Long
-        get() = wasmMod.uapmdEngineRenderPlaybackPosition(handle).toLong()
+        get() = wasmMod.uapmdEngineRenderPlaybackPosition(handle)
 
     override fun startPlayback()  = wasmMod.uapmdEngineStartPlayback(handle)
     override fun stopPlayback()   = wasmMod.uapmdEngineStopPlayback(handle)

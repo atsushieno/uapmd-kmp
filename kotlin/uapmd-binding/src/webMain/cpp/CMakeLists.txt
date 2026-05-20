@@ -48,6 +48,17 @@ if(LIBREMIDI_INTERFACE_LINK_OPTIONS AND NOT LIBREMIDI_INTERFACE_LINK_OPTIONS STR
     )
 endif()
 
+# uapmd-file exposes browser document-provider helpers through INTERFACE link
+# options. Keep its library-function include, but remove its runtime-method
+# export list because a second -sEXPORTED_RUNTIME_METHODS overrides ours.
+get_target_property(UAPMD_FILE_INTERFACE_LINK_OPTIONS uapmd-file INTERFACE_LINK_OPTIONS)
+if(UAPMD_FILE_INTERFACE_LINK_OPTIONS AND NOT UAPMD_FILE_INTERFACE_LINK_OPTIONS STREQUAL "NOTFOUND")
+    list(FILTER UAPMD_FILE_INTERFACE_LINK_OPTIONS EXCLUDE REGEX "EXPORTED_RUNTIME_METHODS=")
+    set_target_properties(uapmd-file PROPERTIES
+        INTERFACE_LINK_OPTIONS "${UAPMD_FILE_INTERFACE_LINK_OPTIONS}"
+    )
+endif()
+
 # ── Exported C API symbols ────────────────────────────────────────────────────
 # Every public uapmd_* function that the KMP binding calls must appear here so
 # that Emscripten's dead-code elimination keeps it in the final module.
@@ -434,7 +445,7 @@ target_link_options(uapmd-c-api-web PRIVATE
     "-sEXPORT_NAME=UapmdCApi"
     # Symbol exports
     "-sEXPORTED_FUNCTIONS=${UAPMD_EXPORTED_FUNCTIONS_ARG}"
-    "-sEXPORTED_RUNTIME_METHODS=[UTF8ToString,stringToUTF8,allocate,ALLOC_NORMAL,getValue,setValue,addFunction,removeFunction,lengthBytesUTF8]"
+    "-sEXPORTED_RUNTIME_METHODS=[UTF8ToString,stringToUTF8,allocate,ALLOC_NORMAL,allocateUTF8,FS,ccall,getValue,setValue,addFunction,removeFunction,lengthBytesUTF8]"
     # Enable JS BigInt ↔ Wasm i64 so int64_t parameters (timestamps, frame
     # counts) round-trip correctly across the JS boundary.
     "-sWASM_BIGINT=1"

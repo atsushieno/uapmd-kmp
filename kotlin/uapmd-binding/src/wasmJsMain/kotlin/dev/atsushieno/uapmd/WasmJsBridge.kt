@@ -271,11 +271,11 @@ external interface UapmdCApiModule : JsAny {
     @JsName("_uapmd_engine_is_playback_active")
     fun uapmdEngineIsPlaybackActive(handle: Int): Boolean
     @JsName("_uapmd_engine_get_playback_position")
-    fun uapmdEngineGetPlaybackPosition(handle: Int): Double
+    fun uapmdEngineGetPlaybackPosition(handle: Int): Long
     @JsName("_uapmd_engine_set_playback_position")
-    fun uapmdEngineSetPlaybackPosition(handle: Int, position: Double)
+    fun uapmdEngineSetPlaybackPosition(handle: Int, position: Long)
     @JsName("_uapmd_engine_render_playback_position")
-    fun uapmdEngineRenderPlaybackPosition(handle: Int): Double
+    fun uapmdEngineRenderPlaybackPosition(handle: Int): Long
     @JsName("_uapmd_engine_master_track_latency")
     fun uapmdEngineMasterTrackLatency(handle: Int): Int
     @JsName("_uapmd_engine_master_track_render_lead")
