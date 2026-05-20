@@ -291,6 +291,53 @@ class UapmdModel(val sequencer: RealtimeSequencer) {
                         }
                     }
                 }
+                dev.atsushieno.uapmd.ClipType.Audio -> {
+                    val numBuckets = 512
+                    try {
+                        val reader = dev.atsushieno.uapmd.createAudioFileReader(clip.filepath)
+                        reader.use { r ->
+                            val props = r.getProperties()
+                            if (props == null || props.numFrames <= 0L || props.numChannels == 0u) {
+                                dev.atsushieno.uapmd_kmp.timeline.ClipPreviewData.Error("Failed to read audio properties")
+                            } else {
+                                val numChannels = props.numChannels.toInt()
+                                val totalFrames = props.numFrames
+                                val chunkSize = 4096L
+                                val minValues = FloatArray(numBuckets) { Float.MAX_VALUE }
+                                val maxValues = FloatArray(numBuckets) { -Float.MAX_VALUE }
+                                val dest = Array(numChannels) { FloatArray(chunkSize.toInt()) }
+                                var offset = 0L
+                                while (offset < totalFrames) {
+                                    val toRead = minOf(chunkSize, totalFrames - offset)
+                                    r.readFrames(offset, toRead, dest)
+                                    for (f in 0 until toRead.toInt()) {
+                                        var mono = 0f
+                                        for (ch in 0 until numChannels) mono += dest[ch][f]
+                                        mono /= numChannels.toFloat()
+                                        mono = mono.coerceIn(-1f, 1f)
+                                        val globalFrame = offset + f
+                                        val bucket = ((globalFrame.toDouble() / totalFrames.toDouble()) * numBuckets)
+                                            .toInt().coerceIn(0, numBuckets - 1)
+                                        if (mono < minValues[bucket]) minValues[bucket] = mono
+                                        if (mono > maxValues[bucket]) maxValues[bucket] = mono
+                                    }
+                                    offset += toRead
+                                }
+                                val waveform = (0 until numBuckets).map { i ->
+                                    val mn = if (minValues[i] == Float.MAX_VALUE) 0f else minValues[i]
+                                    val mx = if (maxValues[i] == -Float.MAX_VALUE) 0f else maxValues[i]
+                                    dev.atsushieno.uapmd_kmp.timeline.WaveformPoint(mn, mx)
+                                }
+                                dev.atsushieno.uapmd_kmp.timeline.ClipPreviewData.Audio(
+                                    waveform = waveform,
+                                    durationSeconds = durationSeconds
+                                )
+                            }
+                        }
+                    } catch (e: Exception) {
+                        dev.atsushieno.uapmd_kmp.timeline.ClipPreviewData.Error("Failed to open audio file: ${e.message}")
+                    }
+                }
                 else -> dev.atsushieno.uapmd_kmp.timeline.ClipPreviewData.Loading
             }
             return TimelineClip(
