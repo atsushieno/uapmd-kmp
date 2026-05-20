@@ -15,6 +15,7 @@ extern "C" {
 UAPMD_C_EXPORT size_t uapmd_instance_display_name(uapmd_plugin_instance_t inst, char* buf, size_t buf_size);
 UAPMD_C_EXPORT size_t uapmd_instance_format_name(uapmd_plugin_instance_t inst, char* buf, size_t buf_size);
 UAPMD_C_EXPORT size_t uapmd_instance_plugin_id(uapmd_plugin_instance_t inst, char* buf, size_t buf_size);
+UAPMD_C_EXPORT bool uapmd_instance_get_aap_ui_host_details(uapmd_plugin_instance_t inst, uapmd_aap_ui_host_details_t* out);
 
 UAPMD_C_EXPORT bool uapmd_instance_get_bypassed(uapmd_plugin_instance_t inst);
 UAPMD_C_EXPORT void uapmd_instance_set_bypassed(uapmd_plugin_instance_t inst, bool value);

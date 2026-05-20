@@ -91,6 +91,12 @@ typedef struct uapmd_preset_metadata {
     const char* path;
 } uapmd_preset_metadata_t;
 
+typedef struct uapmd_aap_ui_host_details {
+    const char* plugin_package_name;
+    const char* plugin_local_name;
+    int32_t instance_id;
+} uapmd_aap_ui_host_details_t;
+
 typedef enum uapmd_state_context_type {
     UAPMD_STATE_CONTEXT_REMEMBER = 0,
     UAPMD_STATE_CONTEXT_COPYABLE = 1,

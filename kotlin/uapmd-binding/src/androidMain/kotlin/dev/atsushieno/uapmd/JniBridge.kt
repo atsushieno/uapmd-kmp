@@ -29,6 +29,7 @@ object JniBridge {
     @JvmStatic external fun uapmdInstanceDisplayName(h: Long): String
     @JvmStatic external fun uapmdInstanceFormatName(h: Long): String
     @JvmStatic external fun uapmdInstancePluginId(h: Long): String
+    @JvmStatic external fun uapmdInstanceGetAapUiHostDetails(h: Long): Array<String?>?
     @JvmStatic external fun uapmdInstanceGetBypassed(h: Long): Boolean
     @JvmStatic external fun uapmdInstanceSetBypassed(h: Long, v: Boolean)
     @JvmStatic external fun uapmdInstanceStartProcessing(h: Long): Int

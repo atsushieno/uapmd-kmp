@@ -22,6 +22,18 @@ class JvmPluginInstance internal constructor(
     override val pluginId: String
         get() = readJvmString { buf, size -> lib.uapmd_instance_plugin_id(handle, buf, size) }
 
+    override val aapUiHostDetails: AapUiHostDetails?
+        get() {
+            val out = UapmdAapUiHostDetails()
+            if (!lib.uapmd_instance_get_aap_ui_host_details(handle, out))
+                return null
+            return AapUiHostDetails(
+                pluginPackageName = out.plugin_package_name ?: return null,
+                pluginLocalName = out.plugin_local_name ?: "",
+                instanceId = out.instance_id
+            )
+        }
+
     override var bypassed: Boolean
         get() = lib.uapmd_instance_get_bypassed(handle)
         set(value) { lib.uapmd_instance_set_bypassed(handle, value) }

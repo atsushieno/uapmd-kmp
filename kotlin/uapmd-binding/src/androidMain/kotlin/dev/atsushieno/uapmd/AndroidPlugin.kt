@@ -17,6 +17,15 @@ class AndroidPluginInstance internal constructor(
     override val pluginId: String
         get() = JniBridge.uapmdInstancePluginId(handle)
 
+    override val aapUiHostDetails: AapUiHostDetails?
+        get() = JniBridge.uapmdInstanceGetAapUiHostDetails(handle)?.let { arr ->
+            AapUiHostDetails(
+                pluginPackageName = arr.getOrNull(0) ?: return@let null,
+                pluginLocalName = arr.getOrNull(1) ?: "",
+                instanceId = arr.getOrNull(2)?.toIntOrNull() ?: return@let null
+            )
+        }
+
     override var bypassed: Boolean
         get() = JniBridge.uapmdInstanceGetBypassed(handle)
         set(value) { JniBridge.uapmdInstanceSetBypassed(handle, value) }

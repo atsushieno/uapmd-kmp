@@ -9,12 +9,16 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import dev.atsushieno.uapmd.AapUiHostDetails
 
 data class PresetEntry(val bank: Int, val index: Int, val name: String)
 
 data class InstanceInfo(
     val instanceId: Int,
     val displayName: String,
+    val pluginId: String,
+    val pluginFormat: String,
+    val aapUiHostDetails: AapUiHostDetails?,
     val isEnabled: Boolean,
     val groupIndex: Int,
     val groupCount: Int,

@@ -4,6 +4,7 @@ interface PluginInstance {
     val displayName: String
     val formatName: String
     val pluginId: String
+    val aapUiHostDetails: AapUiHostDetails? get() = null
     var bypassed: Boolean
 
     fun startProcessing(): Int
@@ -34,6 +35,12 @@ interface PluginInstance {
     val hasUiSupport: Boolean get() = uiCapabilities.hasUiSupport
     fun createUiPresentation(request: PluginUiPresentationRequest = PluginUiPresentationRequest()): PluginUiPresentation?
 }
+
+data class AapUiHostDetails(
+    val pluginPackageName: String,
+    val pluginLocalName: String,
+    val instanceId: Int
+)
 
 data class PluginUiCapabilities(
     val hasUiSupport: Boolean,

@@ -137,6 +137,13 @@ open class UapmdPresetMetadata : Structure() {
     @JvmField var path: String? = null
 }
 
+@FieldOrder("plugin_package_name", "plugin_local_name", "instance_id")
+open class UapmdAapUiHostDetails : Structure() {
+    @JvmField var plugin_package_name: String? = null
+    @JvmField var plugin_local_name: String? = null
+    @JvmField var instance_id: Int = 0
+}
+
 @FieldOrder(
     "has_ui_support",
     "supports_embedded_presentations",
@@ -436,6 +443,7 @@ interface UapmdLibrary : Library {
     fun uapmd_instance_display_name(inst: Pointer?, buf: ByteArray?, bufSize: Long): Long
     fun uapmd_instance_format_name(inst: Pointer?, buf: ByteArray?, bufSize: Long): Long
     fun uapmd_instance_plugin_id(inst: Pointer?, buf: ByteArray?, bufSize: Long): Long
+    fun uapmd_instance_get_aap_ui_host_details(inst: Pointer?, out: UapmdAapUiHostDetails): Boolean
 
     fun uapmd_instance_get_bypassed(inst: Pointer?): Boolean
     fun uapmd_instance_set_bypassed(inst: Pointer?, value: Boolean)

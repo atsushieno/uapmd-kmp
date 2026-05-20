@@ -449,6 +449,11 @@ private fun MainWindowContent(
                 )
             }
         }
+
+        PlatformHostedPluginUiLayer(
+            model = model,
+            modifier = Modifier.fillMaxSize()
+        )
     }
 }
 

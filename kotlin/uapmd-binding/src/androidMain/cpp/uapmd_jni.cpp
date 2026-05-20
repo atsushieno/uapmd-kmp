@@ -374,6 +374,18 @@ JNIEXPORT jstring JNICALL Java_dev_atsushieno_uapmd_JniBridge_uapmdInstancePlugi
     auto inst = j2p<uapmd_plugin_instance_t>(h);
     return cstr(env, [&](char* b, size_t n){ return uapmd_instance_plugin_id(inst, b, n); });
 }
+JNIEXPORT jobjectArray JNICALL Java_dev_atsushieno_uapmd_JniBridge_uapmdInstanceGetAapUiHostDetails(
+        JNIEnv* env, jclass, jlong h) {
+    uapmd_aap_ui_host_details_t details{};
+    if (!uapmd_instance_get_aap_ui_host_details(j2p<uapmd_plugin_instance_t>(h), &details))
+        return nullptr;
+    jclass stringClass = env->FindClass("java/lang/String");
+    jobjectArray arr = env->NewObjectArray(3, stringClass, nullptr);
+    env->SetObjectArrayElement(arr, 0, env->NewStringUTF(details.plugin_package_name ? details.plugin_package_name : ""));
+    env->SetObjectArrayElement(arr, 1, env->NewStringUTF(details.plugin_local_name ? details.plugin_local_name : ""));
+    env->SetObjectArrayElement(arr, 2, env->NewStringUTF(std::to_string(details.instance_id).c_str()));
+    return arr;
+}
 
 JNIEXPORT jboolean JNICALL Java_dev_atsushieno_uapmd_JniBridge_uapmdInstanceGetBypassed(
         JNIEnv*, jclass, jlong h) {

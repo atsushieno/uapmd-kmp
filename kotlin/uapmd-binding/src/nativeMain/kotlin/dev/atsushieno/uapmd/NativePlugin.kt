@@ -18,6 +18,18 @@ class NativePluginInstance internal constructor(
     override val pluginId: String
         get() = readCString { buf, size -> uapmd_instance_plugin_id(handle, buf, size) }
 
+    override val aapUiHostDetails: AapUiHostDetails?
+        get() = memScoped {
+            val out = alloc<uapmd_aap_ui_host_details_t>()
+            if (!uapmd_instance_get_aap_ui_host_details(handle, out.ptr))
+                return null
+            AapUiHostDetails(
+                pluginPackageName = out.plugin_package_name?.toKString() ?: return null,
+                pluginLocalName = out.plugin_local_name?.toKString() ?: "",
+                instanceId = out.instance_id
+            )
+        }
+
     override var bypassed: Boolean
         get() = uapmd_instance_get_bypassed(handle)
         set(value) { uapmd_instance_set_bypassed(handle, value) }

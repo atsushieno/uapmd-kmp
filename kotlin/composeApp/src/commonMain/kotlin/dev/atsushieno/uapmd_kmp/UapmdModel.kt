@@ -427,6 +427,8 @@ class UapmdModel(val sequencer: RealtimeSequencer) {
         private set
     var selectedInstanceId by mutableStateOf<Int?>(null)
         private set
+    var platformHostedUiInstanceIds by mutableStateOf<Set<Int>>(emptySet())
+        private set
     var pluginUiStatusMessage by mutableStateOf<String?>(null)
         private set
     var pluginLoadStatusMessage by mutableStateOf<String?>(null)
@@ -492,11 +494,14 @@ class UapmdModel(val sequencer: RealtimeSequencer) {
         return InstanceInfo(
             instanceId   = instanceId,
             displayName  = inst.displayName,
+            pluginId     = inst.pluginId,
+            pluginFormat = inst.formatName,
+            aapUiHostDetails = inst.aapUiHostDetails,
             isEnabled    = !inst.bypassed,
             groupIndex   = groupIndex,
             groupCount   = groupCount,
             hasUiSupport = uiCapabilities.hasUiSupport,
-            nativeUiVisible = nativeUiPresentations[instanceId]?.isVisible == true,
+            nativeUiVisible = nativeUiPresentations[instanceId]?.isVisible == true || instanceId in platformHostedUiInstanceIds,
             parameters   = params,
             presets      = presets
         )
@@ -504,6 +509,14 @@ class UapmdModel(val sequencer: RealtimeSequencer) {
 
     fun showPluginUi(instanceId: Int) {
         val inst = engine.getPluginInstance(instanceId) ?: return
+        if (supportsPlatformHostedPluginUi(inst)) {
+            dispatchUiStateUpdate {
+                platformHostedUiInstanceIds = platformHostedUiInstanceIds + instanceId
+                pluginUiStatusMessage = null
+                refreshOpenInstance(instanceId)
+            }
+            return
+        }
         val existing = nativeUiPresentations[instanceId]
         if (existing != null) {
             val status = if (!existing.show()) "Failed to show native UI for ${inst.displayName}." else null
@@ -575,6 +588,7 @@ class UapmdModel(val sequencer: RealtimeSequencer) {
     }
 
     fun closePluginUi(instanceId: Int) {
+        platformHostedUiInstanceIds = platformHostedUiInstanceIds - instanceId
         nativeUiPresentations.remove(instanceId)?.close()
         dispatchUiStateUpdate {
             refreshOpenInstance(instanceId)
@@ -584,6 +598,12 @@ class UapmdModel(val sequencer: RealtimeSequencer) {
     fun clearPluginUiStatus() {
         dispatchUiStateUpdate {
             pluginUiStatusMessage = null
+        }
+    }
+
+    fun reportPluginUiStatus(message: String?) {
+        dispatchUiStateUpdate {
+            pluginUiStatusMessage = message
         }
     }
 
@@ -644,6 +664,7 @@ class UapmdModel(val sequencer: RealtimeSequencer) {
         if (result.success) {
             nativeUiPresentations.values.forEach { it.close() }
             nativeUiPresentations.clear()
+            platformHostedUiInstanceIds = emptySet()
             instanceInfos = emptyMap()
             selectedInstanceId = null
             activeLoadedProjectTempDirectory?.let { PlatformProjectArchiveLoader.cleanupPreparedProject(it) }
