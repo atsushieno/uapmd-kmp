@@ -191,10 +191,18 @@ private fun AapPluginSurfacePopup(
 
     DisposableEffect(state.host) {
         val listener: (Int, Int) -> Unit = { w, h ->
-            contentWidthPx = w
-            contentHeightPx = h
-            if (viewportWidthPx > w) viewportWidthPx = w
-            if (viewportHeightPx > h) viewportHeightPx = h
+            // Skip notifications that arrive at the current viewport dimensions.
+            // These come from relayout() calls triggered by configureViewport, not from
+            // genuine content-size changes (e.g. plugin zoom level changes).
+            // Also skip if nothing actually changed.
+            val isViewportSized = w == viewportWidthPx && h == viewportHeightPx
+            val isSameSize = w == contentWidthPx && h == contentHeightPx
+            if (!isViewportSized && !isSameSize) {
+                contentWidthPx = w
+                contentHeightPx = h
+                if (viewportWidthPx > w) viewportWidthPx = w
+                if (viewportHeightPx > h) viewportHeightPx = h
+            }
         }
         state.host.contentSizeChangedListeners.add(listener)
         onDispose {
