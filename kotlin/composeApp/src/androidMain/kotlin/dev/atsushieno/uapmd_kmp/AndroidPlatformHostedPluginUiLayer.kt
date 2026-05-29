@@ -213,12 +213,16 @@ private fun AapPluginSurfacePopup(
     LaunchedEffect(attached, viewportWidthPx, viewportHeightPx, currentHost) {
         if (!attached || connected)
             return@LaunchedEffect
-        currentHost.connect(viewportWidthPx, viewportHeightPx)
+        // Connect at the full preferred content size so JUCE's peer view is not constrained
+        // to the (smaller) viewport dimensions. This allows JUCE to report its actual preferred
+        // size via OPCODE_CONTENT_SIZE_CHANGED (e.g. Odin2 at 150% zoom = 1800x1200),
+        // which then updates contentWidthPx and triggers a correct configureViewport call.
+        currentHost.connect(state.contentWidth, state.contentHeight)
         currentHost.show()
         connected = true
     }
 
-    LaunchedEffect(currentHost, viewportWidthPx, viewportHeightPx, effectiveScrollX, effectiveScrollY, connected) {
+    LaunchedEffect(currentHost, viewportWidthPx, viewportHeightPx, contentWidthPx, contentHeightPx, effectiveScrollX, effectiveScrollY, connected) {
         if (!connected)
             return@LaunchedEffect
         currentHost.configureViewport(
