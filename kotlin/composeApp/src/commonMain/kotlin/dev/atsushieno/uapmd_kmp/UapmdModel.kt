@@ -20,6 +20,7 @@ import dev.atsushieno.uapmd_kmp.ui.PresetEntry
 import dev.atsushieno.uapmd_kmp.ui.InstanceInfo
 import dev.atsushieno.uapmd_kmp.ui.TrackInstanceEntry
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.delay
@@ -753,6 +754,7 @@ class UapmdModel(val sequencer: RealtimeSequencer) {
     }
 
     fun scanPlugins() {
+        if (isScanning) return
         isScanning = true
         scanProgress = 0f
         scanReport = ""
@@ -771,11 +773,18 @@ class UapmdModel(val sequencer: RealtimeSequencer) {
             }
             override fun onErrorOccurred(message: String) { scanReport += "$message\n" }
         }
-        // Scanning is synchronous in C; run on a background thread via coroutines in the caller.
-        scanTool.performScanning(requireFastScanning = false, observer = observer)
-        engine.pluginHost.reloadCatalogFromCache()
-        refreshCatalog()
-        isScanning = false
+        try {
+            scanTool.performScanning(requireFastScanning = false, observer = observer)
+            scanTool.saveCache()
+            engine.pluginHost.reloadCatalogFromCache()
+            refreshCatalog()
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Throwable) {
+            scanReport += "Plugin scanning failed: ${e.message ?: e::class.simpleName}\n"
+        } finally {
+            isScanning = false
+        }
     }
 
     fun clearBlocklist() {

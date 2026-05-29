@@ -311,7 +311,7 @@ private fun MainWindowContent(
                         plugins              = model.catalogEntries,
                         trackEntries         = model.trackEntries,
                         initialTargetTrackIndex = pluginPanelPreselectedTrack,
-                        onScanRequested      = { model.scanPlugins() },
+                        onScanRequested      = { scope.launchPlatformBackground { model.scanPlugins() } },
                         onClearBlocklist     = { model.clearBlocklist() },
                         onInstantiatePlugin  = { fmt, pid, trackIdx ->
                             val ti = if (trackIdx < 0)
@@ -442,7 +442,7 @@ private fun MainWindowContent(
                     blocklist        = model.blocklist,
                     plugins          = model.catalogEntries,
                     trackEntries     = model.trackEntries,
-                    onScanRequested  = { model.scanPlugins() },
+                    onScanRequested  = { scope.launchPlatformBackground { model.scanPlugins() } },
                     onClearBlocklist = { model.clearBlocklist() },
                     onInstantiatePlugin = { fmt, pid, trackIdx ->
                         val ti = if (trackIdx < 0)

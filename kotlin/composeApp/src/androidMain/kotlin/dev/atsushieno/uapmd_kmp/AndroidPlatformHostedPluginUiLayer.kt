@@ -165,16 +165,18 @@ private fun AapPluginSurfacePopup(
     var resizeStartHeight by remember { mutableStateOf(viewportHeightPx) }
     var resizeDragWidth by remember { mutableStateOf(0f) }
     var resizeDragHeight by remember { mutableStateOf(0f) }
+    var contentWidthPx by remember(state) { mutableStateOf(state.contentWidth) }
+    var contentHeightPx by remember(state) { mutableStateOf(state.contentHeight) }
     val currentHost by rememberUpdatedState(state.host)
     val density = LocalDensity.current
     val viewportWidthDp = with(density) { viewportWidthPx.toDp() }
     val viewportHeightDp = with(density) { viewportHeightPx.toDp() }
     val minViewportWidthPx = 240
     val minViewportHeightPx = 180
-    val maxViewportWidthPx = state.contentWidth.coerceAtLeast(minViewportWidthPx)
-    val maxViewportHeightPx = state.contentHeight.coerceAtLeast(minViewportHeightPx)
-    val maxScrollX = (state.contentWidth - viewportWidthPx).coerceAtLeast(0)
-    val maxScrollY = (state.contentHeight - viewportHeightPx).coerceAtLeast(0)
+    val maxViewportWidthPx = contentWidthPx.coerceAtLeast(minViewportWidthPx)
+    val maxViewportHeightPx = contentHeightPx.coerceAtLeast(minViewportHeightPx)
+    val maxScrollX = (contentWidthPx - viewportWidthPx).coerceAtLeast(0)
+    val maxScrollY = (contentHeightPx - viewportHeightPx).coerceAtLeast(0)
     val effectiveScrollX = scrollX.coerceIn(0, maxScrollX)
     val effectiveScrollY = scrollY.coerceIn(0, maxScrollY)
     val scrollbarThickness = 12.dp
@@ -187,6 +189,19 @@ private fun AapPluginSurfacePopup(
         }
     }
 
+    DisposableEffect(state.host) {
+        val listener: (Int, Int) -> Unit = { w, h ->
+            contentWidthPx = w
+            contentHeightPx = h
+            if (viewportWidthPx > w) viewportWidthPx = w
+            if (viewportHeightPx > h) viewportHeightPx = h
+        }
+        state.host.contentSizeChangedListeners.add(listener)
+        onDispose {
+            state.host.contentSizeChangedListeners.remove(listener)
+        }
+    }
+
     LaunchedEffect(attached, viewportWidthPx, viewportHeightPx, currentHost) {
         if (!attached || connected)
             return@LaunchedEffect
@@ -195,15 +210,15 @@ private fun AapPluginSurfacePopup(
         connected = true
     }
 
-    LaunchedEffect(currentHost, viewportWidthPx, viewportHeightPx, effectiveScrollX, effectiveScrollY, state.contentWidth, state.contentHeight, connected) {
+    LaunchedEffect(currentHost, viewportWidthPx, viewportHeightPx, effectiveScrollX, effectiveScrollY, connected) {
         if (!connected)
             return@LaunchedEffect
         currentHost.configureViewport(
             GuiHelper.ViewportConfiguration(
                 viewportWidth = viewportWidthPx,
                 viewportHeight = viewportHeightPx,
-                contentWidth = state.contentWidth,
-                contentHeight = state.contentHeight,
+                contentWidth = contentWidthPx,
+                contentHeight = contentHeightPx,
                 scrollX = effectiveScrollX,
                 scrollY = effectiveScrollY
             )
