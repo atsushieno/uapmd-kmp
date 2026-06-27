@@ -40,7 +40,6 @@ class JsFunctionBlock internal constructor(
     private val handle: Int
 ) : FunctionBlock {
     override val midiIo: MidiIO   get() = JsMidiIO(jsMod._uapmd_fb_midi_io(handle) as Int)
-    override val instanceId: Int  get() = jsMod._uapmd_fb_instance_id(handle) as Int
     override var group: UByte
         get() = (jsMod._uapmd_fb_get_group(handle) as Int).toUByte()
         set(v) { jsMod._uapmd_fb_set_group(handle, v.toInt()) }

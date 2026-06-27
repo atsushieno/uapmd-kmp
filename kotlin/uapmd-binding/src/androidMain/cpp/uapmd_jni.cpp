@@ -913,8 +913,6 @@ JNIEXPORT void JNICALL Java_dev_atsushieno_uapmd_JniBridge_uapmdMidiIoSend(
 
 JNIEXPORT jlong JNICALL Java_dev_atsushieno_uapmd_JniBridge_uapmdFbMidiIo(
         JNIEnv*, jclass, jlong h) { return p2j(uapmd_fb_midi_io(j2p<uapmd_function_block_t>(h))); }
-JNIEXPORT jint JNICALL Java_dev_atsushieno_uapmd_JniBridge_uapmdFbInstanceId(
-        JNIEnv*, jclass, jlong h) { return uapmd_fb_instance_id(j2p<uapmd_function_block_t>(h)); }
 JNIEXPORT jbyte JNICALL Java_dev_atsushieno_uapmd_JniBridge_uapmdFbGetGroup(
         JNIEnv*, jclass, jlong h) { return static_cast<jbyte>(uapmd_fb_get_group(j2p<uapmd_function_block_t>(h))); }
 JNIEXPORT void JNICALL Java_dev_atsushieno_uapmd_JniBridge_uapmdFbSetGroup(

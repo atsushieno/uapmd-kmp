@@ -54,9 +54,6 @@ class WasmJsFunctionBlock internal constructor(
     override val midiIo: MidiIO
         get() = WasmJsMidiIO(wasmMod.uapmdFbMidiIo(handle))
 
-    override val instanceId: Int
-        get() = wasmMod.uapmdFbInstanceId(handle)
-
     override var group: UByte
         get() = wasmMod.uapmdFbGetGroup(handle).toUByte()
         set(v) { wasmMod.uapmdFbSetGroup(handle, v.toInt()) }

@@ -6,6 +6,7 @@
 #include <remidy/detail/event-loop.hpp>
 #include <cstring>
 #include <functional>
+#include <future>
 #include <string>
 #include <vector>
 
@@ -347,7 +348,11 @@ bool uapmd_tl_remove_clip(uapmd_timeline_facade_t tl, int32_t track_index, int32
 }
 
 uapmd_project_result_t uapmd_tl_load_project(uapmd_timeline_facade_t tl, const char* file_path) {
-    auto r = TF(tl)->loadProject(file_path);
+    auto promise = std::make_shared<std::promise<uapmd::TimelineFacade::ProjectResult>>();
+    TF(tl)->loadProject(file_path, [promise](uapmd::TimelineFacade::ProjectResult r) mutable {
+        promise->set_value(std::move(r));
+    });
+    auto r = promise->get_future().get();
     tl_error = r.error;
     return { r.success, tl_error.empty() ? nullptr : tl_error.c_str() };
 }

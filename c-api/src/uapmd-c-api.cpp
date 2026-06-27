@@ -2,6 +2,7 @@
 
 #include "c-api/uapmd-c-api.h"
 #include <uapmd/uapmd.hpp>
+#include <uapmd-graph/uapmd-graph.hpp>
 #include <cstring>
 #include <memory>
 #include <optional>
@@ -550,7 +551,6 @@ void uapmd_midi_io_send(uapmd_midi_io_t io, uapmd_ump_t* messages, size_t length
  * ═══════════════════════════════════════════════════════════════════════════ */
 
 uapmd_midi_io_t uapmd_fb_midi_io(uapmd_function_block_t fb)     { return reinterpret_cast<uapmd_midi_io_t>(FB(fb)->midiIO()); }
-int32_t  uapmd_fb_instance_id(uapmd_function_block_t fb)        { return FB(fb)->instanceId(); }
 uint8_t  uapmd_fb_get_group(uapmd_function_block_t fb)          { return FB(fb)->group(); }
 void     uapmd_fb_set_group(uapmd_function_block_t fb, uint8_t gid) { FB(fb)->group(gid); }
 void     uapmd_fb_detach_output_mapper(uapmd_function_block_t fb)   { FB(fb)->detachOutputMapper(); }

@@ -595,7 +595,6 @@ interface UapmdLibrary : Library {
     // ── FunctionBlock ────────────────────────────────────────────────────────
 
     fun uapmd_fb_midi_io(fb: Pointer?): Pointer?
-    fun uapmd_fb_instance_id(fb: Pointer?): Int
     fun uapmd_fb_get_group(fb: Pointer?): Byte
     fun uapmd_fb_set_group(fb: Pointer?, groupId: Byte)
     fun uapmd_fb_detach_output_mapper(fb: Pointer?)

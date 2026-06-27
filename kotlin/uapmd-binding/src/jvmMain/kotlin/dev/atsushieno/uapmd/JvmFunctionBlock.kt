@@ -47,8 +47,6 @@ class JvmFunctionBlock internal constructor(
     override val midiIo: MidiIO
         get() = JvmMidiIO(lib.uapmd_fb_midi_io(handle) ?: error("uapmd_fb_midi_io returned null"))
 
-    override val instanceId: Int get() = lib.uapmd_fb_instance_id(handle)
-
     override var group: UByte
         get() = lib.uapmd_fb_get_group(handle).toUByte()
         set(value) { lib.uapmd_fb_set_group(handle, value.toByte()) }

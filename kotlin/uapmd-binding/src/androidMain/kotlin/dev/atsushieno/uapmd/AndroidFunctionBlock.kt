@@ -37,7 +37,6 @@ class AndroidFunctionBlock internal constructor(
 ) : FunctionBlock {
 
     override val midiIo: MidiIO get() = AndroidMidiIO(JniBridge.uapmdFbMidiIo(handle))
-    override val instanceId: Int get() = JniBridge.uapmdFbInstanceId(handle)
 
     override var group: UByte
         get() = JniBridge.uapmdFbGetGroup(handle).toUByte()

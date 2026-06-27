@@ -162,7 +162,6 @@ object JniBridge {
     // ─── FunctionBlock ────────────────────────────────────────────────────────
 
     @JvmStatic external fun uapmdFbMidiIo(h: Long): Long
-    @JvmStatic external fun uapmdFbInstanceId(h: Long): Int
     @JvmStatic external fun uapmdFbGetGroup(h: Long): Byte
     @JvmStatic external fun uapmdFbSetGroup(h: Long, g: Byte)
     @JvmStatic external fun uapmdFbDetachOutputMapper(h: Long)

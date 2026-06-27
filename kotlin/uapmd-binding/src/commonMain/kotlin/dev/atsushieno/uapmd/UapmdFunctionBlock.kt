@@ -12,7 +12,6 @@ interface FunctionDevice
 
 interface FunctionBlock {
     val midiIo: MidiIO
-    val instanceId: Int
     var group: UByte
     fun detachOutputMapper()
     fun initialize()

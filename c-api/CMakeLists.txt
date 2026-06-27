@@ -63,6 +63,7 @@ target_include_directories(uapmd-c-api
         ${UAPMD_SOURCE_DIR}/tools/uapmd-app
         ${UAPMD_SOURCE_DIR}/uapmd-data/include
         ${UAPMD_SOURCE_DIR}/uapmd-engine/include
+        ${UAPMD_SOURCE_DIR}/uapmd-graph/include
         ${UAPMD_SOURCE_DIR}/uapmd/include
         ${UAPMD_SOURCE_DIR}/uapmd-file/include
         ${UAPMD_SOURCE_DIR}/remidy/include

@@ -341,6 +341,7 @@ typedef void (*uapmd_project_save_cb_t)(uapmd_app_project_result_t result, void*
 UAPMD_C_EXPORT void uapmd_app_save_project(uapmd_app_model_t app, const char* file_path, void* user_data, uapmd_project_save_cb_t callback);
 UAPMD_C_EXPORT uapmd_app_project_result_t uapmd_app_save_project_sync(uapmd_app_model_t app, const char* file_path);
 UAPMD_C_EXPORT uapmd_app_project_result_t uapmd_app_load_project(uapmd_app_model_t app, const char* file_path);
+UAPMD_C_EXPORT uapmd_app_project_result_t uapmd_app_load_project_from_handle_token(uapmd_app_model_t app, const char* token);
 
 /* ═══════════════════════════════════════════════════════════════════════════
  *  Offline rendering

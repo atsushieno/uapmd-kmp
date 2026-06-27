@@ -188,7 +188,6 @@ UAPMD_C_EXPORT void uapmd_midi_io_send(uapmd_midi_io_t io, uapmd_ump_t* messages
  * ═══════════════════════════════════════════════════════════════════════════ */
 
 UAPMD_C_EXPORT uapmd_midi_io_t uapmd_fb_midi_io(uapmd_function_block_t fb);
-UAPMD_C_EXPORT int32_t  uapmd_fb_instance_id(uapmd_function_block_t fb);
 UAPMD_C_EXPORT uint8_t  uapmd_fb_get_group(uapmd_function_block_t fb);
 UAPMD_C_EXPORT void     uapmd_fb_set_group(uapmd_function_block_t fb, uint8_t group_id);
 UAPMD_C_EXPORT void     uapmd_fb_detach_output_mapper(uapmd_function_block_t fb);

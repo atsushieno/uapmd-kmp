@@ -5,6 +5,7 @@
 #include "AppModel.hpp"
 #include <uapmd/uapmd.hpp>
 #include <cstring>
+#include <future>
 #include <string>
 #include <vector>
 
@@ -647,7 +648,17 @@ uapmd_app_project_result_t uapmd_app_save_project_sync(uapmd_app_model_t app, co
 }
 
 uapmd_app_project_result_t uapmd_app_load_project(uapmd_app_model_t app, const char* file_path) {
-    auto r = AM(app)->loadProject(file_path);
+    auto promise = std::make_shared<std::promise<uapmd::AppModel::ProjectResult>>();
+    AM(app)->loadProject(file_path, [promise](uapmd::AppModel::ProjectResult r) mutable {
+        promise->set_value(std::move(r));
+    });
+    auto r = promise->get_future().get();
+    tl_error = r.error;
+    return { r.success, tl_error.empty() ? nullptr : tl_error.c_str() };
+}
+
+uapmd_app_project_result_t uapmd_app_load_project_from_handle_token(uapmd_app_model_t app, const char* token) {
+    auto r = AM(app)->loadProjectFromHandleToken(token ? token : "");
     tl_error = r.error;
     return { r.success, tl_error.empty() ? nullptr : tl_error.c_str() };
 }

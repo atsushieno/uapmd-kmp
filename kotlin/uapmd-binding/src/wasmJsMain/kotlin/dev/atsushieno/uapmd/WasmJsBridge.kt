@@ -428,8 +428,6 @@ external interface UapmdCApiModule : JsAny {
     fun uapmdFbmDetachAllOutputMappers(handle: Int)
 
     // ── Function block / device ────────────────────────────────────────────
-    @JsName("_uapmd_fb_instance_id")
-    fun uapmdFbInstanceId(handle: Int): Int
     @JsName("_uapmd_fb_get_group")
     fun uapmdFbGetGroup(handle: Int): Int
     @JsName("_uapmd_fb_set_group")

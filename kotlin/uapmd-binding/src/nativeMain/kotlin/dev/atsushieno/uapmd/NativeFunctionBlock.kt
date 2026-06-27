@@ -47,7 +47,6 @@ class NativeFunctionBlock internal constructor(
 ) : FunctionBlock {
 
     override val midiIo: MidiIO get() = NativeMidiIO(uapmd_fb_midi_io(handle)!!)
-    override val instanceId: Int get() = uapmd_fb_instance_id(handle)
 
     override var group: UByte
         get() = uapmd_fb_get_group(handle)
