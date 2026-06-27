@@ -138,7 +138,7 @@ tasks.register("buildUapmdCApiDesktop") {
                 "-DMIDICCI_SKIP_TOOLS=ON"
             )
             when {
-                os.isWindows -> configureArgs.addAll(listOf("-G", "Visual Studio 17 2022"))
+                os.isWindows -> configureArgs.addAll(listOf("-G", "Visual Studio 18 2026"))
                 os.isLinux   -> configureArgs.addAll(listOf("-G", "Ninja",
                     "-DCMAKE_C_COMPILER=clang", "-DCMAKE_CXX_COMPILER=clang++",
                     "-DCMAKE_POSITION_INDEPENDENT_CODE=ON"))

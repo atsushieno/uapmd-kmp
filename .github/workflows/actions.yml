@@ -51,7 +51,7 @@ jobs:
             name: linux-jvm
             gradle_tasks: jvmTest compileKotlinJvm
           # Windows: JVM only
-          - os: windows-latest
+          - os: windows-2025-vs2026
             name: windows-jvm
             gradle_tasks: jvmTest compileKotlinJvm
     steps:
