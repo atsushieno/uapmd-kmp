@@ -5,7 +5,63 @@ package dev.atsushieno.uapmd
 class WasmJsTimelineTrack internal constructor(
     internal val handle: Int
 ) : TimelineTrack {
-    override fun getClips(): List<ClipData> = emptyList()
+    override fun getClips(): List<ClipData> {
+        val mod = wasmMod
+        val cm = mod.uapmdTtClipManager(handle)
+        if (cm == 0) return emptyList()
+        val count = mod.uapmdCmClipCount(cm)
+        if (count <= 0) return emptyList()
+
+        // uapmd_clip_data_t layout (WASM32):
+        //  +0   int32_t  clip_id
+        //  +4   char*    reference_id
+        //  +8   i64      position.samples
+        //  +16  f64      position.legacy_beats
+        //  +24  i64      duration_samples
+        //  +32  int32_t  source_node_instance_id
+        //  +36  [4 pad]
+        //  +40  f64      gain
+        //  +48  bool     muted
+        //  +49  [3 pad]
+        //  +52  char*    name
+        //  +56  char*    filepath
+        //  +60  bool     needs_file_save
+        //  +61  [3 pad]
+        //  +64  int32_t  clip_type
+        //  ... (68+ not needed for display)
+        //  Total: 128 bytes
+        val STRUCT_SIZE = 128
+        val buf = mod.malloc(count * STRUCT_SIZE)
+        return try {
+            val actual = mod.uapmdCmGetAllClips(cm, buf, count)
+            (0 until actual).map { i ->
+                val p = buf + i * STRUCT_SIZE
+                fun getI32(o: Int) = mod.getValue(p + o, "i32").toInt()
+                fun getI64(o: Int): Long {
+                    val lo = mod.getValue(p + o, "i32").toInt().toLong() and 0xFFFFFFFFL
+                    val hi = mod.getValue(p + o + 4, "i32").toInt().toLong()
+                    return hi * 4294967296L + lo
+                }
+                fun getF64(o: Int) = mod.getValue(p + o, "double")
+                fun getBool(o: Int) = mod.getValue(p + o, "i8").toInt() != 0
+                fun getStr(o: Int): String {
+                    val strPtr = mod.getValue(p + o, "i32").toInt()
+                    return if (strPtr != 0) mod.utf8ToString(strPtr) else ""
+                }
+                ClipData(
+                    clipId              = getI32(0),
+                    positionSamples     = getI64(8),
+                    positionLegacyBeats = getF64(16),
+                    durationSamples     = getI64(24),
+                    gain                = getF64(40),
+                    muted               = getBool(48),
+                    name                = getStr(52),
+                    filepath            = getStr(56),
+                    clipType            = ClipType.fromNative(getI32(64))
+                )
+            }
+        } finally { mod.free(buf) }
+    }
 }
 
 // ─── WasmJsAudioFileReader ────────────────────────────────────────────────────
@@ -46,7 +102,7 @@ class WasmJsAudioFileReader internal constructor(
                 channelPtrs[i] = chPtr
                 mod.setValue(ptrsPtr + i * 4, chPtr.toDouble(), "i32")
             }
-            mod.uapmdAudioFileReaderReadFrames(handle, startFrame.toDouble(), framesToRead.toDouble(), ptrsPtr, channelCount)
+            mod.uapmdAudioFileReaderReadFrames(handle, startFrame, framesToRead, ptrsPtr, channelCount)
             // Copy back from Wasm memory to Kotlin arrays
             for (ch in 0 until channelCount) {
                 val chPtr = channelPtrs[ch]
@@ -107,12 +163,15 @@ class WasmJsTimelineFacade internal constructor(
     override fun setTimeSignature(numerator: Int, denominator: Int) =
         wasmMod.uapmdTlSetTimeSignature(handle, numerator, denominator)
 
-    override fun setLoop(enabled: Boolean, start: TimelinePosition, end: TimelinePosition) =
-        wasmMod.uapmdTlSetLoop(
-            handle, enabled,
-            start.samples.toDouble(), start.legacyBeats,
-            end.samples.toDouble(), end.legacyBeats
-        )
+    override fun setLoop(enabled: Boolean, start: TimelinePosition, end: TimelinePosition) {
+        val mod = wasmMod
+        val startPtr = mod.malloc(16); val endPtr = mod.malloc(16)
+        try {
+            writePosition(mod, startPtr, start)
+            writePosition(mod, endPtr, end)
+            mod.uapmdTlSetLoop(handle, enabled, startPtr, endPtr)
+        } finally { mod.free(startPtr); mod.free(endPtr) }
+    }
 
     override val trackCount: UInt
         get() = wasmMod.uapmdTlTrackCount(handle).toUInt()
@@ -130,18 +189,15 @@ class WasmJsTimelineFacade internal constructor(
         filepath: String
     ): ClipAddResult {
         val mod = wasmMod
-        val outPtr = mod.malloc(16) // sizeof uapmd_clip_add_result_t
+        val outPtr = mod.malloc(16); val posPtr = mod.malloc(16)
         return try {
+            writePosition(mod, posPtr, position)
             withCStringKt(filepath) { fpPtr ->
                 val readerHandle = (reader as WasmJsAudioFileReader).handle
-                mod.uapmdTlAddAudioClip(
-                    handle, trackIndex,
-                    position.samples.toDouble(), position.legacyBeats,
-                    readerHandle, fpPtr, outPtr
-                )
+                mod.uapmdTlAddAudioClip(outPtr, handle, trackIndex, posPtr, readerHandle, fpPtr)
             }
             decodeClipAddResult(mod, outPtr)
-        } finally { mod.free(outPtr) }
+        } finally { mod.free(posPtr); mod.free(outPtr) }
     }
 
     override fun addMidiClipFromFile(
@@ -151,17 +207,14 @@ class WasmJsTimelineFacade internal constructor(
         nrpnToParameterMapping: Boolean
     ): ClipAddResult {
         val mod = wasmMod
-        val outPtr = mod.malloc(16)
+        val outPtr = mod.malloc(16); val posPtr = mod.malloc(16)
         return try {
+            writePosition(mod, posPtr, position)
             withCStringKt(filepath) { fpPtr ->
-                mod.uapmdTlAddMidiClipFromFile(
-                    handle, trackIndex,
-                    position.samples.toDouble(), position.legacyBeats,
-                    fpPtr, nrpnToParameterMapping, outPtr
-                )
+                mod.uapmdTlAddMidiClipFromFile(outPtr, handle, trackIndex, posPtr, fpPtr, nrpnToParameterMapping)
             }
             decodeClipAddResult(mod, outPtr)
-        } finally { mod.free(outPtr) }
+        } finally { mod.free(posPtr); mod.free(outPtr) }
     }
 
     override fun removeClip(trackIndex: Int, clipId: Int): Boolean =
@@ -187,7 +240,7 @@ class WasmJsTimelineFacade internal constructor(
         // uapmd_content_bounds_t layout (approximate; check actual C struct)
         val ptr = mod.malloc(48)
         return try {
-            mod.uapmdTlCalculateContentBounds(handle, ptr)
+            mod.uapmdTlCalculateContentBounds(ptr, handle)
             // bool has_content (+0), i64 first_sample (+8), i64 last_sample (+16), f64 first_sec (+24), f64 last_sec (+32)
             fun getBool(o: Int) = mod.getValue(ptr + o, "i8").toInt() != 0
             fun getI64(o: Int): Long {
@@ -207,6 +260,15 @@ class WasmJsTimelineFacade internal constructor(
     }
 
     // ── Helpers ────────────────────────────────────────────────────────────
+
+    // Write a uapmd_timeline_position_t {int64_t samples, double legacy_beats} into ptr.
+    private fun writePosition(mod: UapmdCApiModule, ptr: Int, pos: TimelinePosition) {
+        val lo = (pos.samples and 0xFFFFFFFFL).toInt()
+        val hi = (pos.samples ushr 32).toInt()
+        mod.setValue(ptr + 0, lo.toDouble(), "i32")
+        mod.setValue(ptr + 4, hi.toDouble(), "i32")
+        mod.setValue(ptr + 8, pos.legacyBeats, "double")
+    }
 
     private fun decodeClipAddResult(mod: UapmdCApiModule, ptr: Int): ClipAddResult {
         // uapmd_clip_add_result_t: { int clip_id; int source_node_id; bool success; const char* error }

@@ -336,21 +336,23 @@ external interface UapmdCApiModule : JsAny {
     @JsName("_uapmd_tl_set_time_signature")
     fun uapmdTlSetTimeSignature(handle: Int, numerator: Int, denominator: Int)
     @JsName("_uapmd_tl_set_loop")
-    fun uapmdTlSetLoop(handle: Int, enabled: Boolean, startSamples: Double, startBeats: Double, endSamples: Double, endBeats: Double)
+    fun uapmdTlSetLoop(handle: Int, enabled: Boolean, startPtr: Int, endPtr: Int)
     @JsName("_uapmd_tl_remove_clip")
     fun uapmdTlRemoveClip(handle: Int, trackIndex: Int, clipId: Int): Boolean
     @JsName("_uapmd_tl_load_project")
     fun uapmdTlLoadProject(handle: Int, filePathPtr: Int, successOut: Int, errorBuf: Int, errorBufSize: Int): Boolean
     @JsName("_uapmd_tl_calculate_content_bounds")
-    fun uapmdTlCalculateContentBounds(handle: Int, outPtr: Int)
+    fun uapmdTlCalculateContentBounds(outPtr: Int, handle: Int)
 
-    // clip add functions return uapmd_clip_add_result_t (handled via out pointer)
+    // Struct-returning functions use sret: first arg is a pointer where the
+    // uapmd_clip_add_result_t return value will be written. Position args are
+    // also passed by pointer (uapmd_timeline_position_t is 16 bytes > ABI limit).
     @JsName("_uapmd_tl_add_audio_clip")
-    fun uapmdTlAddAudioClip(handle: Int, trackIndex: Int, positionSamples: Double, positionBeats: Double, reader: Int, filePathPtr: Int, outPtr: Int)
+    fun uapmdTlAddAudioClip(outPtr: Int, handle: Int, trackIndex: Int, posPtr: Int, reader: Int, filePathPtr: Int)
     @JsName("_uapmd_tl_add_midi_clip_from_file")
-    fun uapmdTlAddMidiClipFromFile(handle: Int, trackIndex: Int, positionSamples: Double, positionBeats: Double, filePathPtr: Int, nrpnMapping: Boolean, outPtr: Int)
+    fun uapmdTlAddMidiClipFromFile(outPtr: Int, handle: Int, trackIndex: Int, posPtr: Int, filePathPtr: Int, nrpnMapping: Boolean)
     @JsName("_uapmd_tl_add_midi_clip_from_data")
-    fun uapmdTlAddMidiClipFromData(handle: Int, trackIndex: Int, positionSamples: Double, positionBeats: Double, dataPtr: Int, dataSize: Int, outPtr: Int)
+    fun uapmdTlAddMidiClipFromData(outPtr: Int, handle: Int, trackIndex: Int, posPtr: Int, dataPtr: Int, dataSize: Int, tickTimestampsPtr: Int, tickCount: Int, tickResolution: Int, clipTempo: Double, tempoChangesPtr: Int, tempoChangeCount: Int, timeSigChangesPtr: Int, timeSigChangeCount: Int, clipNamePtr: Int, nrpnMapping: Boolean, needsFileSave: Boolean)
 
     // ── Timeline track ─────────────────────────────────────────────────────
     @JsName("_uapmd_tt_reference_id")
@@ -361,6 +363,13 @@ external interface UapmdCApiModule : JsAny {
     fun uapmdTtSampleRate(handle: Int): Int
     @JsName("_uapmd_tt_clip_manager")
     fun uapmdTtClipManager(handle: Int): Int
+
+    // ── Clip manager ────────────────────────────────────────────────────────
+    @JsName("_uapmd_cm_clip_count")
+    fun uapmdCmClipCount(handle: Int): Int
+    @JsName("_uapmd_cm_get_all_clips")
+    fun uapmdCmGetAllClips(handle: Int, outPtr: Int, maxCount: Int): Int
+
     @JsName("_uapmd_tt_has_device_input_source")
     fun uapmdTtHasDeviceInputSource(handle: Int): Boolean
     @JsName("_uapmd_tt_remove_clip")
@@ -374,7 +383,7 @@ external interface UapmdCApiModule : JsAny {
     @JsName("_uapmd_audio_file_reader_get_properties")
     fun uapmdAudioFileReaderGetProperties(handle: Int, outPtr: Int): Boolean
     @JsName("_uapmd_audio_file_reader_read_frames")
-    fun uapmdAudioFileReaderReadFrames(handle: Int, startFrame: Double, framesToRead: Double, channelsPtr: Int, channelCount: Int)
+    fun uapmdAudioFileReaderReadFrames(handle: Int, startFrame: Long, framesToRead: Long, channelsPtr: Int, channelCount: Int)
 
     // ── Audio devices ──────────────────────────────────────────────────────
     @JsName("_uapmd_audio_device_mgr_instance")
