@@ -36,9 +36,9 @@ class WasmJsSequencerEngine internal constructor(
     ) {
         val cbId = nextCallbackId()
         pendingAddPluginCallbacks[cbId] = callback
-        val fnPtr = makeCFunctionPtr(cbId, "uapmdDispatchAddPlugin", "viii")
+        val fnPtr = makeCFunctionPtr(cbId, "uapmdDispatchAddPlugin", "viiii")
         withTwoCStringsKt(format, pluginId) { fmtPtr, idPtr ->
-            wasmMod.uapmdEngineAddPluginToTrack(handle, trackIndex, fmtPtr, idPtr, fnPtr, 0)
+            wasmMod.uapmdEngineAddPluginToTrack(handle, trackIndex, fmtPtr, idPtr, 0, fnPtr)
         }
     }
 

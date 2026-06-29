@@ -489,7 +489,7 @@ external interface UapmdCApiModule : JsAny {
     @JsName("_uapmd_scan_tool_save_cache_to")
     fun uapmdScanToolSaveCacheTo(handle: Int, pathPtr: Int)
     @JsName("_uapmd_scan_tool_perform_scanning")
-    fun uapmdScanToolPerformScanning(handle: Int, requireFast: Boolean, slowStartCb: Int, bundleStartCb: Int, bundleCompleteCb: Int, slowCompleteCb: Int, errorCb: Int, cancelCb: Int, ctx: Int)
+    fun uapmdScanToolPerformScanning(handle: Int, requireFast: Boolean, observerPtr: Int)
     @JsName("_uapmd_scan_tool_blocklist_count")
     fun uapmdScanToolBlocklistCount(handle: Int): Int
     @JsName("_uapmd_scan_tool_get_blocklist_entry")
@@ -533,7 +533,7 @@ external interface UapmdCApiModule : JsAny {
 @JsFun("(factory, wasmUrl) => factory({ locateFile: () => wasmUrl })")
 private external fun invokeFactory(factory: JsAny, wasmUrl: String): Promise<UapmdCApiModule>
 
-@JsFun("(mod) => globalThis.__uapmdWasmAdapter.setUapmdModule(mod)")
+@JsFun("(mod) => { globalThis.__uapmdWasmAdapter.setUapmdModule(mod); globalThis.__uapmdWasmAdapter.setKotlinDispatchers(wasmExports); }")
 private external fun setUapmdModule(mod: JsAny)
 
 @JsModule("uapmd-wasm-adapter")

@@ -27,38 +27,62 @@ class WasmJsScanTool internal constructor(
         withCStringKt(path) { ptr -> wasmMod.uapmdScanToolSaveCacheTo(handle, ptr) }
 
     override fun performScanning(requireFastScanning: Boolean, observer: ScanObserver?) {
+        val actualFast = requireFastScanning
         if (observer == null) {
-            wasmMod.uapmdScanToolPerformScanning(handle, requireFastScanning, 0, 0, 0, 0, 0, 0, 0)
+            wasmMod.uapmdScanToolPerformScanning(handle, actualFast, 0)
             return
         }
         val cbId = nextCallbackId()
-        scanObservers[cbId] = observer
-        try {
-            // Signatures: slowStart "vi", bundleStart "vi", bundleComplete "vi",
-            //             slowComplete "v", error "vi", cancel "i" (returns bool)
-            val slowStartPtr      = makeCFunctionPtr(cbId, "uapmdDispatchScanSlowStart",    "vi")
-            val bundleStartPtr    = makeCFunctionPtr(cbId, "uapmdDispatchScanBundleStart",   "vi")
-            val bundleCompletePtr = makeCFunctionPtr(cbId, "uapmdDispatchScanBundleComplete","vi")
-            val slowCompletePtr   = makeCFunctionPtr(cbId, "uapmdDispatchScanSlowComplete",  "vi")
-            val errorPtr_         = makeCFunctionPtr(cbId, "uapmdDispatchScanError",         "vi")
-            val cancelPtr         = makeCFunctionPtr(cbId, "uapmdDispatchScanCancel",        "ii")
 
-            wasmMod.uapmdScanToolPerformScanning(
-                handle, requireFastScanning,
-                slowStartPtr, bundleStartPtr, bundleCompletePtr,
-                slowCompletePtr, errorPtr_, cancelPtr, 0
-            )
+        // C callback signatures (second arg is void* user_data which we pass as cbId):
+        //   slow_scan_started(uint32_t total, void* ctx)  → "vii"
+        //   bundle_scan_*(const char* path, void* ctx)    → "vii"
+        //   slow_scan_completed(void* ctx)                → "vi"
+        //   error_occurred(const char* msg, void* ctx)    → "vii"
+        //   should_cancel(void* ctx) → bool               → "ii"
+        val slowStartPtr      = makeCFunctionPtr(cbId, "uapmdDispatchScanSlowStart",    "vii")
+        val bundleStartPtr    = makeCFunctionPtr(cbId, "uapmdDispatchScanBundleStart",   "vii")
+        val bundleCompletePtr = makeCFunctionPtr(cbId, "uapmdDispatchScanBundleComplete","vii")
+        val slowCompletePtr   = makeCFunctionPtr(cbId, "uapmdDispatchScanSlowComplete",  "vi")
+        val errorPtr_         = makeCFunctionPtr(cbId, "uapmdDispatchScanError",         "vii")
+        val cancelPtr         = makeCFunctionPtr(cbId, "uapmdDispatchScanCancel",        "ii")
 
-            // Clean up function table entries after sync scan completes
-            removeCFunctionPtr(slowStartPtr)
-            removeCFunctionPtr(bundleStartPtr)
-            removeCFunctionPtr(bundleCompletePtr)
-            removeCFunctionPtr(slowCompletePtr)
-            removeCFunctionPtr(errorPtr_)
-            removeCFunctionPtr(cancelPtr)
-        } finally {
-            scanObservers.remove(cbId)
+        // Wrap the observer so cleanup happens when the scan actually completes.
+        // The scan is async on WASM: performScanning returns before callbacks fire,
+        // so we must NOT clean up in a finally block here.
+        scanObservers[cbId] = object : ScanObserver by observer {
+            override fun onSlowScanCompleted() {
+                observer.onSlowScanCompleted()
+                scanObservers.remove(cbId)
+                removeCFunctionPtr(slowStartPtr)
+                removeCFunctionPtr(bundleStartPtr)
+                removeCFunctionPtr(bundleCompletePtr)
+                removeCFunctionPtr(slowCompletePtr)
+                removeCFunctionPtr(errorPtr_)
+                removeCFunctionPtr(cancelPtr)
+            }
         }
+
+        // Build uapmd_scan_observer_t (28 bytes in WASM32):
+        //   [0]  void* user_data
+        //   [4]  slow_scan_started
+        //   [8]  bundle_scan_started
+        //   [12] bundle_scan_completed
+        //   [16] slow_scan_completed
+        //   [20] error_occurred
+        //   [24] should_cancel
+        val obsPtr = wasmMod.malloc(28)
+        wasmMod.setValue(obsPtr + 0,  0.0,                       "i32")
+        wasmMod.setValue(obsPtr + 4,  slowStartPtr.toDouble(),   "i32")
+        wasmMod.setValue(obsPtr + 8,  bundleStartPtr.toDouble(), "i32")
+        wasmMod.setValue(obsPtr + 12, bundleCompletePtr.toDouble(), "i32")
+        wasmMod.setValue(obsPtr + 16, slowCompletePtr.toDouble(),"i32")
+        wasmMod.setValue(obsPtr + 20, errorPtr_.toDouble(),      "i32")
+        wasmMod.setValue(obsPtr + 24, cancelPtr.toDouble(),      "i32")
+        wasmMod.uapmdScanToolPerformScanning(handle, actualFast, obsPtr)
+        // The struct is copied into C lambdas during the call above; safe to free now.
+        wasmMod.free(obsPtr)
+        // Cleanup of function pointers and scanObservers is deferred to onSlowScanCompleted.
     }
 
     override val blocklistCount: UInt
@@ -131,8 +155,8 @@ class WasmJsPluginInstancing internal constructor(
     override fun makeAlive(callback: (String?) -> Unit) {
         val cbId = nextCallbackId()
         pendingMakeAliveCallbacks[cbId] = callback
-        val fnPtr = makeCFunctionPtr(cbId, "uapmdDispatchMakeAlive", "vi")
-        wasmMod.uapmdInstancingMakeAlive(handle, fnPtr, 0)
+        val fnPtr = makeCFunctionPtr(cbId, "uapmdDispatchMakeAlive", "vii")
+        wasmMod.uapmdInstancingMakeAlive(handle, 0, fnPtr)
     }
 
     override fun close() = wasmMod.uapmdInstancingDestroy(handle)

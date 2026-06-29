@@ -96,24 +96,31 @@ void uapmd_scan_tool_save_cache_to(uapmd_scan_tool_t tool, const char* path) {
 void uapmd_scan_tool_perform_scanning(uapmd_scan_tool_t tool,
                                        bool require_fast_scanning,
                                        const uapmd_scan_observer_t* observer) {
-    remidy_tooling::PluginScanObserver obs{};
+    // On WASM the scan is asynchronous (returns before callbacks fire), so obs must
+    // outlive this function. Heap-allocate and self-delete in slowScanCompleted.
+    auto* obs = new remidy_tooling::PluginScanObserver{};
     void* ud = observer ? observer->user_data : nullptr;
 
     if (observer && observer->slow_scan_started)
-        obs.slowScanStarted = [cb = observer->slow_scan_started, ud](uint32_t total) { cb(total, ud); };
+        obs->slowScanStarted = [cb = observer->slow_scan_started, ud](uint32_t total) { cb(total, ud); };
     if (observer && observer->bundle_scan_started)
-        obs.bundleScanStarted = [cb = observer->bundle_scan_started, ud](const std::filesystem::path& p) { cb(p.string().c_str(), ud); };
+        obs->bundleScanStarted = [cb = observer->bundle_scan_started, ud](const std::filesystem::path& p) { cb(p.string().c_str(), ud); };
     if (observer && observer->bundle_scan_completed)
-        obs.bundleScanCompleted = [cb = observer->bundle_scan_completed, ud](const std::filesystem::path& p) { cb(p.string().c_str(), ud); };
-    if (observer && observer->slow_scan_completed)
-        obs.slowScanCompleted = [cb = observer->slow_scan_completed, ud]() { cb(ud); };
+        obs->bundleScanCompleted = [cb = observer->bundle_scan_completed, ud](const std::filesystem::path& p) { cb(p.string().c_str(), ud); };
     if (observer && observer->error_occurred)
-        obs.errorOccurred = [cb = observer->error_occurred, ud](const std::string& msg) { cb(msg.c_str(), ud); };
+        obs->errorOccurred = [cb = observer->error_occurred, ud](const std::string& msg) { cb(msg.c_str(), ud); };
     if (observer && observer->should_cancel)
-        obs.shouldCancel = [cb = observer->should_cancel, ud]() -> bool { return cb(ud); };
+        obs->shouldCancel = [cb = observer->should_cancel, ud]() -> bool { return cb(ud); };
+
+    auto slow_complete_cb = observer ? observer->slow_scan_completed : nullptr;
+    obs->slowScanCompleted = [obs, slow_complete_cb, ud]() {
+        if (slow_complete_cb) slow_complete_cb(ud);
+        delete obs;
+    };
 
     PST(tool)->performPluginScanning(require_fast_scanning,
-        remidy_tooling::ScanMode::InProcess, false, 0.0, &obs);
+        remidy_tooling::ScanMode::InProcess, false, 0.0, obs);
+    // obs is now owned by the async scan chain; do not use it after this point.
 }
 
 uint32_t uapmd_scan_tool_blocklist_count(uapmd_scan_tool_t tool) {

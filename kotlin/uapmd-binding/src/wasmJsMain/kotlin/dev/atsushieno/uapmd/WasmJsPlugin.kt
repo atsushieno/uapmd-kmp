@@ -132,8 +132,8 @@ class WasmJsPluginInstance internal constructor(
             data.forEachIndexed { i, b -> mod.setValue(ptr + i, b.toDouble(), "i8") }
             val cbId = nextCallbackId()
             pendingLoadStateCallbacks[cbId] = callback
-            val fnPtr = makeCFunctionPtr(cbId, "uapmdDispatchLoadState", "vi")
-            mod.uapmdInstanceLoadState(handle, ptr, data.size, ctx.nativeValue, includeUiState, fnPtr, 0)
+            val fnPtr = makeCFunctionPtr(cbId, "uapmdDispatchLoadState", "vii")
+            mod.uapmdInstanceLoadState(handle, ptr, data.size, ctx.nativeValue, includeUiState, 0, fnPtr)
         } finally { mod.free(ptr) }
     }
 
@@ -349,12 +349,12 @@ class WasmJsPluginHost internal constructor(
     ) {
         val cbId = nextCallbackId()
         pendingCreateInstanceCallbacks[cbId] = callback
-        val fnPtr = makeCFunctionPtr(cbId, "uapmdDispatchCreateInstance", "vii")
+        val fnPtr = makeCFunctionPtr(cbId, "uapmdDispatchCreateInstance", "viii")
         withTwoCStringsKt(format, pluginId) { fmtPtr, idPtr ->
             wasmMod.uapmdPluginHostCreateInstance(
                 handle, sampleRate.toInt(), bufferSize.toInt(),
                 mainInputChannels, mainOutputChannels, offlineMode,
-                fmtPtr, idPtr, fnPtr, 0
+                fmtPtr, idPtr, 0, fnPtr
             )
         }
     }

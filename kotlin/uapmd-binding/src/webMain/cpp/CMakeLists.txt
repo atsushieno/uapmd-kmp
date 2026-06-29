@@ -43,6 +43,7 @@ add_subdirectory("${CAPI_DIR}" "${CMAKE_CURRENT_BINARY_DIR}/uapmd-c-api")
 get_target_property(LIBREMIDI_INTERFACE_LINK_OPTIONS libremidi INTERFACE_LINK_OPTIONS)
 if(LIBREMIDI_INTERFACE_LINK_OPTIONS AND NOT LIBREMIDI_INTERFACE_LINK_OPTIONS STREQUAL "NOTFOUND")
     list(FILTER LIBREMIDI_INTERFACE_LINK_OPTIONS EXCLUDE REGEX "EXPORTED_FUNCTIONS=.*_libremidi_devices_poll")
+    list(FILTER LIBREMIDI_INTERFACE_LINK_OPTIONS EXCLUDE REGEX "EXPORTED_RUNTIME_METHODS=")
     set_target_properties(libremidi PROPERTIES
         INTERFACE_LINK_OPTIONS "${LIBREMIDI_INTERFACE_LINK_OPTIONS}"
     )
@@ -109,7 +110,11 @@ target_link_options(uapmd-c-api-web PRIVATE
     "-sEXPORT_NAME=UapmdCApi"
     # Symbol exports
     "-sEXPORTED_FUNCTIONS=${UAPMD_EXPORTED_FUNCTIONS_ARG}"
-    "-sEXPORTED_RUNTIME_METHODS=[UTF8ToString,stringToUTF8,allocate,ALLOC_NORMAL,allocateUTF8,FS,ccall,getValue,setValue,addFunction,removeFunction,lengthBytesUTF8]"
+    # HEAPU8 is included because WebAudioWorkletIODevice.cpp inline JS uses it,
+    # causing Emscripten to auto-inject a narrower EXPORTED_RUNTIME_METHODS list
+    # at link time that would otherwise override and drop getValue/addFunction.
+    # Keeping HEAPU8 here as well lets us be the definitive last word.
+    "-sEXPORTED_RUNTIME_METHODS=[HEAPU8,UTF8ToString,stringToUTF8,allocate,ALLOC_NORMAL,allocateUTF8,FS,ccall,getValue,setValue,addFunction,removeFunction,lengthBytesUTF8]"
     # Enable JS BigInt ↔ Wasm i64 so int64_t parameters (timestamps, frame
     # counts) round-trip correctly across the JS boundary.
     "-sWASM_BIGINT=1"
@@ -131,4 +136,13 @@ target_link_options(uapmd-c-api-web PRIVATE
     # Disable filesystem (uapmd-c-api doesn't use stdio in the library binding)
     # Comment this out if file I/O is needed at the C layer:
     # "-sNO_FILESYSTEM=1"
+)
+
+# Emscripten may auto-inject a narrower -sEXPORTED_RUNTIME_METHODS after ours
+# (from inline JS in dependencies that use HEAPU8/UTF8ToString etc.), which would
+# override and drop getValue/addFunction/removeFunction. Appending via
+# CMAKE_EXE_LINKER_FLAGS places this AFTER all target and dependency link options,
+# making it the final word on the link command line.
+string(APPEND CMAKE_EXE_LINKER_FLAGS
+    " -sEXPORTED_RUNTIME_METHODS=[HEAPU8,UTF8ToString,stringToUTF8,allocate,ALLOC_NORMAL,allocateUTF8,FS,ccall,getValue,setValue,addFunction,removeFunction,lengthBytesUTF8]"
 )

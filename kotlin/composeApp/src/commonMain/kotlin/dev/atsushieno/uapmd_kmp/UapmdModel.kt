@@ -767,22 +767,21 @@ class UapmdModel(val sequencer: RealtimeSequencer) {
                 scanProgress = if (total > 0u) done.toFloat() / total.toFloat() else 0f
             }
             override fun onSlowScanCompleted() {
+                scanTool.saveCache()
+                engine.pluginHost.reloadCatalogFromCache()
+                refreshCatalog()
                 isScanning = false
                 scanProgress = 1f
-                refreshCatalog()
             }
             override fun onErrorOccurred(message: String) { scanReport += "$message\n" }
         }
         try {
             scanTool.performScanning(requireFastScanning = false, observer = observer)
-            scanTool.saveCache()
-            engine.pluginHost.reloadCatalogFromCache()
-            refreshCatalog()
         } catch (e: CancellationException) {
+            isScanning = false
             throw e
         } catch (e: Throwable) {
             scanReport += "Plugin scanning failed: ${e.message ?: e::class.simpleName}\n"
-        } finally {
             isScanning = false
         }
     }
