@@ -316,15 +316,17 @@ class WasmJsPluginHost internal constructor(
         val fmtBuf  = mod.malloc(fmtBufSize)
         val idBuf   = mod.malloc(idBufSize)
         val nameBuf = mod.malloc(nameBufSize)
+        val vendorBufSize = 256; val vendorBuf = mod.malloc(vendorBufSize)
         return try {
-            if (!mod.uapmdPluginHostGetCatalogEntry(handle, index.toInt(), fmtBuf, fmtBufSize, idBuf, idBufSize, nameBuf, nameBufSize)) null
+            if (!mod.uapmdPluginHostGetCatalogEntry(handle, index.toInt(), fmtBuf, fmtBufSize, idBuf, idBufSize, nameBuf, nameBufSize, vendorBuf, vendorBufSize)) null
             else CatalogEntry(
                 format      = mod.utf8ToString(fmtBuf),
                 pluginId    = mod.utf8ToString(idBuf),
-                displayName = mod.utf8ToString(nameBuf)
+                displayName = mod.utf8ToString(nameBuf),
+                vendor      = mod.utf8ToString(vendorBuf)
             )
         } finally {
-            mod.free(fmtBuf); mod.free(idBuf); mod.free(nameBuf)
+            mod.free(fmtBuf); mod.free(idBuf); mod.free(nameBuf); mod.free(vendorBuf)
         }
     }
 
@@ -395,7 +397,7 @@ class WasmJsPluginNode internal constructor(
         val ptr = mod.malloc(events.size)
         return try {
             events.forEachIndexed { i, b -> mod.setValue(ptr + i, b.toDouble(), "i8") }
-            mod.uapmdNodeScheduleEvents(handle, timestamp.toInt(), ptr, events.size)
+            mod.uapmdNodeScheduleEvents(handle, timestamp, ptr, events.size)
         } finally { mod.free(ptr) }
     }
 

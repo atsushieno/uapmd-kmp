@@ -222,17 +222,17 @@ class WasmJsTimelineFacade internal constructor(
 
     override fun loadProject(filePath: String): ProjectResult {
         val mod = wasmMod
-        val errBufSize = 512
-        val errBuf = mod.malloc(errBufSize)
-        val successPtr = mod.malloc(4)
+        // uapmd_project_result_t: { bool success (+0), const char* error (+4) } = 8 bytes
+        val outPtr = mod.malloc(8)
         return try {
             withCStringKt(filePath) { fpPtr ->
-                mod.uapmdTlLoadProject(handle, fpPtr, successPtr, errBuf, errBufSize)
+                mod.uapmdTlLoadProject(outPtr, handle, fpPtr)
             }
-            val success = mod.getValue(successPtr, "i8").toInt() != 0
-            val error = if (!success) mod.utf8ToString(errBuf) else null
+            val success = mod.getValue(outPtr + 0, "i8").toInt() != 0
+            val errPtr  = mod.getValue(outPtr + 4, "i32").toInt()
+            val error   = if (errPtr != 0) mod.utf8ToString(errPtr) else null
             ProjectResult(success, error)
-        } finally { mod.free(errBuf); mod.free(successPtr) }
+        } finally { mod.free(outPtr) }
     }
 
     override fun calculateContentBounds(): ContentBounds {

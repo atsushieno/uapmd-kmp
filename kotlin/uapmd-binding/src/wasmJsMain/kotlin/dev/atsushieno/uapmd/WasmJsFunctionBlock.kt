@@ -34,7 +34,7 @@ class WasmJsMidiIO internal constructor(
         val ptr = mod.malloc(messages.size * 4)
         try {
             messages.forEachIndexed { i, v -> mod.setValue(ptr + i * 4, v.toDouble(), "i32") }
-            mod.uapmdMidiIoSend(handle, ptr, messages.size, timestamp.toDouble())
+            mod.uapmdMidiIoSend(handle, ptr, messages.size, timestamp)
         } finally { mod.free(ptr) }
     }
 }

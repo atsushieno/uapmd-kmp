@@ -72,7 +72,8 @@ external interface UapmdCApiModule : JsAny {
         handle: Int, index: Int,
         fmtBuf: Int, fmtBufSize: Int,
         idBuf: Int, idBufSize: Int,
-        nameBuf: Int, nameBufSize: Int
+        nameBuf: Int, nameBufSize: Int,
+        vendorBuf: Int, vendorBufSize: Int
     ): Boolean
     @JsName("_uapmd_plugin_host_get_instance_ids")
     fun uapmdPluginHostGetInstanceIds(handle: Int, buf: Int, bufCount: Int): Int
@@ -199,7 +200,7 @@ external interface UapmdCApiModule : JsAny {
     @JsName("_uapmd_node_instance_id")
     fun uapmdNodeInstanceId(handle: Int): Int
     @JsName("_uapmd_node_schedule_events")
-    fun uapmdNodeScheduleEvents(handle: Int, timestamp: Int, eventsPtr: Int, eventsSize: Int): Boolean
+    fun uapmdNodeScheduleEvents(handle: Int, timestamp: Long, eventsPtr: Int, eventsSize: Int): Boolean
     @JsName("_uapmd_node_send_all_notes_off")
     fun uapmdNodeSendAllNotesOff(handle: Int)
 
@@ -249,7 +250,7 @@ external interface UapmdCApiModule : JsAny {
     @JsName("_uapmd_engine_get_offline_rendering")
     fun uapmdEngineGetOfflineRendering(handle: Int): Boolean
     @JsName("_uapmd_engine_enqueue_ump")
-    fun uapmdEngineEnqueueUmp(handle: Int, instanceId: Int, umpPtr: Int, count: Int, timestamp: Double)
+    fun uapmdEngineEnqueueUmp(handle: Int, instanceId: Int, umpPtr: Int, count: Int, timestamp: Long)
     @JsName("_uapmd_engine_send_note_on")
     fun uapmdEngineSendNoteOn(handle: Int, instanceId: Int, note: Int)
     @JsName("_uapmd_engine_send_note_off")
@@ -340,7 +341,7 @@ external interface UapmdCApiModule : JsAny {
     @JsName("_uapmd_tl_remove_clip")
     fun uapmdTlRemoveClip(handle: Int, trackIndex: Int, clipId: Int): Boolean
     @JsName("_uapmd_tl_load_project")
-    fun uapmdTlLoadProject(handle: Int, filePathPtr: Int, successOut: Int, errorBuf: Int, errorBufSize: Int): Boolean
+    fun uapmdTlLoadProject(outPtr: Int, handle: Int, filePathPtr: Int)
     @JsName("_uapmd_tl_calculate_content_bounds")
     fun uapmdTlCalculateContentBounds(outPtr: Int, handle: Int)
 
@@ -418,7 +419,7 @@ external interface UapmdCApiModule : JsAny {
     @JsName("_uapmd_midi_io_remove_input_handler")
     fun uapmdMidiIoRemoveInputHandler(handle: Int, token: Int)
     @JsName("_uapmd_midi_io_send")
-    fun uapmdMidiIoSend(handle: Int, messagesPtr: Int, count: Int, timestamp: Double)
+    fun uapmdMidiIoSend(handle: Int, messagesPtr: Int, count: Int, timestamp: Long)
 
     // ── Function block manager ─────────────────────────────────────────────
     @JsName("_uapmd_fbm_count")
@@ -523,6 +524,15 @@ external interface UapmdCApiModule : JsAny {
     fun uapmdFormatManagerFormatCount(handle: Int): Int
     @JsName("_uapmd_format_manager_get_format_name")
     fun uapmdFormatManagerGetFormatName(handle: Int, index: Int, buf: Int, bufSize: Int): Int
+
+    // ── Project archive ────────────────────────────────────────────────────
+    @JsName("_uapmd_project_archive_is_archive")
+    fun uapmdProjectArchiveIsArchive(pathPtr: Int): Boolean
+    // Returns a heap-allocated uapmd_project_archive_extract_result_t* pointer
+    @JsName("_uapmd_project_archive_extract")
+    fun uapmdProjectArchiveExtract(archivePathPtr: Int, destDirPtr: Int): Int
+    @JsName("_uapmd_project_archive_extract_result_free")
+    fun uapmdProjectArchiveExtractResultFree(resultPtr: Int)
 
     // ── Plugin instancing ──────────────────────────────────────────────────
     @JsName("_uapmd_instancing_create")
