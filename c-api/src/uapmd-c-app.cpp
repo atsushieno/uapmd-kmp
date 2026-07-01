@@ -2,7 +2,7 @@
 
 #include "c-api/uapmd-c-app.h"
 #include "c-api-internal.h"
-#include "AppModel.hpp"
+#include <uapmd-app-model/uapmd-app-model.hpp>
 #include <uapmd/uapmd.hpp>
 #include <cstring>
 #include <future>

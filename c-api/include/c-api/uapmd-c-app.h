@@ -1,4 +1,4 @@
-/* uapmd C API — bindings for AppModel (uapmd-app) */
+/* uapmd C API — bindings for AppModel (uapmd-app-model) */
 #ifndef UAPMD_C_APP_H
 #define UAPMD_C_APP_H
 

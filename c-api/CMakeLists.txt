@@ -48,11 +48,13 @@ target_link_libraries(uapmd-c-api
         remidy-gui
 )
 
-# App-layer objects (AppModel etc.) — platform-specific linkage
-if(ANDROID)
-    target_link_libraries(uapmd-c-api PRIVATE uapmd-app)
-elseif(NOT IOS AND NOT EMSCRIPTEN)
-    target_link_libraries(uapmd-c-api PRIVATE uapmd-app-objects)
+if(APPLE AND NOT IOS)
+    target_link_libraries(uapmd-c-api PRIVATE "-framework OpenGL")
+endif()
+
+# App model bindings (AppModel etc.).
+if(NOT EMSCRIPTEN)
+    target_link_libraries(uapmd-c-api PRIVATE uapmd-app-model)
 endif()
 
 # Private includes from the uapmd source tree (passed via UAPMD_SOURCE_DIR).
@@ -60,7 +62,7 @@ endif()
 # read them from the CPM internal cache entries instead.
 target_include_directories(uapmd-c-api
     PRIVATE
-        ${UAPMD_SOURCE_DIR}/tools/uapmd-app
+        ${UAPMD_SOURCE_DIR}/tools/uapmd-app-model/include
         ${UAPMD_SOURCE_DIR}/uapmd-data/include
         ${UAPMD_SOURCE_DIR}/uapmd-engine/include
         ${UAPMD_SOURCE_DIR}/uapmd-graph/include
