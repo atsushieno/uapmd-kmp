@@ -5,7 +5,6 @@
 #include <uapmd-graph/uapmd-graph.hpp>
 #include <cstring>
 #include <memory>
-#include <optional>
 #include <string>
 #include <vector>
 
@@ -61,15 +60,21 @@ size_t uapmd_instance_plugin_id(uapmd_plugin_instance_t inst, char* buf, size_t 
 }
 
 bool uapmd_instance_get_aap_ui_host_details(uapmd_plugin_instance_t inst, uapmd_aap_ui_host_details_t* out) {
-    static thread_local std::optional<uapmd::AapUiHostDetails> tl_aap_ui_host_details;
     if (!inst || !out)
         return false;
-    tl_aap_ui_host_details = I(inst)->aapUiHostDetails();
-    if (!tl_aap_ui_host_details.has_value())
+
+    auto* extension = dynamic_cast<uapmd::AapUiHostDetailsExtension*>(
+        I(inst)->extension(uapmd::kAapUiHostDetailsExtensionId));
+    if (!extension)
         return false;
-    out->plugin_package_name = tl_aap_ui_host_details->pluginPackageName.c_str();
-    out->plugin_local_name = tl_aap_ui_host_details->pluginLocalName.c_str();
-    out->instance_id = tl_aap_ui_host_details->instanceId;
+
+    auto* aap = extension->aapExtensibility();
+    if (!aap)
+        return false;
+
+    out->plugin_package_name = aap->pluginPackageName().c_str();
+    out->plugin_local_name = aap->pluginLocalName().c_str();
+    out->instance_id = aap->instanceId();
     return true;
 }
 

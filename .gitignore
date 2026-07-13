@@ -1,3 +1,4 @@
 .idea
 hs_err_*.log
 .claude
+cmake-build-*

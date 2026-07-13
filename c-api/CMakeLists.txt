@@ -70,6 +70,7 @@ target_include_directories(uapmd-c-api
         ${UAPMD_SOURCE_DIR}/uapmd-file/include
         ${UAPMD_SOURCE_DIR}/remidy/include
         ${UAPMD_SOURCE_DIR}/remidy-tooling/include
+        ${UAPMD_SOURCE_DIR}/tools/remidy-imgui-shared
         $CACHE{CPM_PACKAGE_choc_SOURCE_DIR}
         $CACHE{CPM_PACKAGE_midicci_SOURCE_DIR}/include
         $CACHE{CPM_PACKAGE_miniaudio_SOURCE_DIR}
