@@ -52,6 +52,10 @@ if(APPLE AND NOT IOS)
     target_link_libraries(uapmd-c-api PRIVATE "-framework OpenGL")
 endif()
 
+if(WIN32)
+    target_link_libraries(uapmd-c-api PRIVATE opengl32)
+endif()
+
 # App model bindings (AppModel etc.).
 if(NOT EMSCRIPTEN)
     target_link_libraries(uapmd-c-api PRIVATE uapmd-app-model)
