@@ -40,11 +40,12 @@ target_include_directories(uapmd-c-api
 
 target_link_libraries(uapmd-c-api
     PUBLIC
-        uapmd
+        uapmd-midi-service
+        uapmd-graph
         uapmd-data
         uapmd-file
         uapmd-engine
-        remidy-tooling
+        uapmd-plugin-hosting
         remidy-gui
 )
 
@@ -70,10 +71,11 @@ target_include_directories(uapmd-c-api
         ${UAPMD_SOURCE_DIR}/uapmd-data/include
         ${UAPMD_SOURCE_DIR}/uapmd-engine/include
         ${UAPMD_SOURCE_DIR}/uapmd-graph/include
-        ${UAPMD_SOURCE_DIR}/uapmd/include
+        ${UAPMD_SOURCE_DIR}/uapmd-midi-service/include
         ${UAPMD_SOURCE_DIR}/uapmd-file/include
         ${UAPMD_SOURCE_DIR}/remidy/include
-        ${UAPMD_SOURCE_DIR}/remidy-tooling/include
+        ${UAPMD_SOURCE_DIR}/remidy-gui/include
+        ${UAPMD_SOURCE_DIR}/uapmd-plugin-hosting/include
         ${UAPMD_SOURCE_DIR}/tools/remidy-imgui-shared
         $CACHE{CPM_PACKAGE_choc_SOURCE_DIR}
         $CACHE{CPM_PACKAGE_midicci_SOURCE_DIR}/include

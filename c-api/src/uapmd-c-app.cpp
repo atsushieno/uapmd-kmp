@@ -3,7 +3,8 @@
 #include "c-api/uapmd-c-app.h"
 #include "c-api-internal.h"
 #include <uapmd-app-model/uapmd-app-model.hpp>
-#include <uapmd/uapmd.hpp>
+#include <uapmd-midi-service/uapmd-midi-service.hpp>
+#include <uapmd-plugin-hosting/uapmd-plugin-hosting.hpp>
 #include <cstring>
 #include <future>
 #include <string>
@@ -11,8 +12,8 @@
 
 /* ── Cast helpers ─────────────────────────────────────────────────────────── */
 
-static uapmd::AppModel*             AM(uapmd_app_model_t h)            { return reinterpret_cast<uapmd::AppModel*>(h); }
-static uapmd::TransportController*   TC(uapmd_transport_controller_t h) { return reinterpret_cast<uapmd::TransportController*>(h); }
+static uapmd_app::AppModel*             AM(uapmd_app_model_t h)            { return reinterpret_cast<uapmd_app::AppModel*>(h); }
+static uapmd_app::TransportController*   TC(uapmd_transport_controller_t h) { return reinterpret_cast<uapmd_app::TransportController*>(h); }
 
 static size_t copy_string(const std::string& src, char* buf, size_t buf_size) {
     size_t required = src.size() + 1;
@@ -42,13 +43,13 @@ static thread_local std::string tl_error2;
  *  Lifecycle
  * ═══════════════════════════════════════════════════════════════════════════ */
 
-void uapmd_app_instantiate() { uapmd::AppModel::instantiate(); }
+void uapmd_app_instantiate() { uapmd_app::AppModel::instantiate(); }
 
 uapmd_app_model_t uapmd_app_instance() {
-    return reinterpret_cast<uapmd_app_model_t>(&uapmd::AppModel::instance());
+    return reinterpret_cast<uapmd_app_model_t>(&uapmd_app::AppModel::instance());
 }
 
-void uapmd_app_cleanup() { uapmd::AppModel::cleanupInstance(); }
+void uapmd_app_cleanup() { uapmd_app::AppModel::cleanupInstance(); }
 
 /* ═══════════════════════════════════════════════════════════════════════════
  *  Accessors
@@ -91,7 +92,7 @@ void uapmd_app_perform_plugin_scanning(uapmd_app_model_t app,
                                         double remote_timeout_seconds,
                                         bool require_fast_scanning) {
     AM(app)->performPluginScanning(force_rescan,
-        static_cast<uapmd::AppModel::PluginScanRequest>(request),
+        static_cast<uapmd_app::AppModel::PluginScanRequest>(request),
         remote_timeout_seconds, require_fast_scanning);
 }
 
@@ -115,7 +116,7 @@ void uapmd_app_create_plugin_instance(uapmd_app_model_t app,
                                        const uapmd_plugin_instance_config_t* config,
                                        void* user_data,
                                        uapmd_instance_created_cb_t callback) {
-    uapmd::AppModel::PluginInstanceConfig cfg;
+    uapmd_app::AppModel::PluginInstanceConfig cfg;
     if (config) {
         if (config->api_name) cfg.apiName = config->api_name;
         if (config->device_name) cfg.deviceName = config->device_name;
@@ -125,7 +126,7 @@ void uapmd_app_create_plugin_instance(uapmd_app_model_t app,
     }
 
     AM(app)->createPluginInstanceAsync(format, plugin_id, track_index, cfg,
-        [callback, user_data](const uapmd::AppModel::PluginInstanceResult& r) {
+        [callback, user_data](const uapmd_app::AppModel::PluginInstanceResult& r) {
             if (!callback) return;
             uapmd_plugin_instance_result_t cr;
             cr.instance_id = r.instanceId;
@@ -192,7 +193,7 @@ void uapmd_app_load_plugin_state(uapmd_app_model_t app,
                                    void* user_data,
                                    uapmd_plugin_state_cb_t callback) {
     AM(app)->loadPluginState(instance_id, filepath,
-        [callback, user_data](uapmd::AppModel::PluginStateResult r) {
+        [callback, user_data](uapmd_app::AppModel::PluginStateResult r) {
             if (!callback) return;
             uapmd_plugin_state_result_t cr;
             cr.instance_id = r.instanceId;
@@ -209,7 +210,7 @@ void uapmd_app_save_plugin_state(uapmd_app_model_t app,
                                    void* user_data,
                                    uapmd_plugin_state_cb_t callback) {
     AM(app)->savePluginState(instance_id, filepath,
-        [callback, user_data](uapmd::AppModel::PluginStateResult r) {
+        [callback, user_data](uapmd_app::AppModel::PluginStateResult r) {
             if (!callback) return;
             uapmd_plugin_state_result_t cr;
             cr.instance_id = r.instanceId;
@@ -224,7 +225,7 @@ void uapmd_app_save_plugin_state(uapmd_app_model_t app,
  *  Clip management
  * ═══════════════════════════════════════════════════════════════════════════ */
 
-static uapmd_clip_add_result_t to_c_clip_result(const uapmd::AppModel::ClipAddResult& r) {
+static uapmd_clip_add_result_t to_c_clip_result(const uapmd_app::AppModel::ClipAddResult& r) {
     tl_error = r.error;
     return { r.clipId, r.sourceNodeId, r.success, tl_error.empty() ? nullptr : tl_error.c_str() };
 }
@@ -372,7 +373,7 @@ void uapmd_app_request_show_instance_details(uapmd_app_model_t app, int32_t inst
  *  Track graph editing (DAG)
  * ═══════════════════════════════════════════════════════════════════════════ */
 
-static uapmd_graph_endpoint_t to_c_endpoint(const uapmd::AudioPluginGraphEndpoint& e) {
+static uapmd_graph_endpoint_t to_c_endpoint(const uapmd_graph::AudioPluginGraphEndpoint& e) {
     return {
         static_cast<uapmd_graph_endpoint_type_t>(e.type),
         e.instance_id,
@@ -380,9 +381,9 @@ static uapmd_graph_endpoint_t to_c_endpoint(const uapmd::AudioPluginGraphEndpoin
     };
 }
 
-static uapmd::AudioPluginGraphEndpoint to_cpp_endpoint(const uapmd_graph_endpoint_t& e) {
-    uapmd::AudioPluginGraphEndpoint r;
-    r.type = static_cast<uapmd::AudioPluginGraphEndpointType>(e.type);
+static uapmd_graph::AudioPluginGraphEndpoint to_cpp_endpoint(const uapmd_graph_endpoint_t& e) {
+    uapmd_graph::AudioPluginGraphEndpoint r;
+    r.type = static_cast<uapmd_graph::AudioPluginGraphEndpointType>(e.type);
     r.instance_id = e.instance_id;
     r.bus_index = e.bus_index;
     return r;
@@ -404,7 +405,7 @@ static thread_local std::vector<uapmd_graph_connection_t> tl_connections;
 static thread_local std::string tl_conn_error;
 
 uapmd_graph_connections_result_t uapmd_app_get_track_graph_connections(uapmd_app_model_t app, int32_t track_index) {
-    std::vector<uapmd::AudioPluginGraphConnection> conns;
+    std::vector<uapmd_graph::AudioPluginGraphConnection> conns;
     tl_conn_error.clear();
     bool ok = AM(app)->getTrackGraphConnections(track_index, conns, tl_conn_error);
     tl_connections.clear();
@@ -423,9 +424,9 @@ uapmd_graph_connections_result_t uapmd_app_get_track_graph_connections(uapmd_app
 uapmd_op_result_t uapmd_app_connect_track_graph(uapmd_app_model_t app,
                                                   int32_t track_index,
                                                   const uapmd_graph_connection_t* connection) {
-    uapmd::AudioPluginGraphConnection c;
+    uapmd_graph::AudioPluginGraphConnection c;
     c.id = connection->id;
-    c.bus_type = static_cast<uapmd::AudioPluginGraphBusType>(connection->bus_type);
+    c.bus_type = static_cast<uapmd_graph::AudioPluginGraphBusType>(connection->bus_type);
     c.source = to_cpp_endpoint(connection->source);
     c.target = to_cpp_endpoint(connection->target);
     tl_conn_error.clear();
@@ -633,7 +634,7 @@ bool uapmd_app_remove_ump_event_from_clip(uapmd_app_model_t app,
  * ═══════════════════════════════════════════════════════════════════════════ */
 
 void uapmd_app_save_project(uapmd_app_model_t app, const char* file_path, void* user_data, uapmd_project_save_cb_t callback) {
-    AM(app)->saveProject(file_path, [callback, user_data](uapmd::AppModel::ProjectResult r) {
+    AM(app)->saveProject(file_path, [callback, user_data](uapmd_app::AppModel::ProjectResult r) {
         if (!callback) return;
         tl_error = r.error;
         uapmd_app_project_result_t cr = { r.success, tl_error.empty() ? nullptr : tl_error.c_str() };
@@ -648,8 +649,8 @@ uapmd_app_project_result_t uapmd_app_save_project_sync(uapmd_app_model_t app, co
 }
 
 uapmd_app_project_result_t uapmd_app_load_project(uapmd_app_model_t app, const char* file_path) {
-    auto promise = std::make_shared<std::promise<uapmd::AppModel::ProjectResult>>();
-    AM(app)->loadProject(file_path, [promise](uapmd::AppModel::ProjectResult r) mutable {
+    auto promise = std::make_shared<std::promise<uapmd_app::AppModel::ProjectResult>>();
+    AM(app)->loadProject(file_path, [promise](uapmd_app::AppModel::ProjectResult r) mutable {
         promise->set_value(std::move(r));
     });
     auto r = promise->get_future().get();
@@ -668,7 +669,7 @@ uapmd_app_project_result_t uapmd_app_load_project_from_handle_token(uapmd_app_mo
  * ═══════════════════════════════════════════════════════════════════════════ */
 
 bool uapmd_app_start_render(uapmd_app_model_t app, const uapmd_app_render_settings_t* settings) {
-    uapmd::AppModel::RenderToFileSettings s;
+    uapmd_app::AppModel::RenderToFileSettings s;
     if (settings->output_path) s.outputPath = settings->output_path;
     s.startSeconds = settings->start_seconds;
     if (settings->has_end_seconds)

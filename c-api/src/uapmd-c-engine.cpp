@@ -4,6 +4,8 @@
 #include "c-api-internal.h"
 #include <uapmd-engine/uapmd-engine.hpp>
 #include <remidy/detail/event-loop.hpp>
+#include <algorithm>
+#include <cmath>
 #include <cstring>
 #include <functional>
 #include <future>
@@ -151,7 +153,10 @@ void uapmd_engine_set_sample_rate(uapmd_sequencer_engine_t engine, int32_t sampl
 bool uapmd_engine_get_offline_rendering(uapmd_sequencer_engine_t engine)          { return E(engine)->offlineRendering(); }
 void uapmd_engine_set_offline_rendering(uapmd_sequencer_engine_t engine, bool en) { E(engine)->offlineRendering(en); }
 void uapmd_engine_set_active(uapmd_sequencer_engine_t engine, bool active)        { E(engine)->setEngineActive(active); }
-void uapmd_engine_set_external_pump(uapmd_sequencer_engine_t engine, bool en)     { E(engine)->setExternalPump(en); }
+/* SequencerEngine::setExternalPump() was removed in uapmd 0.5.5 (the engine no
+ * longer runs an inline pump that a separate pump thread could race with).
+ * Kept as a no-op so the C ABI and the Kotlin bindings stay source-compatible. */
+void uapmd_engine_set_external_pump(uapmd_sequencer_engine_t engine, bool en)     { (void) engine; (void) en; }
 
 /* Playback */
 
@@ -174,8 +179,29 @@ void uapmd_engine_set_parameter_value(uapmd_sequencer_engine_t e, int32_t id, in
 
 /* Audio analysis */
 
-void uapmd_engine_get_input_spectrum(uapmd_sequencer_engine_t e, float* out, int n)  { E(e)->getInputSpectrum(out, n); }
-void uapmd_engine_get_output_spectrum(uapmd_sequencer_engine_t e, float* out, int n) { E(e)->getOutputSpectrum(out, n); }
+/* uapmd 0.5.5 replaced SequencerEngine::get{Input,Output}Spectrum() with
+ * AnalyserNode accessors. The C API keeps its "average magnitude per bar"
+ * contract (values in 0..1), so bucket the analyser's time-domain data here. */
+static void fill_spectrum_bars(uapmd_graph::webaudio_compat::AnalyserNode* analyser, float* out, int numBars) {
+    if (!out || numBars <= 0)
+        return;
+    if (!analyser) {
+        std::fill_n(out, numBars, 0.0f);
+        return;
+    }
+    constexpr int kSamplesPerBar = 8;
+    std::vector<float> samples(static_cast<size_t>(numBars) * kSamplesPerBar);
+    analyser->getFloatTimeDomainData(samples.data(), static_cast<uint32_t>(samples.size()));
+    for (int bar = 0; bar < numBars; ++bar) {
+        float sum = 0.0f;
+        for (int i = 0; i < kSamplesPerBar; ++i)
+            sum += std::abs(samples[static_cast<size_t>(bar) * kSamplesPerBar + i]);
+        out[bar] = sum / kSamplesPerBar;
+    }
+}
+
+void uapmd_engine_get_input_spectrum(uapmd_sequencer_engine_t e, float* out, int n)  { fill_spectrum_bars(E(e)->inputAnalyser(), out, n); }
+void uapmd_engine_get_output_spectrum(uapmd_sequencer_engine_t e, float* out, int n) { fill_spectrum_bars(E(e)->outputAnalyser(), out, n); }
 
 /* Timeline */
 
@@ -442,7 +468,9 @@ uapmd_audio_io_device_t uapmd_audio_device_mgr_open(uapmd_audio_io_device_mgr_t 
  * ═══════════════════════════════════════════════════════════════════════════ */
 
 double   uapmd_audio_device_sample_rate(uapmd_audio_io_device_t dev)      { return AD(dev)->sampleRate(); }
-uint32_t uapmd_audio_device_channels(uapmd_audio_io_device_t dev)         { return AD(dev)->channels(); }
+/* AudioIODevice::channels() was removed in uapmd 0.5.5; it always returned the
+ * output channel count, so keep that meaning for this C entry point. */
+uint32_t uapmd_audio_device_channels(uapmd_audio_io_device_t dev)         { return AD(dev)->outputChannels(); }
 uint32_t uapmd_audio_device_input_channels(uapmd_audio_io_device_t dev)   { return AD(dev)->inputChannels(); }
 uint32_t uapmd_audio_device_output_channels(uapmd_audio_io_device_t dev)  { return AD(dev)->outputChannels(); }
 uapmd_status_t uapmd_audio_device_start(uapmd_audio_io_device_t dev)      { return AD(dev)->start(); }

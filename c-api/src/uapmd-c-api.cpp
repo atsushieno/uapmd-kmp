@@ -1,7 +1,8 @@
 /* uapmd C API — implementation for the uapmd module bindings */
 
 #include "c-api/uapmd-c-api.h"
-#include <uapmd/uapmd.hpp>
+#include <uapmd-midi-service/uapmd-midi-service.hpp>
+#include <uapmd-plugin-hosting/uapmd-plugin-hosting.hpp>
 #include <uapmd-graph/uapmd-graph.hpp>
 #include <cstring>
 #include <memory>
@@ -10,19 +11,19 @@
 
 /* ── Cast helpers ─────────────────────────────────────────────────────────── */
 
-static uapmd::AudioPluginInstanceAPI* I(uapmd_plugin_instance_t h) { return reinterpret_cast<uapmd::AudioPluginInstanceAPI*>(h); }
-static uapmd::AudioPluginHostingAPI*  H(uapmd_plugin_host_t h)     { return reinterpret_cast<uapmd::AudioPluginHostingAPI*>(h); }
-static uapmd::AudioPluginGraph*       G(uapmd_plugin_graph_t h)    { return reinterpret_cast<uapmd::AudioPluginGraph*>(h); }
-static uapmd::AudioPluginNode*        N(uapmd_plugin_node_t h)     { return reinterpret_cast<uapmd::AudioPluginNode*>(h); }
-static uapmd::MidiIOFeature*          M(uapmd_midi_io_t h)         { return reinterpret_cast<uapmd::MidiIOFeature*>(h); }
-static uapmd::UapmdFunctionBlock*     FB(uapmd_function_block_t h) { return reinterpret_cast<uapmd::UapmdFunctionBlock*>(h); }
-static uapmd::UapmdFunctionBlockManager* FBM(uapmd_function_block_mgr_t h) { return reinterpret_cast<uapmd::UapmdFunctionBlockManager*>(h); }
-static uapmd::UapmdFunctionDevice*    FD(uapmd_function_device_t h) { return reinterpret_cast<uapmd::UapmdFunctionDevice*>(h); }
-static uapmd::UapmdUmpInputMapper*    UIN(uapmd_ump_input_mapper_t h) { return reinterpret_cast<uapmd::UapmdUmpInputMapper*>(h); }
-static uapmd::UapmdUmpOutputMapper*   UOUT(uapmd_ump_output_mapper_t h) { return reinterpret_cast<uapmd::UapmdUmpOutputMapper*>(h); }
+static uapmd_plugin_hosting::AudioPluginInstanceAPI* I(uapmd_plugin_instance_t h) { return reinterpret_cast<uapmd_plugin_hosting::AudioPluginInstanceAPI*>(h); }
+static uapmd_plugin_hosting::AudioPluginHostingAPI*  H(uapmd_plugin_host_t h)     { return reinterpret_cast<uapmd_plugin_hosting::AudioPluginHostingAPI*>(h); }
+static uapmd_graph::AudioPluginGraph*       G(uapmd_plugin_graph_t h)    { return reinterpret_cast<uapmd_graph::AudioPluginGraph*>(h); }
+static uapmd_graph::AudioPluginNode*        N(uapmd_plugin_node_t h)     { return reinterpret_cast<uapmd_graph::AudioPluginNode*>(h); }
+static uapmd_midi_service::MidiIOFeature*          M(uapmd_midi_io_t h)         { return reinterpret_cast<uapmd_midi_service::MidiIOFeature*>(h); }
+static uapmd_midi_service::UapmdFunctionBlock*     FB(uapmd_function_block_t h) { return reinterpret_cast<uapmd_midi_service::UapmdFunctionBlock*>(h); }
+static uapmd_midi_service::UapmdFunctionBlockManager* FBM(uapmd_function_block_mgr_t h) { return reinterpret_cast<uapmd_midi_service::UapmdFunctionBlockManager*>(h); }
+static uapmd_midi_service::UapmdFunctionDevice*    FD(uapmd_function_device_t h) { return reinterpret_cast<uapmd_midi_service::UapmdFunctionDevice*>(h); }
+static uapmd_midi_service::UapmdUmpInputMapper*    UIN(uapmd_ump_input_mapper_t h) { return reinterpret_cast<uapmd_midi_service::UapmdUmpInputMapper*>(h); }
+static uapmd_midi_service::UapmdUmpOutputMapper*   UOUT(uapmd_ump_output_mapper_t h) { return reinterpret_cast<uapmd_midi_service::UapmdUmpOutputMapper*>(h); }
 
 struct UiPresentationHandle {
-    uapmd::AudioPluginInstanceAPI* instance{};
+    uapmd_plugin_hosting::AudioPluginInstanceAPI* instance{};
     uapmd_ui_presentation_request_t request{};
     std::string web_container_id;
     void* resize_user_data{};
@@ -63,8 +64,8 @@ bool uapmd_instance_get_aap_ui_host_details(uapmd_plugin_instance_t inst, uapmd_
     if (!inst || !out)
         return false;
 
-    auto* extension = dynamic_cast<uapmd::AapUiHostDetailsExtension*>(
-        I(inst)->extension(uapmd::kAapUiHostDetailsExtensionId));
+    auto* extension = dynamic_cast<uapmd_plugin_hosting::AapUiHostDetailsExtension*>(
+        I(inst)->extension(uapmd_plugin_hosting::kAapUiHostDetailsExtensionId));
     if (!extension)
         return false;
 
@@ -91,7 +92,7 @@ bool     uapmd_instance_requires_replacing_process(uapmd_plugin_instance_t inst)
 /* ── Parameters ──────────────────────────────────────────────────────────── */
 
 /* Thread-local storage for parameter metadata conversion */
-static thread_local std::vector<uapmd::ParameterMetadata> tl_param_list;
+static thread_local std::vector<uapmd_plugin_hosting::ParameterMetadata> tl_param_list;
 static thread_local std::vector<uapmd_parameter_named_value_t> tl_named_values;
 static thread_local std::vector<std::string> tl_string_store;
 
@@ -152,7 +153,7 @@ size_t uapmd_instance_get_per_note_controller_value_string(uapmd_plugin_instance
 
 /* ── Presets ─────────────────────────────────────────────────────────────── */
 
-static thread_local std::vector<uapmd::PresetsMetadata> tl_preset_list;
+static thread_local std::vector<uapmd_plugin_hosting::PresetsMetadata> tl_preset_list;
 
 uint32_t uapmd_instance_preset_count(uapmd_plugin_instance_t inst) {
     tl_preset_list = I(inst)->presetMetadataList();
@@ -203,7 +204,7 @@ void uapmd_instance_request_state(uapmd_plugin_instance_t inst,
                                    void* user_data,
                                    uapmd_request_state_cb_t callback) {
     I(inst)->requestState(
-        static_cast<uapmd::StateContextType>(ctx),
+        static_cast<uapmd_plugin_hosting::StateContextType>(ctx),
         include_ui_state,
         user_data,
         [callback](std::vector<uint8_t> state, std::string error, void* ud) {
@@ -220,7 +221,7 @@ void uapmd_instance_load_state(uapmd_plugin_instance_t inst,
     std::vector<uint8_t> data(state, state + state_size);
     I(inst)->loadState(
         std::move(data),
-        static_cast<uapmd::StateContextType>(ctx),
+        static_cast<uapmd_plugin_hosting::StateContextType>(ctx),
         include_ui_state,
         user_data,
         [callback](std::string error, void* ud) {
@@ -359,10 +360,10 @@ bool uapmd_ui_presentation_can_resize(uapmd_ui_presentation_t presentation) {
 #include <mutex>
 
 static std::mutex s_host_mutex;
-static std::unordered_map<uapmd::AudioPluginHostingAPI*, std::unique_ptr<uapmd::AudioPluginHostingAPI>> s_owned_hosts;
+static std::unordered_map<uapmd_plugin_hosting::AudioPluginHostingAPI*, std::unique_ptr<uapmd_plugin_hosting::AudioPluginHostingAPI>> s_owned_hosts;
 
 uapmd_plugin_host_t uapmd_plugin_host_create() {
-    auto host = uapmd::AudioPluginHostingAPI::create();
+    auto host = uapmd_plugin_hosting::AudioPluginHostingAPI::create();
     auto raw = host.get();
     std::lock_guard lock(s_host_mutex);
     s_owned_hosts[raw] = std::move(host);
@@ -475,10 +476,10 @@ void uapmd_node_send_all_notes_off(uapmd_plugin_node_t node) { N(node)->sendAllN
  * ═══════════════════════════════════════════════════════════════════════════ */
 
 static std::mutex s_graph_mutex;
-static std::unordered_map<uapmd::AudioPluginGraph*, std::unique_ptr<uapmd::AudioPluginGraph>> s_owned_graphs;
+static std::unordered_map<uapmd_graph::AudioPluginGraph*, std::unique_ptr<uapmd_graph::AudioPluginGraph>> s_owned_graphs;
 
 uapmd_plugin_graph_t uapmd_graph_create(size_t event_buffer_size_in_bytes) {
-    auto graph = uapmd::AudioPluginGraph::create(event_buffer_size_in_bytes);
+    auto graph = uapmd_graph::AudioPluginGraph::create(event_buffer_size_in_bytes);
     auto raw = graph.get();
     std::lock_guard lock(s_graph_mutex);
     s_owned_graphs[raw] = std::move(graph);

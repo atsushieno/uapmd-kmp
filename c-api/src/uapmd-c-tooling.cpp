@@ -1,7 +1,7 @@
 /* uapmd C API — implementation for remidy-tooling bindings */
 
 #include "c-api/uapmd-c-tooling.h"
-#include <remidy-tooling/remidy-tooling.hpp>
+#include <uapmd-plugin-hosting/uapmd-plugin-hosting.hpp>
 #include <cstring>
 #include <string>
 #include <vector>
@@ -10,9 +10,9 @@
 
 /* ── Cast helpers ─────────────────────────────────────────────────────────── */
 
-static remidy_tooling::PluginScanTool*   PST(uapmd_scan_tool_t h) { return reinterpret_cast<remidy_tooling::PluginScanTool*>(h); }
-static remidy_tooling::PluginInstancing* PI(uapmd_plugin_instancing_t h) { return reinterpret_cast<remidy_tooling::PluginInstancing*>(h); }
-static remidy_tooling::PluginFormatManager* PFM(uapmd_format_manager_t h) { return reinterpret_cast<remidy_tooling::PluginFormatManager*>(h); }
+static uapmd_plugin_hosting::PluginScanTool*   PST(uapmd_scan_tool_t h) { return reinterpret_cast<uapmd_plugin_hosting::PluginScanTool*>(h); }
+static uapmd_plugin_hosting::PluginInstancing* PI(uapmd_plugin_instancing_t h) { return reinterpret_cast<uapmd_plugin_hosting::PluginInstancing*>(h); }
+static uapmd_plugin_hosting::PluginFormatManager* PFM(uapmd_format_manager_t h) { return reinterpret_cast<uapmd_plugin_hosting::PluginFormatManager*>(h); }
 
 /* ── copy_string ──────────────────────────────────────────────────────────── */
 
@@ -28,25 +28,25 @@ static size_t copy_string(const std::string& src, char* buf, size_t buf_size) {
 /* ── Ownership registries ─────────────────────────────────────────────────── */
 
 static std::mutex s_scan_tool_mutex;
-static std::unordered_map<remidy_tooling::PluginScanTool*, std::unique_ptr<remidy_tooling::PluginScanTool>> s_owned_scan_tools;
+static std::unordered_map<uapmd_plugin_hosting::PluginScanTool*, std::unique_ptr<uapmd_plugin_hosting::PluginScanTool>> s_owned_scan_tools;
 
 static std::mutex s_instancing_mutex;
-static std::unordered_map<remidy_tooling::PluginInstancing*, std::unique_ptr<remidy_tooling::PluginInstancing>> s_owned_instancings;
+static std::unordered_map<uapmd_plugin_hosting::PluginInstancing*, std::unique_ptr<uapmd_plugin_hosting::PluginInstancing>> s_owned_instancings;
 
 static std::mutex s_fmt_mgr_mutex;
-static std::unordered_map<remidy_tooling::PluginFormatManager*, std::unique_ptr<remidy_tooling::PluginFormatManager>> s_owned_fmt_mgrs;
+static std::unordered_map<uapmd_plugin_hosting::PluginFormatManager*, std::unique_ptr<uapmd_plugin_hosting::PluginFormatManager>> s_owned_fmt_mgrs;
 
 /* ── Thread-local storage ─────────────────────────────────────────────────── */
 
 static thread_local std::vector<remidy::PluginFormat*> tl_formats;
-static thread_local std::vector<remidy_tooling::BlocklistEntry> tl_blocklist;
+static thread_local std::vector<uapmd_plugin_hosting::BlocklistEntry> tl_blocklist;
 
 /* ═══════════════════════════════════════════════════════════════════════════
  *  PluginScanTool
  * ═══════════════════════════════════════════════════════════════════════════ */
 
 uapmd_scan_tool_t uapmd_scan_tool_create() {
-    auto tool = remidy_tooling::PluginScanTool::create();
+    auto tool = uapmd_plugin_hosting::PluginScanTool::create();
     auto raw = tool.get();
     std::lock_guard lock(s_scan_tool_mutex);
     s_owned_scan_tools[raw] = std::move(tool);
@@ -98,7 +98,7 @@ void uapmd_scan_tool_perform_scanning(uapmd_scan_tool_t tool,
                                        const uapmd_scan_observer_t* observer) {
     // On WASM the scan is asynchronous (returns before callbacks fire), so obs must
     // outlive this function. Heap-allocate and self-delete in slowScanCompleted.
-    auto* obs = new remidy_tooling::PluginScanObserver{};
+    auto* obs = new uapmd_plugin_hosting::PluginScanObserver{};
     void* ud = observer ? observer->user_data : nullptr;
 
     if (observer && observer->slow_scan_started)
@@ -119,7 +119,7 @@ void uapmd_scan_tool_perform_scanning(uapmd_scan_tool_t tool,
     };
 
     PST(tool)->performPluginScanning(require_fast_scanning,
-        remidy_tooling::ScanMode::InProcess, false, 0.0, obs);
+        uapmd_plugin_hosting::ScanMode::InProcess, false, 0.0, obs);
     // obs is now owned by the async scan chain; do not use it after this point.
 }
 
@@ -168,7 +168,7 @@ size_t uapmd_scan_tool_last_scan_error(uapmd_scan_tool_t tool, char* buf, size_t
 uapmd_plugin_instancing_t uapmd_instancing_create(uapmd_scan_tool_t tool,
                                                     const char* format,
                                                     const char* plugin_id) {
-    auto inst = std::make_unique<remidy_tooling::PluginInstancing>(
+    auto inst = std::make_unique<uapmd_plugin_hosting::PluginInstancing>(
         *PST(tool), format ? format : "", plugin_id ? plugin_id : "");
     auto raw = inst.get();
     std::lock_guard lock(s_instancing_mutex);
@@ -202,7 +202,7 @@ uapmd_instancing_state_t uapmd_instancing_state(uapmd_plugin_instancing_t inst) 
 static thread_local std::vector<remidy::PluginFormat*> tl_mgr_formats;
 
 uapmd_format_manager_t uapmd_format_manager_create() {
-    auto mgr = std::make_unique<remidy_tooling::PluginFormatManager>();
+    auto mgr = std::make_unique<uapmd_plugin_hosting::PluginFormatManager>();
     auto raw = mgr.get();
     std::lock_guard lock(s_fmt_mgr_mutex);
     s_owned_fmt_mgrs[raw] = std::move(mgr);
