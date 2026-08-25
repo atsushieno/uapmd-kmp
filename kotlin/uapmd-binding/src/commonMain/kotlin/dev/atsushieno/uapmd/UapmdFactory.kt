@@ -16,3 +16,4 @@ expect fun createAudioFileReader(filepath: String): AudioFileReader
 expect fun createScanTool(): ScanTool
 expect fun createFormatManager(): FormatManager
 expect fun createPluginInstancing(scanTool: ScanTool, format: String, pluginId: String): PluginInstancing
+expect fun createAddinManager(): AddinManager

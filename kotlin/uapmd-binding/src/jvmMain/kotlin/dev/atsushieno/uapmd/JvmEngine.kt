@@ -117,6 +117,29 @@ class JvmSequencerEngine internal constructor(
     override val timeline: TimelineFacade
         get() = JvmTimelineFacade(lib.uapmd_engine_timeline(handle) ?: error("uapmd_engine_timeline returned null"))
 
+    // ─── Project / track dirty state (uapmd 0.5.6) ──────────────────────────
+
+    override val isProjectDirty: Boolean get() = lib.uapmd_engine_is_project_dirty(handle)
+    override fun isTrackDirty(trackIndex: Int) = lib.uapmd_engine_is_track_dirty(handle, trackIndex)
+    override fun markTrackDirty(trackIndex: Int, dirty: Boolean) = lib.uapmd_engine_mark_track_dirty(handle, trackIndex, dirty)
+    override fun clearTrackDirtyState() = lib.uapmd_engine_clear_track_dirty_state(handle)
+
+    override var masterTrackMarkers: List<ClipMarkerData>
+        get() {
+            val count = lib.uapmd_engine_master_marker_count(handle)
+            if (count == 0) return emptyList()
+            return (0 until count).mapNotNull { i ->
+                val out = dev.atsushieno.uapmd.jna.UapmdClipMarker()
+                if (!lib.uapmd_engine_get_master_marker(handle, i, out)) return@mapNotNull null
+                out.read()
+                out.toKotlin()
+            }
+        }
+        set(value) = lib.uapmd_engine_set_master_markers(handle, value.toJvmArray(), value.size)
+
+    override fun registerAddinExtensionPoints(manager: AddinManager) =
+        lib.uapmd_engine_register_addin_extension_points(handle, (manager as JvmAddinManager).handle)
+
     override fun renderOffline(
         settings: OfflineRenderSettings,
         progressCallback: ((OfflineRenderProgress) -> Unit)?,

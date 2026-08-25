@@ -544,6 +544,266 @@ external interface UapmdCApiModule : JsAny {
     /** Callback: void(const char* error) */
     @JsName("_uapmd_instancing_make_alive")
     fun uapmdInstancingMakeAlive(handle: Int, callback: Int, ctx: Int)
+
+    // ── Project history: ProjectUndoEngine (uapmd 0.5.6) ───────────────────
+    //
+    // Functions returning a C struct take a hidden result pointer as their
+    // FIRST argument (Emscripten sret), and a struct passed by value is passed
+    // as a pointer in its declared position.
+
+    @JsName("_uapmd_undo_engine_get_state")
+    fun uapmdUndoEngineGetState(eng: Int, outPtr: Int): Boolean
+    @JsName("_uapmd_undo_engine_undo")
+    fun uapmdUndoEngineUndo(eng: Int, userData: Int, callback: Int)
+    @JsName("_uapmd_undo_engine_redo")
+    fun uapmdUndoEngineRedo(eng: Int, userData: Int, callback: Int)
+    @JsName("_uapmd_undo_engine_begin_compound")
+    fun uapmdUndoEngineBeginCompound(outPtr: Int, eng: Int, descPtr: Int, origin: Int)
+    @JsName("_uapmd_undo_engine_end_compound")
+    fun uapmdUndoEngineEndCompound(eng: Int, userData: Int, callback: Int)
+    @JsName("_uapmd_undo_engine_cancel_compound")
+    fun uapmdUndoEngineCancelCompound(eng: Int, userData: Int, callback: Int)
+    @JsName("_uapmd_undo_engine_begin_gesture")
+    fun uapmdUndoEngineBeginGesture(outPtr: Int, eng: Int, descPtr: Int, origin: Int)
+    @JsName("_uapmd_undo_engine_end_gesture")
+    fun uapmdUndoEngineEndGesture(eng: Int, userData: Int, callback: Int)
+    @JsName("_uapmd_undo_engine_cancel_gesture")
+    fun uapmdUndoEngineCancelGesture(eng: Int, userData: Int, callback: Int)
+    @JsName("_uapmd_undo_engine_clear")
+    fun uapmdUndoEngineClear(eng: Int, markCurrentStateSaved: Boolean): Boolean
+    @JsName("_uapmd_undo_engine_mark_saved")
+    fun uapmdUndoEngineMarkSaved(eng: Int): Boolean
+    @JsName("_uapmd_undo_engine_shutdown")
+    fun uapmdUndoEngineShutdown(eng: Int)
+
+    // ── Project history: ProjectCommandManager ─────────────────────────────
+
+    @JsName("_uapmd_command_manager_get_state")
+    fun uapmdCommandManagerGetState(cm: Int, outPtr: Int): Boolean
+    @JsName("_uapmd_command_manager_history")
+    fun uapmdCommandManagerHistory(cm: Int): Int
+    @JsName("_uapmd_command_manager_undo")
+    fun uapmdCommandManagerUndo(cm: Int, userData: Int, callback: Int)
+    @JsName("_uapmd_command_manager_redo")
+    fun uapmdCommandManagerRedo(cm: Int, userData: Int, callback: Int)
+    @JsName("_uapmd_command_manager_begin_step")
+    fun uapmdCommandManagerBeginStep(outPtr: Int, cm: Int, descPtr: Int, origin: Int)
+    @JsName("_uapmd_command_manager_end_step")
+    fun uapmdCommandManagerEndStep(cm: Int, userData: Int, callback: Int)
+    @JsName("_uapmd_command_manager_cancel_step")
+    fun uapmdCommandManagerCancelStep(cm: Int, userData: Int, callback: Int)
+    @JsName("_uapmd_command_manager_begin_gesture")
+    fun uapmdCommandManagerBeginGesture(outPtr: Int, cm: Int, descPtr: Int, origin: Int)
+    @JsName("_uapmd_command_manager_end_gesture")
+    fun uapmdCommandManagerEndGesture(cm: Int, userData: Int, callback: Int)
+    @JsName("_uapmd_command_manager_cancel_gesture")
+    fun uapmdCommandManagerCancelGesture(cm: Int, userData: Int, callback: Int)
+    @JsName("_uapmd_command_manager_shutdown")
+    fun uapmdCommandManagerShutdown(cm: Int)
+
+    // ── Project history: ProjectCommands ───────────────────────────────────
+
+    @JsName("_uapmd_commands_history")
+    fun uapmdCommandsHistory(cmd: Int): Int
+    @JsName("_uapmd_commands_set_clip_enabled")
+    fun uapmdCommandsSetClipEnabled(cmd: Int, t: Int, c: Int, v: Boolean, o: Int): Boolean
+    @JsName("_uapmd_commands_set_clip_anchor")
+    fun uapmdCommandsSetClipAnchor(cmd: Int, t: Int, c: Int, anchorPtr: Int, o: Int): Boolean
+    @JsName("_uapmd_commands_set_clip_gain")
+    fun uapmdCommandsSetClipGain(cmd: Int, t: Int, c: Int, v: Double, o: Int): Boolean
+    @JsName("_uapmd_commands_set_clip_muted")
+    fun uapmdCommandsSetClipMuted(cmd: Int, t: Int, c: Int, v: Boolean, o: Int): Boolean
+    @JsName("_uapmd_commands_set_clip_name")
+    fun uapmdCommandsSetClipName(cmd: Int, t: Int, c: Int, namePtr: Int, o: Int): Boolean
+    @JsName("_uapmd_commands_set_clip_filepath")
+    fun uapmdCommandsSetClipFilepath(cmd: Int, t: Int, c: Int, pathPtr: Int, o: Int): Boolean
+    @JsName("_uapmd_commands_set_clip_needs_file_save")
+    fun uapmdCommandsSetClipNeedsFileSave(cmd: Int, t: Int, c: Int, v: Boolean, o: Int): Boolean
+    @JsName("_uapmd_commands_set_clip_markers")
+    fun uapmdCommandsSetClipMarkers(cmd: Int, t: Int, c: Int, markersPtr: Int, count: Int, o: Int): Boolean
+    @JsName("_uapmd_commands_set_clip_audio_warps")
+    fun uapmdCommandsSetClipAudioWarps(cmd: Int, t: Int, c: Int, warpsPtr: Int, count: Int, o: Int): Boolean
+    @JsName("_uapmd_commands_set_track_gain")
+    fun uapmdCommandsSetTrackGain(cmd: Int, t: Int, v: Double, o: Int): Boolean
+    @JsName("_uapmd_commands_set_track_muted")
+    fun uapmdCommandsSetTrackMuted(cmd: Int, t: Int, v: Boolean, o: Int): Boolean
+    @JsName("_uapmd_commands_set_track_solo")
+    fun uapmdCommandsSetTrackSolo(cmd: Int, t: Int, v: Boolean, o: Int): Boolean
+    @JsName("_uapmd_commands_set_track_bypassed")
+    fun uapmdCommandsSetTrackBypassed(cmd: Int, t: Int, v: Boolean, o: Int): Boolean
+    @JsName("_uapmd_commands_set_track_freeze_policy_enabled")
+    fun uapmdCommandsSetTrackFreezePolicyEnabled(cmd: Int, t: Int, v: Boolean, o: Int): Boolean
+    @JsName("_uapmd_commands_set_plugin_bypassed")
+    fun uapmdCommandsSetPluginBypassed(cmd: Int, id: Int, v: Boolean, o: Int): Boolean
+    @JsName("_uapmd_commands_set_plugin_parameter_value")
+    fun uapmdCommandsSetPluginParameterValue(cmd: Int, id: Int, idx: Int, v: Double, o: Int): Boolean
+    @JsName("_uapmd_commands_set_plugin_per_note_controller_value")
+    fun uapmdCommandsSetPluginPerNoteControllerValue(
+        cmd: Int, id: Int, contextType: Int, note: Int, channel: Int, group: Int, extra: Int,
+        idx: Int, v: Double, o: Int
+    ): Boolean
+    @JsName("_uapmd_commands_set_plugin_group")
+    fun uapmdCommandsSetPluginGroup(cmd: Int, id: Int, group: Int, o: Int): Boolean
+    @JsName("_uapmd_commands_set_master_track_markers")
+    fun uapmdCommandsSetMasterTrackMarkers(cmd: Int, markersPtr: Int, count: Int, o: Int): Boolean
+
+    // ── Project history: ProjectAddressBook ────────────────────────────────
+
+    @JsName("_uapmd_addresses_timeline_track")
+    fun uapmdAddressesTimelineTrack(ab: Int, refIdPtr: Int): Int
+    @JsName("_uapmd_addresses_sequencer_track")
+    fun uapmdAddressesSequencerTrack(ab: Int, refIdPtr: Int): Int
+    @JsName("_uapmd_addresses_track_index")
+    fun uapmdAddressesTrackIndex(ab: Int, refIdPtr: Int): Int
+    @JsName("_uapmd_addresses_clip_id")
+    fun uapmdAddressesClipId(ab: Int, addressPtr: Int): Int
+    @JsName("_uapmd_addresses_plugin_instance_id")
+    fun uapmdAddressesPluginInstanceId(ab: Int, addressPtr: Int): Int
+    @JsName("_uapmd_addresses_track_reference_id")
+    fun uapmdAddressesTrackReferenceId(ab: Int, trackIndex: Int): Int
+    @JsName("_uapmd_addresses_clip_address")
+    fun uapmdAddressesClipAddress(ab: Int, trackIndex: Int, clipId: Int, outPtr: Int): Boolean
+    @JsName("_uapmd_addresses_plugin_address")
+    fun uapmdAddressesPluginAddress(ab: Int, instanceId: Int, outPtr: Int): Boolean
+
+    // ── Fragments ──────────────────────────────────────────────────────────
+
+    @JsName("_uapmd_clip_fragment_destroy")
+    fun uapmdClipFragmentDestroy(fragment: Int)
+    @JsName("_uapmd_clip_fragment_is_midi")
+    fun uapmdClipFragmentIsMidi(fragment: Int): Boolean
+    @JsName("_uapmd_clip_fragment_get_clip")
+    fun uapmdClipFragmentGetClip(fragment: Int, outPtr: Int): Boolean
+    @JsName("_uapmd_clip_fragment_get_ump_events")
+    fun uapmdClipFragmentGetUmpEvents(fragment: Int, outPtr: Int, outCount: Int): Int
+    @JsName("_uapmd_clip_fragment_get_ump_tick_timestamps")
+    fun uapmdClipFragmentGetUmpTickTimestamps(fragment: Int, outPtr: Int, outCount: Int): Int
+    @JsName("_uapmd_clip_fragment_extension_state_count")
+    fun uapmdClipFragmentExtensionStateCount(fragment: Int): Int
+    @JsName("_uapmd_clip_fragment_extension_state_key")
+    fun uapmdClipFragmentExtensionStateKey(fragment: Int, index: Int, buf: Int, bufSize: Int): Int
+    @JsName("_uapmd_clip_fragment_extension_state_data")
+    fun uapmdClipFragmentExtensionStateData(fragment: Int, index: Int, buf: Int, bufSize: Int): Int
+
+    @JsName("_uapmd_track_fragment_destroy")
+    fun uapmdTrackFragmentDestroy(fragment: Int)
+    @JsName("_uapmd_track_fragment_reference_id")
+    fun uapmdTrackFragmentReferenceId(fragment: Int, buf: Int, bufSize: Int): Int
+    @JsName("_uapmd_track_fragment_volume")
+    fun uapmdTrackFragmentVolume(fragment: Int): Double
+    @JsName("_uapmd_track_fragment_muted")
+    fun uapmdTrackFragmentMuted(fragment: Int): Boolean
+    @JsName("_uapmd_track_fragment_solo")
+    fun uapmdTrackFragmentSolo(fragment: Int): Boolean
+    @JsName("_uapmd_track_fragment_graph_type")
+    fun uapmdTrackFragmentGraphType(fragment: Int, buf: Int, bufSize: Int): Int
+    @JsName("_uapmd_track_fragment_graph_bytes")
+    fun uapmdTrackFragmentGraphBytes(fragment: Int, buf: Int, bufSize: Int): Int
+    @JsName("_uapmd_track_fragment_clip_count")
+    fun uapmdTrackFragmentClipCount(fragment: Int): Int
+    @JsName("_uapmd_track_fragment_get_clip")
+    fun uapmdTrackFragmentGetClip(fragment: Int, index: Int): Int
+    @JsName("_uapmd_track_fragment_plugin_count")
+    fun uapmdTrackFragmentPluginCount(fragment: Int): Int
+    @JsName("_uapmd_track_fragment_get_plugin")
+    fun uapmdTrackFragmentGetPlugin(fragment: Int, index: Int, outPtr: Int): Boolean
+
+    // ── TimelineFacade history accessors and undoable mutations ────────────
+
+    @JsName("_uapmd_tl_undo_engine")
+    fun uapmdTlUndoEngine(tl: Int): Int
+    @JsName("_uapmd_tl_commands")
+    fun uapmdTlCommands(tl: Int): Int
+    @JsName("_uapmd_tl_addresses")
+    fun uapmdTlAddresses(tl: Int): Int
+    @JsName("_uapmd_tl_begin_document_transaction")
+    fun uapmdTlBeginDocumentTransaction(tl: Int)
+    @JsName("_uapmd_tl_end_document_transaction")
+    fun uapmdTlEndDocumentTransaction(tl: Int)
+    @JsName("_uapmd_tl_remove_clip_with_origin")
+    fun uapmdTlRemoveClipWithOrigin(tl: Int, t: Int, c: Int, o: Int): Boolean
+    @JsName("_uapmd_tl_clear_clips_from_track")
+    fun uapmdTlClearClipsFromTrack(tl: Int, t: Int, o: Int): Boolean
+    @JsName("_uapmd_tl_clip_enabled")
+    fun uapmdTlClipEnabled(tl: Int, t: Int, c: Int): Boolean
+    @JsName("_uapmd_tl_replace_midi_clip_content")
+    fun uapmdTlReplaceMidiClipContent(
+        tl: Int, t: Int, c: Int, eventsPtr: Int, eventCount: Int, ticksPtr: Int, tickCount: Int, o: Int
+    ): Boolean
+    @JsName("_uapmd_tl_replace_audio_clip_content")
+    fun uapmdTlReplaceAudioClipContent(
+        tl: Int, t: Int, c: Int, filepathPtr: Int,
+        markersPtr: Int, markerCount: Int, warpsPtr: Int, warpCount: Int,
+        masterMarkersPtr: Int, masterMarkerCount: Int, o: Int
+    ): Boolean
+    @JsName("_uapmd_tl_capture_clip_fragment")
+    fun uapmdTlCaptureClipFragment(tl: Int, t: Int, c: Int): Int
+    @JsName("_uapmd_tl_attach_clip_fragment")
+    fun uapmdTlAttachClipFragment(outPtr: Int, tl: Int, t: Int, fragment: Int, idPolicy: Int)
+    @JsName("_uapmd_tl_capture_track_fragment")
+    fun uapmdTlCaptureTrackFragment(tl: Int, t: Int, userData: Int, callback: Int)
+    @JsName("_uapmd_tl_attach_track_fragment")
+    fun uapmdTlAttachTrackFragment(tl: Int, fragment: Int, optionsPtr: Int, userData: Int, callback: Int)
+    @JsName("_uapmd_tl_add_empty_track")
+    fun uapmdTlAddEmptyTrackUndoable(tl: Int, o: Int, userData: Int, callback: Int)
+    @JsName("_uapmd_tl_remove_track")
+    fun uapmdTlRemoveTrackUndoable(tl: Int, t: Int, o: Int, userData: Int, callback: Int)
+    @JsName("_uapmd_tl_record_track_addition")
+    fun uapmdTlRecordTrackAddition(tl: Int, t: Int, o: Int, userData: Int, callback: Int)
+    @JsName("_uapmd_tl_set_plugin_state")
+    fun uapmdTlSetPluginState(tl: Int, id: Int, statePtr: Int, stateSize: Int, o: Int, userData: Int, callback: Int)
+    @JsName("_uapmd_tl_load_plugin_preset")
+    fun uapmdTlLoadPluginPreset(tl: Int, id: Int, presetIndex: Int, o: Int, userData: Int, callback: Int)
+    @JsName("_uapmd_tl_record_plugin_instance_addition")
+    fun uapmdTlRecordPluginInstanceAddition(tl: Int, id: Int, o: Int, userData: Int, callback: Int)
+    @JsName("_uapmd_tl_remove_plugin_instance")
+    fun uapmdTlRemovePluginInstanceUndoable(tl: Int, id: Int, o: Int, userData: Int, callback: Int)
+    @JsName("_uapmd_tl_has_pending_plugin_mutations")
+    fun uapmdTlHasPendingPluginMutations(tl: Int): Boolean
+
+    // ── Engine dirty state, master markers, addin extension points ─────────
+
+    @JsName("_uapmd_engine_is_project_dirty")
+    fun uapmdEngineIsProjectDirty(engine: Int): Boolean
+    @JsName("_uapmd_engine_is_track_dirty")
+    fun uapmdEngineIsTrackDirty(engine: Int, t: Int): Boolean
+    @JsName("_uapmd_engine_mark_track_dirty")
+    fun uapmdEngineMarkTrackDirty(engine: Int, t: Int, dirty: Boolean)
+    @JsName("_uapmd_engine_clear_track_dirty_state")
+    fun uapmdEngineClearTrackDirtyState(engine: Int)
+    @JsName("_uapmd_engine_master_marker_count")
+    fun uapmdEngineMasterMarkerCount(engine: Int): Int
+    @JsName("_uapmd_engine_get_master_marker")
+    fun uapmdEngineGetMasterMarker(engine: Int, index: Int, outPtr: Int): Boolean
+    @JsName("_uapmd_engine_set_master_markers")
+    fun uapmdEngineSetMasterMarkers(engine: Int, markersPtr: Int, count: Int)
+    @JsName("_uapmd_engine_register_addin_extension_points")
+    fun uapmdEngineRegisterAddinExtensionPoints(engine: Int, mgr: Int)
+
+    // ── AddinManager ───────────────────────────────────────────────────────
+
+    @JsName("_uapmd_addin_manager_create")
+    fun uapmdAddinManagerCreate(): Int
+    @JsName("_uapmd_addin_manager_destroy")
+    fun uapmdAddinManagerDestroy(mgr: Int)
+    @JsName("_uapmd_addin_manager_initialize")
+    fun uapmdAddinManagerInitialize(mgr: Int)
+    @JsName("_uapmd_addin_manager_set_enabled")
+    fun uapmdAddinManagerSetEnabled(mgr: Int, packageIdPtr: Int, addinIdPtr: Int, enabled: Boolean): Boolean
+    @JsName("_uapmd_addin_manager_shutdown")
+    fun uapmdAddinManagerShutdown(mgr: Int)
+    @JsName("_uapmd_addin_manager_directory_count")
+    fun uapmdAddinManagerDirectoryCount(mgr: Int): Int
+    @JsName("_uapmd_addin_manager_get_directory")
+    fun uapmdAddinManagerGetDirectory(mgr: Int, index: Int, buf: Int, bufSize: Int): Int
+    @JsName("_uapmd_addin_manager_addin_count")
+    fun uapmdAddinManagerAddinCount(mgr: Int): Int
+    @JsName("_uapmd_addin_manager_get_addin")
+    fun uapmdAddinManagerGetAddin(mgr: Int, index: Int, outPtr: Int): Boolean
+    @JsName("_uapmd_addin_manager_last_error")
+    fun uapmdAddinManagerLastError(mgr: Int, buf: Int, bufSize: Int): Int
+    @JsName("_uapmd_addin_supports_dynamic_loading")
+    fun uapmdAddinSupportsDynamicLoading(): Boolean
 }
 
 // ── External adapter declarations ────────────────────────────────────────────
@@ -773,4 +1033,49 @@ fun uapmdDispatchRequestState(cbId: Int, dataPtr: Int, size: Int, errorPtr: Int)
 fun uapmdDispatchLoadState(cbId: Int, errorPtr: Int) {
     val error = if (errorPtr != 0) wasmMod.utf8ToString(errorPtr) else null
     pendingLoadStateCallbacks.remove(cbId)?.invoke(error)
+}
+
+
+// ── Project history: BigInt-valued parameters ────────────────────────────────
+//
+// The Wasm module is linked with -sWASM_BIGINT=1, so scalar i64 parameters must
+// arrive as BigInt. Passing the value as a decimal string keeps it exact for
+// magnitudes beyond 2^53.
+
+@JsFun("(mod, eng, v) => mod._uapmd_undo_engine_mark_state_saved(eng, BigInt(v))")
+internal external fun wasmUndoEngineMarkStateSaved(mod: UapmdCApiModule, eng: Int, v: String): Boolean
+
+@JsFun("(mod, eng, v) => mod._uapmd_undo_engine_set_maximum_history_size(eng, BigInt(v))")
+internal external fun wasmUndoEngineSetMaximumHistorySize(mod: UapmdCApiModule, eng: Int, v: String): Boolean
+
+@JsFun("(mod, cmd, t, c, v, o) => mod._uapmd_commands_resize_clip(cmd, t, c, BigInt(v), o)")
+internal external fun wasmCommandsResizeClip(mod: UapmdCApiModule, cmd: Int, t: Int, c: Int, v: String, o: Int): Boolean
+
+// ── Project history callback dispatch ───────────────────────────────────────
+
+internal val pendingUndoCompletions   = mutableMapOf<Int, (UndoResult) -> Unit>()
+internal val pendingTrackMutations    = mutableMapOf<Int, (Int, String?) -> Unit>()
+internal val pendingTrackFragments    = mutableMapOf<Int, (TrackFragment?, String?) -> Unit>()
+
+/** The C callback takes uapmd_undo_result_t by value, i.e. as a pointer. */
+@JsExport
+fun uapmdDispatchUndoCompletion(cbId: Int, resultPtr: Int) {
+    val mod = wasmMod
+    val status = mod.getValue(resultPtr, "i32").toInt()
+    val errorPtr = mod.getValue(resultPtr + 4, "i32").toInt()
+    val error = if (errorPtr != 0) mod.utf8ToString(errorPtr) else null
+    pendingUndoCompletions.remove(cbId)?.invoke(UndoResult(UndoStatus.fromNative(status), error))
+}
+
+@JsExport
+fun uapmdDispatchTrackMutation(cbId: Int, trackIndex: Int, errorPtr: Int) {
+    val error = if (errorPtr != 0) wasmMod.utf8ToString(errorPtr) else null
+    pendingTrackMutations.remove(cbId)?.invoke(trackIndex, error)
+}
+
+@JsExport
+fun uapmdDispatchTrackFragment(cbId: Int, fragmentPtr: Int, errorPtr: Int) {
+    val error = if (errorPtr != 0) wasmMod.utf8ToString(errorPtr) else null
+    val fragment = if (fragmentPtr != 0) WasmJsTrackFragment(fragmentPtr) else null
+    pendingTrackFragments.remove(cbId)?.invoke(fragment, error)
 }

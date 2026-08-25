@@ -210,6 +210,55 @@ uapmd_timeline_facade_t uapmd_engine_timeline(uapmd_sequencer_engine_t engine) {
 }
 
 /* ═══════════════════════════════════════════════════════════════════════════
+ *  Project / track dirty state (uapmd 0.5.6)
+ * ═══════════════════════════════════════════════════════════════════════════ */
+
+bool uapmd_engine_is_project_dirty(uapmd_sequencer_engine_t engine) { return E(engine)->isProjectDirty(); }
+bool uapmd_engine_is_track_dirty(uapmd_sequencer_engine_t engine, int32_t track_index) { return E(engine)->isTrackDirty(track_index); }
+void uapmd_engine_mark_track_dirty(uapmd_sequencer_engine_t engine, int32_t track_index, bool dirty) { E(engine)->markTrackDirty(track_index, dirty); }
+void uapmd_engine_clear_track_dirty_state(uapmd_sequencer_engine_t engine) { E(engine)->clearTrackDirtyState(); }
+
+/* ─── Master-track markers ───────────────────────────────────────────────── */
+
+static thread_local std::vector<uapmd_clip_marker_t> tl_engine_master_markers;
+
+uint32_t uapmd_engine_master_marker_count(uapmd_sequencer_engine_t engine) {
+    auto& markers = E(engine)->masterTrackMarkers();
+    tl_engine_master_markers.clear();
+    tl_engine_master_markers.reserve(markers.size());
+    for (auto& m : markers)
+        tl_engine_master_markers.push_back({
+            m.markerId.c_str(), m.clipPositionOffset,
+            static_cast<uapmd_audio_warp_reference_type_t>(m.referenceType),
+            m.referenceClipId.c_str(), m.referenceMarkerId.c_str(), m.name.c_str()
+        });
+    return static_cast<uint32_t>(tl_engine_master_markers.size());
+}
+
+bool uapmd_engine_get_master_marker(uapmd_sequencer_engine_t engine, uint32_t index, uapmd_clip_marker_t* out) {
+    (void) engine; /* data cached by the preceding count call */
+    if (!out || index >= tl_engine_master_markers.size()) return false;
+    *out = tl_engine_master_markers[index];
+    return true;
+}
+
+void uapmd_engine_set_master_markers(uapmd_sequencer_engine_t engine, const uapmd_clip_marker_t* markers, uint32_t count) {
+    std::vector<uapmd::ClipMarker> result;
+    result.reserve(count);
+    for (uint32_t i = 0; markers && i < count; ++i) {
+        uapmd::ClipMarker m;
+        if (markers[i].marker_id) m.markerId = markers[i].marker_id;
+        m.clipPositionOffset = markers[i].clip_position_offset;
+        m.referenceType = static_cast<uapmd::AudioWarpReferenceType>(markers[i].reference_type);
+        if (markers[i].reference_clip_id) m.referenceClipId = markers[i].reference_clip_id;
+        if (markers[i].reference_marker_id) m.referenceMarkerId = markers[i].reference_marker_id;
+        if (markers[i].name) m.name = markers[i].name;
+        result.push_back(std::move(m));
+    }
+    E(engine)->setMasterTrackMarkers(std::move(result));
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════
  *  SequencerTrack
  * ═══════════════════════════════════════════════════════════════════════════ */
 

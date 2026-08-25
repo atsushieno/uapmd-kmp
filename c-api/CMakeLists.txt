@@ -9,6 +9,8 @@ set(UAPMD_C_API_HEADERS
     include/c-api/uapmd-c-tooling.h
     include/c-api/uapmd-c-gui.h
     include/c-api/uapmd-c-app.h
+    include/c-api/uapmd-c-undo.h
+    include/c-api/uapmd-c-addin.h
 )
 
 set(UAPMD_C_API_SOURCES
@@ -19,6 +21,8 @@ set(UAPMD_C_API_SOURCES
     src/uapmd-c-tooling.cpp
     src/uapmd-c-gui.cpp
     src/uapmd-c-app.cpp
+    src/uapmd-c-undo.cpp
+    src/uapmd-c-addin.cpp
 )
 
 if(EMSCRIPTEN)
@@ -40,6 +44,7 @@ target_include_directories(uapmd-c-api
 
 target_link_libraries(uapmd-c-api
     PUBLIC
+        uapmd-addin-core
         uapmd-midi-service
         uapmd-graph
         uapmd-data

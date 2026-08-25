@@ -381,6 +381,131 @@ open class UapmdScanObserver : Structure() {
 
 // ─── Library interface ───────────────────────────────────────────────────────
 
+
+// ─── Project history structs (uapmd 0.5.6) ───────────────────────────────────
+
+@FieldOrder("status", "error")
+open class UapmdUndoResult : Structure() {
+    @JvmField var status: Int = 0
+    @JvmField var error: String? = null
+
+    class ByVal : UapmdUndoResult(), Structure.ByValue
+}
+
+@FieldOrder(
+    "busy", "compound_open", "gesture_open", "can_undo", "can_redo", "dirty",
+    "compound_description", "undo_description", "redo_description",
+    "history_size_in_bytes", "maximum_history_size_in_bytes",
+    "current_state_id", "saved_state_id"
+)
+open class UapmdUndoState : Structure() {
+    @JvmField var busy: Byte = 0
+    @JvmField var compound_open: Byte = 0
+    @JvmField var gesture_open: Byte = 0
+    @JvmField var can_undo: Byte = 0
+    @JvmField var can_redo: Byte = 0
+    @JvmField var dirty: Byte = 0
+    @JvmField var compound_description: String? = null
+    @JvmField var undo_description: String? = null
+    @JvmField var redo_description: String? = null
+    @JvmField var history_size_in_bytes: Long = 0L
+    @JvmField var maximum_history_size_in_bytes: Long = 0L
+    @JvmField var current_state_id: Long = 0L
+    @JvmField var saved_state_id: Long = 0L
+}
+
+@FieldOrder("track_reference_id", "clip_reference_id")
+open class UapmdClipAddress : Structure() {
+    @JvmField var track_reference_id: String? = null
+    @JvmField var clip_reference_id: String? = null
+
+    class ByVal : UapmdClipAddress(), Structure.ByValue
+}
+
+@FieldOrder("track_reference_id", "node_id")
+open class UapmdPluginAddress : Structure() {
+    @JvmField var track_reference_id: String? = null
+    @JvmField var node_id: String? = null
+
+    class ByVal : UapmdPluginAddress(), Structure.ByValue
+}
+
+@FieldOrder("id_policy", "insertion_index", "include_plugins", "include_plugin_state", "include_clips")
+open class UapmdTrackAttachOptions : Structure() {
+    @JvmField var id_policy: Int = 1
+    @JvmField var insertion_index: Int = -1
+    @JvmField var include_plugins: Byte = 1
+    @JvmField var include_plugin_state: Byte = 1
+    @JvmField var include_clips: Byte = 1
+
+    class ByVal : UapmdTrackAttachOptions(), Structure.ByValue
+}
+
+@FieldOrder("type", "reference_id", "offset")
+open class UapmdTimeReference : Structure() {
+    @JvmField var type: Int = 0
+    @JvmField var reference_id: String? = null
+    @JvmField var offset: Double = 0.0
+
+    class ByVal : UapmdTimeReference(), Structure.ByValue
+}
+
+@FieldOrder("marker_id", "clip_position_offset", "reference_type", "reference_clip_id", "reference_marker_id", "name")
+open class UapmdClipMarker : Structure() {
+    @JvmField var marker_id: String? = null
+    @JvmField var clip_position_offset: Double = 0.0
+    @JvmField var reference_type: Int = 0
+    @JvmField var reference_clip_id: String? = null
+    @JvmField var reference_marker_id: String? = null
+    @JvmField var name: String? = null
+}
+
+@FieldOrder("clip_position_offset", "speed_ratio", "reference_type", "reference_clip_id", "reference_marker_id")
+open class UapmdAudioWarpPoint : Structure() {
+    @JvmField var clip_position_offset: Double = 0.0
+    @JvmField var speed_ratio: Double = 1.0
+    @JvmField var reference_type: Int = 0
+    @JvmField var reference_clip_id: String? = null
+    @JvmField var reference_marker_id: String? = null
+}
+
+@FieldOrder("node_id", "plugin_id", "format", "display_name", "group_index", "state_size", "state")
+open class UapmdTrackPluginFragment : Structure() {
+    @JvmField var node_id: String? = null
+    @JvmField var plugin_id: String? = null
+    @JvmField var format: String? = null
+    @JvmField var display_name: String? = null
+    @JvmField var group_index: Int = -1
+    @JvmField var state_size: Int = 0
+    @JvmField var state: Pointer? = null
+}
+
+@FieldOrder("package_id", "addin_id", "name", "path", "library_path", "built_in", "state", "message")
+open class UapmdAddinInfo : Structure() {
+    @JvmField var package_id: String? = null
+    @JvmField var addin_id: String? = null
+    @JvmField var name: String? = null
+    @JvmField var path: String? = null
+    @JvmField var library_path: String? = null
+    @JvmField var built_in: Byte = 0
+    @JvmField var state: Int = 0
+    @JvmField var message: String? = null
+}
+
+// ─── Project history callbacks ───────────────────────────────────────────────
+
+interface UndoCompletionCb : Callback {
+    fun invoke(result: UapmdUndoResult.ByVal, userData: Pointer?)
+}
+
+interface TrackMutationCb : Callback {
+    fun invoke(trackIndex: Int, error: String?, userData: Pointer?)
+}
+
+interface TrackFragmentCb : Callback {
+    fun invoke(fragment: Pointer?, error: String?, userData: Pointer?)
+}
+
 interface UapmdLibrary : Library {
 
     companion object {
@@ -864,4 +989,159 @@ interface UapmdLibrary : Library {
         isMainThread: EventLoopIsMainThreadCb,
         enqueueTask: EventLoopEnqueueCb
     )
+
+    // ══ Project history: ProjectUndoEngine (uapmd 0.5.6) ═════════════════════
+
+    fun uapmd_undo_engine_get_state(eng: Pointer?, out: UapmdUndoState): Boolean
+    fun uapmd_undo_engine_undo(eng: Pointer?, userData: Pointer?, callback: UndoCompletionCb?)
+    fun uapmd_undo_engine_redo(eng: Pointer?, userData: Pointer?, callback: UndoCompletionCb?)
+    fun uapmd_undo_engine_begin_compound(eng: Pointer?, description: String?, origin: Int): UapmdUndoResult.ByVal
+    fun uapmd_undo_engine_end_compound(eng: Pointer?, userData: Pointer?, callback: UndoCompletionCb?)
+    fun uapmd_undo_engine_cancel_compound(eng: Pointer?, userData: Pointer?, callback: UndoCompletionCb?)
+    fun uapmd_undo_engine_begin_gesture(eng: Pointer?, description: String?, origin: Int): UapmdUndoResult.ByVal
+    fun uapmd_undo_engine_end_gesture(eng: Pointer?, userData: Pointer?, callback: UndoCompletionCb?)
+    fun uapmd_undo_engine_cancel_gesture(eng: Pointer?, userData: Pointer?, callback: UndoCompletionCb?)
+    fun uapmd_undo_engine_clear(eng: Pointer?, markCurrentStateSaved: Boolean): Boolean
+    fun uapmd_undo_engine_mark_saved(eng: Pointer?): Boolean
+    fun uapmd_undo_engine_mark_state_saved(eng: Pointer?, stateId: Long): Boolean
+    fun uapmd_undo_engine_set_maximum_history_size(eng: Pointer?, bytes: Long): Boolean
+    fun uapmd_undo_engine_shutdown(eng: Pointer?)
+
+    // ══ Project history: ProjectCommandManager ══════════════════════════════
+
+    fun uapmd_command_manager_get_state(cm: Pointer?, out: UapmdUndoState): Boolean
+    fun uapmd_command_manager_history(cm: Pointer?): Pointer?
+    fun uapmd_command_manager_undo(cm: Pointer?, userData: Pointer?, callback: UndoCompletionCb?)
+    fun uapmd_command_manager_redo(cm: Pointer?, userData: Pointer?, callback: UndoCompletionCb?)
+    fun uapmd_command_manager_begin_step(cm: Pointer?, description: String?, origin: Int): UapmdUndoResult.ByVal
+    fun uapmd_command_manager_end_step(cm: Pointer?, userData: Pointer?, callback: UndoCompletionCb?)
+    fun uapmd_command_manager_cancel_step(cm: Pointer?, userData: Pointer?, callback: UndoCompletionCb?)
+    fun uapmd_command_manager_begin_gesture(cm: Pointer?, description: String?, origin: Int): UapmdUndoResult.ByVal
+    fun uapmd_command_manager_end_gesture(cm: Pointer?, userData: Pointer?, callback: UndoCompletionCb?)
+    fun uapmd_command_manager_cancel_gesture(cm: Pointer?, userData: Pointer?, callback: UndoCompletionCb?)
+    fun uapmd_command_manager_shutdown(cm: Pointer?)
+
+    // ══ Project history: ProjectCommands ════════════════════════════════════
+
+    fun uapmd_commands_history(cmd: Pointer?): Pointer?
+    fun uapmd_commands_set_clip_enabled(cmd: Pointer?, trackIndex: Int, clipId: Int, enabled: Boolean, origin: Int): Boolean
+    fun uapmd_commands_set_clip_anchor(cmd: Pointer?, trackIndex: Int, clipId: Int, anchor: UapmdTimeReference.ByVal, origin: Int): Boolean
+    fun uapmd_commands_set_clip_gain(cmd: Pointer?, trackIndex: Int, clipId: Int, gain: Double, origin: Int): Boolean
+    fun uapmd_commands_set_clip_muted(cmd: Pointer?, trackIndex: Int, clipId: Int, muted: Boolean, origin: Int): Boolean
+    fun uapmd_commands_resize_clip(cmd: Pointer?, trackIndex: Int, clipId: Int, newDurationSamples: Long, origin: Int): Boolean
+    fun uapmd_commands_set_clip_name(cmd: Pointer?, trackIndex: Int, clipId: Int, name: String?, origin: Int): Boolean
+    fun uapmd_commands_set_clip_filepath(cmd: Pointer?, trackIndex: Int, clipId: Int, filepath: String?, origin: Int): Boolean
+    fun uapmd_commands_set_clip_needs_file_save(cmd: Pointer?, trackIndex: Int, clipId: Int, needsSave: Boolean, origin: Int): Boolean
+    fun uapmd_commands_set_clip_markers(cmd: Pointer?, trackIndex: Int, clipId: Int, markers: UapmdClipMarker?, markerCount: Int, origin: Int): Boolean
+    fun uapmd_commands_set_clip_audio_warps(cmd: Pointer?, trackIndex: Int, clipId: Int, warps: UapmdAudioWarpPoint?, warpCount: Int, origin: Int): Boolean
+    fun uapmd_commands_set_track_gain(cmd: Pointer?, trackIndex: Int, gain: Double, origin: Int): Boolean
+    fun uapmd_commands_set_track_muted(cmd: Pointer?, trackIndex: Int, muted: Boolean, origin: Int): Boolean
+    fun uapmd_commands_set_track_solo(cmd: Pointer?, trackIndex: Int, solo: Boolean, origin: Int): Boolean
+    fun uapmd_commands_set_track_bypassed(cmd: Pointer?, trackIndex: Int, bypassed: Boolean, origin: Int): Boolean
+    fun uapmd_commands_set_track_freeze_policy_enabled(cmd: Pointer?, trackIndex: Int, enabled: Boolean, origin: Int): Boolean
+    fun uapmd_commands_set_plugin_bypassed(cmd: Pointer?, instanceId: Int, bypassed: Boolean, origin: Int): Boolean
+    fun uapmd_commands_set_plugin_parameter_value(cmd: Pointer?, instanceId: Int, parameterIndex: Int, value: Double, origin: Int): Boolean
+    fun uapmd_commands_set_plugin_per_note_controller_value(
+        cmd: Pointer?, instanceId: Int, contextType: Int,
+        note: Int, channel: Int, group: Int, extra: Int,
+        parameterIndex: Int, value: Double, origin: Int
+    ): Boolean
+    fun uapmd_commands_set_plugin_group(cmd: Pointer?, instanceId: Int, group: Byte, origin: Int): Boolean
+    fun uapmd_commands_set_master_track_markers(cmd: Pointer?, markers: UapmdClipMarker?, markerCount: Int, origin: Int): Boolean
+
+    // ══ Project history: ProjectAddressBook ═════════════════════════════════
+
+    fun uapmd_addresses_timeline_track(ab: Pointer?, trackReferenceId: String?): Pointer?
+    fun uapmd_addresses_sequencer_track(ab: Pointer?, trackReferenceId: String?): Pointer?
+    fun uapmd_addresses_track_index(ab: Pointer?, trackReferenceId: String?): Int
+    fun uapmd_addresses_clip_id(ab: Pointer?, address: UapmdClipAddress.ByVal): Int
+    fun uapmd_addresses_plugin_instance_id(ab: Pointer?, address: UapmdPluginAddress.ByVal): Int
+    fun uapmd_addresses_track_reference_id(ab: Pointer?, trackIndex: Int): String?
+    fun uapmd_addresses_clip_address(ab: Pointer?, trackIndex: Int, clipId: Int, out: UapmdClipAddress): Boolean
+    fun uapmd_addresses_plugin_address(ab: Pointer?, instanceId: Int, out: UapmdPluginAddress): Boolean
+
+    // ══ Fragments ═══════════════════════════════════════════════════════════
+
+    fun uapmd_clip_fragment_destroy(fragment: Pointer?)
+    fun uapmd_clip_fragment_is_midi(fragment: Pointer?): Boolean
+    fun uapmd_clip_fragment_get_clip(fragment: Pointer?, out: UapmdClipData): Boolean
+    fun uapmd_clip_fragment_ump_event_count(fragment: Pointer?): Int
+    fun uapmd_clip_fragment_get_ump_events(fragment: Pointer?, out: IntArray?, outCount: Int): Int
+    fun uapmd_clip_fragment_get_ump_tick_timestamps(fragment: Pointer?, out: LongArray?, outCount: Int): Int
+    fun uapmd_clip_fragment_extension_state_count(fragment: Pointer?): Int
+    fun uapmd_clip_fragment_extension_state_key(fragment: Pointer?, index: Int, buf: ByteArray?, bufSize: Long): Long
+    fun uapmd_clip_fragment_extension_state_data(fragment: Pointer?, index: Int, buf: ByteArray?, bufSize: Long): Long
+
+    fun uapmd_track_fragment_destroy(fragment: Pointer?)
+    fun uapmd_track_fragment_reference_id(fragment: Pointer?, buf: ByteArray?, bufSize: Long): Long
+    fun uapmd_track_fragment_volume(fragment: Pointer?): Double
+    fun uapmd_track_fragment_muted(fragment: Pointer?): Boolean
+    fun uapmd_track_fragment_solo(fragment: Pointer?): Boolean
+    fun uapmd_track_fragment_graph_type(fragment: Pointer?, buf: ByteArray?, bufSize: Long): Long
+    fun uapmd_track_fragment_graph_bytes(fragment: Pointer?, buf: ByteArray?, bufSize: Long): Long
+    fun uapmd_track_fragment_clip_count(fragment: Pointer?): Int
+    fun uapmd_track_fragment_get_clip(fragment: Pointer?, index: Int): Pointer?
+    fun uapmd_track_fragment_plugin_count(fragment: Pointer?): Int
+    fun uapmd_track_fragment_get_plugin(fragment: Pointer?, index: Int, out: UapmdTrackPluginFragment): Boolean
+
+    // ══ TimelineFacade history accessors and undoable mutations ═════════════
+
+    fun uapmd_tl_undo_engine(tl: Pointer?): Pointer?
+    fun uapmd_tl_commands(tl: Pointer?): Pointer?
+    fun uapmd_tl_addresses(tl: Pointer?): Pointer?
+    fun uapmd_tl_begin_document_transaction(tl: Pointer?)
+    fun uapmd_tl_end_document_transaction(tl: Pointer?)
+    fun uapmd_tl_remove_clip_with_origin(tl: Pointer?, trackIndex: Int, clipId: Int, origin: Int): Boolean
+    fun uapmd_tl_clear_clips_from_track(tl: Pointer?, trackIndex: Int, origin: Int): Boolean
+    fun uapmd_tl_clip_enabled(tl: Pointer?, trackIndex: Int, clipId: Int): Boolean
+    fun uapmd_tl_replace_midi_clip_content(
+        tl: Pointer?, trackIndex: Int, clipId: Int,
+        umpEvents: IntArray?, umpEventCount: Int,
+        tickTimestamps: LongArray?, tickCount: Int, origin: Int
+    ): Boolean
+    fun uapmd_tl_replace_audio_clip_content(
+        tl: Pointer?, trackIndex: Int, clipId: Int, filepath: String?,
+        markers: UapmdClipMarker?, markerCount: Int,
+        warps: UapmdAudioWarpPoint?, warpCount: Int,
+        masterMarkers: UapmdClipMarker?, masterMarkerCount: Int, origin: Int
+    ): Boolean
+    fun uapmd_tl_capture_clip_fragment(tl: Pointer?, trackIndex: Int, clipId: Int): Pointer?
+    fun uapmd_tl_attach_clip_fragment(tl: Pointer?, trackIndex: Int, fragment: Pointer?, idPolicy: Int): UapmdClipAddResult.ByVal
+    fun uapmd_tl_capture_track_fragment(tl: Pointer?, trackIndex: Int, userData: Pointer?, callback: TrackFragmentCb?)
+    fun uapmd_tl_attach_track_fragment(tl: Pointer?, fragment: Pointer?, options: UapmdTrackAttachOptions.ByVal, userData: Pointer?, callback: TrackMutationCb?)
+    fun uapmd_tl_add_empty_track(tl: Pointer?, origin: Int, userData: Pointer?, callback: TrackMutationCb?)
+    fun uapmd_tl_remove_track(tl: Pointer?, trackIndex: Int, origin: Int, userData: Pointer?, callback: TrackMutationCb?)
+    fun uapmd_tl_record_track_addition(tl: Pointer?, trackIndex: Int, origin: Int, userData: Pointer?, callback: TrackMutationCb?)
+    fun uapmd_tl_set_plugin_state(tl: Pointer?, instanceId: Int, state: ByteArray?, stateSize: Long, origin: Int, userData: Pointer?, callback: UndoCompletionCb?)
+    fun uapmd_tl_load_plugin_preset(tl: Pointer?, instanceId: Int, presetIndex: Int, origin: Int, userData: Pointer?, callback: UndoCompletionCb?)
+    fun uapmd_tl_record_plugin_instance_addition(tl: Pointer?, instanceId: Int, origin: Int, userData: Pointer?, callback: UndoCompletionCb?)
+    fun uapmd_tl_remove_plugin_instance(tl: Pointer?, instanceId: Int, origin: Int, userData: Pointer?, callback: UndoCompletionCb?)
+    fun uapmd_tl_has_pending_plugin_mutations(tl: Pointer?): Boolean
+
+    // ══ Engine dirty state and master markers ═══════════════════════════════
+
+    fun uapmd_engine_is_project_dirty(engine: Pointer?): Boolean
+    fun uapmd_engine_is_track_dirty(engine: Pointer?, trackIndex: Int): Boolean
+    fun uapmd_engine_mark_track_dirty(engine: Pointer?, trackIndex: Int, dirty: Boolean)
+    fun uapmd_engine_clear_track_dirty_state(engine: Pointer?)
+    fun uapmd_engine_master_marker_count(engine: Pointer?): Int
+    fun uapmd_engine_get_master_marker(engine: Pointer?, index: Int, out: UapmdClipMarker): Boolean
+    fun uapmd_engine_set_master_markers(engine: Pointer?, markers: UapmdClipMarker?, count: Int)
+
+    // ══ AddinManager ════════════════════════════════════════════════════════
+
+    fun uapmd_addin_manager_create(): Pointer?
+    fun uapmd_addin_manager_destroy(mgr: Pointer?)
+    fun uapmd_addin_manager_register_extension_point(mgr: Pointer?, path: String?, extensionPoint: Pointer?)
+    fun uapmd_engine_register_addin_extension_points(engine: Pointer?, mgr: Pointer?)
+    fun uapmd_addin_manager_initialize(mgr: Pointer?)
+    fun uapmd_addin_manager_set_enabled(mgr: Pointer?, packageId: String?, addinId: String?, enabled: Boolean): Boolean
+    fun uapmd_addin_manager_shutdown(mgr: Pointer?)
+    fun uapmd_addin_manager_directory_count(mgr: Pointer?): Int
+    fun uapmd_addin_manager_get_directory(mgr: Pointer?, index: Int, buf: ByteArray?, bufSize: Long): Long
+    fun uapmd_addin_manager_addin_count(mgr: Pointer?): Int
+    fun uapmd_addin_manager_get_addin(mgr: Pointer?, index: Int, out: UapmdAddinInfo): Boolean
+    fun uapmd_addin_manager_last_error(mgr: Pointer?, buf: ByteArray?, bufSize: Long): Long
+    fun uapmd_addin_supports_dynamic_loading(): Boolean
+    fun uapmd_addin_state_name(state: Int): String?
 }

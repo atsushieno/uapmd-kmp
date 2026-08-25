@@ -45,6 +45,10 @@ static JNIEnv* jni_env() {
     return env;
 }
 
+// Shared with uapmd_jni_history.cpp, which needs the same attach-on-demand
+// behaviour for callbacks arriving on engine threads.
+JNIEnv* uapmd_jni_env() { return jni_env(); }
+
 // ─── Handle helpers ───────────────────────────────────────────────────────────
 
 template<typename T>

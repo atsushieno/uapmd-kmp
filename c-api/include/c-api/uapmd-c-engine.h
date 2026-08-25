@@ -150,6 +150,29 @@ UAPMD_C_EXPORT uint8_t uapmd_track_find_available_group(uapmd_sequencer_track_t 
 UAPMD_C_EXPORT void    uapmd_track_remove_instance(uapmd_sequencer_track_t track, int32_t instance_id);
 
 /* ═══════════════════════════════════════════════════════════════════════════
+ *  Project / track dirty state (uapmd 0.5.6)
+ * ═══════════════════════════════════════════════════════════════════════════ */
+
+/* True when the project document differs from its saved history node, or an
+ * asynchronous project mutation is still being committed. */
+UAPMD_C_EXPORT bool uapmd_engine_is_project_dirty(uapmd_sequencer_engine_t engine);
+/* Track render/cache dirtiness: runtime state owned by the engine, separate
+ * from project-document history dirtiness. */
+UAPMD_C_EXPORT bool uapmd_engine_is_track_dirty(uapmd_sequencer_engine_t engine, int32_t track_index);
+UAPMD_C_EXPORT void uapmd_engine_mark_track_dirty(uapmd_sequencer_engine_t engine, int32_t track_index, bool dirty);
+UAPMD_C_EXPORT void uapmd_engine_clear_track_dirty_state(uapmd_sequencer_engine_t engine);
+
+/* ─── Master-track markers ───────────────────────────────────────────────── */
+/* Project-wide markers, owned by the engine alongside the master track.
+ * uapmd_engine_master_marker_count() snapshots them into per-thread storage
+ * which uapmd_engine_get_master_marker() then reads, so call the count first.
+ * The setter applies markers directly; use uapmd_commands_set_master_track_markers()
+ * instead when the change should be undoable. */
+UAPMD_C_EXPORT uint32_t uapmd_engine_master_marker_count(uapmd_sequencer_engine_t engine);
+UAPMD_C_EXPORT bool     uapmd_engine_get_master_marker(uapmd_sequencer_engine_t engine, uint32_t index, uapmd_clip_marker_t* out);
+UAPMD_C_EXPORT void     uapmd_engine_set_master_markers(uapmd_sequencer_engine_t engine, const uapmd_clip_marker_t* markers, uint32_t count);
+
+/* ═══════════════════════════════════════════════════════════════════════════
  *  TimelineFacade
  * ═══════════════════════════════════════════════════════════════════════════ */
 

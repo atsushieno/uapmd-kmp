@@ -7,6 +7,7 @@
 #include "uapmd-c-data.h"
 #include "uapmd-c-engine.h"
 #include "uapmd-c-file.h"
+#include "uapmd-c-undo.h"
 
 #ifdef __cplusplus
 extern "C" {
@@ -190,9 +191,19 @@ UAPMD_C_EXPORT bool uapmd_app_remove_clip_from_track(uapmd_app_model_t app, int3
  *  Track management
  * ═══════════════════════════════════════════════════════════════════════════ */
 
-UAPMD_C_EXPORT int32_t uapmd_app_add_track(uapmd_app_model_t app);
-UAPMD_C_EXPORT bool    uapmd_app_remove_track(uapmd_app_model_t app, int32_t track_index);
-UAPMD_C_EXPORT void    uapmd_app_remove_all_tracks(uapmd_app_model_t app);
+/* The mutation callbacks live in uapmd-c-undo.h: track mutations became undo
+ * engine operations in uapmd 0.5.6, so they complete asynchronously. */
+
+UAPMD_C_EXPORT void uapmd_app_add_track(uapmd_app_model_t app,
+                                           void* user_data,
+                                           uapmd_track_mutation_cb_t callback);
+UAPMD_C_EXPORT void uapmd_app_remove_track(uapmd_app_model_t app,
+                                              int32_t track_index,
+                                              void* user_data,
+                                              uapmd_track_mutation_cb_t callback);
+UAPMD_C_EXPORT void uapmd_app_remove_all_tracks(uapmd_app_model_t app,
+                                                   void* user_data,
+                                                   uapmd_track_clear_cb_t callback);
 
 UAPMD_C_EXPORT int32_t uapmd_app_add_device_input_to_track(uapmd_app_model_t app,
                                                               int32_t track_index,
@@ -326,6 +337,20 @@ UAPMD_C_EXPORT bool uapmd_app_remove_ump_event_from_clip(uapmd_app_model_t app,
                                                             int32_t track_index,
                                                             int32_t clip_id,
                                                             int32_t event_index);
+
+/* ═══════════════════════════════════════════════════════════════════════════
+ *  Undo history (uapmd 0.5.6)
+ *
+ *  The application-level entry points. They wrap the same history that
+ *  uapmd_tl_undo_engine() exposes, and additionally reconcile the plug-in
+ *  instances the model tracks after the document moves.
+ * ═══════════════════════════════════════════════════════════════════════════ */
+
+typedef void (*uapmd_history_mutation_cb_t)(const char* error, void* user_data);
+
+UAPMD_C_EXPORT bool uapmd_app_get_history_state(uapmd_app_model_t app, uapmd_undo_state_t* out);
+UAPMD_C_EXPORT void uapmd_app_undo(uapmd_app_model_t app, void* user_data, uapmd_history_mutation_cb_t callback);
+UAPMD_C_EXPORT void uapmd_app_redo(uapmd_app_model_t app, void* user_data, uapmd_history_mutation_cb_t callback);
 
 /* ═══════════════════════════════════════════════════════════════════════════
  *  Project save/load

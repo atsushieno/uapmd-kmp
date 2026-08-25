@@ -1,5 +1,5 @@
 package = uapmd
-headers = c-api/uapmd-c-common.h c-api/uapmd-c-api.h c-api/uapmd-c-data.h c-api/uapmd-c-engine.h c-api/uapmd-c-tooling.h c-api/uapmd-c-file.h c-api/uapmd-c-gui.h c-api/uapmd-c-app.h
+headers = c-api/uapmd-c-common.h c-api/uapmd-c-api.h c-api/uapmd-c-data.h c-api/uapmd-c-engine.h c-api/uapmd-c-tooling.h c-api/uapmd-c-file.h c-api/uapmd-c-gui.h c-api/uapmd-c-app.h c-api/uapmd-c-undo.h c-api/uapmd-c-addin.h
 headerFilter = c-api/**
 
 # Link options: add the pre-built uapmd-c-api static library when building the final binary.

@@ -107,6 +107,39 @@ class AndroidSequencerEngine internal constructor(
 
     override val timeline: TimelineFacade get() = AndroidTimelineFacade(JniBridge.uapmdEngineTimeline(handle))
 
+    // ─── Project / track dirty state (uapmd 0.5.6) ──────────────────────────
+
+    override val isProjectDirty: Boolean get() = JniBridge.uapmdEngineIsProjectDirty(handle)
+    override fun isTrackDirty(trackIndex: Int) = JniBridge.uapmdEngineIsTrackDirty(handle, trackIndex)
+    override fun markTrackDirty(trackIndex: Int, dirty: Boolean) = JniBridge.uapmdEngineMarkTrackDirty(handle, trackIndex, dirty)
+    override fun clearTrackDirtyState() = JniBridge.uapmdEngineClearTrackDirtyState(handle)
+
+    override var masterTrackMarkers: List<ClipMarkerData>
+        get() {
+            val count = JniBridge.uapmdEngineMasterMarkerCount(handle)
+            if (count == 0) return emptyList()
+            val strings = arrayOfNulls<String>(count * 4)
+            val types = IntArray(count)
+            val offsets = JniBridge.uapmdEngineGetMasterMarkers(handle, strings, types)
+            return (0 until count).map { i ->
+                ClipMarkerData(
+                    markerId = strings[i * 4 + 0] ?: "",
+                    clipPositionOffset = offsets[i],
+                    referenceType = WarpReferenceType.fromNative(types[i]),
+                    referenceClipId = strings[i * 4 + 1] ?: "",
+                    referenceMarkerId = strings[i * 4 + 2] ?: "",
+                    name = strings[i * 4 + 3] ?: ""
+                )
+            }
+        }
+        set(value) {
+            val a = MarkerArrays(value)
+            JniBridge.uapmdEngineSetMasterMarkers(handle, a.strings, a.numbers, a.refTypes)
+        }
+
+    override fun registerAddinExtensionPoints(manager: AddinManager) =
+        JniBridge.uapmdEngineRegisterAddinExtensionPoints(handle, (manager as AndroidAddinManager).handle)
+
     override fun renderOffline(
         settings: OfflineRenderSettings,
         progressCallback: ((OfflineRenderProgress) -> Unit)?,

@@ -6,6 +6,22 @@ class JsSequencerEngine internal constructor(
     internal val handle: Int
 ) : SequencerEngine {
 
+    private val engineHistory = JsEngineHistory(handle)
+
+    // ─── Project / track dirty state (uapmd 0.5.6) ──────────────────────────
+
+    override val isProjectDirty get() = engineHistory.isProjectDirty
+    override fun isTrackDirty(trackIndex: Int) = engineHistory.isTrackDirty(trackIndex)
+    override fun markTrackDirty(trackIndex: Int, dirty: Boolean) = engineHistory.markTrackDirty(trackIndex, dirty)
+    override fun clearTrackDirtyState() = engineHistory.clearTrackDirtyState()
+
+    override var masterTrackMarkers: List<ClipMarkerData>
+        get() = engineHistory.masterTrackMarkers
+        set(value) { engineHistory.masterTrackMarkers = value }
+
+    override fun registerAddinExtensionPoints(manager: AddinManager) =
+        engineHistory.registerAddinExtensionPoints(manager)
+
     override val pluginHost: PluginHost
         get() = JsPluginHost(jsMod._uapmd_engine_plugin_host(handle) as Int)
 

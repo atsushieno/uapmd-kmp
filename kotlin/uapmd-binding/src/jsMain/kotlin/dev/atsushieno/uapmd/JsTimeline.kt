@@ -57,6 +57,8 @@ class JsTimelineFacade internal constructor(
     internal val handle: Int
 ) : TimelineFacade {
 
+    private val history = JsTimelineHistory(handle)
+
     override fun getState(): TimelineState? =
         withWasmMem(80) { ptr ->
             if (!(jsMod._uapmd_tl_get_state(handle, ptr) as Boolean)) null
@@ -133,4 +135,65 @@ class JsTimelineFacade internal constructor(
 
     override fun getMidiClipNotes(trackIndex: Int, clipId: Int): List<MidiNoteData>? = null
     override fun setTimelineChangedCallback(callback: (() -> Unit)?) {}
+
+    // ─── Project history (uapmd 0.5.6) ──────────────────────────────────────
+
+    override val undoEngine get() = history.undoEngine
+    override val commands get() = history.commands
+    override val addresses get() = history.addresses
+
+    override fun <T> documentTransaction(block: () -> T): T = history.documentTransaction(block)
+
+    override fun removeClip(trackIndex: Int, clipId: Int, origin: MutationOrigin) =
+        history.removeClip(trackIndex, clipId, origin)
+
+    override fun clearClipsFromTrack(trackIndex: Int, origin: MutationOrigin) =
+        history.clearClipsFromTrack(trackIndex, origin)
+
+    override fun isClipEnabled(trackIndex: Int, clipId: Int) = history.isClipEnabled(trackIndex, clipId)
+
+    override fun replaceMidiClipContent(
+        trackIndex: Int, clipId: Int, umpEvents: UIntArray, tickTimestamps: LongArray, origin: MutationOrigin
+    ) = history.replaceMidiClipContent(trackIndex, clipId, umpEvents, tickTimestamps, origin)
+
+    override fun replaceAudioClipContent(
+        trackIndex: Int, clipId: Int, filepath: String,
+        markers: List<ClipMarkerData>, warps: List<AudioWarpPointData>,
+        masterMarkers: List<ClipMarkerData>, origin: MutationOrigin
+    ) = history.replaceAudioClipContent(trackIndex, clipId, filepath, markers, warps, masterMarkers, origin)
+
+    override fun captureClipFragment(trackIndex: Int, clipId: Int) = history.captureClipFragment(trackIndex, clipId)
+
+    override fun attachClipFragment(trackIndex: Int, fragment: ClipFragment, idPolicy: ObjectIdPolicy) =
+        history.attachClipFragment(trackIndex, fragment, idPolicy)
+
+    override fun captureTrackFragment(trackIndex: Int, callback: (TrackFragment?, String?) -> Unit) =
+        history.captureTrackFragment(trackIndex, callback)
+
+    override fun attachTrackFragment(
+        fragment: TrackFragment, options: TrackAttachOptions, callback: (Int, String?) -> Unit
+    ) = history.attachTrackFragment(fragment, options, callback)
+
+    override fun addEmptyTrack(origin: MutationOrigin, callback: (Int, String?) -> Unit) =
+        history.addEmptyTrack(origin, callback)
+
+    override fun removeTrack(trackIndex: Int, origin: MutationOrigin, callback: (Int, String?) -> Unit) =
+        history.removeTrack(trackIndex, origin, callback)
+
+    override fun recordTrackAddition(trackIndex: Int, origin: MutationOrigin, callback: (Int, String?) -> Unit) =
+        history.recordTrackAddition(trackIndex, origin, callback)
+
+    override fun setPluginState(instanceId: Int, state: ByteArray, origin: MutationOrigin, completion: ((UndoResult) -> Unit)?) =
+        history.setPluginState(instanceId, state, origin, completion)
+
+    override fun loadPluginPreset(instanceId: Int, presetIndex: Int, origin: MutationOrigin, completion: ((UndoResult) -> Unit)?) =
+        history.loadPluginPreset(instanceId, presetIndex, origin, completion)
+
+    override fun recordPluginInstanceAddition(instanceId: Int, origin: MutationOrigin, completion: ((UndoResult) -> Unit)?) =
+        history.recordPluginInstanceAddition(instanceId, origin, completion)
+
+    override fun removePluginInstance(instanceId: Int, origin: MutationOrigin, completion: ((UndoResult) -> Unit)?) =
+        history.removePluginInstance(instanceId, origin, completion)
+
+    override val hasPendingPluginMutations get() = history.hasPendingPluginMutations
 }

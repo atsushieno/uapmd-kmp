@@ -53,6 +53,35 @@ interface SequencerEngine {
 
     val timeline: TimelineFacade
 
+    // ─── Project / track dirty state (uapmd 0.5.6) ──────────────────────────
+
+    /**
+     * True when the project document differs from its saved history node, or an
+     * asynchronous project mutation is still being committed.
+     */
+    val isProjectDirty: Boolean
+    /**
+     * Track render/cache dirtiness: runtime state owned by the engine, separate
+     * from project-document history dirtiness.
+     */
+    fun isTrackDirty(trackIndex: Int): Boolean
+    fun markTrackDirty(trackIndex: Int, dirty: Boolean = true)
+    fun clearTrackDirtyState()
+
+    /**
+     * Project-wide markers, owned by the engine alongside the master track.
+     * The setter applies markers directly; use
+     * [ProjectCommands.setMasterTrackMarkers] instead when the change should be
+     * undoable.
+     */
+    var masterTrackMarkers: List<ClipMarkerData>
+
+    /**
+     * Publishes every extension point this engine offers into [manager]. Call
+     * before [AddinManager.initialize].
+     */
+    fun registerAddinExtensionPoints(manager: AddinManager)
+
     fun renderOffline(
         settings: OfflineRenderSettings,
         progressCallback: ((OfflineRenderProgress) -> Unit)? = null,

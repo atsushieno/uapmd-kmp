@@ -317,9 +317,27 @@ bool uapmd_app_remove_clip_from_track(uapmd_app_model_t app, int32_t track_index
  *  Track management
  * ═══════════════════════════════════════════════════════════════════════════ */
 
-int32_t uapmd_app_add_track(uapmd_app_model_t app)                         { return AM(app)->addTrack(); }
-bool    uapmd_app_remove_track(uapmd_app_model_t app, int32_t track_index) { return AM(app)->removeTrack(track_index); }
-void    uapmd_app_remove_all_tracks(uapmd_app_model_t app)                 { AM(app)->removeAllTracks(); }
+void uapmd_app_add_track(uapmd_app_model_t app, void* user_data, uapmd_track_mutation_cb_t callback) {
+    if (!callback) return;
+    AM(app)->addTrack([user_data, callback](int32_t track_index, std::string error) {
+        callback(track_index, error.empty() ? nullptr : error.c_str(), user_data);
+    });
+}
+
+void uapmd_app_remove_track(uapmd_app_model_t app, int32_t track_index,
+                            void* user_data, uapmd_track_mutation_cb_t callback) {
+    if (!callback) return;
+    AM(app)->removeTrack(track_index, [user_data, callback](int32_t removed_index, std::string error) {
+        callback(removed_index, error.empty() ? nullptr : error.c_str(), user_data);
+    });
+}
+
+void uapmd_app_remove_all_tracks(uapmd_app_model_t app, void* user_data, uapmd_track_clear_cb_t callback) {
+    if (!callback) return;
+    AM(app)->removeAllTracks([user_data, callback](std::string error) {
+        callback(error.empty() ? nullptr : error.c_str(), user_data);
+    });
+}
 
 int32_t uapmd_app_add_device_input_to_track(uapmd_app_model_t app,
                                               int32_t track_index,
@@ -536,7 +554,7 @@ uapmd_op_result_t uapmd_app_set_clip_audio_events(uapmd_app_model_t app,
 static thread_local std::vector<uapmd_clip_marker_t> tl_master_markers_c;
 
 uint32_t uapmd_app_master_marker_count(uapmd_app_model_t app) {
-    auto& markers = AM(app)->masterTrackMarkers();
+    auto& markers = AM(app)->sequencer().engine()->masterTrackMarkers();
     tl_master_markers_c.clear();
     for (auto& m : markers)
         tl_master_markers_c.push_back({
@@ -627,6 +645,50 @@ bool uapmd_app_remove_ump_event_from_clip(uapmd_app_model_t app,
                                             int32_t event_index) {
     tl_ump_error.clear();
     return AM(app)->removeUmpEventFromClip(track_index, clip_id, event_index, tl_ump_error);
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════
+ *  Undo history (uapmd 0.5.6)
+ * ═══════════════════════════════════════════════════════════════════════════ */
+
+static thread_local std::string tl_history_compound_desc;
+static thread_local std::string tl_history_undo_desc;
+static thread_local std::string tl_history_redo_desc;
+
+bool uapmd_app_get_history_state(uapmd_app_model_t app, uapmd_undo_state_t* out) {
+    if (!app || !out) return false;
+    auto s = AM(app)->historyState();
+    tl_history_compound_desc = s.compoundDescription;
+    tl_history_undo_desc = s.undoDescription;
+    tl_history_redo_desc = s.redoDescription;
+    out->busy = s.busy;
+    out->compound_open = s.compoundOpen;
+    out->gesture_open = s.gestureOpen;
+    out->can_undo = s.canUndo;
+    out->can_redo = s.canRedo;
+    out->dirty = s.dirty;
+    out->compound_description = tl_history_compound_desc.c_str();
+    out->undo_description = tl_history_undo_desc.c_str();
+    out->redo_description = tl_history_redo_desc.c_str();
+    out->history_size_in_bytes = static_cast<uint64_t>(s.historySizeInBytes);
+    out->maximum_history_size_in_bytes = static_cast<uint64_t>(s.maximumHistorySizeInBytes);
+    out->current_state_id = s.currentStateId;
+    out->saved_state_id = s.savedStateId;
+    return true;
+}
+
+void uapmd_app_undo(uapmd_app_model_t app, void* user_data, uapmd_history_mutation_cb_t callback) {
+    if (!callback) return;
+    AM(app)->undo([user_data, callback](std::string error) {
+        callback(error.empty() ? nullptr : error.c_str(), user_data);
+    });
+}
+
+void uapmd_app_redo(uapmd_app_model_t app, void* user_data, uapmd_history_mutation_cb_t callback) {
+    if (!callback) return;
+    AM(app)->redo([user_data, callback](std::string error) {
+        callback(error.empty() ? nullptr : error.c_str(), user_data);
+    });
 }
 
 /* ═══════════════════════════════════════════════════════════════════════════

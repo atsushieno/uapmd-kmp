@@ -120,6 +120,29 @@ class NativeSequencerEngine internal constructor(
     override val timeline: TimelineFacade
         get() = NativeTimelineFacade(uapmd_engine_timeline(handle)!!)
 
+    // ─── Project / track dirty state (uapmd 0.5.6) ──────────────────────────
+
+    override val isProjectDirty: Boolean get() = uapmd_engine_is_project_dirty(handle)
+    override fun isTrackDirty(trackIndex: Int) = uapmd_engine_is_track_dirty(handle, trackIndex)
+    override fun markTrackDirty(trackIndex: Int, dirty: Boolean) = uapmd_engine_mark_track_dirty(handle, trackIndex, dirty)
+    override fun clearTrackDirtyState() = uapmd_engine_clear_track_dirty_state(handle)
+
+    override var masterTrackMarkers: List<ClipMarkerData>
+        get() = memScoped {
+            val count = uapmd_engine_master_marker_count(handle).toInt()
+            if (count == 0) return emptyList()
+            val out = alloc<uapmd_clip_marker_t>()
+            (0 until count).mapNotNull { i ->
+                if (!uapmd_engine_get_master_marker(handle, i.toUInt(), out.ptr)) null else out.toKotlin()
+            }
+        }
+        set(value) = memScoped {
+            uapmd_engine_set_master_markers(handle, markersToNative(value), value.size.toUInt())
+        }
+
+    override fun registerAddinExtensionPoints(manager: AddinManager) =
+        uapmd_engine_register_addin_extension_points(handle, (manager as NativeAddinManager).handle)
+
     override fun renderOffline(
         settings: OfflineRenderSettings,
         progressCallback: ((OfflineRenderProgress) -> Unit)?,

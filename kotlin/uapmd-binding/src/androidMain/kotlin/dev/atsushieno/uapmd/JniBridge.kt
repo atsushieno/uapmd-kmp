@@ -416,4 +416,168 @@ object JniBridge {
 
     @JvmStatic external fun uapmdSetupAndroidEventLoop(dispatcher: Any)
     @JvmStatic external fun uapmdRunEventLoopTask(token: Long)
+
+    // ══ Project history: ProjectUndoEngine (uapmd 0.5.6) ═════════════════════
+    //
+    // Undo state comes back as Object[]{ LongArray(10), String, String, String };
+    // an undo result as Object[]{ LongArray(1) status, String? error }.
+
+    @JvmStatic external fun uapmdUndoEngineGetState(h: Long): Array<Any>?
+    /** cb: (statusOrdinal: Int, error: String?) -> Unit */
+    @JvmStatic external fun uapmdUndoEngineUndo(h: Long, cb: Any?)
+    @JvmStatic external fun uapmdUndoEngineRedo(h: Long, cb: Any?)
+    @JvmStatic external fun uapmdUndoEngineBeginCompound(h: Long, description: String, origin: Int): Array<Any>?
+    @JvmStatic external fun uapmdUndoEngineEndCompound(h: Long, cb: Any?)
+    @JvmStatic external fun uapmdUndoEngineCancelCompound(h: Long, cb: Any?)
+    @JvmStatic external fun uapmdUndoEngineBeginGesture(h: Long, description: String, origin: Int): Array<Any>?
+    @JvmStatic external fun uapmdUndoEngineEndGesture(h: Long, cb: Any?)
+    @JvmStatic external fun uapmdUndoEngineCancelGesture(h: Long, cb: Any?)
+    @JvmStatic external fun uapmdUndoEngineClear(h: Long, markSaved: Boolean): Boolean
+    @JvmStatic external fun uapmdUndoEngineMarkSaved(h: Long): Boolean
+    @JvmStatic external fun uapmdUndoEngineMarkStateSaved(h: Long, stateId: Long): Boolean
+    @JvmStatic external fun uapmdUndoEngineSetMaximumHistorySize(h: Long, bytes: Long): Boolean
+    @JvmStatic external fun uapmdUndoEngineShutdown(h: Long)
+
+    // ══ Project history: ProjectCommandManager ══════════════════════════════
+
+    @JvmStatic external fun uapmdCommandManagerGetState(h: Long): Array<Any>?
+    @JvmStatic external fun uapmdCommandManagerHistory(h: Long): Long
+    @JvmStatic external fun uapmdCommandManagerUndo(h: Long, cb: Any?)
+    @JvmStatic external fun uapmdCommandManagerRedo(h: Long, cb: Any?)
+    @JvmStatic external fun uapmdCommandManagerBeginStep(h: Long, description: String, origin: Int): Array<Any>?
+    @JvmStatic external fun uapmdCommandManagerEndStep(h: Long, cb: Any?)
+    @JvmStatic external fun uapmdCommandManagerCancelStep(h: Long, cb: Any?)
+    @JvmStatic external fun uapmdCommandManagerBeginGesture(h: Long, description: String, origin: Int): Array<Any>?
+    @JvmStatic external fun uapmdCommandManagerEndGesture(h: Long, cb: Any?)
+    @JvmStatic external fun uapmdCommandManagerCancelGesture(h: Long, cb: Any?)
+    @JvmStatic external fun uapmdCommandManagerShutdown(h: Long)
+
+    // ══ Project history: ProjectCommands ════════════════════════════════════
+    //
+    // Marker lists travel as parallel arrays: strings[i*4] = {markerId,
+    // referenceClipId, referenceMarkerId, name}, numbers[i] = offset,
+    // refTypes[i] = referenceType. Warps use strings[i*2] / numbers[i*2].
+
+    @JvmStatic external fun uapmdCommandsHistory(h: Long): Long
+    @JvmStatic external fun uapmdCommandsSetClipEnabled(h: Long, t: Int, c: Int, v: Boolean, o: Int): Boolean
+    @JvmStatic external fun uapmdCommandsSetClipAnchor(h: Long, t: Int, c: Int, type: Int, refId: String, offset: Double, o: Int): Boolean
+    @JvmStatic external fun uapmdCommandsSetClipGain(h: Long, t: Int, c: Int, v: Double, o: Int): Boolean
+    @JvmStatic external fun uapmdCommandsSetClipMuted(h: Long, t: Int, c: Int, v: Boolean, o: Int): Boolean
+    @JvmStatic external fun uapmdCommandsResizeClip(h: Long, t: Int, c: Int, v: Long, o: Int): Boolean
+    @JvmStatic external fun uapmdCommandsSetClipName(h: Long, t: Int, c: Int, v: String, o: Int): Boolean
+    @JvmStatic external fun uapmdCommandsSetClipFilepath(h: Long, t: Int, c: Int, v: String, o: Int): Boolean
+    @JvmStatic external fun uapmdCommandsSetClipNeedsFileSave(h: Long, t: Int, c: Int, v: Boolean, o: Int): Boolean
+    @JvmStatic external fun uapmdCommandsSetClipMarkers(h: Long, t: Int, c: Int, strings: Array<String?>, numbers: DoubleArray, refTypes: IntArray, o: Int): Boolean
+    @JvmStatic external fun uapmdCommandsSetClipAudioWarps(h: Long, t: Int, c: Int, strings: Array<String?>, numbers: DoubleArray, refTypes: IntArray, o: Int): Boolean
+    @JvmStatic external fun uapmdCommandsSetTrackGain(h: Long, t: Int, v: Double, o: Int): Boolean
+    @JvmStatic external fun uapmdCommandsSetTrackMuted(h: Long, t: Int, v: Boolean, o: Int): Boolean
+    @JvmStatic external fun uapmdCommandsSetTrackSolo(h: Long, t: Int, v: Boolean, o: Int): Boolean
+    @JvmStatic external fun uapmdCommandsSetTrackBypassed(h: Long, t: Int, v: Boolean, o: Int): Boolean
+    @JvmStatic external fun uapmdCommandsSetTrackFreezePolicyEnabled(h: Long, t: Int, v: Boolean, o: Int): Boolean
+    @JvmStatic external fun uapmdCommandsSetPluginBypassed(h: Long, id: Int, v: Boolean, o: Int): Boolean
+    @JvmStatic external fun uapmdCommandsSetPluginParameterValue(h: Long, id: Int, idx: Int, v: Double, o: Int): Boolean
+    @JvmStatic external fun uapmdCommandsSetPluginPerNoteControllerValue(
+        h: Long, id: Int, contextType: Int, note: Int, channel: Int, group: Int, extra: Int, idx: Int, v: Double, o: Int
+    ): Boolean
+    @JvmStatic external fun uapmdCommandsSetPluginGroup(h: Long, id: Int, g: Byte, o: Int): Boolean
+    @JvmStatic external fun uapmdCommandsSetMasterTrackMarkers(h: Long, strings: Array<String?>, numbers: DoubleArray, refTypes: IntArray, o: Int): Boolean
+
+    // ══ Project history: ProjectAddressBook ═════════════════════════════════
+
+    @JvmStatic external fun uapmdAddressesTimelineTrack(h: Long, refId: String): Long
+    @JvmStatic external fun uapmdAddressesSequencerTrack(h: Long, refId: String): Long
+    @JvmStatic external fun uapmdAddressesTrackIndex(h: Long, refId: String): Int
+    @JvmStatic external fun uapmdAddressesClipId(h: Long, trackRef: String, clipRef: String): Int
+    @JvmStatic external fun uapmdAddressesPluginInstanceId(h: Long, trackRef: String, nodeId: String): Int
+    @JvmStatic external fun uapmdAddressesTrackReferenceId(h: Long, trackIndex: Int): String?
+    @JvmStatic external fun uapmdAddressesClipAddress(h: Long, trackIndex: Int, clipId: Int): Array<String>?
+    @JvmStatic external fun uapmdAddressesPluginAddress(h: Long, instanceId: Int): Array<String>?
+
+    // ══ Fragments ═══════════════════════════════════════════════════════════
+
+    @JvmStatic external fun uapmdClipFragmentDestroy(h: Long)
+    @JvmStatic external fun uapmdClipFragmentIsMidi(h: Long): Boolean
+    /** Fills outStrings[0..1] = {name, filepath}; returns the 7 numeric clip fields. */
+    @JvmStatic external fun uapmdClipFragmentGetClip(h: Long, outStrings: Array<String?>): DoubleArray?
+    @JvmStatic external fun uapmdClipFragmentGetUmpEvents(h: Long): IntArray
+    @JvmStatic external fun uapmdClipFragmentGetUmpTickTimestamps(h: Long): LongArray
+    @JvmStatic external fun uapmdClipFragmentExtensionStateCount(h: Long): Int
+    @JvmStatic external fun uapmdClipFragmentExtensionStateKey(h: Long, index: Int): String
+    @JvmStatic external fun uapmdClipFragmentExtensionStateData(h: Long, index: Int): ByteArray
+
+    @JvmStatic external fun uapmdTrackFragmentDestroy(h: Long)
+    @JvmStatic external fun uapmdTrackFragmentReferenceId(h: Long): String
+    @JvmStatic external fun uapmdTrackFragmentVolume(h: Long): Double
+    @JvmStatic external fun uapmdTrackFragmentMuted(h: Long): Boolean
+    @JvmStatic external fun uapmdTrackFragmentSolo(h: Long): Boolean
+    @JvmStatic external fun uapmdTrackFragmentGraphType(h: Long): String
+    @JvmStatic external fun uapmdTrackFragmentGraphBytes(h: Long): ByteArray
+    @JvmStatic external fun uapmdTrackFragmentClipCount(h: Long): Int
+    @JvmStatic external fun uapmdTrackFragmentGetClip(h: Long, index: Int): Long
+    @JvmStatic external fun uapmdTrackFragmentPluginCount(h: Long): Int
+    /** Fills outStrings[0..3] = {nodeId, pluginId, format, displayName}; returns the plug-in state. */
+    @JvmStatic external fun uapmdTrackFragmentGetPlugin(h: Long, index: Int, outStrings: Array<String?>): ByteArray?
+    @JvmStatic external fun uapmdTrackFragmentPluginGroupIndex(h: Long, index: Int): Int
+
+    // ══ TimelineFacade history accessors and undoable mutations ═════════════
+
+    @JvmStatic external fun uapmdTlUndoEngine(h: Long): Long
+    @JvmStatic external fun uapmdTlCommands(h: Long): Long
+    @JvmStatic external fun uapmdTlAddresses(h: Long): Long
+    @JvmStatic external fun uapmdTlBeginDocumentTransaction(h: Long)
+    @JvmStatic external fun uapmdTlEndDocumentTransaction(h: Long)
+    @JvmStatic external fun uapmdTlRemoveClipWithOrigin(h: Long, t: Int, c: Int, o: Int): Boolean
+    @JvmStatic external fun uapmdTlClearClipsFromTrack(h: Long, t: Int, o: Int): Boolean
+    @JvmStatic external fun uapmdTlClipEnabled(h: Long, t: Int, c: Int): Boolean
+    @JvmStatic external fun uapmdTlReplaceMidiClipContent(h: Long, t: Int, c: Int, umpEvents: IntArray?, tickTimestamps: LongArray?, o: Int): Boolean
+    @JvmStatic external fun uapmdTlReplaceAudioClipContent(
+        h: Long, t: Int, c: Int, filepath: String,
+        markerStrings: Array<String?>, markerNumbers: DoubleArray, markerTypes: IntArray,
+        warpStrings: Array<String?>, warpNumbers: DoubleArray, warpTypes: IntArray,
+        masterStrings: Array<String?>, masterNumbers: DoubleArray, masterTypes: IntArray, o: Int
+    ): Boolean
+    @JvmStatic external fun uapmdTlCaptureClipFragment(h: Long, t: Int, c: Int): Long
+    /** Fills outStrings[0] with the error; returns {clipId, sourceNodeId, success}. */
+    @JvmStatic external fun uapmdTlAttachClipFragment(h: Long, t: Int, fragment: Long, idPolicy: Int, outStrings: Array<String?>): IntArray
+    /** cb: (fragmentHandle: Long, error: String?) -> Unit */
+    @JvmStatic external fun uapmdTlCaptureTrackFragment(h: Long, t: Int, cb: Any)
+    /** cb: (trackIndex: Int, error: String?) -> Unit */
+    @JvmStatic external fun uapmdTlAttachTrackFragment(
+        h: Long, fragment: Long, idPolicy: Int, insertionIndex: Int,
+        includePlugins: Boolean, includePluginState: Boolean, includeClips: Boolean, cb: Any
+    )
+    @JvmStatic external fun uapmdTlAddEmptyTrackUndoable(h: Long, o: Int, cb: Any)
+    @JvmStatic external fun uapmdTlRemoveTrackUndoable(h: Long, t: Int, o: Int, cb: Any)
+    @JvmStatic external fun uapmdTlRecordTrackAddition(h: Long, t: Int, o: Int, cb: Any)
+    @JvmStatic external fun uapmdTlSetPluginState(h: Long, id: Int, state: ByteArray?, o: Int, cb: Any?)
+    @JvmStatic external fun uapmdTlLoadPluginPreset(h: Long, id: Int, presetIndex: Int, o: Int, cb: Any?)
+    @JvmStatic external fun uapmdTlRecordPluginInstanceAddition(h: Long, id: Int, o: Int, cb: Any?)
+    @JvmStatic external fun uapmdTlRemovePluginInstanceUndoable(h: Long, id: Int, o: Int, cb: Any?)
+    @JvmStatic external fun uapmdTlHasPendingPluginMutations(h: Long): Boolean
+
+    // ══ Engine dirty state, master markers, addin extension points ══════════
+
+    @JvmStatic external fun uapmdEngineIsProjectDirty(h: Long): Boolean
+    @JvmStatic external fun uapmdEngineIsTrackDirty(h: Long, t: Int): Boolean
+    @JvmStatic external fun uapmdEngineMarkTrackDirty(h: Long, t: Int, dirty: Boolean)
+    @JvmStatic external fun uapmdEngineClearTrackDirtyState(h: Long)
+    @JvmStatic external fun uapmdEngineMasterMarkerCount(h: Long): Int
+    @JvmStatic external fun uapmdEngineGetMasterMarkers(h: Long, outStrings: Array<String?>, outTypes: IntArray): DoubleArray
+    @JvmStatic external fun uapmdEngineSetMasterMarkers(h: Long, strings: Array<String?>, numbers: DoubleArray, refTypes: IntArray)
+    @JvmStatic external fun uapmdEngineRegisterAddinExtensionPoints(engine: Long, mgr: Long)
+
+    // ══ AddinManager ════════════════════════════════════════════════════════
+
+    @JvmStatic external fun uapmdAddinManagerCreate(): Long
+    @JvmStatic external fun uapmdAddinManagerDestroy(h: Long)
+    @JvmStatic external fun uapmdAddinManagerInitialize(h: Long)
+    @JvmStatic external fun uapmdAddinManagerSetEnabled(h: Long, packageId: String, addinId: String, enabled: Boolean): Boolean
+    @JvmStatic external fun uapmdAddinManagerShutdown(h: Long)
+    @JvmStatic external fun uapmdAddinManagerDirectoryCount(h: Long): Int
+    @JvmStatic external fun uapmdAddinManagerGetDirectory(h: Long, index: Int): String
+    @JvmStatic external fun uapmdAddinManagerAddinCount(h: Long): Int
+    /** Fills outStrings[0..5] = {packageId, addinId, name, path, libraryPath, message}; returns {builtIn, state}. */
+    @JvmStatic external fun uapmdAddinManagerGetAddin(h: Long, index: Int, outStrings: Array<String?>): IntArray?
+    @JvmStatic external fun uapmdAddinManagerLastError(h: Long): String
+    @JvmStatic external fun uapmdAddinSupportsDynamicLoading(): Boolean
 }
