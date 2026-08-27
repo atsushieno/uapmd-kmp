@@ -1,5 +1,8 @@
+import org.gradle.api.file.FileSystemOperations
+import org.gradle.process.ExecOperations
 import org.jetbrains.kotlin.gradle.ExperimentalWasmDsl
 import org.jetbrains.kotlin.gradle.dsl.JvmTarget
+import javax.inject.Inject
 
 plugins {
     alias(libs.plugins.kotlinMultiplatform)
@@ -9,6 +12,14 @@ plugins {
 
 val repoRoot = rootProject.projectDir.parentFile
 val cpmCacheDir = File(System.getProperty("user.home"), ".cache/CPM/uapmd")
+
+// Gradle 9 removed Project.exec()/Project.copy() from task actions. Ad-hoc task
+// actions must obtain the corresponding services by injection instead.
+interface GradleServices {
+    @get:Inject val exec: ExecOperations
+    @get:Inject val fs: FileSystemOperations
+}
+val buildServices = objects.newInstance<GradleServices>()
 
 kotlin {
     androidTarget {
@@ -150,12 +161,12 @@ tasks.register("buildUapmdCApiDesktop") {
                     "-DCMAKE_POSITION_INDEPENDENT_CODE=ON"))
                 else         -> configureArgs.addAll(listOf("-G", "Ninja"))
             }
-            exec {
+            buildServices.exec.exec {
                 workingDir = repoRoot
                 commandLine(configureArgs)
             }
         }
-        exec {
+        buildServices.exec.exec {
             workingDir = repoRoot
             commandLine(
                 "cmake", "--build", cmakeBuildDir.absolutePath,
@@ -256,7 +267,7 @@ tasks.register("buildUapmdCApiWasm") {
         val cpmCacheArg = "-DCPM_SOURCE_CACHE=${cpmCacheDir.absolutePath}"
 
         // ── 1. Configure ──────────────────────────────────────────────────────
-        exec {
+        buildServices.exec.exec {
             commandLine(
                 "emcmake", "cmake",
                 "-S", wasmSrcDir.absolutePath,
@@ -270,7 +281,7 @@ tasks.register("buildUapmdCApiWasm") {
         }
 
         // ── 2. Build ──────────────────────────────────────────────────────────
-        exec {
+        buildServices.exec.exec {
             commandLine(
                 "cmake",
                 "--build", buildDir.absolutePath,
@@ -303,7 +314,7 @@ tasks.register("buildUapmdCApiWasm") {
         if (!wclapEs6Dir.isDirectory) {
             throw GradleException("Expected WebCLAP es6 runtime directory at ${wclapEs6Dir.absolutePath}")
         }
-        copy {
+        buildServices.fs.copy {
             from(wclapEs6Dir)
             into(File(wasmOutputDir, "es6"))
         }
