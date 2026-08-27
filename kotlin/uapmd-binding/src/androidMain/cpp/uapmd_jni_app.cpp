@@ -87,6 +87,31 @@ void app_instance_created_trampoline(uapmd_plugin_instance_result_t result, void
     delete ctx;
 }
 
+/** Packs uapmd_app_project_result_t as Object[]{ long[1] success, String? error }. */
+jobjectArray pack_project_result(JNIEnv* env, uapmd_app_project_result_t r) {
+    jlong ok = r.success ? 1 : 0;
+    jlongArray okArr = env->NewLongArray(1);
+    env->SetLongArrayRegion(okArr, 0, 1, &ok);
+
+    jclass objectClass = env->FindClass("java/lang/Object");
+    jobjectArray result = env->NewObjectArray(2, objectClass, nullptr);
+    env->SetObjectArrayElement(result, 0, okArr);
+    if (r.error) env->SetObjectArrayElement(result, 1, env->NewStringUTF(r.error));
+    return result;
+}
+
+/** cb signature: (success: Boolean, error: String?) -> Unit */
+void app_project_save_trampoline(uapmd_app_project_result_t r, void* ud) {
+    auto* ctx = static_cast<AppCtx*>(ud);
+    if (!ctx) return;
+    JNIEnv* e = uapmd_jni_env();
+    if (e && ctx->mid) {
+        jstring err = r.error ? e->NewStringUTF(r.error) : nullptr;
+        e->CallVoidMethod(ctx->obj, ctx->mid, static_cast<jboolean>(r.success), err);
+    }
+    delete ctx;
+}
+
 /** Packs uapmd_undo_state_t as Object[]{ long[10], String, String, String }. */
 jobjectArray pack_app_undo_state(JNIEnv* env, const uapmd_undo_state_t& s) {
     jlong nums[10] = {
@@ -374,6 +399,36 @@ JNI_FN(void, uapmdAppRequestShowPluginUi)(JNIEnv*, jclass, jlong app, jint insta
 
 JNI_FN(void, uapmdAppHidePluginUi)(JNIEnv*, jclass, jlong app, jint instanceId) {
     uapmd_app_hide_plugin_ui(AM(app), instanceId);
+}
+
+/* ── Project I/O ───────────────────────────────────────────────────────────── */
+
+JNI_FN(jobjectArray, uapmdAppLoadProject)(JNIEnv* env, jclass, jlong app, jstring path) {
+    const char* p = path ? env->GetStringUTFChars(path, nullptr) : nullptr;
+    auto r = uapmd_app_load_project(AM(app), p);
+    if (path) env->ReleaseStringUTFChars(path, p);
+    return pack_project_result(env, r);
+}
+
+JNI_FN(jobjectArray, uapmdAppSaveProjectSync)(JNIEnv* env, jclass, jlong app, jstring path) {
+    const char* p = path ? env->GetStringUTFChars(path, nullptr) : nullptr;
+    auto r = uapmd_app_save_project_sync(AM(app), p);
+    if (path) env->ReleaseStringUTFChars(path, p);
+    return pack_project_result(env, r);
+}
+
+JNI_FN(void, uapmdAppSaveProject)(JNIEnv* env, jclass, jlong app, jstring path, jobject cb) {
+    const char* p = path ? env->GetStringUTFChars(path, nullptr) : nullptr;
+    auto* ctx = cb ? new AppCtx(env, cb, "(ZLjava/lang/String;)V") : nullptr;
+    uapmd_app_save_project(AM(app), p, ctx, app_project_save_trampoline);
+    if (path) env->ReleaseStringUTFChars(path, p);
+}
+
+JNI_FN(jobjectArray, uapmdAppLoadProjectFromHandleToken)(JNIEnv* env, jclass, jlong app, jstring token) {
+    const char* t = token ? env->GetStringUTFChars(token, nullptr) : nullptr;
+    auto r = uapmd_app_load_project_from_handle_token(AM(app), t);
+    if (token) env->ReleaseStringUTFChars(token, t);
+    return pack_project_result(env, r);
 }
 
 #undef JNI_FN

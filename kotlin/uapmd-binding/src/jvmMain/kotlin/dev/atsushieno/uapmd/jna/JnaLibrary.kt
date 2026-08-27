@@ -520,6 +520,18 @@ open class UapmdPluginInstanceResult : Structure() {
     class ByVal : UapmdPluginInstanceResult(), Structure.ByValue
 }
 
+@FieldOrder("success", "error")
+open class UapmdAppProjectResult : Structure() {
+    @JvmField var success: Byte = 0
+    @JvmField var error: String? = null
+
+    class ByVal : UapmdAppProjectResult(), Structure.ByValue
+}
+
+interface ProjectSaveCb : Callback {
+    fun invoke(result: UapmdAppProjectResult.ByVal, userData: Pointer?)
+}
+
 interface InstanceCreatedCb : Callback {
     fun invoke(result: UapmdPluginInstanceResult.ByVal, userData: Pointer?)
 }
@@ -1235,4 +1247,9 @@ interface UapmdLibrary : Library {
     fun uapmd_app_request_show_instance_details(app: Pointer?, instanceId: Int)
     fun uapmd_app_request_show_plugin_ui(app: Pointer?, instanceId: Int)
     fun uapmd_app_hide_plugin_ui(app: Pointer?, instanceId: Int)
+
+    fun uapmd_app_load_project(app: Pointer?, filePath: String?): UapmdAppProjectResult.ByVal
+    fun uapmd_app_save_project_sync(app: Pointer?, filePath: String?): UapmdAppProjectResult.ByVal
+    fun uapmd_app_save_project(app: Pointer?, filePath: String?, userData: Pointer?, callback: ProjectSaveCb?)
+    fun uapmd_app_load_project_from_handle_token(app: Pointer?, token: String?): UapmdAppProjectResult.ByVal
 }

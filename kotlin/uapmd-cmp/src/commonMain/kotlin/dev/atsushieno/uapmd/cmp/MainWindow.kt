@@ -19,6 +19,8 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.DpSize
 import androidx.compose.ui.unit.dp
 import dev.atsushieno.uapmd.cmp.ui.FloatingWindowLayer
+import dev.atsushieno.uapmd.cmp.ui.InstanceDetails
+import dev.atsushieno.uapmd.cmp.ui.PluginSelector
 import dev.atsushieno.uapmd.cmp.ui.Toolbar
 import dev.atsushieno.uapmd.cmp.ui.rememberFloatingWindowManager
 
@@ -38,13 +40,13 @@ fun MainWindow() {
                     Toolbar(
                         host = host,
                         onTogglePlugins = {
-                            windows.toggle("plugins", "Plugin Selector", DpSize(520.dp, 360.dp)) {
-                                PluginSelectorPlaceholder(host)
+                            windows.toggle("plugins", "Plugin Selector", DpSize(560.dp, 430.dp)) {
+                                PluginSelector(host)
                             }
                         }
                     )
                     HorizontalDivider()
-                    TrackListPlaceholder(host, Modifier.weight(1f))
+                    TrackList(host, windows, Modifier.weight(1f))
                     HorizontalDivider()
                     BottomBar(host, windows)
                 }
@@ -54,7 +56,11 @@ fun MainWindow() {
 }
 
 @Composable
-private fun TrackListPlaceholder(host: UapmdHost, modifier: Modifier = Modifier) {
+private fun TrackList(
+    host: UapmdHost,
+    windows: dev.atsushieno.uapmd.cmp.ui.FloatingWindowManager,
+    modifier: Modifier = Modifier
+) {
     Column(modifier.fillMaxWidth().padding(8.dp)) {
         val tl = host.timeline
         Text(
@@ -64,13 +70,32 @@ private fun TrackListPlaceholder(host: UapmdHost, modifier: Modifier = Modifier)
             style = MaterialTheme.typography.bodySmall
         )
         LazyColumn(Modifier.fillMaxWidth()) {
-            items((0 until host.trackCount).toList()) { index ->
-                Row(
-                    Modifier.fillMaxWidth().padding(vertical = 3.dp),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Text("Track $index", Modifier.weight(1f))
-                    Button(onClick = { host.removeTrack(index) }) { Text("🗑") }
+            items(host.trackInstances.indices.toList()) { trackIndex ->
+                val instances = host.trackInstances[trackIndex]
+                Column(Modifier.fillMaxWidth().padding(vertical = 4.dp)) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Text("Track $trackIndex", Modifier.weight(1f))
+                        Button(onClick = { host.removeTrack(trackIndex) }) { Text("🗑") }
+                    }
+                    // uapmd-app labels this button with the first plugin, or
+                    // "Add Plugin" when the track is empty.
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Button(onClick = {
+                            windows.toggle("plugins", "Plugin Selector", DpSize(560.dp, 430.dp)) {
+                                PluginSelector(host)
+                            }
+                        }) { Text(instances.firstOrNull()?.displayName ?: "Add Plugin") }
+                        instances.forEach { inst ->
+                            Text("  ")
+                            Button(onClick = {
+                                windows.open(
+                                    "details:${inst.instanceId}",
+                                    "${inst.displayName} (${inst.formatName}) - Details",
+                                    DpSize(460.dp, 420.dp)
+                                ) { InstanceDetails(host, inst) }
+                            }) { Text("${inst.displayName} ⋮") }
+                        }
+                    }
                 }
             }
         }
@@ -93,20 +118,5 @@ private fun BottomBar(host: UapmdHost, windows: dev.atsushieno.uapmd.cmp.ui.Floa
                 Text("Plugin instances (Phase 3).")
             }
         }) { Text("Plugin Instances") }
-    }
-}
-
-@Composable
-private fun PluginSelectorPlaceholder(host: UapmdHost) {
-    Column {
-        Text(
-            if (host.isScanning) "Scanning plugins…" else "Idle.",
-            style = MaterialTheme.typography.bodyMedium
-        )
-        Text(
-            "The catalog table lands in Phase 3; instance creation needs " +
-                "uapmd_app_create_plugin_instance (see docs/uapmd-binding-missing-api.md).",
-            style = MaterialTheme.typography.bodySmall
-        )
     }
 }

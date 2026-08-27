@@ -125,7 +125,33 @@ class NativeAppModel internal constructor(
 
     override fun requestShowPluginUi(instanceId: Int) = uapmd_app_request_show_plugin_ui(handle, instanceId)
     override fun hidePluginUi(instanceId: Int) = uapmd_app_hide_plugin_ui(handle, instanceId)
+
+    // ── Project I/O ─────────────────────────────────────────────────────────
+
+    override fun loadProject(filePath: String): AppProjectResult =
+        uapmd_app_load_project(handle, filePath).useContents { toKotlin() }
+
+    override fun saveProjectSync(filePath: String): AppProjectResult =
+        uapmd_app_save_project_sync(handle, filePath).useContents { toKotlin() }
+
+    override fun saveProject(filePath: String, callback: (AppProjectResult) -> Unit) =
+        uapmd_app_save_project(handle, filePath, StableRef.create(callback).asCPointer(), appProjectSaveTrampoline)
+
+    override fun loadProjectFromHandleToken(token: String): AppProjectResult =
+        uapmd_app_load_project_from_handle_token(handle, token).useContents { toKotlin() }
 }
+
+private fun uapmd_app_project_result_t.toKotlin() =
+    AppProjectResult(success, error?.toKString())
+
+private val appProjectSaveTrampoline =
+    staticCFunction<CValue<uapmd_app_project_result_t>, COpaquePointer?, Unit> { result, userData ->
+        if (userData != null) {
+            val ref = userData.asStableRef<(AppProjectResult) -> Unit>()
+            result.useContents { ref.get()(AppProjectResult(success, error?.toKString())) }
+            ref.dispose()
+        }
+    }
 
 private val appInstanceCreatedTrampoline =
     staticCFunction<CValue<uapmd_plugin_instance_result_t>, COpaquePointer?, Unit> { result, userData ->

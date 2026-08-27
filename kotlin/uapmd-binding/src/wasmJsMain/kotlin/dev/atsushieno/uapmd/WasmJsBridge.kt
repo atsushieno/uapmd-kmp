@@ -913,6 +913,16 @@ external interface UapmdCApiModule : JsAny {
     fun uapmdAppRequestShowPluginUi(app: Int, instanceId: Int)
     @JsName("_uapmd_app_hide_plugin_ui")
     fun uapmdAppHidePluginUi(app: Int, instanceId: Int)
+
+    // Struct-returning functions take the result pointer as their FIRST argument (sret).
+    @JsName("_uapmd_app_load_project")
+    fun uapmdAppLoadProject(out: Int, app: Int, filePath: Int)
+    @JsName("_uapmd_app_save_project_sync")
+    fun uapmdAppSaveProjectSync(out: Int, app: Int, filePath: Int)
+    @JsName("_uapmd_app_save_project")
+    fun uapmdAppSaveProject(app: Int, filePath: Int, userData: Int, callback: Int)
+    @JsName("_uapmd_app_load_project_from_handle_token")
+    fun uapmdAppLoadProjectFromHandleToken(out: Int, app: Int, token: Int)
 }
 
 
@@ -1175,6 +1185,7 @@ internal val pendingTrackFragments    = mutableMapOf<Int, (TrackFragment?, Strin
 /** For C callbacks shaped (const char* error, void* user_data). */
 internal val pendingErrorOnlyCallbacks = mutableMapOf<Int, (String?) -> Unit>()
 internal val pendingInstanceCreations = mutableMapOf<Int, (PluginInstanceResult) -> Unit>()
+internal val pendingProjectSaves = mutableMapOf<Int, (AppProjectResult) -> Unit>()
 
 /** The C callback takes uapmd_undo_result_t by value, i.e. as a pointer. */
 @JsExport
@@ -1208,6 +1219,17 @@ fun uapmdDispatchInstanceCreated(cbId: Int, resultPtr: Int) {
             pluginName = if (namePtr != 0) mod.utf8ToString(namePtr) else "",
             error = if (errPtr != 0) mod.utf8ToString(errPtr) else null
         )
+    )
+}
+
+/** uapmd_app_project_result_t by value = a pointer. wasm32: bool @0, char* @4. */
+@JsExport
+fun uapmdDispatchProjectSave(cbId: Int, resultPtr: Int) {
+    val mod = wasmMod
+    val ok = mod.getValue(resultPtr, "i8").toInt() != 0
+    val errPtr = mod.getValue(resultPtr + 4, "i32").toInt()
+    pendingProjectSaves.remove(cbId)?.invoke(
+        AppProjectResult(ok, if (errPtr != 0) mod.utf8ToString(errPtr) else null)
     )
 }
 

@@ -128,7 +128,32 @@ class JvmAppModel internal constructor(
 
     override fun requestShowPluginUi(instanceId: Int) = lib.uapmd_app_request_show_plugin_ui(handle, instanceId)
     override fun hidePluginUi(instanceId: Int) = lib.uapmd_app_hide_plugin_ui(handle, instanceId)
+
+    // ── Project I/O ─────────────────────────────────────────────────────────
+
+    override fun loadProject(filePath: String): AppProjectResult =
+        lib.uapmd_app_load_project(handle, filePath).toKotlin()
+
+    override fun saveProjectSync(filePath: String): AppProjectResult =
+        lib.uapmd_app_save_project_sync(handle, filePath).toKotlin()
+
+    override fun saveProject(filePath: String, callback: (AppProjectResult) -> Unit) {
+        lateinit var cb: ProjectSaveCb
+        cb = object : ProjectSaveCb {
+            override fun invoke(result: UapmdAppProjectResult.ByVal, userData: Pointer?) {
+                liveAppCallbacks.remove(cb)
+                callback(result.toKotlin())
+            }
+        }
+        liveAppCallbacks.add(cb)
+        lib.uapmd_app_save_project(handle, filePath, null, cb)
+    }
+
+    override fun loadProjectFromHandleToken(token: String): AppProjectResult =
+        lib.uapmd_app_load_project_from_handle_token(handle, token).toKotlin()
 }
+
+private fun UapmdAppProjectResult.toKotlin() = AppProjectResult(success != 0.toByte(), error)
 
 // Callbacks are held by a strong reference until they fire, so JNA cannot collect
 // the trampoline while native code still owns the pointer.

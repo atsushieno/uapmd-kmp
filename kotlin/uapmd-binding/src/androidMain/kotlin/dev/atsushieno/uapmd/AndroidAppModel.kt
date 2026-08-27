@@ -113,6 +113,28 @@ class AndroidAppModel internal constructor(internal val handle: Long) : AppModel
 
     override fun requestShowPluginUi(instanceId: Int) = JniBridge.uapmdAppRequestShowPluginUi(handle, instanceId)
     override fun hidePluginUi(instanceId: Int) = JniBridge.uapmdAppHidePluginUi(handle, instanceId)
+
+    // ── Project I/O ─────────────────────────────────────────────────────────
+
+    override fun loadProject(filePath: String): AppProjectResult =
+        JniBridge.uapmdAppLoadProject(handle, filePath).toProjectResult()
+
+    override fun saveProjectSync(filePath: String): AppProjectResult =
+        JniBridge.uapmdAppSaveProjectSync(handle, filePath).toProjectResult()
+
+    override fun saveProject(filePath: String, callback: (AppProjectResult) -> Unit) =
+        JniBridge.uapmdAppSaveProject(handle, filePath) { success: Boolean, error: String? ->
+            callback(AppProjectResult(success, error))
+        }
+
+    override fun loadProjectFromHandleToken(token: String): AppProjectResult =
+        JniBridge.uapmdAppLoadProjectFromHandleToken(handle, token).toProjectResult()
+}
+
+private fun Array<Any>?.toProjectResult(): AppProjectResult {
+    if (this == null) return AppProjectResult(false, "native call returned null")
+    val nums = this[0] as LongArray
+    return AppProjectResult(nums[0] != 0L, this.getOrNull(1) as? String)
 }
 
 class AndroidTransportController internal constructor(internal val handle: Long) : TransportController {

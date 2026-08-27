@@ -1,0 +1,19 @@
+package dev.atsushieno.uapmd.cmp
+
+import java.awt.FileDialog
+import java.awt.Frame
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
+
+/** AWT FileDialog gives a native chooser on macOS and Windows without extra deps. */
+private suspend fun pick(mode: Int): String? = withContext(Dispatchers.Main) {
+    val dialog = FileDialog(null as Frame?, "uapmd project", mode)
+    dialog.file = "*.uapmd"
+    dialog.isVisible = true
+    val dir = dialog.directory
+    val file = dialog.file
+    if (dir == null || file == null) null else dir + file
+}
+
+actual suspend fun pickProjectFileToOpen(): String? = pick(FileDialog.LOAD)
+actual suspend fun pickProjectFileToSave(): String? = pick(FileDialog.SAVE)

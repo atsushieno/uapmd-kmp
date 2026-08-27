@@ -126,6 +126,25 @@ fun main() {
         check("instance retrievable from the plugin host", inst != null)
         check("instance reports a display name", !inst?.displayName.isNullOrEmpty())
         println("   instantiated '${inst?.displayName}' params=${inst?.parameterCount} group=${model.getInstanceGroup(succeeded.instanceId)}")
+        // ── parameters via ProjectCommands (what InstanceDetails uses) ───────
+        val inst2 = host.getInstance(succeeded.instanceId)!!
+        val paramCount = inst2.parameterCount.toInt()
+        check("instance exposes parameters", paramCount > 0)
+        if (paramCount > 0) {
+            val meta = inst2.getParameterMetadata(0u)!!
+            val before = inst2.getParameterValue(0)
+            val target = if (before < (meta.minPlainValue + meta.maxPlainValue) / 2)
+                meta.maxPlainValue else meta.minPlainValue
+            val commands = model.sequencer.engine.timeline.commands
+            val accepted = commands.setPluginParameterValue(succeeded.instanceId, 0, target)
+            Thread.sleep(300)
+            val after = inst2.getParameterValue(0)
+            println("   param '${meta.name}': $before -> $after (requested $target, accepted=$accepted)")
+            check("setPluginParameterValue was accepted", accepted)
+            check("parameter value actually changed", after != before)
+            check("parameter edit is undoable", model.historyState.canUndo)
+        }
+
         // Opt-in: removing an instance and then shutting the engine down crashes
         // in AppModel::completeAudioEngineShutdown() (AppModel.cpp:783 dereferences
         // host->getInstance(id) for an id instanceIds() still reports). Upstream bug,
@@ -140,6 +159,18 @@ fun main() {
     } else {
         println("NOTE  no candidate plugin instantiated on this machine; the binding still")
         println("      round-tripped every error string, so marshalling is verified")
+    }
+
+    // ── project save/load (struct RETURNED by value: the sret ABI path) ──────
+    val projectPath = System.getProperty("java.io.tmpdir") + "/uapmd-cmp-probe.uapmd"
+    val saved = model.saveProjectSync(projectPath)
+    println("   saveProjectSync -> success=${saved.success} error=${saved.error}")
+    check("saveProjectSync returned a decodable struct", saved.success || saved.error != null)
+    if (saved.success) {
+        check("project file exists on disk", java.io.File(projectPath).length() > 0)
+        val loaded = model.loadProject(projectPath)
+        println("   loadProject -> success=${loaded.success} error=${loaded.error}")
+        check("loadProject round-tripped", loaded.success)
     }
 
     // ── ordered teardown: engine off, then cleanup (§2.5) ────────────────────

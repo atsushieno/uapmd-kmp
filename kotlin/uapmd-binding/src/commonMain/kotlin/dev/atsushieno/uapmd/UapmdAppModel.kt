@@ -104,7 +104,18 @@ interface AppModel {
     fun requestShowInstanceDetails(instanceId: Int)
     fun requestShowPluginUi(instanceId: Int)
     fun hidePluginUi(instanceId: Int)
+
+    // ── Project I/O ─────────────────────────────────────────────────────────
+
+    fun loadProject(filePath: String): AppProjectResult
+    fun saveProjectSync(filePath: String): AppProjectResult
+    fun saveProject(filePath: String, callback: (AppProjectResult) -> Unit)
+    /** Android's document-picker path: resolves a content:// handle token. */
+    fun loadProjectFromHandleToken(token: String): AppProjectResult
 }
+
+/** Mirrors `uapmd_app_project_result_t`. */
+data class AppProjectResult(val success: Boolean, val error: String?)
 
 /** Mirrors `uapmd_plugin_instance_config_t`; empty strings take the C defaults. */
 data class PluginInstanceConfig(

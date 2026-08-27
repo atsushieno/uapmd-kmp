@@ -12,7 +12,7 @@ uapmd API. Anything else belongs in the app.
 ## 1 · Done in this branch (needs lifting onto `main`)
 
 `uapmd-c-app.h` was fully unbound before this work: `grep -c uapmd_app_ kotlin/uapmd-binding/src`
-returned 0. **49 of its 81 functions are now bound** on all five backends.
+returned 0. **53 of its 81 functions are now bound** on all five backends.
 
 | Group | Functions | Kotlin surface |
 |---|---|---|
@@ -24,6 +24,7 @@ returned 0. **49 of its 81 functions are now bound** on all five backends.
 | Tracks | `add_track`, `remove_track`, `remove_all_tracks`, `timeline_track_count`, `get_timeline_track`, `master_timeline_track`, `get_timeline_state` | same names |
 | History | `get_history_state`, `undo`, `redo` | `historyState`, `undo()`, `redo()` |
 | Transport | all 10 `uapmd_transport_*` | `TransportController` |
+| Project I/O | `load_project`, `save_project`, `save_project_sync`, `load_project_from_handle_token` | `AppModel` project members + `AppProjectResult` mirror |
 | Plugin instances | `create_plugin_instance`, `remove_plugin_instance`, `get/set_instance_group`, `enable/disable_ump_device`, `request_show_instance_details`, `request_show_plugin_ui`, `hide_plugin_ui` | `AppModel` instance members + `PluginInstanceConfig` / `PluginInstanceResult` mirrors |
 
 Files: `commonMain/UapmdAppModel.kt`, `{Jvm,Native,Android,WasmJs,Js}AppModel.kt`,
@@ -60,19 +61,22 @@ prefer consistency with that, the flag can come back as binding-side.)
 
 ---
 
-## 2 · Still unbound in `uapmd-c-app.h` (32 of 81)
+## 2 · Still unbound in `uapmd-c-app.h` (28 of 81)
 
 Ordered by when `uapmd-cmp` needs them. Several pass or return structs **by value**, which is
 where the Emscripten ABI rules (sret first-argument, byval-as-pointer, `WASM_BIGINT`) bite.
-The instance-lifecycle group above was the first such case and confirmed the rule in practice:
-`uapmd_plugin_instance_result_t` reaches the callback as a pointer on wasm/js (int32 id @0,
-`char*` name @4, `char*` error @8) and as a JNA `Structure.ByValue` on the JVM.
+Both by-value directions are now proven in practice:
+- **struct in a callback** — `uapmd_plugin_instance_result_t` arrives as a pointer on wasm/js
+  (int32 id @0, `char*` @4, `char*` @8), as `Structure.ByValue` on JNA, `CValue<>` on cinterop.
+- **struct returned (sret)** — `uapmd_app_project_result_t` (bool @0, `char*` @4, size 8) takes
+  the result pointer as the **first** argument on wasm/js. Verified on the JVM by round-tripping
+  a real `.uapmd` file through `save_project_sync` then `load_project`.
 
 | Priority | Functions | Struct-by-value? |
 |---|---|---|
 | Plugin UI | `show_plugin_ui` (the parent-handle/resize-handler form) | no |
 | Plugin state | `save_plugin_state`, `load_plugin_state` | **yes** — `uapmd_plugin_state_result_t` |
-| Project I/O | `save_project`, `save_project_sync`, `load_project`, `load_project_from_handle_token`, `document_provider` | **yes** — `uapmd_app_project_result_t` |
+| Project I/O | `document_provider` | no |
 | Clips | `add_clip_to_track`, `add_midi_clip_to_track`, `add_midi_clip_from_data`, `create_empty_midi_clip`, `remove_clip_from_track` | **yes** — `uapmd_clip_add_result_t` |
 | Offline render | `start_render`, `cancel_render`, `get_render_status`, `clear_render_status` | **yes** — settings in, status out |
 | Track graph | `ensure_track_uses_editor_graph`, `request_show_track_graph`, `revert_track_to_simple_graph`, `get_track_graph_connections`, `connect_track_graph`, `disconnect_track_graph_connection` | **yes** |

@@ -651,4 +651,10 @@ object JniBridge {
     @JvmStatic external fun uapmdAppRequestShowInstanceDetails(app: Long, instanceId: Int)
     @JvmStatic external fun uapmdAppRequestShowPluginUi(app: Long, instanceId: Int)
     @JvmStatic external fun uapmdAppHidePluginUi(app: Long, instanceId: Int)
+
+    @JvmStatic external fun uapmdAppLoadProject(app: Long, filePath: String): Array<Any>?
+    @JvmStatic external fun uapmdAppSaveProjectSync(app: Long, filePath: String): Array<Any>?
+    /** cb: (success: Boolean, error: String?) -> Unit */
+    @JvmStatic external fun uapmdAppSaveProject(app: Long, filePath: String, cb: Any)
+    @JvmStatic external fun uapmdAppLoadProjectFromHandleToken(app: Long, token: String): Array<Any>?
 }

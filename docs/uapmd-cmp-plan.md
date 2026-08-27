@@ -826,3 +826,60 @@ probe therefore makes removal **opt-in**: `-Duapmd.probe.removeInstance=1` repro
 default run stays green. `tests/uapmd-app-shutdown-crash.c` is a started pure-C repro, but it is
 **not working yet** — a bare C host installs no remidy `EventLoop`, so instantiation never
 completes and it stalls before the interesting part.
+
+### 2026-08-28 (cont.) — Phases 3-5 landed
+
+**Phase 3 — Plugin Selector** (`ui/PluginSelector.kt`): scan / force-rescan / remote-scanner
+controls, live search, sortable Format/Name/Vendor table over the real catalog, destination
+selector (New Track or an existing track), Device Name + API fields, and instantiation reporting
+success or the plugin's own error. The blocked-bundle list is deliberately absent, not faked —
+enumerating it needs AppModel's `PluginScanTool`, which the C API does not expose.
+
+**Track list** now shows real tracks with their plugin instances, each opening its own Details
+window keyed `details:<instanceId>`, so several coexist.
+
+**Phase 4 — Instance Details** (`ui/InstanceDetails.kt`): Show/Hide UI, delete, pitch bend,
+channel pressure, a playable `MidiKeyboard`, presets, UMP group, and a filterable parameter table
+with per-parameter reset. Parameter edits route through `ProjectCommands.setPluginParameterValue`
+rather than poking the instance, so they are undoable — as in uapmd-app.
+
+**Phase 5 (part) — Project I/O**: `load_project`, `save_project`, `save_project_sync`,
+`load_project_from_handle_token` bound on all five backends and wired into the Project menu with
+an AWT-based desktop file chooser. Android/iOS/web pickers return null for now with a comment
+naming what each needs.
+
+Binding count: **53 of 81** `uapmd-c-app.h` functions. Probe now at **24 checks**, all passing on
+real plugins — instantiation, parameter edit through the undo engine, and a `.uapmd` project
+round-trip.
+
+### Correction: plugin GUI hosting is app work, NOT a missing API
+
+An earlier note in this session claimed the C API lacked a way to observe AppModel's
+`uiShowRequested`, and that this blocked plugin GUI support. **That was wrong**, and no such item
+was added to the missing-API inventory.
+
+Plugin UI is already fully bound, at the plugin level rather than through AppModel, on all five
+backends:
+
+```kotlin
+PluginInstance.uiCapabilities / hasUiSupport
+PluginInstance.createUiPresentation(request): PluginUiPresentation?
+PluginUiPresentation.show() / hide() / close() / setSize() / getSize()
+PluginUiHost.FloatingWindow | NativeEmbedded(parentHandle) | WebEmbedded(containerId)
+```
+
+`composeApp` uses exactly this and had working plugin UIs on **desktop and Android**. The
+`uapmd_app_request_show_plugin_ui` route I bound is uapmd-app's own indirection — AppModel raises
+a request and its `MainWindow` serves it by creating a `ContainerWindow`. We do not need that
+split: `uapmd-cmp` can call `createUiPresentation()` directly.
+
+So the outstanding work is **app-side porting**, already listed in §3 of this plan as
+"port, don't rewrite":
+
+- `PluginUiHosting.{jvm,android,ios,wasmJs}.kt`
+- `AndroidPlatformHostedPluginUiLayer.kt` (468 lines of hard-won AAP UI hosting)
+- Wasm was unsupported in `composeApp`, but `PluginUiHost.WebEmbedded(containerId)` is bound, so
+  hosting the plugin's web content in a container element should be reachable.
+
+Until that lands, Instance Details' "Show UI" button calls `requestShowPluginUi`, which nothing
+services — it is a no-op and should be disabled with a reason rather than left looking functional.

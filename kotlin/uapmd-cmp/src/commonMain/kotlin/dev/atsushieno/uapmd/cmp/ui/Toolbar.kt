@@ -23,6 +23,10 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
 import dev.atsushieno.uapmd.ScanMode
 import dev.atsushieno.uapmd.cmp.UapmdHost
+import dev.atsushieno.uapmd.cmp.pickProjectFileToOpen
+import dev.atsushieno.uapmd.cmp.pickProjectFileToSave
+import androidx.compose.runtime.rememberCoroutineScope
+import kotlinx.coroutines.launch
 
 private val EngineOn = Color(0xFF3F9455)
 private val EngineOff = Color(0xFF944536)
@@ -42,6 +46,7 @@ fun Toolbar(
     var commandOpen by remember { mutableStateOf(false) }
     var projectOpen by remember { mutableStateOf(false) }
     var importOpen by remember { mutableStateOf(false) }
+    val scope = rememberCoroutineScope()
 
     Row(
         modifier = modifier.fillMaxWidth().padding(8.dp),
@@ -121,8 +126,15 @@ fun Toolbar(
         Box {
             Button(onClick = { projectOpen = true }) { Text("Project") }
             DropdownMenu(expanded = projectOpen, onDismissRequest = { projectOpen = false }) {
-                DropdownMenuItem(text = { Text("Load Project") }, enabled = false, onClick = {})
-                DropdownMenuItem(text = { Text("Save Project") }, enabled = false, onClick = {})
+                DropdownMenuItem(text = { Text("Load Project") }, onClick = {
+                    projectOpen = false
+                    scope.launch { pickProjectFileToOpen()?.let { host.loadProject(it) } }
+                })
+                DropdownMenuItem(text = { Text("Save Project") }, onClick = {
+                    projectOpen = false
+                    scope.launch { pickProjectFileToSave()?.let { host.saveProject(it) } }
+                })
+                // Needs uapmd_app_start_render - see docs/uapmd-binding-missing-api.md
                 DropdownMenuItem(text = { Text("Render To File") }, enabled = false, onClick = {})
             }
         }

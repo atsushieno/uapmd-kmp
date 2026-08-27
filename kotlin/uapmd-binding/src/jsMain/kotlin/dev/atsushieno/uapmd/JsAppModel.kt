@@ -165,6 +165,45 @@ class JsAppModel internal constructor(internal val handle: Int) : AppModel {
     override fun hidePluginUi(instanceId: Int) {
         jsMod._uapmd_app_hide_plugin_ui(handle, instanceId)
     }
+
+    // ── Project I/O ─────────────────────────────────────────────────────────
+    // Struct-returning functions take the result pointer as their FIRST argument.
+
+    private fun projectCall(path: String, call: (out: Int, str: Int) -> Unit): AppProjectResult =
+        withWasmMem(8) { out ->                    // sizeof uapmd_app_project_result_t
+            withJsCString(path) { p -> call(out, p) }
+            decodeJsProjectResult(out)
+        }
+
+    override fun loadProject(filePath: String): AppProjectResult =
+        projectCall(filePath) { out, p -> jsMod._uapmd_app_load_project(out, handle, p) }
+
+    override fun saveProjectSync(filePath: String): AppProjectResult =
+        projectCall(filePath) { out, p -> jsMod._uapmd_app_save_project_sync(out, handle, p) }
+
+    override fun saveProject(filePath: String, callback: (AppProjectResult) -> Unit) {
+        withJsCString(filePath) { p ->
+            jsMod._uapmd_app_save_project(handle, p, 0, makeJsProjectSave(callback))
+        }
+    }
+
+    override fun loadProjectFromHandleToken(token: String): AppProjectResult =
+        projectCall(token) { out, t -> jsMod._uapmd_app_load_project_from_handle_token(out, handle, t) }
+}
+
+private fun decodeJsProjectResult(ptr: Int): AppProjectResult {
+    val ok = (jsMod.getValue(ptr, "i8") as Int) != 0
+    val errPtr = jsMod.getValue(ptr + 4, "i32") as Int
+    return AppProjectResult(ok, if (errPtr != 0) jsMod.UTF8ToString(errPtr) as String else null)
+}
+
+private fun makeJsProjectSave(callback: (AppProjectResult) -> Unit): Int {
+    var slot = 0
+    val fn: (dynamic, dynamic) -> Unit = { resultPtr, _ ->
+        try { callback(decodeJsProjectResult(resultPtr as Int)) } finally { removeJsCallback(slot) }
+    }
+    slot = addJsCallback(fn.asDynamic(), "vii")
+    return slot
 }
 
 /**

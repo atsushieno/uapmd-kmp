@@ -6,8 +6,13 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.rememberCoroutineScope
 import dev.atsushieno.uapmd.AppModel
+import dev.atsushieno.uapmd.AppProjectResult
 import dev.atsushieno.uapmd.RealtimeSequencer
+import dev.atsushieno.uapmd.CatalogEntry
+import dev.atsushieno.uapmd.PluginInstanceConfig
+import dev.atsushieno.uapmd.PluginInstanceResult
 import dev.atsushieno.uapmd.ScanMode
 import dev.atsushieno.uapmd.TimelineState
 import dev.atsushieno.uapmd.UndoState
@@ -91,11 +96,63 @@ class UapmdHost private constructor(val model: AppModel) {
         refresh()
     }
 
+    // ── Plugin catalog ──────────────────────────────────────────────────────
+
+    var catalog by mutableStateOf<List<CatalogEntry>>(emptyList())
+        private set
+    var lastInstantiation by mutableStateOf<PluginInstanceResult?>(null)
+        private set
+    var isInstantiating by mutableStateOf(false)
+        private set
+
+    fun refreshCatalog() {
+        val pluginHost = model.sequencer.engine.pluginHost
+        catalog = (0 until pluginHost.catalogEntryCount.toInt())
+            .mapNotNull { pluginHost.getCatalogEntry(it.toUInt()) }
+    }
+
+    /** [trackIndex] < 0 creates a new track, matching the C API. */
+    fun instantiate(entry: CatalogEntry, trackIndex: Int, config: PluginInstanceConfig = PluginInstanceConfig()) {
+        if (isInstantiating) return
+        isInstantiating = true
+        model.createPluginInstance(entry.format, entry.pluginId, trackIndex, config) { result ->
+            lastInstantiation = result
+            isInstantiating = false
+            refresh()
+        }
+    }
+
+    fun removeInstance(instanceId: Int) {
+        model.removePluginInstance(instanceId)
+        refresh()
+    }
+
+    // ── Project I/O ─────────────────────────────────────────────────────────
+
+    var lastProjectResult by mutableStateOf<AppProjectResult?>(null)
+        private set
+
+    fun loadProject(path: String) {
+        lastProjectResult = model.loadProject(path)
+        refresh()
+    }
+
+    fun saveProject(path: String) {
+        model.saveProject(path) { result ->
+            lastProjectResult = result
+            refresh()
+        }
+    }
+
     // ── Tracks / timeline ───────────────────────────────────────────────────
 
     var trackCount by mutableStateOf(0)
         private set
     var timeline by mutableStateOf<TimelineState?>(null)
+        private set
+
+    /** Per track, the plugin instances on it, in graph order. */
+    var trackInstances by mutableStateOf<List<List<TrackInstance>>>(emptyList())
         private set
 
     fun addTrack() = model.addTrack { _, _ -> refresh() }
@@ -115,6 +172,17 @@ class UapmdHost private constructor(val model: AppModel) {
         history = model.historyState
         trackCount = model.timelineTrackCount.toInt()
         timeline = model.getTimelineState()
+
+        val engine = model.sequencer.engine
+        val count = engine.trackCount.toInt()
+        trackInstances = (0 until count).map { ti ->
+            engine.getTrack(ti.toUInt()).getOrderedInstanceIds().mapNotNull { id ->
+                engine.getPluginInstance(id)?.let { inst ->
+                    TrackInstance(id, inst.displayName, inst.formatName)
+                }
+            }
+        }
+        if (catalog.isEmpty() && !isScanning) refreshCatalog()
     }
 
     fun shutdown() {
@@ -148,6 +216,9 @@ expect val platformStartsWithAudioEngineEnabled: Boolean
 expect fun notifyPersistentStorageReadyForPlatform(model: AppModel)
 
 expect fun cleanupUapmdAppModel()
+
+/** One plugin instance on a track, flattened for the UI. */
+data class TrackInstance(val instanceId: Int, val displayName: String, val formatName: String)
 
 @Composable
 fun rememberUapmdHost(): UapmdHost {

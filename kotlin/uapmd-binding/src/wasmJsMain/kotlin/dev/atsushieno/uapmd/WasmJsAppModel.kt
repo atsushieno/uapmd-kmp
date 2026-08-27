@@ -130,6 +130,42 @@ class WasmJsAppModel internal constructor(internal val handle: Int) : AppModel {
 
     override fun requestShowPluginUi(instanceId: Int) = wasmMod.uapmdAppRequestShowPluginUi(handle, instanceId)
     override fun hidePluginUi(instanceId: Int) = wasmMod.uapmdAppHidePluginUi(handle, instanceId)
+
+    // ── Project I/O ─────────────────────────────────────────────────────────
+
+    private fun projectCall(path: String, call: (out: Int, app: Int, str: Int) -> Unit): AppProjectResult =
+        withWasmStruct(8) { out ->                 // sizeof uapmd_app_project_result_t
+            withCStringKt(path) { p -> call(out, handle, p) }
+            decodeProjectResult(out)
+        }
+
+    override fun loadProject(filePath: String): AppProjectResult =
+        projectCall(filePath) { out, app, p -> wasmMod.uapmdAppLoadProject(out, app, p) }
+
+    override fun saveProjectSync(filePath: String): AppProjectResult =
+        projectCall(filePath) { out, app, p -> wasmMod.uapmdAppSaveProjectSync(out, app, p) }
+
+    override fun saveProject(filePath: String, callback: (AppProjectResult) -> Unit) {
+        withCStringKt(filePath) { p ->
+            wasmMod.uapmdAppSaveProject(handle, p, 0, appProjectSavePtr(callback))
+        }
+    }
+
+    override fun loadProjectFromHandleToken(token: String): AppProjectResult =
+        projectCall(token) { out, app, t -> wasmMod.uapmdAppLoadProjectFromHandleToken(out, app, t) }
+}
+
+private fun decodeProjectResult(ptr: Int): AppProjectResult {
+    val mod = wasmMod
+    val ok = mod.getValue(ptr, "i8").toInt() != 0
+    val errPtr = mod.getValue(ptr + 4, "i32").toInt()
+    return AppProjectResult(ok, if (errPtr != 0) mod.utf8ToString(errPtr) else null)
+}
+
+private fun appProjectSavePtr(callback: (AppProjectResult) -> Unit): Int {
+    val cbId = nextCallbackId()
+    pendingProjectSaves[cbId] = callback
+    return makeCFunctionPtr(cbId, "uapmdDispatchProjectSave", "vii")
 }
 
 private fun appInstanceCreatedPtr(callback: (PluginInstanceResult) -> Unit): Int {
