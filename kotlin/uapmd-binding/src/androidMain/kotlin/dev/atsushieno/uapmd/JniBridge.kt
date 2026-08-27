@@ -636,4 +636,19 @@ object JniBridge {
     @JvmStatic external fun uapmdAppUndo(app: Long, cb: Any?)
     /** cb: (error: String?) -> Unit */
     @JvmStatic external fun uapmdAppRedo(app: Long, cb: Any?)
+
+    /** cb: (instanceId: Int, pluginName: String?, error: String?) -> Unit */
+    @JvmStatic external fun uapmdAppCreatePluginInstance(
+        app: Long, format: String, pluginId: String, trackIndex: Int,
+        apiName: String, deviceName: String, manufacturer: String, version: String, stateFile: String,
+        cb: Any
+    )
+    @JvmStatic external fun uapmdAppRemovePluginInstance(app: Long, instanceId: Int)
+    @JvmStatic external fun uapmdAppGetInstanceGroup(app: Long, instanceId: Int): Int
+    @JvmStatic external fun uapmdAppSetInstanceGroup(app: Long, instanceId: Int, group: Int): Boolean
+    @JvmStatic external fun uapmdAppEnableUmpDevice(app: Long, instanceId: Int, deviceName: String)
+    @JvmStatic external fun uapmdAppDisableUmpDevice(app: Long, instanceId: Int)
+    @JvmStatic external fun uapmdAppRequestShowInstanceDetails(app: Long, instanceId: Int)
+    @JvmStatic external fun uapmdAppRequestShowPluginUi(app: Long, instanceId: Int)
+    @JvmStatic external fun uapmdAppHidePluginUi(app: Long, instanceId: Int)
 }

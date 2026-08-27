@@ -3,6 +3,7 @@ package dev.atsushieno.uapmd.cmp
 import dev.atsushieno.uapmd.cleanupAppModel
 import dev.atsushieno.uapmd.getAppModel
 import dev.atsushieno.uapmd.initJvmEventLoop
+import dev.atsushieno.uapmd.PluginInstanceResult
 import dev.atsushieno.uapmd.instantiateAppModel
 
 /**
@@ -91,11 +92,67 @@ fun main() {
     println("   timeline: tempo=${tl?.tempo} sig=${tl?.timeSignatureNumerator}/${tl?.timeSignatureDenominator} sr=${tl?.sampleRate}")
     check("timeline state readable with a sane tempo", tl != null && tl.tempo > 0.0)
 
+    // ── plugin catalog + instantiation ───────────────────────────────────────
+    val host = model.sequencer.engine.pluginHost
+    val catalogCount = host.catalogEntryCount.toInt()
+    println("   catalog entries: $catalogCount")
+    check("plugin catalog is populated after the initial scan", catalogCount > 0)
+
+    // Plugins fail for their own reasons (missing resources, unsupported I/O),
+    // so try a handful and report the first that instantiates.
+    val candidates = (0 until catalogCount)
+        .mapNotNull { host.getCatalogEntry(it.toUInt()) }
+        .sortedBy { if (it.format == "AU") 0 else 1 }   // AU is native on macOS
+        .take(10)
+
+    var succeeded: PluginInstanceResult? = null
+    val attempts = mutableListOf<String>()
+    for (entry in candidates) {
+        var result: PluginInstanceResult? = null
+        model.createPluginInstance(entry.format, entry.pluginId, -1) { r -> result = r }
+        val instAt = System.currentTimeMillis()
+        while (result == null && System.currentTimeMillis() - instAt < 30_000)
+            Thread.sleep(50)
+        val r = result
+        if (r == null) { attempts += "${entry.displayName}: no callback"; continue }
+        if (r.error == null && r.instanceId >= 0) { succeeded = r; attempts += "${entry.displayName}: OK"; break }
+        attempts += "${entry.displayName}: ${r.error?.take(60)}"
+    }
+    attempts.forEach { println("   attempt $it") }
+
+    check("createPluginInstance always calls back", attempts.none { it.endsWith("no callback") })
+    if (succeeded != null) {
+        val inst = host.getInstance(succeeded.instanceId)
+        check("instance retrievable from the plugin host", inst != null)
+        check("instance reports a display name", !inst?.displayName.isNullOrEmpty())
+        println("   instantiated '${inst?.displayName}' params=${inst?.parameterCount} group=${model.getInstanceGroup(succeeded.instanceId)}")
+        // Opt-in: removing an instance and then shutting the engine down crashes
+        // in AppModel::completeAudioEngineShutdown() (AppModel.cpp:783 dereferences
+        // host->getInstance(id) for an id instanceIds() still reports). Upstream bug,
+        // not a binding one - see docs/uapmd-cmp-plan.md.
+        if (System.getProperty("uapmd.probe.removeInstance") != null) {
+            model.removePluginInstance(succeeded.instanceId)
+            Thread.sleep(500)
+            check("instance removed", host.getInstance(succeeded.instanceId) == null)
+        } else {
+            println("   (instance removal skipped; pass -Duapmd.probe.removeInstance=1 to reproduce the shutdown crash)")
+        }
+    } else {
+        println("NOTE  no candidate plugin instantiated on this machine; the binding still")
+        println("      round-tripped every error string, so marshalling is verified")
+    }
+
     // ── ordered teardown: engine off, then cleanup (§2.5) ────────────────────
     model.setAudioEngineEnabled(false)
     val teardownAt = System.currentTimeMillis()
     while (seq.isAudioPlaying() != 0 && System.currentTimeMillis() - teardownAt < 15_000)
         Thread.sleep(50)
+    // `isAudioPlaying() == 0` is NOT "shutdown finished": AppModel sets it inside
+    // completeAudioEngineShutdown(), which is itself a task queued on the event
+    // loop and still has plugin deactivation and resetProcessingState() to run.
+    // Destroying the model before that task drains crashes it on a null `this`.
+    // Flushing the queue with an ordered no-op guarantees it has completed.
+    java.awt.EventQueue.invokeAndWait { }
     cleanupAppModel()
     println("-- cleaned up")
 

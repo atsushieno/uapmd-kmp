@@ -85,6 +85,49 @@ class JvmAppModel internal constructor(
 
     override fun redo(callback: ((String?) -> Unit)?) =
         lib.uapmd_app_redo(handle, null, callback?.let { historyMutationCb(it) })
+
+    // ── Plugin instances ────────────────────────────────────────────────────
+
+    override fun createPluginInstance(
+        format: String, pluginId: String, trackIndex: Int,
+        config: PluginInstanceConfig, callback: (PluginInstanceResult) -> Unit
+    ) {
+        val c = UapmdPluginInstanceConfig().apply {
+            api_name = config.apiName
+            device_name = config.deviceName
+            manufacturer = config.manufacturer
+            version = config.version
+            state_file = config.stateFile
+        }
+        lateinit var cb: InstanceCreatedCb
+        cb = object : InstanceCreatedCb {
+            override fun invoke(result: UapmdPluginInstanceResult.ByVal, userData: Pointer?) {
+                liveAppCallbacks.remove(cb)
+                callback(PluginInstanceResult(result.instance_id, result.plugin_name ?: "", result.error))
+            }
+        }
+        liveAppCallbacks.add(cb)
+        lib.uapmd_app_create_plugin_instance(handle, format, pluginId, trackIndex, c, null, cb)
+    }
+
+    override fun removePluginInstance(instanceId: Int) = lib.uapmd_app_remove_plugin_instance(handle, instanceId)
+
+    override fun getInstanceGroup(instanceId: Int): UByte =
+        lib.uapmd_app_get_instance_group(handle, instanceId).toUByte()
+
+    override fun setInstanceGroup(instanceId: Int, group: UByte): Boolean =
+        lib.uapmd_app_set_instance_group(handle, instanceId, group.toByte())
+
+    override fun enableUmpDevice(instanceId: Int, deviceName: String) =
+        lib.uapmd_app_enable_ump_device(handle, instanceId, deviceName)
+
+    override fun disableUmpDevice(instanceId: Int) = lib.uapmd_app_disable_ump_device(handle, instanceId)
+
+    override fun requestShowInstanceDetails(instanceId: Int) =
+        lib.uapmd_app_request_show_instance_details(handle, instanceId)
+
+    override fun requestShowPluginUi(instanceId: Int) = lib.uapmd_app_request_show_plugin_ui(handle, instanceId)
+    override fun hidePluginUi(instanceId: Int) = lib.uapmd_app_hide_plugin_ui(handle, instanceId)
 }
 
 // Callbacks are held by a strong reference until they fire, so JNA cannot collect

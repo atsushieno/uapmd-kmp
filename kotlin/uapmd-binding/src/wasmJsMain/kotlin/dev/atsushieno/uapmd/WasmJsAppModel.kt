@@ -84,6 +84,58 @@ class WasmJsAppModel internal constructor(internal val handle: Int) : AppModel {
 
     override fun redo(callback: ((String?) -> Unit)?) =
         wasmMod.uapmdAppRedo(handle, 0, callback?.let { appErrorOnlyPtr(it) } ?: 0)
+
+    // ── Plugin instances ────────────────────────────────────────────────────
+
+    override fun createPluginInstance(
+        format: String, pluginId: String, trackIndex: Int,
+        config: PluginInstanceConfig, callback: (PluginInstanceResult) -> Unit
+    ) {
+        val mod = wasmMod
+        // uapmd_plugin_instance_config_t: five char* fields, 20 bytes on wasm32.
+        val cfg = mod.malloc(20)
+        val strings = listOf(config.apiName, config.deviceName, config.manufacturer, config.version, config.stateFile)
+        val ptrs = strings.map { str ->
+            val size = mod.lengthBytesUTF8(str) + 1
+            val p = mod.malloc(size)
+            mod.stringToUTF8(str, p, size)
+            p
+        }
+        ptrs.forEachIndexed { i, p -> mod.setValue(cfg + i * 4, p.toDouble(), "i32") }
+        try {
+            withTwoCStringsKt(format, pluginId) { f, pid ->
+                mod.uapmdAppCreatePluginInstance(handle, f, pid, trackIndex, cfg, 0, appInstanceCreatedPtr(callback))
+            }
+        } finally {
+            ptrs.forEach { mod.free(it) }
+            mod.free(cfg)
+        }
+    }
+
+    override fun removePluginInstance(instanceId: Int) = wasmMod.uapmdAppRemovePluginInstance(handle, instanceId)
+
+    override fun getInstanceGroup(instanceId: Int): UByte =
+        wasmMod.uapmdAppGetInstanceGroup(handle, instanceId).toUByte()
+
+    override fun setInstanceGroup(instanceId: Int, group: UByte): Boolean =
+        wasmMod.uapmdAppSetInstanceGroup(handle, instanceId, group.toInt())
+
+    override fun enableUmpDevice(instanceId: Int, deviceName: String) =
+        withCStringKt(deviceName) { d -> wasmMod.uapmdAppEnableUmpDevice(handle, instanceId, d) }
+
+    override fun disableUmpDevice(instanceId: Int) = wasmMod.uapmdAppDisableUmpDevice(handle, instanceId)
+
+    override fun requestShowInstanceDetails(instanceId: Int) =
+        wasmMod.uapmdAppRequestShowInstanceDetails(handle, instanceId)
+
+    override fun requestShowPluginUi(instanceId: Int) = wasmMod.uapmdAppRequestShowPluginUi(handle, instanceId)
+    override fun hidePluginUi(instanceId: Int) = wasmMod.uapmdAppHidePluginUi(handle, instanceId)
+}
+
+private fun appInstanceCreatedPtr(callback: (PluginInstanceResult) -> Unit): Int {
+    val cbId = nextCallbackId()
+    pendingInstanceCreations[cbId] = callback
+    return makeCFunctionPtr(cbId, "uapmdDispatchInstanceCreated", "vii")
 }
 
 private fun appTrackMutationPtr(callback: (Int, String?) -> Unit): Int {

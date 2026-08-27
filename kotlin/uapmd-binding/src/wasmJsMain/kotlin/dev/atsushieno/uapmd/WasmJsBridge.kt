@@ -894,6 +894,25 @@ external interface UapmdCApiModule : JsAny {
     fun uapmdAppUndo(app: Int, userData: Int, callback: Int)
     @JsName("_uapmd_app_redo")
     fun uapmdAppRedo(app: Int, userData: Int, callback: Int)
+
+    @JsName("_uapmd_app_create_plugin_instance")
+    fun uapmdAppCreatePluginInstance(app: Int, format: Int, pluginId: Int, trackIndex: Int, config: Int, userData: Int, callback: Int)
+    @JsName("_uapmd_app_remove_plugin_instance")
+    fun uapmdAppRemovePluginInstance(app: Int, instanceId: Int)
+    @JsName("_uapmd_app_get_instance_group")
+    fun uapmdAppGetInstanceGroup(app: Int, instanceId: Int): Int
+    @JsName("_uapmd_app_set_instance_group")
+    fun uapmdAppSetInstanceGroup(app: Int, instanceId: Int, group: Int): Boolean
+    @JsName("_uapmd_app_enable_ump_device")
+    fun uapmdAppEnableUmpDevice(app: Int, instanceId: Int, deviceName: Int)
+    @JsName("_uapmd_app_disable_ump_device")
+    fun uapmdAppDisableUmpDevice(app: Int, instanceId: Int)
+    @JsName("_uapmd_app_request_show_instance_details")
+    fun uapmdAppRequestShowInstanceDetails(app: Int, instanceId: Int)
+    @JsName("_uapmd_app_request_show_plugin_ui")
+    fun uapmdAppRequestShowPluginUi(app: Int, instanceId: Int)
+    @JsName("_uapmd_app_hide_plugin_ui")
+    fun uapmdAppHidePluginUi(app: Int, instanceId: Int)
 }
 
 
@@ -1155,6 +1174,7 @@ internal val pendingTrackMutations    = mutableMapOf<Int, (Int, String?) -> Unit
 internal val pendingTrackFragments    = mutableMapOf<Int, (TrackFragment?, String?) -> Unit>()
 /** For C callbacks shaped (const char* error, void* user_data). */
 internal val pendingErrorOnlyCallbacks = mutableMapOf<Int, (String?) -> Unit>()
+internal val pendingInstanceCreations = mutableMapOf<Int, (PluginInstanceResult) -> Unit>()
 
 /** The C callback takes uapmd_undo_result_t by value, i.e. as a pointer. */
 @JsExport
@@ -1170,6 +1190,25 @@ fun uapmdDispatchUndoCompletion(cbId: Int, resultPtr: Int) {
 fun uapmdDispatchTrackMutation(cbId: Int, trackIndex: Int, errorPtr: Int) {
     val error = if (errorPtr != 0) wasmMod.utf8ToString(errorPtr) else null
     pendingTrackMutations.remove(cbId)?.invoke(trackIndex, error)
+}
+
+/**
+ * The C callback takes uapmd_plugin_instance_result_t by value, which Emscripten
+ * passes as a pointer. Layout on wasm32: int32 id @0, char* name @4, char* err @8.
+ */
+@JsExport
+fun uapmdDispatchInstanceCreated(cbId: Int, resultPtr: Int) {
+    val mod = wasmMod
+    val id = mod.getValue(resultPtr, "i32").toInt()
+    val namePtr = mod.getValue(resultPtr + 4, "i32").toInt()
+    val errPtr = mod.getValue(resultPtr + 8, "i32").toInt()
+    pendingInstanceCreations.remove(cbId)?.invoke(
+        PluginInstanceResult(
+            instanceId = id,
+            pluginName = if (namePtr != 0) mod.utf8ToString(namePtr) else "",
+            error = if (errPtr != 0) mod.utf8ToString(errPtr) else null
+        )
+    )
 }
 
 @JsExport

@@ -74,6 +74,19 @@ void app_error_only_trampoline(const char* error, void* ud) {
     delete ctx;
 }
 
+/** cb signature: (instanceId: Int, pluginName: String?, error: String?) -> Unit */
+void app_instance_created_trampoline(uapmd_plugin_instance_result_t result, void* ud) {
+    auto* ctx = static_cast<AppCtx*>(ud);
+    if (!ctx) return;
+    JNIEnv* e = uapmd_jni_env();
+    if (e && ctx->mid) {
+        jstring name = result.plugin_name ? e->NewStringUTF(result.plugin_name) : nullptr;
+        jstring err = result.error ? e->NewStringUTF(result.error) : nullptr;
+        e->CallVoidMethod(ctx->obj, ctx->mid, static_cast<jint>(result.instance_id), name, err);
+    }
+    delete ctx;
+}
+
 /** Packs uapmd_undo_state_t as Object[]{ long[10], String, String, String }. */
 jobjectArray pack_app_undo_state(JNIEnv* env, const uapmd_undo_state_t& s) {
     jlong nums[10] = {
@@ -296,6 +309,71 @@ JNI_FN(void, uapmdAppUndo)(JNIEnv* env, jclass, jlong app, jobject cb) {
 JNI_FN(void, uapmdAppRedo)(JNIEnv* env, jclass, jlong app, jobject cb) {
     auto* ctx = cb ? new AppCtx(env, cb, "(Ljava/lang/String;)V") : nullptr;
     uapmd_app_redo(AM(app), ctx, app_error_only_trampoline);
+}
+
+/* ── Plugin instances ──────────────────────────────────────────────────────── */
+
+JNI_FN(void, uapmdAppCreatePluginInstance)(JNIEnv* env, jclass, jlong app,
+                                             jstring format, jstring pluginId, jint trackIndex,
+                                             jstring apiName, jstring deviceName, jstring manufacturer,
+                                             jstring version, jstring stateFile, jobject cb) {
+    const char* f   = format     ? env->GetStringUTFChars(format, nullptr)     : nullptr;
+    const char* p   = pluginId   ? env->GetStringUTFChars(pluginId, nullptr)   : nullptr;
+    const char* an  = apiName    ? env->GetStringUTFChars(apiName, nullptr)    : nullptr;
+    const char* dn  = deviceName ? env->GetStringUTFChars(deviceName, nullptr) : nullptr;
+    const char* mf  = manufacturer ? env->GetStringUTFChars(manufacturer, nullptr) : nullptr;
+    const char* ver = version    ? env->GetStringUTFChars(version, nullptr)    : nullptr;
+    const char* sf  = stateFile  ? env->GetStringUTFChars(stateFile, nullptr)  : nullptr;
+
+    uapmd_plugin_instance_config_t cfg{};
+    cfg.api_name = an; cfg.device_name = dn; cfg.manufacturer = mf;
+    cfg.version = ver; cfg.state_file = sf;
+
+    auto* ctx = cb ? new AppCtx(env, cb, "(ILjava/lang/String;Ljava/lang/String;)V") : nullptr;
+    uapmd_app_create_plugin_instance(AM(app), f, p, trackIndex, &cfg, ctx,
+                                       app_instance_created_trampoline);
+
+    if (format) env->ReleaseStringUTFChars(format, f);
+    if (pluginId) env->ReleaseStringUTFChars(pluginId, p);
+    if (apiName) env->ReleaseStringUTFChars(apiName, an);
+    if (deviceName) env->ReleaseStringUTFChars(deviceName, dn);
+    if (manufacturer) env->ReleaseStringUTFChars(manufacturer, mf);
+    if (version) env->ReleaseStringUTFChars(version, ver);
+    if (stateFile) env->ReleaseStringUTFChars(stateFile, sf);
+}
+
+JNI_FN(void, uapmdAppRemovePluginInstance)(JNIEnv*, jclass, jlong app, jint instanceId) {
+    uapmd_app_remove_plugin_instance(AM(app), instanceId);
+}
+
+JNI_FN(jint, uapmdAppGetInstanceGroup)(JNIEnv*, jclass, jlong app, jint instanceId) {
+    return uapmd_app_get_instance_group(AM(app), instanceId);
+}
+
+JNI_FN(jboolean, uapmdAppSetInstanceGroup)(JNIEnv*, jclass, jlong app, jint instanceId, jint group) {
+    return uapmd_app_set_instance_group(AM(app), instanceId, static_cast<uint8_t>(group));
+}
+
+JNI_FN(void, uapmdAppEnableUmpDevice)(JNIEnv* env, jclass, jlong app, jint instanceId, jstring deviceName) {
+    const char* d = deviceName ? env->GetStringUTFChars(deviceName, nullptr) : nullptr;
+    uapmd_app_enable_ump_device(AM(app), instanceId, d);
+    if (deviceName) env->ReleaseStringUTFChars(deviceName, d);
+}
+
+JNI_FN(void, uapmdAppDisableUmpDevice)(JNIEnv*, jclass, jlong app, jint instanceId) {
+    uapmd_app_disable_ump_device(AM(app), instanceId);
+}
+
+JNI_FN(void, uapmdAppRequestShowInstanceDetails)(JNIEnv*, jclass, jlong app, jint instanceId) {
+    uapmd_app_request_show_instance_details(AM(app), instanceId);
+}
+
+JNI_FN(void, uapmdAppRequestShowPluginUi)(JNIEnv*, jclass, jlong app, jint instanceId) {
+    uapmd_app_request_show_plugin_ui(AM(app), instanceId);
+}
+
+JNI_FN(void, uapmdAppHidePluginUi)(JNIEnv*, jclass, jlong app, jint instanceId) {
+    uapmd_app_hide_plugin_ui(AM(app), instanceId);
 }
 
 #undef JNI_FN

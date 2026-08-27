@@ -82,6 +82,37 @@ class AndroidAppModel internal constructor(internal val handle: Long) : AppModel
 
     override fun undo(callback: ((String?) -> Unit)?) = JniBridge.uapmdAppUndo(handle, callback)
     override fun redo(callback: ((String?) -> Unit)?) = JniBridge.uapmdAppRedo(handle, callback)
+
+    // ── Plugin instances ────────────────────────────────────────────────────
+
+    override fun createPluginInstance(
+        format: String, pluginId: String, trackIndex: Int,
+        config: PluginInstanceConfig, callback: (PluginInstanceResult) -> Unit
+    ) = JniBridge.uapmdAppCreatePluginInstance(
+        handle, format, pluginId, trackIndex,
+        config.apiName, config.deviceName, config.manufacturer, config.version, config.stateFile
+    ) { instanceId: Int, pluginName: String?, error: String? ->
+        callback(PluginInstanceResult(instanceId, pluginName ?: "", error))
+    }
+
+    override fun removePluginInstance(instanceId: Int) = JniBridge.uapmdAppRemovePluginInstance(handle, instanceId)
+
+    override fun getInstanceGroup(instanceId: Int): UByte =
+        JniBridge.uapmdAppGetInstanceGroup(handle, instanceId).toUByte()
+
+    override fun setInstanceGroup(instanceId: Int, group: UByte): Boolean =
+        JniBridge.uapmdAppSetInstanceGroup(handle, instanceId, group.toInt())
+
+    override fun enableUmpDevice(instanceId: Int, deviceName: String) =
+        JniBridge.uapmdAppEnableUmpDevice(handle, instanceId, deviceName)
+
+    override fun disableUmpDevice(instanceId: Int) = JniBridge.uapmdAppDisableUmpDevice(handle, instanceId)
+
+    override fun requestShowInstanceDetails(instanceId: Int) =
+        JniBridge.uapmdAppRequestShowInstanceDetails(handle, instanceId)
+
+    override fun requestShowPluginUi(instanceId: Int) = JniBridge.uapmdAppRequestShowPluginUi(handle, instanceId)
+    override fun hidePluginUi(instanceId: Int) = JniBridge.uapmdAppHidePluginUi(handle, instanceId)
 }
 
 class AndroidTransportController internal constructor(internal val handle: Long) : TransportController {

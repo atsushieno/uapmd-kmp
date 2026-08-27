@@ -124,6 +124,7 @@ tasks.register<JavaExec>("runBootstrapProbe") {
         jvmMainCompilation.runtimeDependencyFiles
     )
     jvmArgs("-Dapple.awt.application.name=uapmd-cmp", "-Xdock:name=uapmd-cmp")
+    System.getProperty("uapmd.probe.removeInstance")?.let { systemProperty("uapmd.probe.removeInstance", it) }
 }
 
 afterEvaluate {

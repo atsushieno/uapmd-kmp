@@ -502,6 +502,28 @@ interface TrackMutationCb : Callback {
     fun invoke(trackIndex: Int, error: String?, userData: Pointer?)
 }
 
+@FieldOrder("api_name", "device_name", "manufacturer", "version", "state_file")
+open class UapmdPluginInstanceConfig : Structure() {
+    @JvmField var api_name: String? = null
+    @JvmField var device_name: String? = null
+    @JvmField var manufacturer: String? = null
+    @JvmField var version: String? = null
+    @JvmField var state_file: String? = null
+}
+
+@FieldOrder("instance_id", "plugin_name", "error")
+open class UapmdPluginInstanceResult : Structure() {
+    @JvmField var instance_id: Int = 0
+    @JvmField var plugin_name: String? = null
+    @JvmField var error: String? = null
+
+    class ByVal : UapmdPluginInstanceResult(), Structure.ByValue
+}
+
+interface InstanceCreatedCb : Callback {
+    fun invoke(result: UapmdPluginInstanceResult.ByVal, userData: Pointer?)
+}
+
 interface TrackClearCb : Callback {
     fun invoke(error: String?, userData: Pointer?)
 }
@@ -1203,4 +1225,14 @@ interface UapmdLibrary : Library {
     fun uapmd_app_get_history_state(app: Pointer?, out: UapmdUndoState): Boolean
     fun uapmd_app_undo(app: Pointer?, userData: Pointer?, callback: HistoryMutationCb?)
     fun uapmd_app_redo(app: Pointer?, userData: Pointer?, callback: HistoryMutationCb?)
+
+    fun uapmd_app_create_plugin_instance(app: Pointer?, format: String?, pluginId: String?, trackIndex: Int, config: UapmdPluginInstanceConfig?, userData: Pointer?, callback: InstanceCreatedCb?)
+    fun uapmd_app_remove_plugin_instance(app: Pointer?, instanceId: Int)
+    fun uapmd_app_get_instance_group(app: Pointer?, instanceId: Int): Byte
+    fun uapmd_app_set_instance_group(app: Pointer?, instanceId: Int, group: Byte): Boolean
+    fun uapmd_app_enable_ump_device(app: Pointer?, instanceId: Int, deviceName: String?)
+    fun uapmd_app_disable_ump_device(app: Pointer?, instanceId: Int)
+    fun uapmd_app_request_show_instance_details(app: Pointer?, instanceId: Int)
+    fun uapmd_app_request_show_plugin_ui(app: Pointer?, instanceId: Int)
+    fun uapmd_app_hide_plugin_ui(app: Pointer?, instanceId: Int)
 }

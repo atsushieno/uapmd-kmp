@@ -77,7 +77,50 @@ interface AppModel {
     val historyState: UndoState
     fun undo(callback: ((error: String?) -> Unit)? = null)
     fun redo(callback: ((error: String?) -> Unit)? = null)
+
+    // ── Plugin instances ────────────────────────────────────────────────────
+
+    /**
+     * Instantiates [pluginId] and attaches it to [trackIndex]; a negative index
+     * creates a new track. The callback runs once, on the thread that finishes
+     * instantiation.
+     */
+    fun createPluginInstance(
+        format: String,
+        pluginId: String,
+        trackIndex: Int,
+        config: PluginInstanceConfig = PluginInstanceConfig(),
+        callback: (PluginInstanceResult) -> Unit
+    )
+    fun removePluginInstance(instanceId: Int)
+
+    fun getInstanceGroup(instanceId: Int): UByte
+    fun setInstanceGroup(instanceId: Int, group: UByte): Boolean
+
+    /** Registers the instance as a virtual MIDI 2.0 device where the platform supports it. */
+    fun enableUmpDevice(instanceId: Int, deviceName: String)
+    fun disableUmpDevice(instanceId: Int)
+
+    fun requestShowInstanceDetails(instanceId: Int)
+    fun requestShowPluginUi(instanceId: Int)
+    fun hidePluginUi(instanceId: Int)
 }
+
+/** Mirrors `uapmd_plugin_instance_config_t`; empty strings take the C defaults. */
+data class PluginInstanceConfig(
+    val apiName: String = "default",
+    val deviceName: String = "",
+    val manufacturer: String = "UAPMD Project",
+    val version: String = "0.1",
+    val stateFile: String = ""
+)
+
+/** Mirrors `uapmd_plugin_instance_result_t`. */
+data class PluginInstanceResult(
+    val instanceId: Int,
+    val pluginName: String,
+    val error: String?
+)
 
 /** `uapmd_app::TransportController`. Owned by the [AppModel]. */
 interface TransportController {

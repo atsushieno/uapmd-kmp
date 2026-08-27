@@ -107,6 +107,91 @@ class JsAppModel internal constructor(internal val handle: Int) : AppModel {
     override fun redo(callback: ((String?) -> Unit)?) {
         jsMod._uapmd_app_redo(handle, 0, callback?.let { makeJsErrorOnly(it) } ?: 0)
     }
+
+    // ── Plugin instances ────────────────────────────────────────────────────
+
+    override fun createPluginInstance(
+        format: String, pluginId: String, trackIndex: Int,
+        config: PluginInstanceConfig, callback: (PluginInstanceResult) -> Unit
+    ) {
+        // uapmd_plugin_instance_config_t: five char* fields, 20 bytes on wasm32.
+        withWasmMem(20) { cfg ->
+            val strings = listOf(config.apiName, config.deviceName, config.manufacturer, config.version, config.stateFile)
+            val ptrs = strings.map { str ->
+                val size = (jsMod.lengthBytesUTF8(str) as Int) + 1
+                val p = jsMod._malloc(size) as Int
+                jsMod.stringToUTF8(str, p, size)
+                p
+            }
+            ptrs.forEachIndexed { i, p -> jsMod.setValue(cfg + i * 4, p, "i32") }
+            try {
+                withJsTwoCStrings(format, pluginId) { f, pid ->
+                    jsMod._uapmd_app_create_plugin_instance(
+                        handle, f, pid, trackIndex, cfg, 0, makeJsInstanceCreated(callback)
+                    )
+                }
+            } finally {
+                ptrs.forEach { jsMod._free(it) }
+            }
+        }
+    }
+
+    override fun removePluginInstance(instanceId: Int) {
+        jsMod._uapmd_app_remove_plugin_instance(handle, instanceId)
+    }
+
+    override fun getInstanceGroup(instanceId: Int): UByte =
+        (jsMod._uapmd_app_get_instance_group(handle, instanceId) as Int).toUByte()
+
+    override fun setInstanceGroup(instanceId: Int, group: UByte): Boolean =
+        jsMod._uapmd_app_set_instance_group(handle, instanceId, group.toInt()) as Boolean
+
+    override fun enableUmpDevice(instanceId: Int, deviceName: String) {
+        withJsCString(deviceName) { d -> jsMod._uapmd_app_enable_ump_device(handle, instanceId, d) }
+    }
+
+    override fun disableUmpDevice(instanceId: Int) {
+        jsMod._uapmd_app_disable_ump_device(handle, instanceId)
+    }
+
+    override fun requestShowInstanceDetails(instanceId: Int) {
+        jsMod._uapmd_app_request_show_instance_details(handle, instanceId)
+    }
+
+    override fun requestShowPluginUi(instanceId: Int) {
+        jsMod._uapmd_app_request_show_plugin_ui(handle, instanceId)
+    }
+
+    override fun hidePluginUi(instanceId: Int) {
+        jsMod._uapmd_app_hide_plugin_ui(handle, instanceId)
+    }
+}
+
+/**
+ * uapmd_plugin_instance_result_t arrives by value, i.e. as a pointer.
+ * wasm32 layout: int32 id @0, char* name @4, char* err @8.
+ */
+private fun makeJsInstanceCreated(callback: (PluginInstanceResult) -> Unit): Int {
+    var slot = 0
+    val fn: (dynamic, dynamic) -> Unit = { resultPtr, _ ->
+        try {
+            val p = resultPtr as Int
+            val id = jsMod.getValue(p, "i32") as Int
+            val namePtr = jsMod.getValue(p + 4, "i32") as Int
+            val errPtr = jsMod.getValue(p + 8, "i32") as Int
+            callback(
+                PluginInstanceResult(
+                    instanceId = id,
+                    pluginName = if (namePtr != 0) jsMod.UTF8ToString(namePtr) as String else "",
+                    error = if (errPtr != 0) jsMod.UTF8ToString(errPtr) as String else null
+                )
+            )
+        } finally {
+            removeJsCallback(slot)
+        }
+    }
+    slot = addJsCallback(fn.asDynamic(), "vii")
+    return slot
 }
 
 /** For C callbacks shaped (const char* error, void* user_data). */

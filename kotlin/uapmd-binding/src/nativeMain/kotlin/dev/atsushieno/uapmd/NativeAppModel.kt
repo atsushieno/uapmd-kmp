@@ -89,7 +89,60 @@ class NativeAppModel internal constructor(
 
     override fun redo(callback: ((String?) -> Unit)?) =
         uapmd_app_redo(handle, callback?.let { StableRef.create(it).asCPointer() }, appHistoryTrampoline)
+
+    // ── Plugin instances ────────────────────────────────────────────────────
+
+    override fun createPluginInstance(
+        format: String, pluginId: String, trackIndex: Int,
+        config: PluginInstanceConfig, callback: (PluginInstanceResult) -> Unit
+    ) = memScoped {
+        val c = alloc<uapmd_plugin_instance_config_t>()
+        c.api_name = config.apiName.cstr.ptr
+        c.device_name = config.deviceName.cstr.ptr
+        c.manufacturer = config.manufacturer.cstr.ptr
+        c.version = config.version.cstr.ptr
+        c.state_file = config.stateFile.cstr.ptr
+        uapmd_app_create_plugin_instance(
+            handle, format, pluginId, trackIndex, c.ptr,
+            StableRef.create(callback).asCPointer(), appInstanceCreatedTrampoline
+        )
+    }
+
+    override fun removePluginInstance(instanceId: Int) = uapmd_app_remove_plugin_instance(handle, instanceId)
+
+    override fun getInstanceGroup(instanceId: Int): UByte = uapmd_app_get_instance_group(handle, instanceId)
+
+    override fun setInstanceGroup(instanceId: Int, group: UByte): Boolean =
+        uapmd_app_set_instance_group(handle, instanceId, group)
+
+    override fun enableUmpDevice(instanceId: Int, deviceName: String) =
+        uapmd_app_enable_ump_device(handle, instanceId, deviceName)
+
+    override fun disableUmpDevice(instanceId: Int) = uapmd_app_disable_ump_device(handle, instanceId)
+
+    override fun requestShowInstanceDetails(instanceId: Int) =
+        uapmd_app_request_show_instance_details(handle, instanceId)
+
+    override fun requestShowPluginUi(instanceId: Int) = uapmd_app_request_show_plugin_ui(handle, instanceId)
+    override fun hidePluginUi(instanceId: Int) = uapmd_app_hide_plugin_ui(handle, instanceId)
 }
+
+private val appInstanceCreatedTrampoline =
+    staticCFunction<CValue<uapmd_plugin_instance_result_t>, COpaquePointer?, Unit> { result, userData ->
+        if (userData != null) {
+            val ref = userData.asStableRef<(PluginInstanceResult) -> Unit>()
+            result.useContents {
+                ref.get()(
+                    PluginInstanceResult(
+                        instanceId = instance_id,
+                        pluginName = plugin_name?.toKString() ?: "",
+                        error = error?.toKString()
+                    )
+                )
+            }
+            ref.dispose()
+        }
+    }
 
 private val appTrackMutationTrampoline =
     staticCFunction<Int, CPointer<ByteVar>?, COpaquePointer?, Unit> { trackIndex, error, userData ->

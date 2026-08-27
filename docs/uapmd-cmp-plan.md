@@ -783,3 +783,46 @@ state at 100 ms, because it lives in C++ and changes without notifying Compose.
 Controls whose binding is missing are rendered **disabled** rather than omitted, so the gap is
 visible in the UI and traceable to the inventory: record (needs `MidiRecorder`), Import and
 Project (need the clip and project-I/O bindings), and instance creation in the Plugin Selector.
+
+### 2026-08-28 (cont.) — plugin instance lifecycle, and an upstream crash
+
+**Bound (JVM so far):** `create_plugin_instance`, `remove_plugin_instance`,
+`get/set_instance_group`, `enable/disable_ump_device`, `request_show_instance_details`,
+`request_show_plugin_ui`, `hide_plugin_ui` — plus the `uapmd_plugin_instance_config_t` /
+`uapmd_plugin_instance_result_t` mirrors. This is the first struct-by-value callback in the
+AppModel surface and it marshals correctly: real error strings and ids round-trip.
+
+Verified against the machine's real plugin library — 391 catalog entries, an AU plugin
+instantiated (`Gateway`, 13 parameters, UMP group 0), retrievable from the host, then removed.
+
+### Upstream bug found: crash on engine shutdown after removing a plugin
+
+`uapmd-app-model/src/AppModel.cpp:783`
+
+```cpp
+auto* host = sequencer_.engine()->pluginHost();
+for (auto id : host->instanceIds())
+    host->getInstance(id)->stopProcessing();   // no null check
+```
+
+After `uapmd_app_remove_plugin_instance()`, `instanceIds()` still reports the removed id while
+`getInstance()` returns `nullptr`, so `completeAudioEngineShutdown()` dereferences null.
+
+Evidence:
+
+- `SIGSEGV`, `si_addr: 0x0`, problematic frame
+  `uapmd_app::AppModel::completeAudioEngineShutdown()+0x110`, reached from the event-loop task
+  (`CApiEventLoop::enqueueTaskOnMainThreadImpl` → AWT EDT).
+- Deterministic: instantiate → remove → engine off ⇒ crash. Skip only the removal and the same
+  teardown is clean and the probe passes.
+- **Not a binding artifact.** The crash is entirely inside `uapmd-app-model`; the binding's only
+  involvement is providing the event loop that runs the task.
+
+This affects uapmd-app itself, not just uapmd-cmp: removing a plugin and then toggling the audio
+engine off should hit the same path.
+
+Left for the human to fix — `external/uapmd` is a submodule, and commits there are yours. The
+probe therefore makes removal **opt-in**: `-Duapmd.probe.removeInstance=1` reproduces it, and the
+default run stays green. `tests/uapmd-app-shutdown-crash.c` is a started pure-C repro, but it is
+**not working yet** — a bare C host installs no remidy `EventLoop`, so instantiation never
+completes and it stalls before the interesting part.
