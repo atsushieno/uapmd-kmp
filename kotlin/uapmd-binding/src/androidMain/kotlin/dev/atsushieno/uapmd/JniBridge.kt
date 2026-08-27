@@ -663,4 +663,22 @@ object JniBridge {
     @JvmStatic external fun uapmdAppAddUmpEventToClip(app: Long, trackIndex: Int, clipId: Int, tick: Long, words: IntArray): Boolean
     @JvmStatic external fun uapmdAppRemoveUmpEventFromClip(app: Long, trackIndex: Int, clipId: Int, eventIndex: Int): Boolean
     @JvmStatic external fun uapmdAppRemoveClipFromTrack(app: Long, trackIndex: Int, clipId: Int): Boolean
+
+    @JvmStatic external fun uapmdAppEnsureTrackUsesEditorGraph(app: Long, trackIndex: Int): Boolean
+    @JvmStatic external fun uapmdAppRevertTrackToSimpleGraph(app: Long, trackIndex: Int): Boolean
+    /** Object[]{ long[1] success, String? error, long[] ids, int[] flat(7 per connection) } */
+    @JvmStatic external fun uapmdAppGetTrackGraphConnections(app: Long, trackIndex: Int): Array<Any>?
+    @JvmStatic external fun uapmdAppConnectTrackGraph(
+        app: Long, trackIndex: Int, id: Long, busType: Int,
+        srcType: Int, srcInstance: Int, srcBus: Int,
+        tgtType: Int, tgtInstance: Int, tgtBus: Int
+    ): Array<Any>?
+    @JvmStatic external fun uapmdAppDisconnectTrackGraphConnection(app: Long, trackIndex: Int, connectionId: Long): Array<Any>?
+
+    @JvmStatic external fun uapmdAppGetClipAudioEvents(app: Long, trackIndex: Int, clipId: Int): Array<Any>?
+    @JvmStatic external fun uapmdAppSetClipAudioEvents(
+        app: Long, trackIndex: Int, clipId: Int,
+        markerStrings: Array<String>, markerOffsets: DoubleArray, markerRefTypes: IntArray,
+        warpNums: DoubleArray, warpRefTypes: IntArray, warpStrings: Array<String>
+    ): Array<Any>?
 }

@@ -12,3 +12,6 @@ actual fun supportsPlatformHostedPluginUi(instance: PluginInstance): Boolean = f
 
 @Composable
 actual fun PlatformHostedPluginUiLayer(host: UapmdHost, modifier: Modifier) = Unit
+
+// iOS uses the platform's own run loop; nothing to install.
+actual fun initPlatformEventLoop() = Unit

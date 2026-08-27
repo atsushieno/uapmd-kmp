@@ -24,3 +24,12 @@ expect fun supportsPlatformHostedPluginUi(instance: PluginInstance): Boolean
 /** Renders any platform-hosted plugin UIs over the app content. No-op elsewhere. */
 @Composable
 expect fun PlatformHostedPluginUiLayer(host: UapmdHost, modifier: Modifier = Modifier)
+
+/**
+ * Installs the platform's remidy EventLoop. MUST run before AppModel exists:
+ * AppModel marshals plugin deactivation and history completions through it, and
+ * without one they silently never run (docs/uapmd-cmp-plan.md §2.3).
+ *
+ * Implementations are idempotent, so entry points may also call it early.
+ */
+expect fun initPlatformEventLoop()

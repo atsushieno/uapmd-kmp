@@ -6,7 +6,8 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.rememberCoroutineScope
+import kotlinx.coroutines.cancel
+import kotlinx.coroutines.launch
 import dev.atsushieno.uapmd.AddinManager
 import dev.atsushieno.uapmd.AppModel
 import dev.atsushieno.uapmd.AppProjectResult
@@ -24,6 +25,7 @@ import dev.atsushieno.uapmd.ClipData
 import dev.atsushieno.uapmd.TimelinePosition
 import dev.atsushieno.uapmd.createAudioFileReader
 import dev.atsushieno.uapmd.MidiNoteData
+import dev.atsushieno.uapmd.OfflineRenderSettings
 import dev.atsushieno.uapmd.PluginInstanceConfig
 import dev.atsushieno.uapmd.PluginInstanceResult
 import dev.atsushieno.uapmd.ScanMode
@@ -47,6 +49,10 @@ import dev.atsushieno.uapmd.instantiateAppModel
  * has to run before AppModel exists at all.
  */
 class UapmdHost private constructor(val model: AppModel) {
+
+    private val scope = kotlinx.coroutines.CoroutineScope(
+        kotlinx.coroutines.SupervisorJob() + kotlinx.coroutines.Dispatchers.Main
+    )
 
     /** AppModel owns the underlying handle, so the app only ever holds a borrow. */
     val sequencer: RealtimeSequencer = BorrowedRealtimeSequencer(model.sequencer)
@@ -278,6 +284,61 @@ class UapmdHost private constructor(val model: AppModel) {
         nativeUiPresentations.remove(instanceId)?.close()
     }
 
+    // ── Offline render ──────────────────────────────────────────────────────
+
+    var isRendering by mutableStateOf(false)
+        private set
+    var renderProgress by mutableStateOf(0.0)
+        private set
+    var renderStatus by mutableStateOf<String?>(null)
+        private set
+    private var renderCancelled = false
+
+    fun startRender(
+        outputPath: String,
+        startSeconds: Double,
+        endSeconds: Double?,
+        tailSeconds: Double,
+        enableSilenceStop: Boolean
+    ) {
+        if (isRendering) return
+        isRendering = true
+        renderCancelled = false
+        renderProgress = 0.0
+        renderStatus = null
+
+        val bounds = model.sequencer.engine.timeline.calculateContentBounds()
+        val settings = OfflineRenderSettings(
+            outputPath = outputPath,
+            startSeconds = startSeconds,
+            endSeconds = endSeconds,
+            useContentFallback = endSeconds == null,
+            contentBoundsValid = bounds.hasContent,
+            contentStartSeconds = bounds.firstSeconds,
+            contentEndSeconds = bounds.lastSeconds,
+            tailSeconds = tailSeconds,
+            enableSilenceStop = enableSilenceStop,
+            sampleRate = model.sampleRate.takeIf { it > 0 } ?: 48000
+        )
+
+        // renderOffline blocks, so keep it off the UI dispatcher.
+        scope.launch(backgroundDispatcher()) {
+            val result = model.sequencer.engine.renderOffline(
+                settings,
+                progressCallback = { p -> renderProgress = p.progress },
+                shouldCancel = { renderCancelled }
+            )
+            isRendering = false
+            renderStatus = when {
+                result.canceled -> "Render cancelled."
+                result.success -> "Rendered ${result.renderedSeconds}s to $outputPath"
+                else -> result.errorMessage ?: "Render failed."
+            }
+        }
+    }
+
+    fun cancelRender() { renderCancelled = true }
+
     // ── Clip import ─────────────────────────────────────────────────────────
 
     var lastClipResult by mutableStateOf<ClipAddResult?>(null)
@@ -382,6 +443,7 @@ class UapmdHost private constructor(val model: AppModel) {
     }
 
     fun shutdown() {
+        scope.cancel()
         addins?.shutdown()
         addins?.close()
         nativeUiPresentations.values.forEach { it.close() }
@@ -392,6 +454,8 @@ class UapmdHost private constructor(val model: AppModel) {
 
     companion object {
         fun start(): UapmdHost {
+            // Ordering is load-bearing: the event loop must exist first (§2.3).
+            initPlatformEventLoop()
             instantiateAppModel()
             val host = UapmdHost(getAppModel())
             host.initAddins()

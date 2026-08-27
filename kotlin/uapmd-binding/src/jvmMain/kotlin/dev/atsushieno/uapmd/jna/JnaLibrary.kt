@@ -451,7 +451,11 @@ open class UapmdTimeReference : Structure() {
 }
 
 @FieldOrder("marker_id", "clip_position_offset", "reference_type", "reference_clip_id", "reference_marker_id", "name")
-open class UapmdClipMarker : Structure() {
+open class UapmdClipMarker : Structure {
+    constructor() : super()
+    /** Reads one element of a C array in place. */
+    constructor(p: Pointer) : super(p) { read() }
+
     @JvmField var marker_id: String? = null
     @JvmField var clip_position_offset: Double = 0.0
     @JvmField var reference_type: Int = 0
@@ -461,7 +465,10 @@ open class UapmdClipMarker : Structure() {
 }
 
 @FieldOrder("clip_position_offset", "speed_ratio", "reference_type", "reference_clip_id", "reference_marker_id")
-open class UapmdAudioWarpPoint : Structure() {
+open class UapmdAudioWarpPoint : Structure {
+    constructor() : super()
+    constructor(p: Pointer) : super(p) { read() }
+
     @JvmField var clip_position_offset: Double = 0.0
     @JvmField var speed_ratio: Double = 1.0
     @JvmField var reference_type: Int = 0
@@ -547,6 +554,55 @@ open class UapmdUmpEventsResult : Structure() {
     @JvmField var events: Pointer? = null
 
     class ByVal : UapmdUmpEventsResult(), Structure.ByValue
+}
+
+@FieldOrder("type", "instance_id", "bus_index")
+open class UapmdGraphEndpoint : Structure {
+    constructor() : super()
+    constructor(p: Pointer) : super(p) { read() }
+    @JvmField var type: Int = 0
+    @JvmField var instance_id: Int = 0
+    @JvmField var bus_index: Int = 0
+}
+
+@FieldOrder("id", "bus_type", "source", "target")
+open class UapmdGraphConnection : Structure {
+    constructor() : super()
+    constructor(p: Pointer) : super(p) { read() }
+    @JvmField var id: Long = 0
+    @JvmField var bus_type: Int = 0
+    @JvmField var source: UapmdGraphEndpoint = UapmdGraphEndpoint()
+    @JvmField var target: UapmdGraphEndpoint = UapmdGraphEndpoint()
+}
+
+@FieldOrder("success", "error", "count", "connections")
+open class UapmdGraphConnectionsResult : Structure() {
+    @JvmField var success: Byte = 0
+    @JvmField var error: String? = null
+    @JvmField var count: Int = 0
+    @JvmField var connections: Pointer? = null
+
+    class ByVal : UapmdGraphConnectionsResult(), Structure.ByValue
+}
+
+@FieldOrder("success", "error", "marker_count", "markers", "audio_warp_count", "audio_warps")
+open class UapmdClipAudioEventsResult : Structure() {
+    @JvmField var success: Byte = 0
+    @JvmField var error: String? = null
+    @JvmField var marker_count: Int = 0
+    @JvmField var markers: Pointer? = null
+    @JvmField var audio_warp_count: Int = 0
+    @JvmField var audio_warps: Pointer? = null
+
+    class ByVal : UapmdClipAudioEventsResult(), Structure.ByValue
+}
+
+@FieldOrder("success", "error")
+open class UapmdOpResult : Structure() {
+    @JvmField var success: Byte = 0
+    @JvmField var error: String? = null
+
+    class ByVal : UapmdOpResult(), Structure.ByValue
 }
 
 interface ProjectSaveCb : Callback {
@@ -1278,4 +1334,13 @@ interface UapmdLibrary : Library {
     fun uapmd_app_add_ump_event_to_clip(app: Pointer?, trackIndex: Int, clipId: Int, tick: Long, words: IntArray?, wordCount: Int): Boolean
     fun uapmd_app_remove_ump_event_from_clip(app: Pointer?, trackIndex: Int, clipId: Int, eventIndex: Int): Boolean
     fun uapmd_app_remove_clip_from_track(app: Pointer?, trackIndex: Int, clipId: Int): Boolean
+
+    fun uapmd_app_ensure_track_uses_editor_graph(app: Pointer?, trackIndex: Int): Boolean
+    fun uapmd_app_revert_track_to_simple_graph(app: Pointer?, trackIndex: Int): Boolean
+    fun uapmd_app_get_track_graph_connections(app: Pointer?, trackIndex: Int): UapmdGraphConnectionsResult.ByVal
+    fun uapmd_app_connect_track_graph(app: Pointer?, trackIndex: Int, connection: UapmdGraphConnection?): UapmdOpResult.ByVal
+    fun uapmd_app_disconnect_track_graph_connection(app: Pointer?, trackIndex: Int, connectionId: Long): UapmdOpResult.ByVal
+
+    fun uapmd_app_get_clip_audio_events(app: Pointer?, trackIndex: Int, clipId: Int): UapmdClipAudioEventsResult.ByVal
+    fun uapmd_app_set_clip_audio_events(app: Pointer?, trackIndex: Int, clipId: Int, markers: UapmdClipMarker?, markerCount: Int, warps: UapmdAudioWarpPoint?, warpCount: Int): UapmdOpResult.ByVal
 }

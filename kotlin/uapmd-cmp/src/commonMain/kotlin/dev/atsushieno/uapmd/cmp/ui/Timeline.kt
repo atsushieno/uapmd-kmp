@@ -189,24 +189,57 @@ private fun TrackLane(
             val px = (host.playheadSeconds * pixelsPerSecond).toFloat()
             drawLine(Playhead, Offset(px, 0f), Offset(px, size.height), 2f)
         }
-        // Clip labels double as the handle for opening a clip editor, the way
-        // uapmd-app reaches its dump / event-list windows.
+        // A clip's label opens its context menu, so every editor stays reachable
+        // from one place - piano roll, raw events, removal.
         clips.forEach { clip ->
             val x = (clip.positionSamples / sampleRate * pixelsPerSecond).dp
+            var menuOpen by remember(clip.clipId) { mutableStateOf(false) }
             val isMidi = clip.clipType == ClipType.Midi
-            Text(
-                clip.name.ifEmpty { if (isMidi) "MIDI clip" else "audio clip" },
-                Modifier
-                    .padding(start = x + 3.dp, top = 5.dp)
-                    .clickable(enabled = isMidi) {
-                        windows.open(
-                            "dump:$trackIndex:${clip.clipId}",
-                            "${clip.name.ifEmpty { "MIDI clip" }} - Events",
-                            DpSize(520.dp, 400.dp)
-                        ) { MidiDumpWindow(host, trackIndex, clip.clipId) }
-                    },
-                style = MaterialTheme.typography.labelSmall
-            )
+            Box(Modifier.padding(start = x + 3.dp, top = 5.dp)) {
+                Text(
+                    clip.name.ifEmpty { if (isMidi) "MIDI clip" else "audio clip" },
+                    Modifier.clickable { menuOpen = true },
+                    style = MaterialTheme.typography.labelSmall
+                )
+                DropdownMenu(expanded = menuOpen, onDismissRequest = { menuOpen = false }) {
+                    if (isMidi) {
+                        DropdownMenuItem(text = { Text("Piano Roll") }, onClick = {
+                            menuOpen = false
+                            windows.open(
+                                "pianoroll:$trackIndex:${clip.clipId}",
+                                "${clip.name.ifEmpty { "MIDI clip" }} - Piano Roll",
+                                DpSize(640.dp, 420.dp)
+                            ) { PianoRollEditor(host, trackIndex, clip.clipId) }
+                        })
+                        DropdownMenuItem(text = { Text("Edit Events (UMP)") }, onClick = {
+                            menuOpen = false
+                            windows.open(
+                                "dump:$trackIndex:${clip.clipId}",
+                                "${clip.name.ifEmpty { "MIDI clip" }} - Events",
+                                DpSize(520.dp, 400.dp)
+                            ) { MidiDumpWindow(host, trackIndex, clip.clipId) }
+                        })
+                        HorizontalDivider()
+                    } else {
+                        DropdownMenuItem(text = { Text("Markers & Warps") }, onClick = {
+                            menuOpen = false
+                            windows.open(
+                                "events:$trackIndex:${clip.clipId}",
+                                "${clip.name.ifEmpty { "audio clip" }} - Markers & Warps",
+                                DpSize(560.dp, 420.dp)
+                            ) { AudioEventListEditor(host, trackIndex, clip.clipId) }
+                        })
+                        HorizontalDivider()
+                    }
+                    DropdownMenuItem(text = { Text("Remove Clip") }, onClick = {
+                        menuOpen = false
+                        windows.close("pianoroll:$trackIndex:${clip.clipId}")
+                        windows.close("dump:$trackIndex:${clip.clipId}")
+                        windows.close("events:$trackIndex:${clip.clipId}")
+                        host.removeClip(trackIndex, clip.clipId)
+                    })
+                }
+            }
         }
     }
 }
@@ -318,6 +351,15 @@ private fun TrackLegend(host: UapmdHost, windows: FloatingWindowManager, trackIn
                     )
                 }
             }
+
+            Button(
+                onClick = {
+                    windows.open("graph:$trackIndex", "Track $trackIndex Graph", DpSize(620.dp, 440.dp)) {
+                        TrackGraphEditor(host, trackIndex)
+                    }
+                },
+                contentPadding = TightPadding
+            ) { Text("Graph") }
 
             Box {
                 Button(onClick = { moreMenu = true }, contentPadding = TightPadding) { Text("⋮") }

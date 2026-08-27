@@ -182,6 +182,94 @@ class JvmAppModel internal constructor(
 
     override fun removeClipFromTrack(trackIndex: Int, clipId: Int): Boolean =
         lib.uapmd_app_remove_clip_from_track(handle, trackIndex, clipId)
+
+    // ── Track graph ─────────────────────────────────────────────────────────
+
+    override fun ensureTrackUsesEditorGraph(trackIndex: Int): Boolean =
+        lib.uapmd_app_ensure_track_uses_editor_graph(handle, trackIndex)
+
+    override fun revertTrackToSimpleGraph(trackIndex: Int): Boolean =
+        lib.uapmd_app_revert_track_to_simple_graph(handle, trackIndex)
+
+    override fun getTrackGraphConnections(trackIndex: Int): GraphConnectionsResult {
+        val r = lib.uapmd_app_get_track_graph_connections(handle, trackIndex)
+        if (r.success == 0.toByte() || r.connections == null || r.count == 0)
+            return GraphConnectionsResult(r.success != 0.toByte(), r.error, emptyList())
+        val stride = UapmdGraphConnection().size().toLong()
+        val list = (0 until r.count).map { i ->
+            val c = UapmdGraphConnection(r.connections!!.share(i * stride))
+            GraphConnection(
+                id = c.id,
+                busType = GraphBusType.fromNative(c.bus_type),
+                source = c.source.toKotlin(),
+                target = c.target.toKotlin()
+            )
+        }
+        return GraphConnectionsResult(true, r.error, list)
+    }
+
+    override fun connectTrackGraph(trackIndex: Int, connection: GraphConnection): OpResult {
+        val c = UapmdGraphConnection().apply {
+            id = connection.id
+            bus_type = connection.busType.nativeValue
+            source = connection.source.toNative()
+            target = connection.target.toNative()
+        }
+        val r = lib.uapmd_app_connect_track_graph(handle, trackIndex, c)
+        return OpResult(r.success != 0.toByte(), r.error)
+    }
+
+    override fun disconnectTrackGraphConnection(trackIndex: Int, connectionId: Long): OpResult {
+        val r = lib.uapmd_app_disconnect_track_graph_connection(handle, trackIndex, connectionId)
+        return OpResult(r.success != 0.toByte(), r.error)
+    }
+
+    // ── Clip audio events ───────────────────────────────────────────────────
+
+    override fun getClipAudioEvents(trackIndex: Int, clipId: Int): ClipAudioEventsResult {
+        val r = lib.uapmd_app_get_clip_audio_events(handle, trackIndex, clipId)
+        if (r.success == 0.toByte())
+            return ClipAudioEventsResult(false, r.error, emptyList(), emptyList())
+
+        val markerStride = UapmdClipMarker().size().toLong()
+        val markers = if (r.markers == null) emptyList() else (0 until r.marker_count).map { i ->
+            UapmdClipMarker(r.markers!!.share(i * markerStride)).toKotlin()
+        }
+        val warpStride = UapmdAudioWarpPoint().size().toLong()
+        val warps = if (r.audio_warps == null) emptyList() else (0 until r.audio_warp_count).map { i ->
+            UapmdAudioWarpPoint(r.audio_warps!!.share(i * warpStride)).toKotlinWarp()
+        }
+        return ClipAudioEventsResult(true, r.error, markers, warps)
+    }
+
+    override fun setClipAudioEvents(
+        trackIndex: Int, clipId: Int,
+        markers: List<ClipMarkerData>, warps: List<AudioWarpPointData>
+    ): OpResult {
+        val r = lib.uapmd_app_set_clip_audio_events(
+            handle, trackIndex, clipId,
+            markers.toJvmArray(), markers.size,
+            warps.toJvmArray(), warps.size
+        )
+        return OpResult(r.success != 0.toByte(), r.error)
+    }
+}
+
+private fun UapmdAudioWarpPoint.toKotlinWarp() = AudioWarpPointData(
+    clipPositionOffset = clip_position_offset,
+    speedRatio = speed_ratio,
+    referenceType = WarpReferenceType.fromNative(reference_type),
+    referenceClipId = reference_clip_id ?: "",
+    referenceMarkerId = reference_marker_id ?: ""
+)
+
+private fun UapmdGraphEndpoint.toKotlin() =
+    GraphEndpoint(GraphEndpointType.fromNative(type), instance_id, bus_index.toUInt())
+
+private fun GraphEndpoint.toNative() = UapmdGraphEndpoint().also {
+    it.type = type.nativeValue
+    it.instance_id = instanceId
+    it.bus_index = busIndex.toInt()
 }
 
 private fun UapmdAppProjectResult.toKotlin() = AppProjectResult(success != 0.toByte(), error)

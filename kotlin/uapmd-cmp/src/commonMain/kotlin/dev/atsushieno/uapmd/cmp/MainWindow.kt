@@ -21,7 +21,9 @@ import androidx.compose.ui.unit.dp
 import dev.atsushieno.uapmd.cmp.ui.FloatingWindowLayer
 import dev.atsushieno.uapmd.cmp.ui.AddinManagerWindow
 import dev.atsushieno.uapmd.cmp.ui.DeviceSettings
+import dev.atsushieno.uapmd.cmp.ui.ExporterWindow
 import dev.atsushieno.uapmd.cmp.ui.InstanceDetails
+import dev.atsushieno.uapmd.cmp.ui.MasterMarkersWindow
 import dev.atsushieno.uapmd.cmp.ui.MixerMonitor
 import dev.atsushieno.uapmd.cmp.ui.PluginInstances
 import dev.atsushieno.uapmd.cmp.ui.PluginSelector
@@ -44,6 +46,16 @@ fun MainWindow() {
                 Column(Modifier.fillMaxSize()) {
                     Toolbar(
                         host = host,
+                        onToggleMarkers = {
+                            windows.toggle("markers", "Project Markers", DpSize(520.dp, 340.dp)) {
+                                MasterMarkersWindow(host)
+                            }
+                        },
+                        onToggleExporter = {
+                            windows.toggle("exporter", "Render To File", DpSize(560.dp, 280.dp)) {
+                                ExporterWindow(host)
+                            }
+                        },
                         onToggleAddins = {
                             windows.toggle("addins", "Addins", DpSize(500.dp, 340.dp)) {
                                 AddinManagerWindow(host)

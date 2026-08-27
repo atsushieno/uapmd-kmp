@@ -9,6 +9,7 @@
 #include <jni.h>
 #include <cstdint>
 #include <vector>
+#include <string>
 
 #include "c-api/uapmd-c-common.h"
 #include "c-api/uapmd-c-app.h"
@@ -486,6 +487,191 @@ JNI_FN(jboolean, uapmdAppRemoveUmpEventFromClip)(JNIEnv*, jclass, jlong app, jin
 
 JNI_FN(jboolean, uapmdAppRemoveClipFromTrack)(JNIEnv*, jclass, jlong app, jint trackIndex, jint clipId) {
     return uapmd_app_remove_clip_from_track(AM(app), trackIndex, clipId);
+}
+
+/* ── Track graph ───────────────────────────────────────────────────────────── */
+
+JNI_FN(jboolean, uapmdAppEnsureTrackUsesEditorGraph)(JNIEnv*, jclass, jlong app, jint t) {
+    return uapmd_app_ensure_track_uses_editor_graph(AM(app), t);
+}
+
+JNI_FN(jboolean, uapmdAppRevertTrackToSimpleGraph)(JNIEnv*, jclass, jlong app, jint t) {
+    return uapmd_app_revert_track_to_simple_graph(AM(app), t);
+}
+
+/** Object[]{ long[1] success, String? error, long[] ids, int[] flat } where flat is
+ *  7 ints per connection: busType, srcType, srcInstance, srcBus, tgtType, tgtInstance, tgtBus. */
+JNI_FN(jobjectArray, uapmdAppGetTrackGraphConnections)(JNIEnv* env, jclass, jlong app, jint t) {
+    auto r = uapmd_app_get_track_graph_connections(AM(app), t);
+
+    jlong ok = r.success ? 1 : 0;
+    jlongArray okArr = env->NewLongArray(1);
+    env->SetLongArrayRegion(okArr, 0, 1, &ok);
+
+    const jsize n = r.success && r.connections ? static_cast<jsize>(r.count) : 0;
+    jlongArray ids = env->NewLongArray(n);
+    jintArray flat = env->NewIntArray(n * 7);
+    for (jsize i = 0; i < n; i++) {
+        const auto& c = r.connections[i];
+        jlong id = static_cast<jlong>(c.id);
+        env->SetLongArrayRegion(ids, i, 1, &id);
+        jint vals[7] = {
+            static_cast<jint>(c.bus_type),
+            static_cast<jint>(c.source.type), c.source.instance_id, static_cast<jint>(c.source.bus_index),
+            static_cast<jint>(c.target.type), c.target.instance_id, static_cast<jint>(c.target.bus_index)
+        };
+        env->SetIntArrayRegion(flat, i * 7, 7, vals);
+    }
+
+    jclass objectClass = env->FindClass("java/lang/Object");
+    jobjectArray result = env->NewObjectArray(4, objectClass, nullptr);
+    env->SetObjectArrayElement(result, 0, okArr);
+    if (r.error) env->SetObjectArrayElement(result, 1, env->NewStringUTF(r.error));
+    env->SetObjectArrayElement(result, 2, ids);
+    env->SetObjectArrayElement(result, 3, flat);
+    return result;
+}
+
+/** Returns Object[]{ long[1] success, String? error }. */
+static jobjectArray pack_op_result(JNIEnv* env, uapmd_op_result_t r) {
+    jlong ok = r.success ? 1 : 0;
+    jlongArray okArr = env->NewLongArray(1);
+    env->SetLongArrayRegion(okArr, 0, 1, &ok);
+    jclass objectClass = env->FindClass("java/lang/Object");
+    jobjectArray result = env->NewObjectArray(2, objectClass, nullptr);
+    env->SetObjectArrayElement(result, 0, okArr);
+    if (r.error) env->SetObjectArrayElement(result, 1, env->NewStringUTF(r.error));
+    return result;
+}
+
+JNI_FN(jobjectArray, uapmdAppConnectTrackGraph)(JNIEnv* env, jclass, jlong app, jint t,
+                                                  jlong id, jint busType,
+                                                  jint srcType, jint srcInstance, jint srcBus,
+                                                  jint tgtType, jint tgtInstance, jint tgtBus) {
+    uapmd_graph_connection_t c{};
+    c.id = static_cast<int64_t>(id);
+    c.bus_type = static_cast<uapmd_graph_bus_type_t>(busType);
+    c.source.type = static_cast<uapmd_graph_endpoint_type_t>(srcType);
+    c.source.instance_id = srcInstance;
+    c.source.bus_index = static_cast<uint32_t>(srcBus);
+    c.target.type = static_cast<uapmd_graph_endpoint_type_t>(tgtType);
+    c.target.instance_id = tgtInstance;
+    c.target.bus_index = static_cast<uint32_t>(tgtBus);
+    return pack_op_result(env, uapmd_app_connect_track_graph(AM(app), t, &c));
+}
+
+JNI_FN(jobjectArray, uapmdAppDisconnectTrackGraphConnection)(JNIEnv* env, jclass, jlong app,
+                                                               jint t, jlong connectionId) {
+    return pack_op_result(env, uapmd_app_disconnect_track_graph_connection(AM(app), t, connectionId));
+}
+
+/* ── Clip audio events ─────────────────────────────────────────────────────── */
+
+/** Object[]{ long[1] ok, String? error, String[] markerStrings(4/marker), double[] markerNums(1/marker),
+ *            int[] markerRefTypes, double[] warpNums(2/warp), int[] warpRefTypes, String[] warpStrings(2/warp) } */
+JNI_FN(jobjectArray, uapmdAppGetClipAudioEvents)(JNIEnv* env, jclass, jlong app, jint t, jint clipId) {
+    auto r = uapmd_app_get_clip_audio_events(AM(app), t, clipId);
+
+    jlong ok = r.success ? 1 : 0;
+    jlongArray okArr = env->NewLongArray(1);
+    env->SetLongArrayRegion(okArr, 0, 1, &ok);
+
+    jclass stringClass = env->FindClass("java/lang/String");
+    const jsize mn = r.success ? static_cast<jsize>(r.marker_count) : 0;
+    const jsize wn = r.success ? static_cast<jsize>(r.audio_warp_count) : 0;
+
+    jobjectArray mStr = env->NewObjectArray(mn * 4, stringClass, nullptr);
+    jdoubleArray mNum = env->NewDoubleArray(mn);
+    jintArray mRef = env->NewIntArray(mn);
+    for (jsize i = 0; i < mn; i++) {
+        const auto& m = r.markers[i];
+        const char* strs[4] = { m.marker_id, m.reference_clip_id, m.reference_marker_id, m.name };
+        for (int k = 0; k < 4; k++)
+            env->SetObjectArrayElement(mStr, i * 4 + k, env->NewStringUTF(strs[k] ? strs[k] : ""));
+        jdouble off = m.clip_position_offset;
+        env->SetDoubleArrayRegion(mNum, i, 1, &off);
+        jint rt = static_cast<jint>(m.reference_type);
+        env->SetIntArrayRegion(mRef, i, 1, &rt);
+    }
+
+    jobjectArray wStr = env->NewObjectArray(wn * 2, stringClass, nullptr);
+    jdoubleArray wNum = env->NewDoubleArray(wn * 2);
+    jintArray wRef = env->NewIntArray(wn);
+    for (jsize i = 0; i < wn; i++) {
+        const auto& w = r.audio_warps[i];
+        const char* strs[2] = { w.reference_clip_id, w.reference_marker_id };
+        for (int k = 0; k < 2; k++)
+            env->SetObjectArrayElement(wStr, i * 2 + k, env->NewStringUTF(strs[k] ? strs[k] : ""));
+        jdouble nums[2] = { w.clip_position_offset, w.speed_ratio };
+        env->SetDoubleArrayRegion(wNum, i * 2, 2, nums);
+        jint rt = static_cast<jint>(w.reference_type);
+        env->SetIntArrayRegion(wRef, i, 1, &rt);
+    }
+
+    jclass objectClass = env->FindClass("java/lang/Object");
+    jobjectArray result = env->NewObjectArray(8, objectClass, nullptr);
+    env->SetObjectArrayElement(result, 0, okArr);
+    if (r.error) env->SetObjectArrayElement(result, 1, env->NewStringUTF(r.error));
+    env->SetObjectArrayElement(result, 2, mStr);
+    env->SetObjectArrayElement(result, 3, mNum);
+    env->SetObjectArrayElement(result, 4, mRef);
+    env->SetObjectArrayElement(result, 5, wNum);
+    env->SetObjectArrayElement(result, 6, wRef);
+    env->SetObjectArrayElement(result, 7, wStr);
+    return result;
+}
+
+JNI_FN(jobjectArray, uapmdAppSetClipAudioEvents)(JNIEnv* env, jclass, jlong app, jint t, jint clipId,
+                                                   jobjectArray mStr, jdoubleArray mNum, jintArray mRef,
+                                                   jdoubleArray wNum, jintArray wRef, jobjectArray wStr) {
+    const jsize mn = mNum ? env->GetArrayLength(mNum) : 0;
+    const jsize wn = wRef ? env->GetArrayLength(wRef) : 0;
+
+    std::vector<std::string> keep;
+    keep.reserve(static_cast<size_t>(mn) * 4 + static_cast<size_t>(wn) * 2);
+    auto take = [&](jobjectArray arr, jsize idx) -> const char* {
+        auto js = reinterpret_cast<jstring>(env->GetObjectArrayElement(arr, idx));
+        const char* c = js ? env->GetStringUTFChars(js, nullptr) : "";
+        keep.emplace_back(c ? c : "");
+        if (js) env->ReleaseStringUTFChars(js, c);
+        return keep.back().c_str();
+    };
+
+    std::vector<uapmd_clip_marker_t> markers(static_cast<size_t>(mn));
+    if (mn) {
+        jdouble* nums = env->GetDoubleArrayElements(mNum, nullptr);
+        jint* refs = env->GetIntArrayElements(mRef, nullptr);
+        for (jsize i = 0; i < mn; i++) {
+            markers[i].marker_id = take(mStr, i * 4);
+            markers[i].clip_position_offset = nums[i];
+            markers[i].reference_type = static_cast<uapmd_audio_warp_reference_type_t>(refs[i]);
+            markers[i].reference_clip_id = take(mStr, i * 4 + 1);
+            markers[i].reference_marker_id = take(mStr, i * 4 + 2);
+            markers[i].name = take(mStr, i * 4 + 3);
+        }
+        env->ReleaseDoubleArrayElements(mNum, nums, JNI_ABORT);
+        env->ReleaseIntArrayElements(mRef, refs, JNI_ABORT);
+    }
+
+    std::vector<uapmd_audio_warp_point_t> warps(static_cast<size_t>(wn));
+    if (wn) {
+        jdouble* nums = env->GetDoubleArrayElements(wNum, nullptr);
+        jint* refs = env->GetIntArrayElements(wRef, nullptr);
+        for (jsize i = 0; i < wn; i++) {
+            warps[i].clip_position_offset = nums[i * 2];
+            warps[i].speed_ratio = nums[i * 2 + 1];
+            warps[i].reference_type = static_cast<uapmd_audio_warp_reference_type_t>(refs[i]);
+            warps[i].reference_clip_id = take(wStr, i * 2);
+            warps[i].reference_marker_id = take(wStr, i * 2 + 1);
+        }
+        env->ReleaseDoubleArrayElements(wNum, nums, JNI_ABORT);
+        env->ReleaseIntArrayElements(wRef, refs, JNI_ABORT);
+    }
+
+    return pack_op_result(env, uapmd_app_set_clip_audio_events(
+        AM(app), t, clipId,
+        mn ? markers.data() : nullptr, static_cast<uint32_t>(mn),
+        wn ? warps.data() : nullptr, static_cast<uint32_t>(wn)));
 }
 
 #undef JNI_FN

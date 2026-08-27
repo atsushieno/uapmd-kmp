@@ -229,6 +229,161 @@ class JsAppModel internal constructor(internal val handle: Int) : AppModel {
 
     override fun removeClipFromTrack(trackIndex: Int, clipId: Int): Boolean =
         jsMod._uapmd_app_remove_clip_from_track(handle, trackIndex, clipId) as Boolean
+
+    // ── Track graph ─────────────────────────────────────────────────────────
+
+    override fun ensureTrackUsesEditorGraph(trackIndex: Int): Boolean =
+        jsMod._uapmd_app_ensure_track_uses_editor_graph(handle, trackIndex) as Boolean
+
+    override fun revertTrackToSimpleGraph(trackIndex: Int): Boolean =
+        jsMod._uapmd_app_revert_track_to_simple_graph(handle, trackIndex) as Boolean
+
+    override fun getTrackGraphConnections(trackIndex: Int): GraphConnectionsResult =
+        withWasmMem(16) { out ->
+            jsMod._uapmd_app_get_track_graph_connections(out, handle, trackIndex)
+            val ok = (jsMod.getValue(out, "i8") as Int) != 0
+            val errPtr = jsMod.getValue(out + 4, "i32") as Int
+            val error = if (errPtr != 0) jsMod.UTF8ToString(errPtr) as String else null
+            val count = jsMod.getValue(out + 8, "i32") as Int
+            val ptr = jsMod.getValue(out + 12, "i32") as Int
+            if (!ok || ptr == 0 || count == 0) GraphConnectionsResult(ok, error, emptyList())
+            else GraphConnectionsResult(ok, error, (0 until count).map { i ->
+                val base = ptr + i * JsGraphConnectionSize
+                GraphConnection(
+                    id = (jsMod.getValue(base, "i64") as? Number)?.toLong() ?: 0L,
+                    busType = GraphBusType.fromNative(jsMod.getValue(base + 8, "i32") as Int),
+                    source = jsReadEndpoint(base + 12),
+                    target = jsReadEndpoint(base + 24)
+                )
+            })
+        }
+
+    override fun connectTrackGraph(trackIndex: Int, connection: GraphConnection): OpResult =
+        withWasmMem(JsGraphConnectionSize) { c ->
+            jsMod.setValue(c, js("BigInt")(connection.id.toString()), "i64")
+            jsMod.setValue(c + 8, connection.busType.nativeValue, "i32")
+            jsWriteEndpoint(c + 12, connection.source)
+            jsWriteEndpoint(c + 24, connection.target)
+            withWasmMem(8) { out ->
+                jsMod._uapmd_app_connect_track_graph(out, handle, trackIndex, c)
+                jsReadOpResult(out)
+            }
+        }
+
+    override fun disconnectTrackGraphConnection(trackIndex: Int, connectionId: Long): OpResult =
+        withWasmMem(8) { out ->
+            jsMod._uapmd_app_disconnect_track_graph_connection(
+                out, handle, trackIndex, js("BigInt")(connectionId.toString())
+            )
+            jsReadOpResult(out)
+        }
+
+    // ── Clip audio events ───────────────────────────────────────────────────
+
+    override fun getClipAudioEvents(trackIndex: Int, clipId: Int): ClipAudioEventsResult =
+        withWasmMem(24) { out ->
+            jsMod._uapmd_app_get_clip_audio_events(out, handle, trackIndex, clipId)
+            val ok = (jsMod.getValue(out, "i8") as Int) != 0
+            val errPtr = jsMod.getValue(out + 4, "i32") as Int
+            val error = if (errPtr != 0) jsMod.UTF8ToString(errPtr) as String else null
+            if (!ok) ClipAudioEventsResult(false, error, emptyList(), emptyList())
+            else {
+                val mCount = jsMod.getValue(out + 8, "i32") as Int
+                val mPtr = jsMod.getValue(out + 12, "i32") as Int
+                val wCount = jsMod.getValue(out + 16, "i32") as Int
+                val wPtr = jsMod.getValue(out + 20, "i32") as Int
+                ClipAudioEventsResult(
+                    true, error,
+                    if (mPtr == 0) emptyList() else (0 until mCount).map { i ->
+                        val b = mPtr + i * JsClipMarkerSize
+                        ClipMarkerData(
+                            markerId = jsStrAt(b),
+                            clipPositionOffset = jsMod.getValue(b + 8, "double") as Double,
+                            referenceType = WarpReferenceType.fromNative(jsMod.getValue(b + 16, "i32") as Int),
+                            referenceClipId = jsStrAt(b + 20),
+                            referenceMarkerId = jsStrAt(b + 24),
+                            name = jsStrAt(b + 28)
+                        )
+                    },
+                    if (wPtr == 0) emptyList() else (0 until wCount).map { i ->
+                        val b = wPtr + i * JsWarpPointSize
+                        AudioWarpPointData(
+                            clipPositionOffset = jsMod.getValue(b, "double") as Double,
+                            speedRatio = jsMod.getValue(b + 8, "double") as Double,
+                            referenceType = WarpReferenceType.fromNative(jsMod.getValue(b + 16, "i32") as Int),
+                            referenceClipId = jsStrAt(b + 20),
+                            referenceMarkerId = jsStrAt(b + 24)
+                        )
+                    }
+                )
+            }
+        }
+
+    override fun setClipAudioEvents(
+        trackIndex: Int, clipId: Int,
+        markers: List<ClipMarkerData>, warps: List<AudioWarpPointData>
+    ): OpResult {
+        val owned = mutableListOf<Int>()
+        fun cstr(v: String): Int {
+            val size = (jsMod.lengthBytesUTF8(v) as Int) + 1
+            val p = jsMod._malloc(size) as Int
+            jsMod.stringToUTF8(v, p, size)
+            owned += p
+            return p
+        }
+        val mBuf = if (markers.isEmpty()) 0 else (jsMod._malloc(markers.size * JsClipMarkerSize) as Int).also { owned += it }
+        markers.forEachIndexed { i, m ->
+            val b = mBuf + i * JsClipMarkerSize
+            jsMod.setValue(b, cstr(m.markerId), "i32")
+            jsMod.setValue(b + 8, m.clipPositionOffset, "double")
+            jsMod.setValue(b + 16, m.referenceType.nativeValue, "i32")
+            jsMod.setValue(b + 20, cstr(m.referenceClipId), "i32")
+            jsMod.setValue(b + 24, cstr(m.referenceMarkerId), "i32")
+            jsMod.setValue(b + 28, cstr(m.name), "i32")
+        }
+        val wBuf = if (warps.isEmpty()) 0 else (jsMod._malloc(warps.size * JsWarpPointSize) as Int).also { owned += it }
+        warps.forEachIndexed { i, w ->
+            val b = wBuf + i * JsWarpPointSize
+            jsMod.setValue(b, w.clipPositionOffset, "double")
+            jsMod.setValue(b + 8, w.speedRatio, "double")
+            jsMod.setValue(b + 16, w.referenceType.nativeValue, "i32")
+            jsMod.setValue(b + 20, cstr(w.referenceClipId), "i32")
+            jsMod.setValue(b + 24, cstr(w.referenceMarkerId), "i32")
+        }
+        return try {
+            withWasmMem(8) { out ->
+                jsMod._uapmd_app_set_clip_audio_events(out, handle, trackIndex, clipId, mBuf, markers.size, wBuf, warps.size)
+                jsReadOpResult(out)
+            }
+        } finally { owned.forEach { jsMod._free(it) } }
+    }
+}
+
+private const val JsGraphConnectionSize = 40
+private const val JsClipMarkerSize = 32
+private const val JsWarpPointSize = 32
+
+private fun jsStrAt(ptr: Int): String {
+    val p = jsMod.getValue(ptr, "i32") as Int
+    return if (p != 0) jsMod.UTF8ToString(p) as String else ""
+}
+
+private fun jsReadEndpoint(ptr: Int) = GraphEndpoint(
+    GraphEndpointType.fromNative(jsMod.getValue(ptr, "i32") as Int),
+    jsMod.getValue(ptr + 4, "i32") as Int,
+    (jsMod.getValue(ptr + 8, "i32") as Int).toUInt()
+)
+
+private fun jsWriteEndpoint(ptr: Int, e: GraphEndpoint) {
+    jsMod.setValue(ptr, e.type.nativeValue, "i32")
+    jsMod.setValue(ptr + 4, e.instanceId, "i32")
+    jsMod.setValue(ptr + 8, e.busIndex.toInt(), "i32")
+}
+
+private fun jsReadOpResult(ptr: Int): OpResult {
+    val ok = (jsMod.getValue(ptr, "i8") as Int) != 0
+    val errPtr = jsMod.getValue(ptr + 4, "i32") as Int
+    return OpResult(ok, if (errPtr != 0) jsMod.UTF8ToString(errPtr) as String else null)
 }
 
 private fun decodeJsProjectResult(ptr: Int): AppProjectResult {

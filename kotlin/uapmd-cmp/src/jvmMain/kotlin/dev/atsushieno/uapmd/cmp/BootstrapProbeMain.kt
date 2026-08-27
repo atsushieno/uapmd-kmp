@@ -218,10 +218,84 @@ fun main() {
             check("UMP events carry words", firstEvent != null && firstEvent.words.isNotEmpty())
             check("UMP ticks are non-decreasing",
                 ump.events.zipWithNext().all { (a, b) -> a.tick <= b.tick })
+
+            // ── clip audio events round trip (markers on the MIDI clip) ─────
+            val before = model.getClipAudioEvents(0, added.clipId)
+            println("   clip events: ok=${before.success} markers=${before.markers.size} warps=${before.warps.size} err=${before.error}")
+            check("getClipAudioEvents decodes", before.success || before.error != null)
+            // ── UMP note parsing + content round trip ───────────────────────
+            val parsed = dev.atsushieno.uapmd.cmp.ui.parseUmpNotes(ump.events)
+            println("   parsed notes: ${parsed.size} (getMidiClipNotes said ${notes?.size})")
+            check("UMP note parser recovers notes", parsed.isNotEmpty())
+            check("parsed note count is close to the engine's",
+                kotlin.math.abs(parsed.size - (notes?.size ?: 0)) <= (notes?.size ?: 0) / 10)
+            check("notes have positive duration", parsed.all { it.durationTicks > 0 })
+
+            // Rebuild with no edits: the stream must survive a round trip.
+            val (words, ticks) = dev.atsushieno.uapmd.cmp.ui.rebuildClipContent(ump.events, emptyMap())
+            check("rebuild produces one tick per word", words.size == ticks.size)
+            check("rebuild preserves the word count",
+                words.size == ump.events.sumOf { it.words.size })
+            check("rebuilt ticks are sorted", ticks.toList() == ticks.sorted())
+
+            val replaced = timelineFacade.replaceMidiClipContent(0, added.clipId, words, ticks)
+            println("   replaceMidiClipContent(identity) -> $replaced")
+            check("identity replace accepted", replaced)
+            val afterReplace = model.getMidiClipUmpEvents(0, added.clipId)
+            println("   events after replace: ${afterReplace.events.size} (was ${ump.events.size})")
+            check("event count survives the round trip",
+                afterReplace.events.size == ump.events.size)
+            check("first tick survives",
+                afterReplace.events.firstOrNull()?.tick == ump.events.firstOrNull()?.tick)
+
+            // Move the first note 120 ticks later and confirm it lands.
+            val first = parsed.first()
+            val (mWords, mTicks) = dev.atsushieno.uapmd.cmp.ui.rebuildClipContent(
+                afterReplace.events, mapOf(first.onIndex to 120L, first.offIndex to 120L)
+            )
+            val movedOk = timelineFacade.replaceMidiClipContent(0, added.clipId, mWords, mTicks)
+            val afterMove = dev.atsushieno.uapmd.cmp.ui.parseUmpNotes(
+                model.getMidiClipUmpEvents(0, added.clipId).events
+            )
+            val movedNote = afterMove.firstOrNull { it.note == first.note && it.startTick == first.startTick + 120L }
+            println("   moved note: $movedOk -> found=${movedNote != null}")
+            check("note move applied", movedOk && movedNote != null)
+
+            // Markers and warps belong to AUDIO clips; this one is MIDI, so the
+            // engine refuses the write. That still exercises the write path and
+            // proves the error string marshals back.
+            if (before.success) {
+                val setR = model.setClipAudioEvents(
+                    0, added.clipId,
+                    before.markers + dev.atsushieno.uapmd.ClipMarkerData("probe-clip-marker", 3.25, name = "P"),
+                    before.warps
+                )
+                println("   set on a MIDI clip: ok=${setR.success} err=${setR.error}")
+                check("setClipAudioEvents refuses a MIDI clip with a readable reason",
+                    !setR.success && !setR.error.isNullOrEmpty())
+            }
         }
     } else {
         println("NOTE  no test MIDI file at $midi; skipped clip checks")
     }
+
+    // ── project markers (engine-owned, edited through ProjectCommands) ───────
+    val markersBefore = model.sequencer.engine.masterTrackMarkers.size
+    val added = model.sequencer.engine.timeline.commands.setMasterTrackMarkers(
+        model.sequencer.engine.masterTrackMarkers +
+            dev.atsushieno.uapmd.ClipMarkerData("probe-marker", 12.5, name = "Probe")
+    )
+    val markersAfter = model.sequencer.engine.masterTrackMarkers
+    println("   markers: $markersBefore -> ${markersAfter.size} (accepted=$added)")
+    check("setMasterTrackMarkers accepted", added)
+    check("marker is readable back", markersAfter.any { it.markerId == "probe-marker" })
+    check("marker kept its offset", markersAfter.firstOrNull { it.markerId == "probe-marker" }?.clipPositionOffset == 12.5)
+
+    // ── track graph ──────────────────────────────────────────────────────────
+    val graphOk = model.ensureTrackUsesEditorGraph(0)
+    val connections = model.getTrackGraphConnections(0)
+    println("   graph: editor=$graphOk connections=${connections.connections.size} error=${connections.error}")
+    check("track graph connections readable", connections.success || connections.error != null)
 
     // ── project save/load (struct RETURNED by value: the sret ABI path) ──────
     val projectPath = System.getProperty("java.io.tmpdir") + "/uapmd-cmp-probe.uapmd"

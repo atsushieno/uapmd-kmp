@@ -930,6 +930,20 @@ external interface UapmdCApiModule : JsAny {
     fun uapmdAppRemoveUmpEventFromClip(app: Int, trackIndex: Int, clipId: Int, eventIndex: Int): Boolean
     @JsName("_uapmd_app_remove_clip_from_track")
     fun uapmdAppRemoveClipFromTrack(app: Int, trackIndex: Int, clipId: Int): Boolean
+
+    @JsName("_uapmd_app_ensure_track_uses_editor_graph")
+    fun uapmdAppEnsureTrackUsesEditorGraph(app: Int, trackIndex: Int): Boolean
+    @JsName("_uapmd_app_revert_track_to_simple_graph")
+    fun uapmdAppRevertTrackToSimpleGraph(app: Int, trackIndex: Int): Boolean
+    @JsName("_uapmd_app_get_clip_audio_events")
+    fun uapmdAppGetClipAudioEvents(out: Int, app: Int, trackIndex: Int, clipId: Int)
+    @JsName("_uapmd_app_set_clip_audio_events")
+    fun uapmdAppSetClipAudioEvents(out: Int, app: Int, trackIndex: Int, clipId: Int, markers: Int, markerCount: Int, warps: Int, warpCount: Int)
+    @JsName("_uapmd_app_get_track_graph_connections")
+    fun uapmdAppGetTrackGraphConnections(out: Int, app: Int, trackIndex: Int)
+    @JsName("_uapmd_app_connect_track_graph")
+    fun uapmdAppConnectTrackGraph(out: Int, app: Int, trackIndex: Int, connection: Int)
+
 }
 
 
@@ -1174,6 +1188,17 @@ fun uapmdDispatchLoadState(cbId: Int, errorPtr: Int) {
 // The Wasm module is linked with -sWASM_BIGINT=1, so scalar i64 parameters must
 // arrive as BigInt. Passing the value as a decimal string keeps it exact for
 // magnitudes beyond 2^53.
+
+@JsFun("(mod, out, app, t, id) => mod._uapmd_app_disconnect_track_graph_connection(out, app, t, BigInt(id))")
+internal external fun wasmAppDisconnectTrackGraph(
+    mod: UapmdCApiModule, out: Int, app: Int, trackIndex: Int, connectionId: String
+)
+
+@JsFun("(mod, ptr, v) => { new DataView(mod.HEAPU8.buffer).setBigInt64(ptr, BigInt(v), true); }")
+internal external fun wasmWriteI64(mod: UapmdCApiModule, ptr: Int, value: String)
+
+@JsFun("(mod, ptr) => new DataView(mod.HEAPU8.buffer).getBigInt64(ptr, true).toString()")
+internal external fun wasmReadI64(mod: UapmdCApiModule, ptr: Int): String
 
 @JsFun("(mod, app, t, c, tick, words, n) => mod._uapmd_app_add_ump_event_to_clip(app, t, c, BigInt(tick), words, n)")
 internal external fun wasmAppAddUmpEventToClip(

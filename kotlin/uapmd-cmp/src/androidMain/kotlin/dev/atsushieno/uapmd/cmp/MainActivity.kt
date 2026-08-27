@@ -9,6 +9,9 @@ class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         enableEdgeToEdge()
         super.onCreate(savedInstanceState)
+        // Idempotent, and UapmdHost.start() does it too; doing it here as well
+        // keeps it on the Android main thread at the earliest possible point.
+        initPlatformEventLoop()
         setContent {
             App()
         }

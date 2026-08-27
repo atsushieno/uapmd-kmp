@@ -155,6 +155,105 @@ class AndroidAppModel internal constructor(internal val handle: Long) : AppModel
 
     override fun removeClipFromTrack(trackIndex: Int, clipId: Int): Boolean =
         JniBridge.uapmdAppRemoveClipFromTrack(handle, trackIndex, clipId)
+
+    // ── Track graph ─────────────────────────────────────────────────────────
+
+    override fun ensureTrackUsesEditorGraph(trackIndex: Int): Boolean =
+        JniBridge.uapmdAppEnsureTrackUsesEditorGraph(handle, trackIndex)
+
+    override fun revertTrackToSimpleGraph(trackIndex: Int): Boolean =
+        JniBridge.uapmdAppRevertTrackToSimpleGraph(handle, trackIndex)
+
+    override fun getTrackGraphConnections(trackIndex: Int): GraphConnectionsResult {
+        val packed = JniBridge.uapmdAppGetTrackGraphConnections(handle, trackIndex)
+            ?: return GraphConnectionsResult(false, "native call returned null", emptyList())
+        val ok = (packed[0] as LongArray)[0] != 0L
+        val error = packed.getOrNull(1) as? String
+        val ids = packed[2] as LongArray
+        val flat = packed[3] as IntArray
+        return GraphConnectionsResult(ok, error, ids.indices.map { i ->
+            val b = i * 7
+            GraphConnection(
+                id = ids[i],
+                busType = GraphBusType.fromNative(flat[b]),
+                source = GraphEndpoint(GraphEndpointType.fromNative(flat[b + 1]), flat[b + 2], flat[b + 3].toUInt()),
+                target = GraphEndpoint(GraphEndpointType.fromNative(flat[b + 4]), flat[b + 5], flat[b + 6].toUInt())
+            )
+        })
+    }
+
+    override fun connectTrackGraph(trackIndex: Int, connection: GraphConnection): OpResult =
+        JniBridge.uapmdAppConnectTrackGraph(
+            handle, trackIndex, connection.id, connection.busType.nativeValue,
+            connection.source.type.nativeValue, connection.source.instanceId, connection.source.busIndex.toInt(),
+            connection.target.type.nativeValue, connection.target.instanceId, connection.target.busIndex.toInt()
+        ).toOpResult()
+
+    override fun disconnectTrackGraphConnection(trackIndex: Int, connectionId: Long): OpResult =
+        JniBridge.uapmdAppDisconnectTrackGraphConnection(handle, trackIndex, connectionId).toOpResult()
+
+    // ── Clip audio events ───────────────────────────────────────────────────
+
+    override fun getClipAudioEvents(trackIndex: Int, clipId: Int): ClipAudioEventsResult {
+        val packed = JniBridge.uapmdAppGetClipAudioEvents(handle, trackIndex, clipId)
+            ?: return ClipAudioEventsResult(false, "native call returned null", emptyList(), emptyList())
+        val ok = (packed[0] as LongArray)[0] != 0L
+        val error = packed.getOrNull(1) as? String
+        @Suppress("UNCHECKED_CAST") val mStr = packed[2] as Array<String>
+        val mNum = packed[3] as DoubleArray
+        val mRef = packed[4] as IntArray
+        val wNum = packed[5] as DoubleArray
+        val wRef = packed[6] as IntArray
+        @Suppress("UNCHECKED_CAST") val wStr = packed[7] as Array<String>
+        return ClipAudioEventsResult(
+            ok, error,
+            mNum.indices.map { i ->
+                ClipMarkerData(
+                    markerId = mStr[i * 4],
+                    clipPositionOffset = mNum[i],
+                    referenceType = WarpReferenceType.fromNative(mRef[i]),
+                    referenceClipId = mStr[i * 4 + 1],
+                    referenceMarkerId = mStr[i * 4 + 2],
+                    name = mStr[i * 4 + 3]
+                )
+            },
+            wRef.indices.map { i ->
+                AudioWarpPointData(
+                    clipPositionOffset = wNum[i * 2],
+                    speedRatio = wNum[i * 2 + 1],
+                    referenceType = WarpReferenceType.fromNative(wRef[i]),
+                    referenceClipId = wStr[i * 2],
+                    referenceMarkerId = wStr[i * 2 + 1]
+                )
+            }
+        )
+    }
+
+    override fun setClipAudioEvents(
+        trackIndex: Int, clipId: Int,
+        markers: List<ClipMarkerData>, warps: List<AudioWarpPointData>
+    ): OpResult = JniBridge.uapmdAppSetClipAudioEvents(
+        handle, trackIndex, clipId,
+        Array(markers.size * 4) { i ->
+            val m = markers[i / 4]
+            when (i % 4) {
+                0 -> m.markerId; 1 -> m.referenceClipId; 2 -> m.referenceMarkerId; else -> m.name
+            }
+        },
+        DoubleArray(markers.size) { markers[it].clipPositionOffset },
+        IntArray(markers.size) { markers[it].referenceType.nativeValue },
+        DoubleArray(warps.size * 2) { i -> if (i % 2 == 0) warps[i / 2].clipPositionOffset else warps[i / 2].speedRatio },
+        IntArray(warps.size) { warps[it].referenceType.nativeValue },
+        Array(warps.size * 2) { i ->
+            val w = warps[i / 2]
+            if (i % 2 == 0) w.referenceClipId else w.referenceMarkerId
+        }
+    ).toOpResult()
+}
+
+private fun Array<Any>?.toOpResult(): OpResult {
+    if (this == null) return OpResult(false, "native call returned null")
+    return OpResult((this[0] as LongArray)[0] != 0L, this.getOrNull(1) as? String)
 }
 
 private fun Array<Any>?.toProjectResult(): AppProjectResult {

@@ -43,6 +43,8 @@ private val RecordActive = Color(0xFFE03333)
 fun Toolbar(
     host: UapmdHost,
     onToggleAddins: () -> Unit,
+    onToggleExporter: () -> Unit,
+    onToggleMarkers: () -> Unit,
     onToggleDeviceSettings: () -> Unit,
     onTogglePlugins: () -> Unit,
     modifier: Modifier = Modifier
@@ -89,6 +91,10 @@ fun Toolbar(
                 DropdownMenuItem(
                     text = { Text("Show Addins") },
                     onClick = { commandOpen = false; onToggleAddins() }
+                )
+                DropdownMenuItem(
+                    text = { Text("Show Project Markers") },
+                    onClick = { commandOpen = false; onToggleMarkers() }
                 )
                 if (h.busy) {
                     DropdownMenuItem(
@@ -155,8 +161,10 @@ fun Toolbar(
                     projectOpen = false
                     scope.launch { pickProjectFileToSave()?.let { host.saveProject(it) } }
                 })
-                // Needs uapmd_app_start_render - see docs/uapmd-binding-missing-api.md
-                DropdownMenuItem(text = { Text("Render To File") }, enabled = false, onClick = {})
+                DropdownMenuItem(
+                    text = { Text("Render To File") },
+                    onClick = { projectOpen = false; onToggleExporter() }
+                )
             }
         }
     }

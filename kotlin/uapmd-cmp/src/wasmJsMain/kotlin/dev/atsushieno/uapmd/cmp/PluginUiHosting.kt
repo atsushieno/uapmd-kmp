@@ -29,3 +29,6 @@ actual fun supportsPlatformHostedPluginUi(instance: PluginInstance): Boolean = f
 
 @Composable
 actual fun PlatformHostedPluginUiLayer(host: UapmdHost, modifier: Modifier) = Unit
+
+// The browser event loop is the main loop; nothing to install.
+actual fun initPlatformEventLoop() = Unit

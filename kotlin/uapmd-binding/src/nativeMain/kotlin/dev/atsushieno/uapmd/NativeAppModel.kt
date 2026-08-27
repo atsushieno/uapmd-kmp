@@ -167,7 +167,111 @@ class NativeAppModel internal constructor(
 
     override fun removeClipFromTrack(trackIndex: Int, clipId: Int): Boolean =
         uapmd_app_remove_clip_from_track(handle, trackIndex, clipId)
+
+    // ── Track graph ─────────────────────────────────────────────────────────
+
+    override fun ensureTrackUsesEditorGraph(trackIndex: Int): Boolean =
+        uapmd_app_ensure_track_uses_editor_graph(handle, trackIndex)
+
+    override fun revertTrackToSimpleGraph(trackIndex: Int): Boolean =
+        uapmd_app_revert_track_to_simple_graph(handle, trackIndex)
+
+    override fun getTrackGraphConnections(trackIndex: Int): GraphConnectionsResult =
+        uapmd_app_get_track_graph_connections(handle, trackIndex).useContents {
+            if (!success || connections == null)
+                return@useContents GraphConnectionsResult(success, error?.toKString(), emptyList())
+            val list = (0 until count.toInt()).map { i ->
+                val c = connections!![i]
+                GraphConnection(
+                    id = c.id,
+                    busType = GraphBusType.fromNative(c.bus_type.toInt()),
+                    source = c.source.readValue().useContents { toKotlinEndpoint() },
+                    target = c.target.readValue().useContents { toKotlinEndpoint() }
+                )
+            }
+            GraphConnectionsResult(true, error?.toKString(), list)
+        }
+
+    override fun connectTrackGraph(trackIndex: Int, connection: GraphConnection): OpResult = memScoped {
+        val c = alloc<uapmd_graph_connection_t>()
+        c.id = connection.id
+        c.bus_type = connection.busType.nativeValue.toUInt()
+        c.source.type = connection.source.type.nativeValue.toUInt()
+        c.source.instance_id = connection.source.instanceId
+        c.source.bus_index = connection.source.busIndex
+        c.target.type = connection.target.type.nativeValue.toUInt()
+        c.target.instance_id = connection.target.instanceId
+        c.target.bus_index = connection.target.busIndex
+        uapmd_app_connect_track_graph(handle, trackIndex, c.ptr).useContents {
+            OpResult(success, error?.toKString())
+        }
+    }
+
+    override fun disconnectTrackGraphConnection(trackIndex: Int, connectionId: Long): OpResult =
+        uapmd_app_disconnect_track_graph_connection(handle, trackIndex, connectionId).useContents {
+            OpResult(success, error?.toKString())
+        }
+
+    // ── Clip audio events ───────────────────────────────────────────────────
+
+    override fun getClipAudioEvents(trackIndex: Int, clipId: Int): ClipAudioEventsResult =
+        uapmd_app_get_clip_audio_events(handle, trackIndex, clipId).useContents {
+            if (!success) return@useContents ClipAudioEventsResult(false, error?.toKString(), emptyList(), emptyList())
+            val ms = if (markers == null) emptyList() else (0 until marker_count.toInt()).map { i ->
+                val m = markers!![i]
+                ClipMarkerData(
+                    markerId = m.marker_id?.toKString() ?: "",
+                    clipPositionOffset = m.clip_position_offset,
+                    referenceType = WarpReferenceType.fromNative(m.reference_type.toInt()),
+                    referenceClipId = m.reference_clip_id?.toKString() ?: "",
+                    referenceMarkerId = m.reference_marker_id?.toKString() ?: "",
+                    name = m.name?.toKString() ?: ""
+                )
+            }
+            val ws = if (audio_warps == null) emptyList() else (0 until audio_warp_count.toInt()).map { i ->
+                val w = audio_warps!![i]
+                AudioWarpPointData(
+                    clipPositionOffset = w.clip_position_offset,
+                    speedRatio = w.speed_ratio,
+                    referenceType = WarpReferenceType.fromNative(w.reference_type.toInt()),
+                    referenceClipId = w.reference_clip_id?.toKString() ?: "",
+                    referenceMarkerId = w.reference_marker_id?.toKString() ?: ""
+                )
+            }
+            ClipAudioEventsResult(true, error?.toKString(), ms, ws)
+        }
+
+    override fun setClipAudioEvents(
+        trackIndex: Int, clipId: Int,
+        markers: List<ClipMarkerData>, warps: List<AudioWarpPointData>
+    ): OpResult = memScoped {
+        val m = allocArray<uapmd_clip_marker_t>(markers.size.coerceAtLeast(1))
+        markers.forEachIndexed { i, d ->
+            m[i].marker_id = d.markerId.cstr.ptr
+            m[i].clip_position_offset = d.clipPositionOffset
+            m[i].reference_type = d.referenceType.nativeValue.toUInt()
+            m[i].reference_clip_id = d.referenceClipId.cstr.ptr
+            m[i].reference_marker_id = d.referenceMarkerId.cstr.ptr
+            m[i].name = d.name.cstr.ptr
+        }
+        val w = allocArray<uapmd_audio_warp_point_t>(warps.size.coerceAtLeast(1))
+        warps.forEachIndexed { i, d ->
+            w[i].clip_position_offset = d.clipPositionOffset
+            w[i].speed_ratio = d.speedRatio
+            w[i].reference_type = d.referenceType.nativeValue.toUInt()
+            w[i].reference_clip_id = d.referenceClipId.cstr.ptr
+            w[i].reference_marker_id = d.referenceMarkerId.cstr.ptr
+        }
+        uapmd_app_set_clip_audio_events(
+            handle, trackIndex, clipId,
+            if (markers.isEmpty()) null else m, markers.size.toUInt(),
+            if (warps.isEmpty()) null else w, warps.size.toUInt()
+        ).useContents { OpResult(success, error?.toKString()) }
+    }
 }
+
+private fun uapmd_graph_endpoint_t.toKotlinEndpoint() =
+    GraphEndpoint(GraphEndpointType.fromNative(type.toInt()), instance_id, bus_index)
 
 private fun uapmd_app_project_result_t.toKotlin() =
     AppProjectResult(success, error?.toKString())

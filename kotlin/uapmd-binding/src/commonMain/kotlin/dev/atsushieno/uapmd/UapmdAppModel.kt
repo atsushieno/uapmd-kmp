@@ -120,7 +120,63 @@ interface AppModel {
     fun removeUmpEventFromClip(trackIndex: Int, clipId: Int, eventIndex: Int): Boolean
 
     fun removeClipFromTrack(trackIndex: Int, clipId: Int): Boolean
+
+    // ── Track graph (DAG) ───────────────────────────────────────────────────
+
+    /** Switches the track from the simple linear chain to the editable graph. */
+    fun ensureTrackUsesEditorGraph(trackIndex: Int): Boolean
+    fun revertTrackToSimpleGraph(trackIndex: Int): Boolean
+    fun getTrackGraphConnections(trackIndex: Int): GraphConnectionsResult
+    fun connectTrackGraph(trackIndex: Int, connection: GraphConnection): OpResult
+    fun disconnectTrackGraphConnection(trackIndex: Int, connectionId: Long): OpResult
+
+    // ── Clip audio events (markers + warps) ─────────────────────────────────
+
+    /** Reading counterpart to `ProjectCommands.setClipMarkers/setClipAudioWarps`. */
+    fun getClipAudioEvents(trackIndex: Int, clipId: Int): ClipAudioEventsResult
+    fun setClipAudioEvents(
+        trackIndex: Int,
+        clipId: Int,
+        markers: List<ClipMarkerData>,
+        warps: List<AudioWarpPointData>
+    ): OpResult
 }
+
+/** Mirrors `uapmd_clip_audio_events_result_t`. */
+data class ClipAudioEventsResult(
+    val success: Boolean,
+    val error: String?,
+    val markers: List<ClipMarkerData>,
+    val warps: List<AudioWarpPointData>
+)
+
+enum class GraphEndpointType(val nativeValue: Int) {
+    GraphInput(0), Plugin(1), GraphOutput(2);
+    companion object { fun fromNative(v: Int) = entries.firstOrNull { it.nativeValue == v } ?: Plugin }
+}
+
+enum class GraphBusType(val nativeValue: Int) {
+    Audio(0), Event(1);
+    companion object { fun fromNative(v: Int) = entries.firstOrNull { it.nativeValue == v } ?: Audio }
+}
+
+data class GraphEndpoint(val type: GraphEndpointType, val instanceId: Int, val busIndex: UInt)
+
+data class GraphConnection(
+    val id: Long,
+    val busType: GraphBusType,
+    val source: GraphEndpoint,
+    val target: GraphEndpoint
+)
+
+data class GraphConnectionsResult(
+    val success: Boolean,
+    val error: String?,
+    val connections: List<GraphConnection>
+)
+
+/** Mirrors `uapmd_op_result_t`. */
+data class OpResult(val success: Boolean, val error: String?)
 
 /** One UMP event in a MIDI clip: a tick plus the 1-4 words of the message. */
 data class UmpEvent(val tick: Long, val words: UIntArray) {

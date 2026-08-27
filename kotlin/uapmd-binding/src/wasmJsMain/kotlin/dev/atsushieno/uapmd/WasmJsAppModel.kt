@@ -195,6 +195,179 @@ class WasmJsAppModel internal constructor(internal val handle: Int) : AppModel {
 
     override fun removeClipFromTrack(trackIndex: Int, clipId: Int): Boolean =
         wasmMod.uapmdAppRemoveClipFromTrack(handle, trackIndex, clipId)
+
+    // ── Track graph ─────────────────────────────────────────────────────────
+    //
+    // uapmd_graph_endpoint_t:          int32 @0, int32 @4, uint32 @8 (12 bytes)
+    // uapmd_graph_connection_t:        int64 @0, int32 @8, endpoint @12, @24 (36 -> 40 aligned)
+    // uapmd_graph_connections_result_t bool @0, char* @4, uint32 @8, ptr @12 (16)
+    // uapmd_op_result_t:               bool @0, char* @4 (8)
+
+    override fun ensureTrackUsesEditorGraph(trackIndex: Int): Boolean =
+        wasmMod.uapmdAppEnsureTrackUsesEditorGraph(handle, trackIndex)
+
+    override fun revertTrackToSimpleGraph(trackIndex: Int): Boolean =
+        wasmMod.uapmdAppRevertTrackToSimpleGraph(handle, trackIndex)
+
+    override fun getTrackGraphConnections(trackIndex: Int): GraphConnectionsResult =
+        withWasmStruct(16) { out ->
+            wasmMod.uapmdAppGetTrackGraphConnections(out, handle, trackIndex)
+            val mod = wasmMod
+            val ok = mod.getValue(out, "i8").toInt() != 0
+            val errPtr = mod.getValue(out + 4, "i32").toInt()
+            val error = if (errPtr != 0) mod.utf8ToString(errPtr) else null
+            val count = mod.getValue(out + 8, "i32").toInt()
+            val ptr = mod.getValue(out + 12, "i32").toInt()
+            if (!ok || ptr == 0 || count == 0) GraphConnectionsResult(ok, error, emptyList())
+            else GraphConnectionsResult(ok, error, (0 until count).map { i ->
+                val base = ptr + i * GraphConnectionSize
+                GraphConnection(
+                    id = wasmReadI64(mod, base).toLong(),
+                    busType = GraphBusType.fromNative(mod.getValue(base + 8, "i32").toInt()),
+                    source = readEndpoint(base + 12),
+                    target = readEndpoint(base + 24)
+                )
+            })
+        }
+
+    override fun connectTrackGraph(trackIndex: Int, connection: GraphConnection): OpResult {
+        val mod = wasmMod
+        val c = mod.malloc(GraphConnectionSize)
+        return try {
+            wasmWriteI64(mod, c, connection.id.toString())
+            mod.setValue(c + 8, connection.busType.nativeValue.toDouble(), "i32")
+            writeEndpoint(c + 12, connection.source)
+            writeEndpoint(c + 24, connection.target)
+            withWasmStruct(8) { out ->
+                mod.uapmdAppConnectTrackGraph(out, handle, trackIndex, c)
+                readOpResult(out)
+            }
+        } finally { mod.free(c) }
+    }
+
+    override fun disconnectTrackGraphConnection(trackIndex: Int, connectionId: Long): OpResult =
+        withWasmStruct(8) { out ->
+            wasmAppDisconnectTrackGraph(wasmMod, out, handle, trackIndex, connectionId.toString())
+            readOpResult(out)
+        }
+
+    // ── Clip audio events ───────────────────────────────────────────────────
+
+    override fun getClipAudioEvents(trackIndex: Int, clipId: Int): ClipAudioEventsResult =
+        withWasmStruct(24) { out ->
+            wasmMod.uapmdAppGetClipAudioEvents(out, handle, trackIndex, clipId)
+            val mod = wasmMod
+            val ok = mod.getValue(out, "i8").toInt() != 0
+            val errPtr = mod.getValue(out + 4, "i32").toInt()
+            val error = if (errPtr != 0) mod.utf8ToString(errPtr) else null
+            if (!ok) ClipAudioEventsResult(false, error, emptyList(), emptyList())
+            else {
+                val mCount = mod.getValue(out + 8, "i32").toInt()
+                val mPtr = mod.getValue(out + 12, "i32").toInt()
+                val wCount = mod.getValue(out + 16, "i32").toInt()
+                val wPtr = mod.getValue(out + 20, "i32").toInt()
+                ClipAudioEventsResult(
+                    true, error,
+                    if (mPtr == 0) emptyList() else (0 until mCount).map { i ->
+                        val b = mPtr + i * ClipMarkerSize
+                        ClipMarkerData(
+                            markerId = wasmStrAt(b),
+                            clipPositionOffset = mod.getValue(b + 8, "double"),
+                            referenceType = WarpReferenceType.fromNative(mod.getValue(b + 16, "i32").toInt()),
+                            referenceClipId = wasmStrAt(b + 20),
+                            referenceMarkerId = wasmStrAt(b + 24),
+                            name = wasmStrAt(b + 28)
+                        )
+                    },
+                    if (wPtr == 0) emptyList() else (0 until wCount).map { i ->
+                        val b = wPtr + i * WarpPointSize
+                        AudioWarpPointData(
+                            clipPositionOffset = mod.getValue(b, "double"),
+                            speedRatio = mod.getValue(b + 8, "double"),
+                            referenceType = WarpReferenceType.fromNative(mod.getValue(b + 16, "i32").toInt()),
+                            referenceClipId = wasmStrAt(b + 20),
+                            referenceMarkerId = wasmStrAt(b + 24)
+                        )
+                    }
+                )
+            }
+        }
+
+    override fun setClipAudioEvents(
+        trackIndex: Int, clipId: Int,
+        markers: List<ClipMarkerData>, warps: List<AudioWarpPointData>
+    ): OpResult {
+        val mod = wasmMod
+        val owned = mutableListOf<Int>()
+        fun cstr(v: String): Int {
+            val size = mod.lengthBytesUTF8(v) + 1
+            val p = mod.malloc(size)
+            mod.stringToUTF8(v, p, size)
+            owned += p
+            return p
+        }
+        val mBuf = if (markers.isEmpty()) 0 else mod.malloc(markers.size * ClipMarkerSize).also { owned += it }
+        markers.forEachIndexed { i, m ->
+            val b = mBuf + i * ClipMarkerSize
+            mod.setValue(b, cstr(m.markerId).toDouble(), "i32")
+            mod.setValue(b + 8, m.clipPositionOffset, "double")
+            mod.setValue(b + 16, m.referenceType.nativeValue.toDouble(), "i32")
+            mod.setValue(b + 20, cstr(m.referenceClipId).toDouble(), "i32")
+            mod.setValue(b + 24, cstr(m.referenceMarkerId).toDouble(), "i32")
+            mod.setValue(b + 28, cstr(m.name).toDouble(), "i32")
+        }
+        val wBuf = if (warps.isEmpty()) 0 else mod.malloc(warps.size * WarpPointSize).also { owned += it }
+        warps.forEachIndexed { i, w ->
+            val b = wBuf + i * WarpPointSize
+            mod.setValue(b, w.clipPositionOffset, "double")
+            mod.setValue(b + 8, w.speedRatio, "double")
+            mod.setValue(b + 16, w.referenceType.nativeValue.toDouble(), "i32")
+            mod.setValue(b + 20, cstr(w.referenceClipId).toDouble(), "i32")
+            mod.setValue(b + 24, cstr(w.referenceMarkerId).toDouble(), "i32")
+        }
+        return try {
+            withWasmStruct(8) { out ->
+                mod.uapmdAppSetClipAudioEvents(out, handle, trackIndex, clipId, mBuf, markers.size, wBuf, warps.size)
+                readOpResult(out)
+            }
+        } finally { owned.forEach { mod.free(it) } }
+    }
+}
+
+private fun wasmStrAt(ptr: Int): String {
+    val p = wasmMod.getValue(ptr, "i32").toInt()
+    return if (p != 0) wasmMod.utf8ToString(p) else ""
+}
+
+private const val GraphConnectionSize = 40
+// Verified with emcc -fdump-record-layouts-complete:
+// uapmd_clip_marker_t     id@0 offset@8 refType@16 refClip@20 refMarker@24 name@28, size 32
+// uapmd_audio_warp_point_t offset@0 speed@8 refType@16 refClip@20 refMarker@24,      size 32
+// uapmd_clip_audio_events_result_t ok@0 err@4 mCount@8 markers@12 wCount@16 warps@20, size 24
+private const val ClipMarkerSize = 32
+private const val WarpPointSize = 32
+
+private fun readEndpoint(ptr: Int): GraphEndpoint {
+    val mod = wasmMod
+    return GraphEndpoint(
+        GraphEndpointType.fromNative(mod.getValue(ptr, "i32").toInt()),
+        mod.getValue(ptr + 4, "i32").toInt(),
+        mod.getValue(ptr + 8, "i32").toInt().toUInt()
+    )
+}
+
+private fun writeEndpoint(ptr: Int, e: GraphEndpoint) {
+    val mod = wasmMod
+    mod.setValue(ptr, e.type.nativeValue.toDouble(), "i32")
+    mod.setValue(ptr + 4, e.instanceId.toDouble(), "i32")
+    mod.setValue(ptr + 8, e.busIndex.toInt().toDouble(), "i32")
+}
+
+private fun readOpResult(ptr: Int): OpResult {
+    val mod = wasmMod
+    val ok = mod.getValue(ptr, "i8").toInt() != 0
+    val errPtr = mod.getValue(ptr + 4, "i32").toInt()
+    return OpResult(ok, if (errPtr != 0) mod.utf8ToString(errPtr) else null)
 }
 
 private fun decodeProjectResult(ptr: Int): AppProjectResult {

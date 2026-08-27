@@ -12,7 +12,7 @@ uapmd API. Anything else belongs in the app.
 ## 1 · Done in this branch (needs lifting onto `main`)
 
 `uapmd-c-app.h` was fully unbound before this work: `grep -c uapmd_app_ kotlin/uapmd-binding/src`
-returned 0. **57 of its 81 functions are now bound** on all five backends.
+returned 0. **64 of its 81 functions are now bound** on all five backends.
 
 | Group | Functions | Kotlin surface |
 |---|---|---|
@@ -25,6 +25,8 @@ returned 0. **57 of its 81 functions are now bound** on all five backends.
 | History | `get_history_state`, `undo`, `redo` | `historyState`, `undo()`, `redo()` |
 | Transport | all 10 `uapmd_transport_*` | `TransportController` |
 | Project I/O | `load_project`, `save_project`, `save_project_sync`, `load_project_from_handle_token` | `AppModel` project members + `AppProjectResult` mirror |
+| Clip audio events | `get_clip_audio_events`, `set_clip_audio_events` | `AppModel` members + `ClipAudioEventsResult` mirror |
+| Track graph | `ensure_track_uses_editor_graph`, `revert_track_to_simple_graph`, `get_track_graph_connections`, `connect_track_graph`, `disconnect_track_graph_connection` | `AppModel` graph members + `GraphConnection` / `GraphEndpoint` / `GraphConnectionsResult` / `OpResult` mirrors |
 | MIDI clip events | `get_midi_clip_ump_events`, `add_ump_event_to_clip`, `remove_ump_event_from_clip`, `remove_clip_from_track` | `AppModel` UMP members + `UmpEvent` / `UmpEventsResult` mirrors |
 | Plugin instances | `create_plugin_instance`, `remove_plugin_instance`, `get/set_instance_group`, `enable/disable_ump_device`, `request_show_instance_details`, `request_show_plugin_ui`, `hide_plugin_ui` | `AppModel` instance members + `PluginInstanceConfig` / `PluginInstanceResult` mirrors |
 
@@ -62,7 +64,7 @@ prefer consistency with that, the flag can come back as binding-side.)
 
 ---
 
-## 2 · Still unbound in `uapmd-c-app.h` (24 of 81)
+## 2 · Still unbound in `uapmd-c-app.h` (17 of 81)
 
 Ordered by when `uapmd-cmp` needs them. Several pass or return structs **by value**, which is
 where the Emscripten ABI rules (sret first-argument, byval-as-pointer, `WASM_BIGINT`) bite.
@@ -77,15 +79,31 @@ Both by-value directions are now proven in practice:
   on a real 8136-event clip. On JNA note that `Structure.useMemory` is protected: walk the array
   with a `Structure(Pointer)` constructor and `share(i * size())` instead.
 
+**Verify layouts, do not guess them.** The wasm/js offsets used here were checked against the
+compiler rather than reasoned about:
+
+```
+emcc -Ic-api/include -Xclang -fdump-record-layouts-complete -fsyntax-only <file.c>
+```
+
+Confirmed: `uapmd_graph_connection_t` id@0, bus_type@8, source@12, target@24, **sizeof 40**;
+`uapmd_graph_connections_result_t` and `uapmd_ump_events_result_t` both bool@0, char*@4,
+uint32@8, ptr@12, sizeof 16; `uapmd_ump_event_t` tick@0, word_count@8, words@12, sizeof 16;
+`uapmd_op_result_t` and `uapmd_app_project_result_t` bool@0, char*@4, sizeof 8;
+`uapmd_clip_marker_t` id@0, offset@8, refType@16, refClip@20, refMarker@24, name@28, sizeof 32;
+`uapmd_audio_warp_point_t` offset@0, speed@8, refType@16, refClip@20, refMarker@24, sizeof 32;
+`uapmd_clip_audio_events_result_t` ok@0, err@4, mCount@8, markers@12, wCount@16, warps@20, sizeof 24.
+
 | Priority | Functions | Struct-by-value? |
 |---|---|---|
 | Plugin UI | `show_plugin_ui` (the parent-handle/resize-handler form) | no |
 | Plugin state | `save_plugin_state`, `load_plugin_state` | **yes** — `uapmd_plugin_state_result_t` |
 | Project I/O | `document_provider` | no |
 | Clips | `add_clip_to_track`, `add_midi_clip_to_track`, `add_midi_clip_from_data`, `create_empty_midi_clip` | **yes** — `uapmd_clip_add_result_t`. Note `TimelineFacade.addMidiClipFromFile()` / `addAudioClip()` were already bound and cover the common cases |
-| Offline render | `start_render`, `cancel_render`, `get_render_status`, `clear_render_status` | **yes** — settings in, status out |
-| Track graph | `ensure_track_uses_editor_graph`, `request_show_track_graph`, `revert_track_to_simple_graph`, `get_track_graph_connections`, `connect_track_graph`, `disconnect_track_graph_connection` | **yes** |
-| Markers / clip audio events | `master_marker_count`, `get_master_marker`, `set_master_markers`, `get_clip_audio_events`, `set_clip_audio_events` | **yes** |
+| Offline render | `start_render`, `cancel_render`, `get_render_status`, `clear_render_status` | **yes**. Not needed so far: `SequencerEngine.renderOffline()` was already bound and drives the Exporter directly |
+| Clip audio events | `get_clip_audio_events`, `set_clip_audio_events` | `AppModel` members + `ClipAudioEventsResult` mirror |
+| Track graph | `request_show_track_graph` (the request/serve indirection; not needed — the app opens its own window) | no |
+| Master markers | `master_marker_count`, `get_master_marker`, `set_master_markers` | **yes**. Not needed: `SequencerEngine.masterTrackMarkers` and `ProjectCommands.setMasterTrackMarkers()` already cover both directions |
 | Misc | `add_device_input_to_track` | no |
 
 ---
@@ -105,6 +123,8 @@ first. All predate 0.5.6 — they were simply never needed by a KMP app before.
 | `PreparedSequencerTrack` family — `prepareTrack`, `addPluginToPreparedTrack`, `publishPreparedTrack` | `uapmd-engine/…/SequencerEngine.hpp` | 0.5.6 delta not covered by `13dac10` |
 | `PluginInstanceLifecycleListener` add/remove | same | 0.5.6 delta not covered by `13dac10` |
 | `restoreNodeId` parameter on `addPluginToTrack()` | same | 0.5.6 delta not covered by `13dac10` |
+| `AppModel::importMidiTracksFromFile()` | `tools/uapmd-app-model` | SMF **multi-track split** import — uapmd-app spreads one file across tracks. Single-clip import already works via `TimelineFacade.addMidiClipFromFile()` |
+| Demucs source-separation import | `tools/uapmd-app-model` | the Import ▸ Split Audio Tracks path |
 
 Deliberately **not** wanted, for the record: `setEngineActive` / `setOutputMuted` /
 `resetProcessingState` / `outputAnalyser`. They are internals of a sequence

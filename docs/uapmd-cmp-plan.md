@@ -975,3 +975,164 @@ per-event removal and append. Reached by clicking a clip's label in the timeline
 `(track, clip)`.
 
 Probe now at **31 checks**, all passing.
+
+### 2026-08-28 (cont.) — Exporter, track graph editor
+
+**Exporter / Render To File** — output path with a native chooser, start/end/tail, stop-on-silence,
+progress bar and cancel. Uses the already-bound `SequencerEngine.renderOffline()` rather than
+AppModel's `start_render` family: same result, no new binding, and progress/cancel arrive as
+direct callbacks. The blocking render runs on a background dispatcher (on wasm that is still the
+main dispatcher, so a render there will block the page — noted in the actual).
+
+**Track Graph Editor** — the per-track DAG editor, on the `NodeGraph.kt` canvas ported from
+composeApp. "Use Editor Graph" / "Revert to Simple Graph", live connection list, link deletion.
+Reached from a Graph button in the track legend, one window per track.
+
+Graph API bound on all five backends, taking the binding to **62 of 81**.
+
+**Struct layouts were verified, not guessed.** Following the project's own ABI note, the wasm/js
+offsets came from `emcc -Xclang -fdump-record-layouts-complete`:
+`uapmd_graph_connection_t` is id@0, bus_type@8, source@12, target@24, **sizeof 40** — the guess
+happened to be right, but the check is what makes it safe to rely on.
+
+### 2026-08-28 (cont.) — Piano roll, clip context menu
+
+**Piano Roll** (`ui/PianoRollEditor.kt`, Phase 8): horizontal/vertical zoom, vertical scroll by
+drag, a tempo-derived snap grid, black/white key rows, velocity-shaded notes, selection, and
+audition on click through the track's first plugin.
+
+It is **read-and-audition today, not an editor**. Moving a note means rewriting the clip's UMP
+stream through `replaceMidiClipContent()`; synthesising correct UMP for an edited note is the
+remaining piece. Raw edits are available in the MIDI dump editor meanwhile. Said plainly in the
+file's own KDoc so it is not mistaken for finished.
+
+**Clip context menu.** Reusing the clip click for the piano roll would have removed access to the
+dump editor — the same regression shape reported earlier with Instance Details. Clicking a clip
+label now opens a menu instead: Piano Roll, Edit Events (UMP), Remove Clip. Every editor stays
+reachable from one place.
+
+### 2026-08-28 (cont.) — project markers; feature status
+
+**Project Markers** window: the engine-owned master-track markers, listed, added and removed.
+Edits go through `ProjectCommands.setMasterTrackMarkers()` so they are undoable — the engine's own
+setter applies them directly and bypasses history. No new binding was needed.
+
+Probe extended to **35 checks**, all passing, now covering markers (write, read back, offset
+preserved) and the track graph (switch to editor graph, read connections).
+
+### Feature status against uapmd-app 0.5.6
+
+Working: audio engine on/off with the proper drain, transport, undo/redo with live descriptions,
+plugin scanning, plugin selector, instantiate/remove, instance details with parameters/presets/
+keyboard, plugin UI hosting (desktop + Android), timeline with clips and MIDI previews, clip
+import, clip context menu, MIDI dump editor, piano roll (read/audition), track graph editor,
+mixer monitor, device settings, plugin instances, addins, project markers, project load/save,
+offline render.
+
+Not done, with the reason:
+
+| Missing | Why |
+|---|---|
+| Beats/ticks timeline view | needs `TempoMap` — not in the C API |
+| Track gain slider, mute, solo | setters exist; **getters** do not, so no correct control can be drawn |
+| Track freeze button | needs `FrozenTrackManager` runtime state |
+| Record button | needs `MidiRecorder` |
+| Script Editor | needs `UapmdJSRuntime` |
+| MCP settings | needs `McpServer` |
+| Demucs split import | app-model surface not bound |
+| Audio clip marker/warp editor | needs `get_clip_audio_events`; the setters are bound |
+| Piano roll **editing** | needs UMP synthesis for moved notes via `replaceMidiClipContent()` |
+| SMF multi-track import | uapmd-app splits one file across tracks; only single-clip import is wired |
+
+The first six are inventory §3 items — C API work that belongs on `main`, not app work.
+
+### 2026-08-28 (cont.) — Phase 9 platform pass; a real bug found
+
+**Bug: the Android entry point never installed the remidy EventLoop.** `MainActivity` called
+`setContent { App() }` directly, and `UapmdHost.start()` did not install one either — only the
+desktop `main()` did. On Android that means AppModel would have been instantiated with no event
+loop, so async completions (track mutations, history, plugin deactivation) would silently never
+fire and engine shutdown would hang. Exactly the failure §2.3 warns about, and it built cleanly.
+
+Fixed structurally rather than per-entry-point: `initPlatformEventLoop()` is now an
+`expect`/`actual` called at the top of `UapmdHost.start()`, before `instantiateAppModel()`.
+JVM → `initJvmEventLoop()`, Android → `initAndroidEventLoop()` (main thread), iOS and wasm no-op
+with a comment saying why. Android and iOS entry points also call it early; the implementations
+are idempotent.
+
+This is the second time ordering that is invisible to the compiler turned out to be wrong. The
+lesson is the one already in §2.3: platform bootstrap ordering needs checking per target, not
+inferring from the desktop build.
+
+### 2026-08-28 (cont.) — clip audio events; app work complete
+
+**`get_clip_audio_events` / `set_clip_audio_events` bound** on all five backends (**64 of 81**),
+with the struct layouts derived from `emcc -fdump-record-layouts-complete` rather than assumed.
+
+**Audio Event List editor** (`ui/AudioEventListEditor.kt`): a clip's markers and warp points,
+listed, added and removed. Reached from an audio clip's context menu, so the menu now offers
+Piano Roll / Edit Events for MIDI clips and Markers & Warps for audio clips.
+
+Probe at **37 checks**. One of them is worth noting because it started as a false failure: setting
+markers on a *MIDI* clip is refused by the engine — "Selected clip is not an audio clip." My first
+version of the check asserted success and failed. The engine was right and the probe was wrong;
+the check now asserts the refusal, which also proves the error string marshals back correctly.
+
+### App work status
+
+Everything reachable without new C API is done. What remains is either C API work for `main`
+(inventory §3: `TempoMap`, track gain/mute/solo getters, `FrozenTrackManager`, `MidiRecorder`,
+`UapmdJSRuntime`, `McpServer`) or two app items with a known shape:
+
+- **Piano roll editing** — moving a note means rewriting the clip's UMP stream through
+  `replaceMidiClipContent()`; the note→UMP synthesis is the missing piece. Read and audition work
+  today, and raw edits are available in the MIDI dump editor.
+- **SMF multi-track split import** — uapmd-app splits one file across tracks; only single-clip
+  import is wired.
+
+`composeApp` stays until the new app is finished, per instruction, and still builds.
+
+### 2026-08-28 (cont.) — piano roll editing
+
+**Piano roll is now an editor, not just a view.** Notes are parsed straight from the clip's UMP
+stream rather than from `getMidiClipNotes()`, so a drag can write the same events back through
+`replaceMidiClipContent()`. Working in ticks throughout avoids a lossy seconds↔ticks conversion
+on every edit.
+
+Two things had to be right, and both were checked rather than assumed:
+
+- **Ticks are per UMP *word*, not per event** — `MidiClipSourceNode`'s constructor comment says
+  "Cumulative ticks for each UMP word". `rebuildClipContent()` emits one tick entry per word and
+  sorts both arrays together.
+- **Note pairing** — `parseUmpNotes()` handles MIDI 1.0 (type 0x2, one word) and MIDI 2.0
+  (type 0x4, two words), treats a zero-velocity note-on as a note-off, and matches each on to the
+  next off on the same (group, channel, note).
+
+Verified on the real 8136-event clip: the parser recovers **exactly 3557 notes, the same count
+the engine's own `getMidiClipNotes()` reports**; an identity rebuild round-trips all 8136 events
+with the first tick preserved; and moving a note 120 ticks lands and reads back.
+
+Probe at **47 checks**, all passing.
+
+### 2026-08-28 — app work complete
+
+Everything reachable from the current C API is built. The two items I had listed as remaining app
+work turned out **not** to be app work:
+
+- **SMF multi-track split import** — `AppModel::importMidiTracksFromFile()` exists in C++ but has
+  no C API wrapper. Single-clip import already works through
+  `TimelineFacade.addMidiClipFromFile()`; splitting one file across tracks needs the binding.
+- **Demucs split audio import** — same story, nothing in `c-api/` at all.
+
+Both are now in inventory §3. I did not approximate either: adding N tracks and importing the same
+file into each would look like the feature without being it.
+
+**Final state.** Binding: **64 of 81** `uapmd-c-app.h` functions across five backends, plus the
+graph, UMP-event and clip-audio-event families. Probe: **47 checks**, all passing against real
+plugins and a real 8136-event SMF. All five targets build. `composeApp` untouched and still
+building, per instruction.
+
+Remaining work is C API work for `main` (§3): `TempoMap`, track gain/mute/solo **getters**,
+`FrozenTrackManager` runtime state, `MidiRecorder`, `UapmdJSRuntime`, `McpServer`, the SMF and
+Demucs import entry points, and the three 0.5.6 engine leftovers. Each has a disabled control or
+an absent window in the app pointing at it, rather than a fake.
