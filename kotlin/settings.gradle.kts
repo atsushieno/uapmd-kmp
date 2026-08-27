@@ -35,4 +35,5 @@ plugins {
 }
 
 include(":composeApp")
+include(":uapmd-cmp")
 include(":uapmd-binding")

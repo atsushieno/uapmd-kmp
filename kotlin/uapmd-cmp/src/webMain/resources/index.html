@@ -1,0 +1,53 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>uapmd-kmp</title>
+    <link type="text/css" rel="stylesheet" href="styles.css">
+</head>
+<body>
+<div id="plugin-ui-host" aria-label="Plugin editor host surface"></div>
+<svg id="compose-loading-spinner" xmlns="http://www.w3.org/2000/svg" width="40" height="40" viewBox="0 0 50 50" role="presentation">
+    <circle cx="25" cy="25" r="20" stroke="#ccc" stroke-width="4" fill="none"/>
+    <circle cx="25" cy="25" r="20" stroke="#333" stroke-width="4" fill="none" stroke-linecap="round"
+            stroke-dasharray="90 125">
+        <animateTransform attributeName="transform" type="rotate" from="0 25 25" to="360 25 25" dur="1s"
+                          repeatCount="indefinite"/>
+    </circle>
+</svg>
+<div id="isolation-message" role="status"></div>
+<script>
+    const isolationMessage = document.getElementById('isolation-message');
+
+    function loadComposeApp() {
+        const script = document.createElement('script');
+        script.type = 'application/javascript';
+        script.src = 'composeApp.js';
+        document.body.appendChild(script);
+    }
+
+    if (crossOriginIsolated) {
+        loadComposeApp();
+    } else if ('serviceWorker' in navigator) {
+        isolationMessage.textContent = 'Preparing WebAssembly runtime...';
+        navigator.serviceWorker.register('./coop-coep-sw.js').then(() => {
+            if (sessionStorage.getItem('uapmd-coop-coep-reloaded') !== 'true') {
+                sessionStorage.setItem('uapmd-coop-coep-reloaded', 'true');
+                window.location.reload();
+            } else if (crossOriginIsolated) {
+                loadComposeApp();
+            } else {
+                isolationMessage.textContent =
+                    'This browser context is not cross-origin isolated. SharedArrayBuffer is required for uapmd Wasm audio.';
+            }
+        }).catch((error) => {
+            isolationMessage.textContent = `Failed to prepare WebAssembly runtime: ${error}`;
+        });
+    } else {
+        isolationMessage.textContent =
+            'This browser does not support service workers. SharedArrayBuffer is required for uapmd Wasm audio.';
+    }
+</script>
+</body>
+</html>
