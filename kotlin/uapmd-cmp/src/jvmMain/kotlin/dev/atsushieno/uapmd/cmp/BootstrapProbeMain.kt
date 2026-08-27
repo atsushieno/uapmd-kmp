@@ -32,7 +32,8 @@ fun main() {
     model.notifyPersistentStorageReady()
     println("   sampleRate=${model.sampleRate} tracks=${model.trackCount}")
 
-    val seq = model.sequencer
+    // Borrow rather than own: AppModel destroys the real handle in cleanup.
+    val seq = BorrowedRealtimeSequencer(model.sequencer)
 
     // ── engine on ────────────────────────────────────────────────────────────
     model.setAudioEngineEnabled(true)
@@ -58,6 +59,37 @@ fun main() {
         Thread.sleep(50)
     check("audio is playing after restart", seq.isAudioPlaying() != 0)
     check("engine reports enabled after restart", model.isAudioEngineEnabled)
+
+    // ── tracks (asynchronous since 0.5.6) ────────────────────────────────────
+    val tracksBefore = model.timelineTrackCount.toInt()
+    var addedIndex = -1
+    var addError: String? = "(callback never fired)"
+    model.addTrack { index, error -> addedIndex = index; addError = error }
+    val addAt = System.currentTimeMillis()
+    while (addError == "(callback never fired)" && System.currentTimeMillis() - addAt < 10_000)
+        Thread.sleep(50)
+    check("addTrack callback fired (index=$addedIndex, error=$addError)", addError != "(callback never fired)")
+    check("track count grew ($tracksBefore -> ${model.timelineTrackCount})",
+        model.timelineTrackCount.toInt() == tracksBefore + 1)
+
+    // ── history ──────────────────────────────────────────────────────────────
+    val afterAdd = model.historyState
+    println("   history: canUndo=${afterAdd.canUndo} undo='${afterAdd.undoDescription}' busy=${afterAdd.busy}")
+    check("adding a track produced an undoable step", afterAdd.canUndo)
+
+    var undoError: String? = "(callback never fired)"
+    model.undo { error -> undoError = error }
+    val undoAt = System.currentTimeMillis()
+    while (undoError == "(callback never fired)" && System.currentTimeMillis() - undoAt < 10_000)
+        Thread.sleep(50)
+    check("undo callback fired (error=$undoError)", undoError == null)
+    check("undo restored the track count", model.timelineTrackCount.toInt() == tracksBefore)
+    check("redo is now available", model.historyState.canRedo)
+
+    // ── timeline state ───────────────────────────────────────────────────────
+    val tl = model.getTimelineState()
+    println("   timeline: tempo=${tl?.tempo} sig=${tl?.timeSignatureNumerator}/${tl?.timeSignatureDenominator} sr=${tl?.sampleRate}")
+    check("timeline state readable with a sane tempo", tl != null && tl.tempo > 0.0)
 
     // ── ordered teardown: engine off, then cleanup (§2.5) ────────────────────
     model.setAudioEngineEnabled(false)

@@ -5,7 +5,12 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.LaunchedEffect
 import dev.atsushieno.uapmd.AppModel
+import dev.atsushieno.uapmd.RealtimeSequencer
+import dev.atsushieno.uapmd.ScanMode
+import dev.atsushieno.uapmd.TimelineState
+import dev.atsushieno.uapmd.UndoState
 import dev.atsushieno.uapmd.getAppModel
 import dev.atsushieno.uapmd.instantiateAppModel
 
@@ -25,6 +30,9 @@ import dev.atsushieno.uapmd.instantiateAppModel
  */
 class UapmdHost private constructor(val model: AppModel) {
 
+    /** AppModel owns the underlying handle, so the app only ever holds a borrow. */
+    val sequencer: RealtimeSequencer = BorrowedRealtimeSequencer(model.sequencer)
+
     var isAudioEngineEnabled by mutableStateOf(false)
         private set
 
@@ -39,9 +47,74 @@ class UapmdHost private constructor(val model: AppModel) {
         refresh()
     }
 
-    /** Read state back rather than assuming the request took effect. */
+    // ── Transport ───────────────────────────────────────────────────────────
+
+    var isPlaying by mutableStateOf(false)
+        private set
+    var isPaused by mutableStateOf(false)
+        private set
+    var isRecording by mutableStateOf(false)
+        private set
+
+    fun playOrStop() {
+        val t = model.transport
+        if (t.isPlaying) t.stop() else t.play()
+        refresh()
+    }
+
+    fun pauseOrResume() {
+        val t = model.transport
+        if (t.isPaused) t.resume() else t.pause()
+        refresh()
+    }
+
+    // ── History ─────────────────────────────────────────────────────────────
+
+    var history by mutableStateOf(model.historyState)
+        private set
+
+    fun undo() = model.undo { refresh() }
+    fun redo() = model.redo { refresh() }
+
+    // ── Scanning ────────────────────────────────────────────────────────────
+
+    var isScanning by mutableStateOf(false)
+        private set
+
+    fun scanPlugins(forceRescan: Boolean = false, mode: ScanMode = ScanMode.InProcess) {
+        model.performPluginScanning(forceRescan, mode)
+        refresh()
+    }
+
+    fun cancelScan() {
+        model.cancelPluginScanning()
+        refresh()
+    }
+
+    // ── Tracks / timeline ───────────────────────────────────────────────────
+
+    var trackCount by mutableStateOf(0)
+        private set
+    var timeline by mutableStateOf<TimelineState?>(null)
+        private set
+
+    fun addTrack() = model.addTrack { _, _ -> refresh() }
+    fun removeTrack(trackIndex: Int) = model.removeTrack(trackIndex) { _, _ -> refresh() }
+
+    /**
+     * Read state back rather than assuming a request took effect — engine
+     * transitions in particular are asynchronous.
+     */
     fun refresh() {
         isAudioEngineEnabled = model.isAudioEngineEnabled
+        isScanning = model.isScanning
+        val t = model.transport
+        isPlaying = t.isPlaying
+        isPaused = t.isPaused
+        isRecording = t.isRecording
+        history = model.historyState
+        trackCount = model.timelineTrackCount.toInt()
+        timeline = model.getTimelineState()
     }
 
     fun shutdown() {
@@ -77,4 +150,15 @@ expect fun notifyPersistentStorageReadyForPlatform(model: AppModel)
 expect fun cleanupUapmdAppModel()
 
 @Composable
-fun rememberUapmdHost(): UapmdHost = remember { UapmdHost.start() }
+fun rememberUapmdHost(): UapmdHost {
+    val host = remember { UapmdHost.start() }
+    // uapmd state lives in C++ and changes without notifying Compose (async
+    // engine transitions, scan completion, history commits), so poll it.
+    LaunchedEffect(host) {
+        while (true) {
+            host.refresh()
+            kotlinx.coroutines.delay(100)
+        }
+    }
+    return host
+}

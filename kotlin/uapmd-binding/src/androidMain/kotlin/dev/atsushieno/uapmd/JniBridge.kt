@@ -613,4 +613,27 @@ object JniBridge {
     @JvmStatic external fun uapmdTransportPause(tc: Long)
     @JvmStatic external fun uapmdTransportResume(tc: Long)
     @JvmStatic external fun uapmdTransportRecord(tc: Long)
+
+    @JvmStatic external fun uapmdAppPerformPluginScanning(app: Long, forceRescan: Boolean, request: Int, remoteTimeoutSeconds: Double, requireFastScanning: Boolean)
+    @JvmStatic external fun uapmdAppCancelPluginScanning(app: Long)
+    @JvmStatic external fun uapmdAppGenerateScanReport(app: Long): String
+    @JvmStatic external fun uapmdAppClearPluginBlocklist(app: Long)
+
+    /** cb: (trackIndex: Int, error: String?) -> Unit */
+    @JvmStatic external fun uapmdAppAddTrack(app: Long, cb: Any)
+    /** cb: (trackIndex: Int, error: String?) -> Unit */
+    @JvmStatic external fun uapmdAppRemoveTrack(app: Long, trackIndex: Int, cb: Any)
+    /** cb: (error: String?) -> Unit */
+    @JvmStatic external fun uapmdAppRemoveAllTracks(app: Long, cb: Any)
+
+    @JvmStatic external fun uapmdAppTimelineTrackCount(app: Long): Int
+    @JvmStatic external fun uapmdAppGetTimelineTrack(app: Long, index: Int): Long
+    @JvmStatic external fun uapmdAppMasterTimelineTrack(app: Long): Long
+    @JvmStatic external fun uapmdAppGetTimelineState(app: Long): DoubleArray?
+
+    @JvmStatic external fun uapmdAppGetHistoryState(app: Long): Array<Any>?
+    /** cb: (error: String?) -> Unit */
+    @JvmStatic external fun uapmdAppUndo(app: Long, cb: Any?)
+    /** cb: (error: String?) -> Unit */
+    @JvmStatic external fun uapmdAppRedo(app: Long, cb: Any?)
 }

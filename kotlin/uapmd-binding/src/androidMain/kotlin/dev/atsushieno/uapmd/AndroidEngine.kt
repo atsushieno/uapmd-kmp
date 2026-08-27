@@ -283,9 +283,7 @@ class AndroidDeviceIODispatcher internal constructor(
 // ─── AndroidRealtimeSequencer ────────────────────────────────────────────────
 
 class AndroidRealtimeSequencer internal constructor(
-    private val handle: Long,
-    /** False when the handle is borrowed (e.g. owned by [AppModel]): close() is then a no-op. */
-    private val owned: Boolean = true
+    private val handle: Long
 ) : RealtimeSequencer {
 
     override val engine: SequencerEngine
@@ -306,7 +304,5 @@ class AndroidRealtimeSequencer internal constructor(
         handle, inputDeviceIndex, outputDeviceIndex, sampleRate.toInt(), bufferSize.toInt()
     )
 
-    override fun close() {
-        if (owned) JniBridge.uapmdRtSequencerDestroy(handle)
-    }
+    override fun close() = JniBridge.uapmdRtSequencerDestroy(handle)
 }

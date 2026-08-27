@@ -38,6 +38,45 @@ interface AppModel {
     /** Startup lifecycle; uapmd-app calls both once the UI exists. */
     fun notifyUiReady()
     fun notifyPersistentStorageReady()
+
+    // ── Plugin scanning ─────────────────────────────────────────────────────
+
+    /**
+     * Runs asynchronously; watch [isScanning]. [ScanMode.Remote] launches a
+     * separate scanner process on desktop and is unavailable on WebAssembly.
+     */
+    fun performPluginScanning(
+        forceRescan: Boolean = false,
+        mode: ScanMode = ScanMode.InProcess,
+        remoteTimeoutSeconds: Double = 20.0,
+        requireFastScanning: Boolean = false
+    )
+    fun cancelPluginScanning()
+    fun generateScanReport(): String
+    fun clearPluginBlocklist()
+
+    // ── Tracks ──────────────────────────────────────────────────────────────
+
+    /** Asynchronous since uapmd 0.5.6: track mutations are undo engine operations. */
+    fun addTrack(callback: (trackIndex: Int, error: String?) -> Unit)
+    fun removeTrack(trackIndex: Int, callback: (trackIndex: Int, error: String?) -> Unit)
+    fun removeAllTracks(callback: (error: String?) -> Unit)
+
+    val timelineTrackCount: UInt
+    fun getTimelineTrack(index: UInt): TimelineTrack
+    val masterTimelineTrack: TimelineTrack
+
+    fun getTimelineState(): TimelineState?
+
+    // ── History ─────────────────────────────────────────────────────────────
+
+    /**
+     * Also reports `busy` while an asynchronous plug-in mutation is still
+     * capturing state, so shortcuts cannot race the capture.
+     */
+    val historyState: UndoState
+    fun undo(callback: ((error: String?) -> Unit)? = null)
+    fun redo(callback: ((error: String?) -> Unit)? = null)
 }
 
 /** `uapmd_app::TransportController`. Owned by the [AppModel]. */

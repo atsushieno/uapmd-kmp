@@ -142,7 +142,21 @@ traceable to a C++ declaration in uapmd, and a reader should be able to diff the
 what went wrong with `composeApp`, one layer up — `UapmdModel.kt` grew into a re-implementation
 of AppModel because there was no line saying where binding ends and app begins.
 
-Two consequences for this plan, both corrections to earlier drafts:
+Scope note: the rule governs *what may be added*, not "never edit the module" — binding
+`AppModel` necessarily means adding files to `uapmd-binding`. What it forbids is adding anything
+that is not in uapmd. Every public member added so far maps 1:1 onto a `uapmd_app_*` /
+`uapmd_transport_*` function in `uapmd-c-app.h`.
+
+Three consequences for this plan, all corrections to earlier drafts:
+
+- **Handle-ownership belongs to the app.** `AppModel` owns its `RealtimeSequencer`, but that type
+  is `AutoCloseable` and each backend's `close()` destroys the handle, so a borrowed instance
+  could be double-freed. The first fix added an `owned` flag to the five `*RealtimeSequencer`
+  classes — a member with no counterpart in uapmd, so it was reverted. The safety now lives in
+  `uapmd-cmp` as `BorrowedRealtimeSequencer`, which delegates everything and no-ops `close()`.
+  "Who owns this handle" is a fact about how this app uses the API, not part of the API.
+  (Note the binding does have a pre-existing `owned` idiom on `ClipFragment`, from the 0.5.6
+  work — so the pattern was not invented here, but that does not make it uapmd API.)
 
 - **Clip preview data is app-side.** `ClipPreview` is `uapmd-app/gui/ClipPreview.hpp` — GUI code,
   not library API — so it must not appear in the binding. What the binding does provide is the
@@ -703,3 +717,69 @@ Compose UI tests, before Phase 3 starts depending on it.
 
 **Next:** broaden the AppModel binding past the bootstrap subset (scanning, instances, tracks,
 timeline, history, project I/O), then the real toolbar.
+
+### 2026-08-28 (cont.) — AppModel binding slice 2
+
+Second slice bound across all five backends: **plugin scanning** (perform / cancel / report /
+clear blocklist), **track mutation** (add / remove / remove-all, asynchronous since 0.5.6),
+**timeline track access and timeline state**, and **history** (`historyState`, `undo`, `redo`).
+
+Extended `runBootstrapProbe` now covers the round trip, and passes:
+
+```
+PASS  addTrack callback fired (index=3, error=null)
+PASS  track count grew (3 -> 4)
+   history: canUndo=true undo='Add track' busy=false
+PASS  adding a track produced an undoable step
+PASS  undo callback fired (error=null)
+PASS  undo restored the track count
+PASS  redo is now available
+   timeline: tempo=120.0 sig=4/4 sr=48000
+```
+
+That exercises the full path end to end: an async mutation routed through the undo engine, its
+completion marshalled back over each binding's callback machinery, the resulting history entry
+carrying a description the toolbar can show, and undo actually restoring document state.
+
+Notes worth keeping:
+
+- **`extern "C"` vs `extern` on `uapmd_jni_env()`.** The Android link failed with
+  `undefined symbol: uapmd_jni_env` because the new file declared it `extern "C"` while
+  `uapmd_jni.cpp` defines it with C++ linkage (`uapmd_jni_history.cpp` declares it plain
+  `extern`). Match the existing declaration.
+- **Reuse over duplication where it was cheap:** `UapmdTimelineState.toKotlin()` (JVM),
+  `decodeTimelineStateAt` (wasm), and `decodeUndoState` / `Off` / `makeJsTrackMutation` (js) were
+  extracted or widened from `private` rather than copied. The one real duplication is
+  `pack_undo_state` in `uapmd_jni_app.cpp`, because the original sits in another file's anonymous
+  namespace.
+- **A new error-only callback shape** `(const char*, void*)` needed plumbing per backend:
+  `TrackClearCb`/`HistoryMutationCb` (JNA), a `staticCFunction` trampoline (native),
+  `app_error_only_trampoline` (JNI), `uapmdDispatchErrorOnly` (wasm), `makeJsErrorOnly` (js).
+
+`composeApp` still builds, as required by §7.1 — every binding change so far has been additive.
+
+**Still to do in the binding:** plugin instance lifecycle (create/remove, UMP device, plugin UI,
+state save/load), clips, project save/load, offline render, track graph editing. Several of those
+return or take structs by value, which is where the Emscripten ABI rules in the project memory
+start to matter.
+
+### 2026-08-28 (cont.) — process correction + Phase 1 toolbar
+
+**Process correction.** Binding changes caused by *missing API* are independent of this UI work
+and belong on `main` on their own. They must be reported as such, not folded into this plan.
+`docs/uapmd-binding-missing-api.md` is now the running inventory: 40 of `uapmd-c-app.h`'s 81
+functions bound, 41 still unbound, plus 8 items missing from the C API entirely. Two rules follow:
+
+1. `uapmd-binding` gets **only** API bindings — nothing app-shaped. The `owned` flag was reverted
+   accordingly; borrow safety now lives in `uapmd-cmp`'s `BorrowedRealtimeSequencer`.
+2. Where the app needs something unbound, it is **reported**, not worked around inside the
+   binding.
+
+**Phase 1 toolbar.** Single-row 0.5.6 layout: engine on/off (colour-coded), Command popup with
+live undo/redo descriptions and busy state, transport, Plugins, Scan/Cancel, Import and Project
+popups, bottom bar with add-track / Mixer Monitor / Plugin Instances. `UapmdHost` polls uapmd
+state at 100 ms, because it lives in C++ and changes without notifying Compose.
+
+Controls whose binding is missing are rendered **disabled** rather than omitted, so the gap is
+visible in the UI and traceable to the inventory: record (needs `MidiRecorder`), Import and
+Project (need the clip and project-I/O bindings), and instance creation in the Plugin Selector.

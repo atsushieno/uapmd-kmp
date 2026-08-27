@@ -14,7 +14,7 @@ package dev.atsushieno.uapmd
 
 // ─── Struct offsets (wasm32) ─────────────────────────────────────────────────
 
-private object Off {
+internal object Off {
     // uapmd_undo_result_t, sizeof 8
     const val RESULT_STATUS = 0
     const val RESULT_ERROR = 4
@@ -186,7 +186,7 @@ private fun decodeUndoResult(ptr: Int) = UndoResult(
     jsGetPtr(ptr + Off.RESULT_ERROR).let { if (it != 0) jsMod.UTF8ToString(it) as String else null }
 )
 
-private fun decodeUndoState(ptr: Int) = UndoState(
+internal fun decodeUndoState(ptr: Int) = UndoState(
     busy = jsGetBool(ptr + Off.STATE_BUSY),
     compoundOpen = jsGetBool(ptr + Off.STATE_COMPOUND_OPEN),
     gestureOpen = jsGetBool(ptr + Off.STATE_GESTURE_OPEN),
@@ -217,7 +217,7 @@ private fun makeJsUndoCompletion(completion: (UndoResult) -> Unit): Int {
     return slot
 }
 
-private fun makeJsTrackMutation(callback: (Int, String?) -> Unit): Int {
+internal fun makeJsTrackMutation(callback: (Int, String?) -> Unit): Int {
     var slot = 0
     val fn: (dynamic, dynamic, dynamic) -> Unit = { trackIndex, errorPtr, _ ->
         try {

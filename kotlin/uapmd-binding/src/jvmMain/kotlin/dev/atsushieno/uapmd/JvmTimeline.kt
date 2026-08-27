@@ -56,17 +56,7 @@ class JvmTimelineFacade internal constructor(
     override fun getState(): TimelineState? {
         val out = UapmdTimelineState()
         if (!lib.uapmd_tl_get_state(handle, out)) return null
-        return TimelineState(
-            playheadPosition = out.playhead_position.toKotlin(),
-            isPlaying = out.is_playing != 0.toByte(),
-            loopEnabled = out.loop_enabled != 0.toByte(),
-            loopStart = out.loop_start.toKotlin(),
-            loopEnd = out.loop_end.toKotlin(),
-            tempo = out.tempo,
-            timeSignatureNumerator = out.time_signature_numerator,
-            timeSignatureDenominator = out.time_signature_denominator,
-            sampleRate = out.sample_rate
-        )
+        return out.toKotlin()
     }
 
     override fun setTempo(tempo: Double) = lib.uapmd_tl_set_tempo(handle, tempo)
@@ -242,3 +232,16 @@ class JvmTimelineTrack internal constructor(
         }
     }
 }
+
+
+internal fun UapmdTimelineState.toKotlin(): TimelineState = TimelineState(
+    playheadPosition = playhead_position.toKotlin(),
+    isPlaying = is_playing != 0.toByte(),
+    loopEnabled = loop_enabled != 0.toByte(),
+    loopStart = loop_start.toKotlin(),
+    loopEnd = loop_end.toKotlin(),
+    tempo = tempo,
+    timeSignatureNumerator = time_signature_numerator,
+    timeSignatureDenominator = time_signature_denominator,
+    sampleRate = sample_rate
+)

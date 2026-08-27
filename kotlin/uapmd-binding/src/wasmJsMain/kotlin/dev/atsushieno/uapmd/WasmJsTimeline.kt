@@ -136,29 +136,8 @@ class WasmJsTimelineFacade internal constructor(
         } finally { mod.free(ptr) }
     }
 
-    private fun decodeTimelineState(mod: UapmdCApiModule, ptr: Int): TimelineState {
-        fun getI32(o: Int) = mod.getValue(ptr + o, "i32").toInt()
-        fun getF64(o: Int) = mod.getValue(ptr + o, "double")
-        fun getBool(o: Int) = mod.getValue(ptr + o, "i8").toInt() != 0
-        fun getI64(o: Int): Long {
-            val lo = mod.getValue(ptr + o, "i32").toInt().toLong() and 0xFFFFFFFFL
-            val hi = mod.getValue(ptr + o + 4, "i32").toInt().toLong()
-            return hi * 4294967296L + lo
-        }
-        fun readPos(o: Int) = TimelinePosition(samples = getI64(o), legacyBeats = getF64(o + 8))
-
-        return TimelineState(
-            playheadPosition           = readPos(0),
-            isPlaying                  = getBool(16),
-            loopEnabled                = getBool(17),
-            loopStart                  = readPos(24),
-            loopEnd                    = readPos(40),
-            tempo                      = getF64(56),
-            timeSignatureNumerator     = getI32(64),
-            timeSignatureDenominator   = getI32(68),
-            sampleRate                 = getI32(72)
-        )
-    }
+    private fun decodeTimelineState(mod: UapmdCApiModule, ptr: Int): TimelineState =
+        decodeTimelineStateAt(mod, ptr)
 
     override fun setTempo(tempo: Double) = wasmMod.uapmdTlSetTempo(handle, tempo)
 
@@ -345,4 +324,30 @@ class WasmJsTimelineFacade internal constructor(
         history.removePluginInstance(instanceId, origin, completion)
 
     override val hasPendingPluginMutations get() = history.hasPendingPluginMutations
+}
+
+
+/** Decodes uapmd_timeline_state_t (sizeof 80) at [ptr]. */
+internal fun decodeTimelineStateAt(mod: UapmdCApiModule, ptr: Int): TimelineState {
+    fun getI32(o: Int) = mod.getValue(ptr + o, "i32").toInt()
+    fun getF64(o: Int) = mod.getValue(ptr + o, "double")
+    fun getBool(o: Int) = mod.getValue(ptr + o, "i8").toInt() != 0
+    fun getI64(o: Int): Long {
+        val lo = mod.getValue(ptr + o, "i32").toInt().toLong() and 0xFFFFFFFFL
+        val hi = mod.getValue(ptr + o + 4, "i32").toInt().toLong()
+        return hi * 4294967296L + lo
+    }
+    fun readPos(o: Int) = TimelinePosition(samples = getI64(o), legacyBeats = getF64(o + 8))
+
+    return TimelineState(
+        playheadPosition         = readPos(0),
+        isPlaying                = getBool(16),
+        loopEnabled              = getBool(17),
+        loopStart                = readPos(24),
+        loopEnd                  = readPos(40),
+        tempo                    = getF64(56),
+        timeSignatureNumerator   = getI32(64),
+        timeSignatureDenominator = getI32(68),
+        sampleRate               = getI32(72)
+    )
 }

@@ -502,6 +502,14 @@ interface TrackMutationCb : Callback {
     fun invoke(trackIndex: Int, error: String?, userData: Pointer?)
 }
 
+interface TrackClearCb : Callback {
+    fun invoke(error: String?, userData: Pointer?)
+}
+
+interface HistoryMutationCb : Callback {
+    fun invoke(error: String?, userData: Pointer?)
+}
+
 interface TrackFragmentCb : Callback {
     fun invoke(fragment: Pointer?, error: String?, userData: Pointer?)
 }
@@ -1177,4 +1185,22 @@ interface UapmdLibrary : Library {
     fun uapmd_transport_pause(tc: Pointer?)
     fun uapmd_transport_resume(tc: Pointer?)
     fun uapmd_transport_record(tc: Pointer?)
+
+    fun uapmd_app_perform_plugin_scanning(app: Pointer?, forceRescan: Boolean, request: Int, remoteTimeoutSeconds: Double, requireFastScanning: Boolean)
+    fun uapmd_app_cancel_plugin_scanning(app: Pointer?)
+    fun uapmd_app_generate_scan_report(app: Pointer?, buf: ByteArray?, bufSize: Long): Long
+    fun uapmd_app_clear_plugin_blocklist(app: Pointer?)
+
+    fun uapmd_app_add_track(app: Pointer?, userData: Pointer?, callback: TrackMutationCb?)
+    fun uapmd_app_remove_track(app: Pointer?, trackIndex: Int, userData: Pointer?, callback: TrackMutationCb?)
+    fun uapmd_app_remove_all_tracks(app: Pointer?, userData: Pointer?, callback: TrackClearCb?)
+
+    fun uapmd_app_timeline_track_count(app: Pointer?): Int
+    fun uapmd_app_get_timeline_track(app: Pointer?, index: Int): Pointer?
+    fun uapmd_app_master_timeline_track(app: Pointer?): Pointer?
+    fun uapmd_app_get_timeline_state(app: Pointer?, out: UapmdTimelineState): Boolean
+
+    fun uapmd_app_get_history_state(app: Pointer?, out: UapmdUndoState): Boolean
+    fun uapmd_app_undo(app: Pointer?, userData: Pointer?, callback: HistoryMutationCb?)
+    fun uapmd_app_redo(app: Pointer?, userData: Pointer?, callback: HistoryMutationCb?)
 }

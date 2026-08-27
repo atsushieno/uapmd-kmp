@@ -862,6 +862,38 @@ external interface UapmdCApiModule : JsAny {
     fun uapmdTransportResume(tc: Int)
     @JsName("_uapmd_transport_record")
     fun uapmdTransportRecord(tc: Int)
+
+    @JsName("_uapmd_app_perform_plugin_scanning")
+    fun uapmdAppPerformPluginScanning(app: Int, forceRescan: Boolean, request: Int, remoteTimeoutSeconds: Double, requireFastScanning: Boolean)
+    @JsName("_uapmd_app_cancel_plugin_scanning")
+    fun uapmdAppCancelPluginScanning(app: Int)
+    @JsName("_uapmd_app_generate_scan_report")
+    fun uapmdAppGenerateScanReport(app: Int, buf: Int, bufSize: Int): Int
+    @JsName("_uapmd_app_clear_plugin_blocklist")
+    fun uapmdAppClearPluginBlocklist(app: Int)
+
+    @JsName("_uapmd_app_add_track")
+    fun uapmdAppAddTrack(app: Int, userData: Int, callback: Int)
+    @JsName("_uapmd_app_remove_track")
+    fun uapmdAppRemoveTrack(app: Int, trackIndex: Int, userData: Int, callback: Int)
+    @JsName("_uapmd_app_remove_all_tracks")
+    fun uapmdAppRemoveAllTracks(app: Int, userData: Int, callback: Int)
+
+    @JsName("_uapmd_app_timeline_track_count")
+    fun uapmdAppTimelineTrackCount(app: Int): Int
+    @JsName("_uapmd_app_get_timeline_track")
+    fun uapmdAppGetTimelineTrack(app: Int, index: Int): Int
+    @JsName("_uapmd_app_master_timeline_track")
+    fun uapmdAppMasterTimelineTrack(app: Int): Int
+    @JsName("_uapmd_app_get_timeline_state")
+    fun uapmdAppGetTimelineState(app: Int, out: Int): Boolean
+
+    @JsName("_uapmd_app_get_history_state")
+    fun uapmdAppGetHistoryState(app: Int, out: Int): Boolean
+    @JsName("_uapmd_app_undo")
+    fun uapmdAppUndo(app: Int, userData: Int, callback: Int)
+    @JsName("_uapmd_app_redo")
+    fun uapmdAppRedo(app: Int, userData: Int, callback: Int)
 }
 
 
@@ -1121,6 +1153,8 @@ internal external fun wasmCommandsResizeClip(mod: UapmdCApiModule, cmd: Int, t: 
 internal val pendingUndoCompletions   = mutableMapOf<Int, (UndoResult) -> Unit>()
 internal val pendingTrackMutations    = mutableMapOf<Int, (Int, String?) -> Unit>()
 internal val pendingTrackFragments    = mutableMapOf<Int, (TrackFragment?, String?) -> Unit>()
+/** For C callbacks shaped (const char* error, void* user_data). */
+internal val pendingErrorOnlyCallbacks = mutableMapOf<Int, (String?) -> Unit>()
 
 /** The C callback takes uapmd_undo_result_t by value, i.e. as a pointer. */
 @JsExport
@@ -1136,6 +1170,12 @@ fun uapmdDispatchUndoCompletion(cbId: Int, resultPtr: Int) {
 fun uapmdDispatchTrackMutation(cbId: Int, trackIndex: Int, errorPtr: Int) {
     val error = if (errorPtr != 0) wasmMod.utf8ToString(errorPtr) else null
     pendingTrackMutations.remove(cbId)?.invoke(trackIndex, error)
+}
+
+@JsExport
+fun uapmdDispatchErrorOnly(cbId: Int, errorPtr: Int) {
+    val error = if (errorPtr != 0) wasmMod.utf8ToString(errorPtr) else null
+    pendingErrorOnlyCallbacks.remove(cbId)?.invoke(error)
 }
 
 @JsExport

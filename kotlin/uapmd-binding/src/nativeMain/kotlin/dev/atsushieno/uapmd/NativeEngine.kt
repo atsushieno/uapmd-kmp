@@ -293,9 +293,7 @@ class NativeDeviceIODispatcher internal constructor(
 // ---------------------------------------------------------------------------
 
 class NativeRealtimeSequencer internal constructor(
-    private val handle: uapmd_realtime_sequencer_t,
-    /** False when the handle is borrowed (e.g. owned by [AppModel]): close() is then a no-op. */
-    private val owned: Boolean = true
+    private val handle: uapmd_realtime_sequencer_t
 ) : RealtimeSequencer {
 
     override val engine: SequencerEngine
@@ -316,7 +314,5 @@ class NativeRealtimeSequencer internal constructor(
         handle, inputDeviceIndex, outputDeviceIndex, sampleRate, bufferSize
     )
 
-    override fun close() {
-        if (owned) uapmd_rt_sequencer_destroy(handle)
-    }
+    override fun close() = uapmd_rt_sequencer_destroy(handle)
 }
