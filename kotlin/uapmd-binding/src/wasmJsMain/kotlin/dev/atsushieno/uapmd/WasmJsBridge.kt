@@ -804,7 +804,66 @@ external interface UapmdCApiModule : JsAny {
     fun uapmdAddinManagerLastError(mgr: Int, buf: Int, bufSize: Int): Int
     @JsName("_uapmd_addin_supports_dynamic_loading")
     fun uapmdAddinSupportsDynamicLoading(): Boolean
+    // ── AppModel / TransportController ─────────────────────────────────────
+
+    @JsName("_uapmd_app_instantiate")
+    fun uapmdAppInstantiate()
+    @JsName("_uapmd_app_instance")
+    fun uapmdAppInstance(): Int
+    @JsName("_uapmd_app_cleanup")
+    fun uapmdAppCleanup()
+
+    @JsName("_uapmd_app_sequencer")
+    fun uapmdAppSequencer(app: Int): Int
+    @JsName("_uapmd_app_transport")
+    fun uapmdAppTransport(app: Int): Int
+    @JsName("_uapmd_app_sample_rate")
+    fun uapmdAppSampleRate(app: Int): Int
+    @JsName("_uapmd_app_track_count")
+    fun uapmdAppTrackCount(app: Int): Int
+
+    @JsName("_uapmd_app_is_scanning")
+    fun uapmdAppIsScanning(app: Int): Boolean
+    @JsName("_uapmd_app_is_audio_engine_enabled")
+    fun uapmdAppIsAudioEngineEnabled(app: Int): Boolean
+    @JsName("_uapmd_app_set_audio_engine_enabled")
+    fun uapmdAppSetAudioEngineEnabled(app: Int, enabled: Boolean)
+    @JsName("_uapmd_app_toggle_audio_engine")
+    fun uapmdAppToggleAudioEngine(app: Int)
+    @JsName("_uapmd_app_update_audio_device_settings")
+    fun uapmdAppUpdateAudioDeviceSettings(app: Int, sampleRate: Int, bufferSize: Int)
+    @JsName("_uapmd_app_set_auto_buffer_size_enabled")
+    fun uapmdAppSetAutoBufferSizeEnabled(app: Int, enabled: Boolean)
+    @JsName("_uapmd_app_auto_buffer_size_enabled")
+    fun uapmdAppAutoBufferSizeEnabled(app: Int): Boolean
+
+    @JsName("_uapmd_app_notify_ui_ready")
+    fun uapmdAppNotifyUiReady(app: Int)
+    @JsName("_uapmd_app_notify_persistent_storage_ready")
+    fun uapmdAppNotifyPersistentStorageReady(app: Int)
+
+    @JsName("_uapmd_transport_is_playing")
+    fun uapmdTransportIsPlaying(tc: Int): Boolean
+    @JsName("_uapmd_transport_is_paused")
+    fun uapmdTransportIsPaused(tc: Int): Boolean
+    @JsName("_uapmd_transport_is_recording")
+    fun uapmdTransportIsRecording(tc: Int): Boolean
+    @JsName("_uapmd_transport_get_volume")
+    fun uapmdTransportGetVolume(tc: Int): Float
+    @JsName("_uapmd_transport_set_volume")
+    fun uapmdTransportSetVolume(tc: Int, volume: Float)
+    @JsName("_uapmd_transport_play")
+    fun uapmdTransportPlay(tc: Int)
+    @JsName("_uapmd_transport_stop")
+    fun uapmdTransportStop(tc: Int)
+    @JsName("_uapmd_transport_pause")
+    fun uapmdTransportPause(tc: Int)
+    @JsName("_uapmd_transport_resume")
+    fun uapmdTransportResume(tc: Int)
+    @JsName("_uapmd_transport_record")
+    fun uapmdTransportRecord(tc: Int)
 }
+
 
 // ── External adapter declarations ────────────────────────────────────────────
 

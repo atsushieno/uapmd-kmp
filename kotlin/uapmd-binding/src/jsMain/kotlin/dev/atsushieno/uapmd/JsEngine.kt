@@ -176,7 +176,9 @@ class JsDeviceIODispatcher internal constructor(
 // ─── JsRealtimeSequencer ──────────────────────────────────────────────────────
 
 class JsRealtimeSequencer internal constructor(
-    private val handle: Int
+    private val handle: Int,
+    /** False when the handle is borrowed (e.g. owned by [AppModel]): close() is then a no-op. */
+    private val owned: Boolean = true
 ) : RealtimeSequencer {
 
     override val engine: SequencerEngine get() = JsSequencerEngine(jsMod._uapmd_rt_sequencer_engine(handle) as Int)
@@ -196,7 +198,9 @@ class JsRealtimeSequencer internal constructor(
         handle, inputDeviceIndex, outputDeviceIndex, sampleRate.toInt(), bufferSize.toInt()
     ) as Boolean
 
-    override fun close() = jsMod._uapmd_rt_sequencer_destroy(handle)
+    override fun close() {
+        if (owned) jsMod._uapmd_rt_sequencer_destroy(handle)
+    }
 }
 
 // ─── JsAudioDeviceManager ─────────────────────────────────────────────────────

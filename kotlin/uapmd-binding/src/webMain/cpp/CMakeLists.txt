@@ -64,9 +64,6 @@ endif()
 # Auto-derived from every UAPMD_C_EXPORT declaration in the C API header so the
 # list stays in sync when functions are added or removed.
 file(GLOB _CAPI_HEADERS "${CAPI_DIR}/include/c-api/*.h")
-# uapmd-c-app.cpp is excluded from the Emscripten build (see c-api/CMakeLists.txt),
-# so skip its header to avoid exporting symbols that won't exist in the library.
-list(FILTER _CAPI_HEADERS EXCLUDE REGEX "uapmd-c-app\\.h$")
 set(_CAPI_EXPORT_LINES "")
 foreach(_hdr IN LISTS _CAPI_HEADERS)
     file(STRINGS "${_hdr}" _lines REGEX "UAPMD_C_EXPORT")

@@ -580,4 +580,37 @@ object JniBridge {
     @JvmStatic external fun uapmdAddinManagerGetAddin(h: Long, index: Int, outStrings: Array<String?>): IntArray?
     @JvmStatic external fun uapmdAddinManagerLastError(h: Long): String
     @JvmStatic external fun uapmdAddinSupportsDynamicLoading(): Boolean
+
+    // ── AppModel / TransportController ──────────────────────────────────────
+
+    @JvmStatic external fun uapmdAppInstantiate()
+    @JvmStatic external fun uapmdAppInstance(): Long
+    @JvmStatic external fun uapmdAppCleanup()
+
+    @JvmStatic external fun uapmdAppSequencer(app: Long): Long
+    @JvmStatic external fun uapmdAppTransport(app: Long): Long
+    @JvmStatic external fun uapmdAppSampleRate(app: Long): Int
+    @JvmStatic external fun uapmdAppTrackCount(app: Long): Int
+
+    @JvmStatic external fun uapmdAppIsScanning(app: Long): Boolean
+    @JvmStatic external fun uapmdAppIsAudioEngineEnabled(app: Long): Boolean
+    @JvmStatic external fun uapmdAppSetAudioEngineEnabled(app: Long, enabled: Boolean)
+    @JvmStatic external fun uapmdAppToggleAudioEngine(app: Long)
+    @JvmStatic external fun uapmdAppUpdateAudioDeviceSettings(app: Long, sampleRate: Int, bufferSize: Int)
+    @JvmStatic external fun uapmdAppSetAutoBufferSizeEnabled(app: Long, enabled: Boolean)
+    @JvmStatic external fun uapmdAppAutoBufferSizeEnabled(app: Long): Boolean
+
+    @JvmStatic external fun uapmdAppNotifyUiReady(app: Long)
+    @JvmStatic external fun uapmdAppNotifyPersistentStorageReady(app: Long)
+
+    @JvmStatic external fun uapmdTransportIsPlaying(tc: Long): Boolean
+    @JvmStatic external fun uapmdTransportIsPaused(tc: Long): Boolean
+    @JvmStatic external fun uapmdTransportIsRecording(tc: Long): Boolean
+    @JvmStatic external fun uapmdTransportGetVolume(tc: Long): Float
+    @JvmStatic external fun uapmdTransportSetVolume(tc: Long, volume: Float)
+    @JvmStatic external fun uapmdTransportPlay(tc: Long)
+    @JvmStatic external fun uapmdTransportStop(tc: Long)
+    @JvmStatic external fun uapmdTransportPause(tc: Long)
+    @JvmStatic external fun uapmdTransportResume(tc: Long)
+    @JvmStatic external fun uapmdTransportRecord(tc: Long)
 }

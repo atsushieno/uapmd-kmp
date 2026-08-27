@@ -1,6 +1,7 @@
 # Plan: `uapmd-cmp` — a fresh Compose Multiplatform app for uapmd 0.5.6
 
-Status: agreed; not yet started. Open questions resolved — see §7.
+Status: **in progress.** Phase 0 essentially complete (0.0/0.1/0.5 verified); Phase 1 started.
+Open questions resolved — see §7. Progress log at the end of this document.
 Supersedes: `docs/ui-parity-tracker.md` (tracker for the *old* `composeApp`; keep as history).
 
 Sources read for this plan:
@@ -640,3 +641,65 @@ rests on binding them.
 
 **Resolved: yes.** `uapmd-binding` already includes API bindings for AppModel, so it covers
 `tools/` by construction. Phase 0 proceeds as written.
+
+
+---
+
+## 8 · Progress log
+
+### 2026-08-28 — Phase 0 landed, Phase 1 started
+
+**0.1 Emscripten AppModel — done, and it was not the obstacle it looked like.**
+Removing the two exclusions (`c-api/CMakeLists.txt` dropping `uapmd-c-app.cpp` and not linking
+`uapmd-app-model`, plus `webMain/cpp/CMakeLists.txt` filtering `uapmd-c-app.h` out of the export
+list) was the whole change. `AppModel.cpp`, `McpServer.cpp` and `UapmdJSRuntime.cpp` all compile
+under Emscripten unmodified. Verified: **71 `uapmd_app_*` + 10 `uapmd_transport_*` symbols**
+exported in `build-wasm/uapmd-c-api.js`, where there were previously zero. The biggest unknown in
+the plan is retired, and the §2.4 fallback is now insurance nobody expects to need.
+
+**0.2 / 0.3 bootstrap subset — bound on all five backends.**
+`AppModel` + `TransportController` in `commonMain`, with `JvmAppModel` (JNA), `NativeAppModel`
+(cinterop), `AndroidAppModel` (new `cpp/uapmd_jni_app.cpp`, 26 JNI functions), `WasmJsAppModel`
+and `JsAppModel`. Android symbols verified by diffing `external fun` names against `nm -D` of the
+built `libuapmd-jni.so`, per the known trap that a missing JNI impl only fails at runtime.
+
+One hazard found and handled: `AppModel` owns its `RealtimeSequencer`, but every platform's
+sequencer wrapper destroys the handle in `close()`. All five gained an internal `owned` flag so
+the borrowed instance handed out by `AppModel.sequencer` cannot double-free.
+
+**0.0 bootstrap — done and verified, not merely compiled.**
+`UapmdHost` (app-side, per §2.0) runs uapmd-app's own startup order: event loop → instantiate →
+`notifyUiReady` → `notifyPersistentStorageReady` → per-platform initial engine state → ordered
+teardown. `platformStartsWithAudioEngineEnabled` is `false` on wasm, `true` elsewhere, matching
+`web_main.cpp`.
+
+**0.5 probe — `./gradlew :uapmd-cmp:runBootstrapProbe`.** All checks pass on desktop:
+
+```
+sampleRate=48000 tracks=3
+PASS  engine reports enabled
+PASS  audio is playing after enable
+PASS  engine reports disabled immediately
+PASS  audio stopped within 15s (took 160ms)
+PASS  audio is playing after restart
+PASS  engine reports enabled after restart
+```
+
+The 160 ms is AppModel's tail drain doing its job — stop, mute, drain, deactivate on the main
+thread, reset — and the restart check is the one `composeApp`'s `setActive`+`stopAudio` could not
+have passed.
+
+Two behaviours came free with AppModel that `composeApp` never had: an automatic initial plugin
+scan at startup (the desktop run scans the real VST3/LV2/AU library), and three initial tracks,
+matching the guide's "UAPMD initially launches with a few empty tracks".
+
+**Phase 1 started: the floating window manager** (`ui/FloatingWindow.kt`) — keyed registry so
+multi-instance windows coexist, draggable title bar, resize handle, click-to-front z-ordering,
+cascade placement, and a drag clamp so a window cannot be lost off-edge.
+
+**Not yet verified:** the window manager's drag/resize/stacking has been exercised only by
+compiling and launching; the interactions themselves have not been driven. Worth a human pass, or
+Compose UI tests, before Phase 3 starts depending on it.
+
+**Next:** broaden the AppModel binding past the bootstrap subset (scanning, instances, tracks,
+timeline, history, project I/O), then the real toolbar.

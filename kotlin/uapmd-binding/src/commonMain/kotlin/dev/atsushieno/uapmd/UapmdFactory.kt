@@ -17,3 +17,11 @@ expect fun createScanTool(): ScanTool
 expect fun createFormatManager(): FormatManager
 expect fun createPluginInstancing(scanTool: ScanTool, format: String, pluginId: String): PluginInstancing
 expect fun createAddinManager(): AddinManager
+
+/**
+ * Creates the process-wide [AppModel]. Install an event loop first (see the
+ * note on [AppModel]). Calling it twice replaces the previous instance.
+ */
+expect fun instantiateAppModel()
+expect fun getAppModel(): AppModel
+expect fun cleanupAppModel()

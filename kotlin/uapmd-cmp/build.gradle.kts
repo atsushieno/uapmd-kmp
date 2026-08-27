@@ -112,6 +112,20 @@ compose.desktop {
     }
 }
 
+val jvmMainCompilation = kotlin.targets.getByName("jvm").compilations.getByName("main")
+
+tasks.register<JavaExec>("runBootstrapProbe") {
+    group = "verification"
+    description = "Headless check that the AppModel bootstrap starts, cleanly stops, and restarts audio."
+    dependsOn("jvmJar")
+    mainClass.set("dev.atsushieno.uapmd.cmp.BootstrapProbeMainKt")
+    classpath(
+        files(tasks.named("jvmJar")),
+        jvmMainCompilation.runtimeDependencyFiles
+    )
+    jvmArgs("-Dapple.awt.application.name=uapmd-cmp", "-Xdock:name=uapmd-cmp")
+}
+
 afterEvaluate {
     tasks.findByName("wasmJsResolveResourcesFromDependencies")?.dependsOn(":uapmd-binding:wasmJsProcessResources")
 }

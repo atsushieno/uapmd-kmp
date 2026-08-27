@@ -214,7 +214,9 @@ class WasmJsDeviceIODispatcher internal constructor(
 // ─── WasmJsRealtimeSequencer ──────────────────────────────────────────────────
 
 class WasmJsRealtimeSequencer internal constructor(
-    private val handle: Int
+    private val handle: Int,
+    /** False when the handle is borrowed (e.g. owned by [AppModel]): close() is then a no-op. */
+    private val owned: Boolean = true
 ) : RealtimeSequencer {
 
     override val engine: SequencerEngine
@@ -236,7 +238,9 @@ class WasmJsRealtimeSequencer internal constructor(
         handle, inputDeviceIndex, outputDeviceIndex, sampleRate.toInt(), bufferSize.toInt()
     )
 
-    override fun close() = wasmMod.uapmdRtSequencerDestroy(handle)
+    override fun close() {
+        if (owned) wasmMod.uapmdRtSequencerDestroy(handle)
+    }
 }
 
 // ─── WasmJsAudioDeviceManager ─────────────────────────────────────────────────

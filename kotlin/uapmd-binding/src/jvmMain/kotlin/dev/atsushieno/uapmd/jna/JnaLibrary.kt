@@ -1144,4 +1144,37 @@ interface UapmdLibrary : Library {
     fun uapmd_addin_manager_last_error(mgr: Pointer?, buf: ByteArray?, bufSize: Long): Long
     fun uapmd_addin_supports_dynamic_loading(): Boolean
     fun uapmd_addin_state_name(state: Int): String?
+
+    // ══ AppModel / TransportController ══════════════════════════════════════
+
+    fun uapmd_app_instantiate()
+    fun uapmd_app_instance(): Pointer?
+    fun uapmd_app_cleanup()
+
+    fun uapmd_app_sequencer(app: Pointer?): Pointer?
+    fun uapmd_app_transport(app: Pointer?): Pointer?
+    fun uapmd_app_sample_rate(app: Pointer?): Int
+    fun uapmd_app_track_count(app: Pointer?): Int
+
+    fun uapmd_app_is_scanning(app: Pointer?): Boolean
+    fun uapmd_app_is_audio_engine_enabled(app: Pointer?): Boolean
+    fun uapmd_app_set_audio_engine_enabled(app: Pointer?, enabled: Boolean)
+    fun uapmd_app_toggle_audio_engine(app: Pointer?)
+    fun uapmd_app_update_audio_device_settings(app: Pointer?, sampleRate: Int, bufferSize: Int)
+    fun uapmd_app_set_auto_buffer_size_enabled(app: Pointer?, enabled: Boolean)
+    fun uapmd_app_auto_buffer_size_enabled(app: Pointer?): Boolean
+
+    fun uapmd_app_notify_ui_ready(app: Pointer?)
+    fun uapmd_app_notify_persistent_storage_ready(app: Pointer?)
+
+    fun uapmd_transport_is_playing(tc: Pointer?): Boolean
+    fun uapmd_transport_is_paused(tc: Pointer?): Boolean
+    fun uapmd_transport_is_recording(tc: Pointer?): Boolean
+    fun uapmd_transport_get_volume(tc: Pointer?): Float
+    fun uapmd_transport_set_volume(tc: Pointer?, volume: Float)
+    fun uapmd_transport_play(tc: Pointer?)
+    fun uapmd_transport_stop(tc: Pointer?)
+    fun uapmd_transport_pause(tc: Pointer?)
+    fun uapmd_transport_resume(tc: Pointer?)
+    fun uapmd_transport_record(tc: Pointer?)
 }

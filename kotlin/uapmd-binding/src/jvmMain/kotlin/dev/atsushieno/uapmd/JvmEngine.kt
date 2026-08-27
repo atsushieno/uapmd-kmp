@@ -293,7 +293,9 @@ class JvmDeviceIODispatcher internal constructor(
 // ─── JvmRealtimeSequencer ────────────────────────────────────────────────────
 
 class JvmRealtimeSequencer internal constructor(
-    private val handle: Pointer
+    private val handle: Pointer,
+    /** False when the handle is borrowed (e.g. owned by [AppModel]): close() is then a no-op. */
+    private val owned: Boolean = true
 ) : RealtimeSequencer {
 
     override val engine: SequencerEngine
@@ -314,5 +316,7 @@ class JvmRealtimeSequencer internal constructor(
         handle, inputDeviceIndex, outputDeviceIndex, sampleRate.toInt(), bufferSize.toInt()
     )
 
-    override fun close() = lib.uapmd_rt_sequencer_destroy(handle)
+    override fun close() {
+        if (owned) lib.uapmd_rt_sequencer_destroy(handle)
+    }
 }

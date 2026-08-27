@@ -25,10 +25,6 @@ set(UAPMD_C_API_SOURCES
     src/uapmd-c-addin.cpp
 )
 
-if(EMSCRIPTEN)
-    list(REMOVE_ITEM UAPMD_C_API_SOURCES src/uapmd-c-app.cpp)
-endif()
-
 if(ANDROID OR IOS OR EMSCRIPTEN)
     add_library(uapmd-c-api STATIC ${UAPMD_C_API_HEADERS} ${UAPMD_C_API_SOURCES})
 else()
@@ -62,10 +58,10 @@ if(WIN32)
     target_link_libraries(uapmd-c-api PRIVATE opengl32)
 endif()
 
-# App model bindings (AppModel etc.).
-if(NOT EMSCRIPTEN)
-    target_link_libraries(uapmd-c-api PRIVATE uapmd-app-model)
-endif()
+# App model bindings (AppModel etc.). Built for every target including
+# Emscripten: uapmd-app's own web_main.cpp uses AppModel, and uapmd-app-model
+# guards its desktop-only dependencies behind UAPMD_BUILDING_WASM.
+target_link_libraries(uapmd-c-api PRIVATE uapmd-app-model)
 
 # Private includes from the uapmd source tree (passed via UAPMD_SOURCE_DIR).
 # DOWNLOAD_ONLY CPM packages don't propagate their _SOURCE_DIR to parent scope;
