@@ -151,6 +151,37 @@ class JvmAppModel internal constructor(
 
     override fun loadProjectFromHandleToken(token: String): AppProjectResult =
         lib.uapmd_app_load_project_from_handle_token(handle, token).toKotlin()
+
+    // ── MIDI clip UMP events ────────────────────────────────────────────────
+
+    override fun getMidiClipUmpEvents(trackIndex: Int, clipId: Int): UmpEventsResult {
+        val r = lib.uapmd_app_get_midi_clip_ump_events(handle, trackIndex, clipId)
+        if (r.success == 0.toByte() || r.events == null || r.event_count == 0)
+            return UmpEventsResult(r.success != 0.toByte(), r.error, emptyList())
+        // Structure.useMemory is protected, so walk the array by offset instead:
+        // uapmd_ump_event_t is { uint64 tick; uint32 word_count; const uint32* words }
+        // = 8 + 4 + (4 pad) + 8 on LP64.
+        val base = r.events!!
+        val stride = UapmdUmpEvent().size().toLong()
+        val events = (0 until r.event_count).map { i ->
+            val e = UapmdUmpEvent(base.share(i * stride))
+            val words = e.words?.getIntArray(0, e.word_count) ?: IntArray(0)
+            UmpEvent(e.tick, UIntArray(words.size) { words[it].toUInt() })
+        }
+        return UmpEventsResult(true, r.error, events)
+    }
+
+    override fun addUmpEventToClip(trackIndex: Int, clipId: Int, tick: Long, words: UIntArray): Boolean =
+        lib.uapmd_app_add_ump_event_to_clip(
+            handle, trackIndex, clipId, tick,
+            IntArray(words.size) { words[it].toInt() }, words.size
+        )
+
+    override fun removeUmpEventFromClip(trackIndex: Int, clipId: Int, eventIndex: Int): Boolean =
+        lib.uapmd_app_remove_ump_event_from_clip(handle, trackIndex, clipId, eventIndex)
+
+    override fun removeClipFromTrack(trackIndex: Int, clipId: Int): Boolean =
+        lib.uapmd_app_remove_clip_from_track(handle, trackIndex, clipId)
 }
 
 private fun UapmdAppProjectResult.toKotlin() = AppProjectResult(success != 0.toByte(), error)

@@ -8,3 +8,13 @@ package dev.atsushieno.uapmd.cmp
  */
 expect suspend fun pickProjectFileToOpen(): String?
 expect suspend fun pickProjectFileToSave(): String?
+expect suspend fun pickMediaFileToOpen(): String?
+
+/**
+ * Optional file to import at startup, for development and screenshots.
+ * uapmd-app has the same idea in its web build (`maybeScheduleAutoImport`).
+ */
+expect fun startupImportPath(): String?
+
+/** Dev hook: instantiate the first catalog entry of this format at startup. */
+expect fun startupInstantiateFormat(): String?

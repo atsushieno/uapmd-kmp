@@ -10,6 +10,7 @@ import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -23,6 +24,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
 import dev.atsushieno.uapmd.ScanMode
 import dev.atsushieno.uapmd.cmp.UapmdHost
+import dev.atsushieno.uapmd.cmp.pickMediaFileToOpen
 import dev.atsushieno.uapmd.cmp.pickProjectFileToOpen
 import dev.atsushieno.uapmd.cmp.pickProjectFileToSave
 import androidx.compose.runtime.rememberCoroutineScope
@@ -40,6 +42,8 @@ private val RecordActive = Color(0xFFE03333)
 @Composable
 fun Toolbar(
     host: UapmdHost,
+    onToggleAddins: () -> Unit,
+    onToggleDeviceSettings: () -> Unit,
     onTogglePlugins: () -> Unit,
     modifier: Modifier = Modifier
 ) {
@@ -76,6 +80,15 @@ fun Toolbar(
                     text = { Text(if (h.redoDescription.isEmpty()) "Redo" else "Redo ${h.redoDescription}") },
                     enabled = h.canRedo && !h.busy,
                     onClick = { host.redo(); commandOpen = false }
+                )
+                HorizontalDivider()
+                DropdownMenuItem(
+                    text = { Text("Show Device Settings") },
+                    onClick = { commandOpen = false; onToggleDeviceSettings() }
+                )
+                DropdownMenuItem(
+                    text = { Text("Show Addins") },
+                    onClick = { commandOpen = false; onToggleAddins() }
                 )
                 if (h.busy) {
                     DropdownMenuItem(
@@ -118,7 +131,15 @@ fun Toolbar(
         Box {
             Button(onClick = { importOpen = true }) { Text("Import") }
             DropdownMenu(expanded = importOpen, onDismissRequest = { importOpen = false }) {
-                DropdownMenuItem(text = { Text("Import MIDI Tracks (SMF)") }, enabled = false, onClick = {})
+                DropdownMenuItem(text = { Text("Add MIDI Clip from File… (track 0)") }, onClick = {
+                    importOpen = false
+                    scope.launch { pickMediaFileToOpen()?.let { host.importMidiClip(0, it) } }
+                })
+                DropdownMenuItem(text = { Text("Add Audio Clip from File… (track 0)") }, onClick = {
+                    importOpen = false
+                    scope.launch { pickMediaFileToOpen()?.let { host.importAudioClip(0, it) } }
+                })
+                // Demucs source separation is app-model work not yet bound.
                 DropdownMenuItem(text = { Text("Import Split Audio Tracks (Demucs)") }, enabled = false, onClick = {})
             }
         }

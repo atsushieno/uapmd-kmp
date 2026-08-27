@@ -16,4 +16,16 @@ private suspend fun pick(mode: Int): String? = withContext(Dispatchers.Main) {
 }
 
 actual suspend fun pickProjectFileToOpen(): String? = pick(FileDialog.LOAD)
+
+actual suspend fun pickMediaFileToOpen(): String? = withContext(Dispatchers.Main) {
+    val dialog = FileDialog(null as Frame?, "MIDI or audio file", FileDialog.LOAD)
+    dialog.isVisible = true
+    val dir = dialog.directory
+    val file = dialog.file
+    if (dir == null || file == null) null else dir + file
+}
 actual suspend fun pickProjectFileToSave(): String? = pick(FileDialog.SAVE)
+
+actual fun startupImportPath(): String? = System.getProperty("uapmd.cmp.importMidi")
+
+actual fun startupInstantiateFormat(): String? = System.getProperty("uapmd.cmp.instantiate")

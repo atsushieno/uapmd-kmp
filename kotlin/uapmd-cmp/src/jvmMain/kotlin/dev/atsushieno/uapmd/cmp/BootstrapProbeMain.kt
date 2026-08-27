@@ -16,6 +16,11 @@ import dev.atsushieno.uapmd.instantiateAppModel
  *
  * Run with: ./gradlew :uapmd-cmp:runBootstrapProbe
  */
+private fun inst2Caps(host: dev.atsushieno.uapmd.PluginHost, id: Int): Pair<Boolean, Boolean> {
+    val c = host.getInstance(id)!!.uiCapabilities
+    return c.hasUiSupport to c.supportsFloatingPresentations
+}
+
 fun main() {
     var failures = 0
     fun check(label: String, ok: Boolean) {
@@ -126,6 +131,30 @@ fun main() {
         check("instance retrievable from the plugin host", inst != null)
         check("instance reports a display name", !inst?.displayName.isNullOrEmpty())
         println("   instantiated '${inst?.displayName}' params=${inst?.parameterCount} group=${model.getInstanceGroup(succeeded.instanceId)}")
+        // ── plugin UI presentation (the path composeApp proved) ──────────────
+        val caps = inst2Caps(host, succeeded.instanceId)
+        println("   ui: hasUiSupport=${caps.first} floating=${caps.second}")
+        // Opt-in: creating a CLAP plugin UI crashes in remidy, which calls
+        // guiCreate(nullptr, ...) as a fallback (PluginInstanceCLAP.UI.cpp:72)
+        // while tryCreateWith only null-guards guiIsApiSupported. clap-helpers
+        // then strlen()s the null api. Upstream bug, plugin-dependent.
+        if (caps.first && System.getProperty("uapmd.probe.pluginUi") != null) {
+            val presentation = host.getInstance(succeeded.instanceId)!!.createUiPresentation()
+            check("createUiPresentation returned a presentation", presentation != null)
+            if (presentation != null) {
+                val shown = presentation.show()
+                println("   ui: show() -> $shown size=${presentation.getSize()}")
+                check("plugin UI show() succeeded", shown)
+                Thread.sleep(800)
+                presentation.close()
+                println("   ui: closed")
+            }
+        } else if (caps.first) {
+            println("NOTE  UI path skipped; pass -Duapmd.probe.pluginUi=1 (may crash on CLAP plugins)")
+        } else {
+            println("NOTE  this plugin reports no UI support; UI path not exercised")
+        }
+
         // ── parameters via ProjectCommands (what InstanceDetails uses) ───────
         val inst2 = host.getInstance(succeeded.instanceId)!!
         val paramCount = inst2.parameterCount.toInt()
@@ -159,6 +188,39 @@ fun main() {
     } else {
         println("NOTE  no candidate plugin instantiated on this machine; the binding still")
         println("      round-tripped every error string, so marshalling is verified")
+    }
+
+    // ── clip import + timeline read-back (what the Timeline view renders) ────
+    val midi = System.getProperty("uapmd.probe.midi")
+        ?: "/Users/atsushi/sources/uapmd-kmp/external/uapmd/cmake-build-debug/_deps/libremidi-src/tests/corpus/You're No Good.mid"
+    if (java.io.File(midi).exists()) {
+        val timelineFacade = model.sequencer.engine.timeline
+        val added = timelineFacade.addMidiClipFromFile(0, dev.atsushieno.uapmd.TimelinePosition(0L, 0.0), midi)
+        println("   addMidiClipFromFile -> clipId=${added.clipId} success=${added.success} error=${added.error}")
+        check("MIDI clip added", added.success)
+        if (added.success) {
+            val clips = model.getTimelineTrack(0u).getClips()
+            check("track 0 reports the clip", clips.any { it.clipId == added.clipId })
+            val clip = clips.first { it.clipId == added.clipId }
+            val seconds = clip.durationSamples.toDouble() / model.sampleRate
+            println("   clip '${clip.name}' type=${clip.clipType} duration=%.2fs".format(seconds))
+            check("clip has a non-zero duration", clip.durationSamples > 0)
+            val notes = timelineFacade.getMidiClipNotes(0, added.clipId)
+            println("   notes decoded: ${notes?.size ?: 0}")
+            check("MIDI notes decode for the preview", (notes?.size ?: 0) > 0)
+
+            // Raw UMP events - the struct-array-in-struct return the dump editor needs.
+            val ump = model.getMidiClipUmpEvents(0, added.clipId)
+            println("   ump events: ${ump.events.size} success=${ump.success} error=${ump.error}")
+            check("UMP events decode", ump.success && ump.events.isNotEmpty())
+            val firstEvent = ump.events.firstOrNull()
+            println("   first ump: tick=${firstEvent?.tick} words=${firstEvent?.words?.joinToString { it.toString(16) }}")
+            check("UMP events carry words", firstEvent != null && firstEvent.words.isNotEmpty())
+            check("UMP ticks are non-decreasing",
+                ump.events.zipWithNext().all { (a, b) -> a.tick <= b.tick })
+        }
+    } else {
+        println("NOTE  no test MIDI file at $midi; skipped clip checks")
     }
 
     // ── project save/load (struct RETURNED by value: the sret ABI path) ──────

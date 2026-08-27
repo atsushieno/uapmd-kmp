@@ -431,6 +431,63 @@ JNI_FN(jobjectArray, uapmdAppLoadProjectFromHandleToken)(JNIEnv* env, jclass, jl
     return pack_project_result(env, r);
 }
 
+/* ── MIDI clip UMP events ──────────────────────────────────────────────────── */
+
+/** Returns Object[]{ long[1] success, String? error, long[] ticks, int[][] words } or null. */
+JNI_FN(jobjectArray, uapmdAppGetMidiClipUmpEvents)(JNIEnv* env, jclass, jlong app,
+                                                     jint trackIndex, jint clipId) {
+    auto r = uapmd_app_get_midi_clip_ump_events(AM(app), trackIndex, clipId);
+
+    jlong ok = r.success ? 1 : 0;
+    jlongArray okArr = env->NewLongArray(1);
+    env->SetLongArrayRegion(okArr, 0, 1, &ok);
+
+    const jsize n = r.success && r.events ? static_cast<jsize>(r.event_count) : 0;
+    jlongArray ticks = env->NewLongArray(n);
+    jclass intArrayClass = env->FindClass("[I");
+    jobjectArray words = env->NewObjectArray(n, intArrayClass, nullptr);
+    for (jsize i = 0; i < n; i++) {
+        const auto& e = r.events[i];
+        jlong tick = static_cast<jlong>(e.tick);
+        env->SetLongArrayRegion(ticks, i, 1, &tick);
+        jintArray w = env->NewIntArray(static_cast<jsize>(e.word_count));
+        if (e.words && e.word_count)
+            env->SetIntArrayRegion(w, 0, static_cast<jsize>(e.word_count),
+                                     reinterpret_cast<const jint*>(e.words));
+        env->SetObjectArrayElement(words, i, w);
+        env->DeleteLocalRef(w);
+    }
+
+    jclass objectClass = env->FindClass("java/lang/Object");
+    jobjectArray result = env->NewObjectArray(4, objectClass, nullptr);
+    env->SetObjectArrayElement(result, 0, okArr);
+    if (r.error) env->SetObjectArrayElement(result, 1, env->NewStringUTF(r.error));
+    env->SetObjectArrayElement(result, 2, ticks);
+    env->SetObjectArrayElement(result, 3, words);
+    return result;
+}
+
+JNI_FN(jboolean, uapmdAppAddUmpEventToClip)(JNIEnv* env, jclass, jlong app, jint trackIndex,
+                                              jint clipId, jlong tick, jintArray words) {
+    jsize n = words ? env->GetArrayLength(words) : 0;
+    jint* w = words ? env->GetIntArrayElements(words, nullptr) : nullptr;
+    bool ok = uapmd_app_add_ump_event_to_clip(AM(app), trackIndex, clipId,
+                                                static_cast<uint64_t>(tick),
+                                                reinterpret_cast<const uint32_t*>(w),
+                                                static_cast<uint32_t>(n));
+    if (words) env->ReleaseIntArrayElements(words, w, JNI_ABORT);
+    return ok;
+}
+
+JNI_FN(jboolean, uapmdAppRemoveUmpEventFromClip)(JNIEnv*, jclass, jlong app, jint trackIndex,
+                                                   jint clipId, jint eventIndex) {
+    return uapmd_app_remove_ump_event_from_clip(AM(app), trackIndex, clipId, eventIndex);
+}
+
+JNI_FN(jboolean, uapmdAppRemoveClipFromTrack)(JNIEnv*, jclass, jlong app, jint trackIndex, jint clipId) {
+    return uapmd_app_remove_clip_from_track(AM(app), trackIndex, clipId);
+}
+
 #undef JNI_FN
 
 } // extern "C"

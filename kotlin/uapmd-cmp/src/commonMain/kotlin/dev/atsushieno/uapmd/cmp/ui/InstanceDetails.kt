@@ -62,10 +62,13 @@ fun InstanceDetails(host: UapmdHost, inst: TrackInstance) {
     Column(Modifier.fillMaxWidth()) {
         Row(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalAlignment = Alignment.CenterVertically) {
             Button(
-                onClick = { host.model.requestShowPluginUi(inst.instanceId) },
+                onClick = { host.showPluginUi(inst.instanceId) },
                 enabled = instance.hasUiSupport
             ) { Text("Show UI") }
-            Button(onClick = { host.model.hidePluginUi(inst.instanceId) }) { Text("Hide UI") }
+            Button(
+                onClick = { host.closePluginUi(inst.instanceId) },
+                enabled = host.isPluginUiVisible(inst.instanceId)
+            ) { Text("Hide UI") }
             Button(onClick = { host.removeInstance(inst.instanceId) }) { Text("Delete") }
         }
 
@@ -74,6 +77,10 @@ fun InstanceDetails(host: UapmdHost, inst: TrackInstance) {
                 "${host.model.getInstanceGroup(inst.instanceId)} · ${parameters.size} parameters",
             style = MaterialTheme.typography.bodySmall
         )
+
+        host.pluginUiStatusMessage?.let {
+            Text(it, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.error)
+        }
 
         HorizontalDivider(Modifier.padding(vertical = 4.dp))
 

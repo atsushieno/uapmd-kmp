@@ -129,6 +129,32 @@ class AndroidAppModel internal constructor(internal val handle: Long) : AppModel
 
     override fun loadProjectFromHandleToken(token: String): AppProjectResult =
         JniBridge.uapmdAppLoadProjectFromHandleToken(handle, token).toProjectResult()
+
+    // ── MIDI clip UMP events ────────────────────────────────────────────────
+
+    override fun getMidiClipUmpEvents(trackIndex: Int, clipId: Int): UmpEventsResult {
+        val packed = JniBridge.uapmdAppGetMidiClipUmpEvents(handle, trackIndex, clipId)
+            ?: return UmpEventsResult(false, "native call returned null", emptyList())
+        val ok = (packed[0] as LongArray)[0] != 0L
+        val error = packed.getOrNull(1) as? String
+        val ticks = packed[2] as LongArray
+        @Suppress("UNCHECKED_CAST")
+        val words = packed[3] as Array<IntArray>
+        return UmpEventsResult(ok, error, ticks.indices.map { i ->
+            UmpEvent(ticks[i], UIntArray(words[i].size) { w -> words[i][w].toUInt() })
+        })
+    }
+
+    override fun addUmpEventToClip(trackIndex: Int, clipId: Int, tick: Long, words: UIntArray): Boolean =
+        JniBridge.uapmdAppAddUmpEventToClip(
+            handle, trackIndex, clipId, tick, IntArray(words.size) { words[it].toInt() }
+        )
+
+    override fun removeUmpEventFromClip(trackIndex: Int, clipId: Int, eventIndex: Int): Boolean =
+        JniBridge.uapmdAppRemoveUmpEventFromClip(handle, trackIndex, clipId, eventIndex)
+
+    override fun removeClipFromTrack(trackIndex: Int, clipId: Int): Boolean =
+        JniBridge.uapmdAppRemoveClipFromTrack(handle, trackIndex, clipId)
 }
 
 private fun Array<Any>?.toProjectResult(): AppProjectResult {

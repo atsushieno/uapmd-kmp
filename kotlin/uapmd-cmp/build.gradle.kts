@@ -102,6 +102,9 @@ compose.desktop {
         jvmArgs += listOf(
             "-Dapple.awt.application.name=uapmd-cmp",
             "-Xdock:name=uapmd-cmp"
+        ) + listOfNotNull(
+            System.getProperty("uapmd.cmp.importMidi")?.let { "-Duapmd.cmp.importMidi=$it" },
+            System.getProperty("uapmd.cmp.instantiate")?.let { "-Duapmd.cmp.instantiate=$it" }
         )
 
         nativeDistributions {
@@ -124,7 +127,9 @@ tasks.register<JavaExec>("runBootstrapProbe") {
         jvmMainCompilation.runtimeDependencyFiles
     )
     jvmArgs("-Dapple.awt.application.name=uapmd-cmp", "-Xdock:name=uapmd-cmp")
-    System.getProperty("uapmd.probe.removeInstance")?.let { systemProperty("uapmd.probe.removeInstance", it) }
+    listOf("uapmd.probe.removeInstance", "uapmd.probe.pluginUi", "uapmd.probe.midi").forEach { key ->
+        System.getProperty(key)?.let { systemProperty(key, it) }
+    }
 }
 
 afterEvaluate {

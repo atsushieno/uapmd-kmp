@@ -19,8 +19,13 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.DpSize
 import androidx.compose.ui.unit.dp
 import dev.atsushieno.uapmd.cmp.ui.FloatingWindowLayer
+import dev.atsushieno.uapmd.cmp.ui.AddinManagerWindow
+import dev.atsushieno.uapmd.cmp.ui.DeviceSettings
 import dev.atsushieno.uapmd.cmp.ui.InstanceDetails
+import dev.atsushieno.uapmd.cmp.ui.MixerMonitor
+import dev.atsushieno.uapmd.cmp.ui.PluginInstances
 import dev.atsushieno.uapmd.cmp.ui.PluginSelector
+import dev.atsushieno.uapmd.cmp.ui.Timeline
 import dev.atsushieno.uapmd.cmp.ui.Toolbar
 import dev.atsushieno.uapmd.cmp.ui.rememberFloatingWindowManager
 
@@ -39,6 +44,16 @@ fun MainWindow() {
                 Column(Modifier.fillMaxSize()) {
                     Toolbar(
                         host = host,
+                        onToggleAddins = {
+                            windows.toggle("addins", "Addins", DpSize(500.dp, 340.dp)) {
+                                AddinManagerWindow(host)
+                            }
+                        },
+                        onToggleDeviceSettings = {
+                            windows.toggle("devices", "Device Settings", DpSize(420.dp, 320.dp)) {
+                                DeviceSettings(host)
+                            }
+                        },
                         onTogglePlugins = {
                             windows.toggle("plugins", "Plugin Selector", DpSize(560.dp, 430.dp)) {
                                 PluginSelector(host)
@@ -46,57 +61,12 @@ fun MainWindow() {
                         }
                     )
                     HorizontalDivider()
-                    TrackList(host, windows, Modifier.weight(1f))
+                    Timeline(host, windows, Modifier.weight(1f))
                     HorizontalDivider()
                     BottomBar(host, windows)
                 }
-            }
-        }
-    }
-}
-
-@Composable
-private fun TrackList(
-    host: UapmdHost,
-    windows: dev.atsushieno.uapmd.cmp.ui.FloatingWindowManager,
-    modifier: Modifier = Modifier
-) {
-    Column(modifier.fillMaxWidth().padding(8.dp)) {
-        val tl = host.timeline
-        Text(
-            "tracks ${host.trackCount} · tempo ${tl?.tempo ?: "-"} · " +
-                "${tl?.timeSignatureNumerator ?: "-"}/${tl?.timeSignatureDenominator ?: "-"} · " +
-                "sr ${host.model.sampleRate}",
-            style = MaterialTheme.typography.bodySmall
-        )
-        LazyColumn(Modifier.fillMaxWidth()) {
-            items(host.trackInstances.indices.toList()) { trackIndex ->
-                val instances = host.trackInstances[trackIndex]
-                Column(Modifier.fillMaxWidth().padding(vertical = 4.dp)) {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Text("Track $trackIndex", Modifier.weight(1f))
-                        Button(onClick = { host.removeTrack(trackIndex) }) { Text("🗑") }
-                    }
-                    // uapmd-app labels this button with the first plugin, or
-                    // "Add Plugin" when the track is empty.
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Button(onClick = {
-                            windows.toggle("plugins", "Plugin Selector", DpSize(560.dp, 430.dp)) {
-                                PluginSelector(host)
-                            }
-                        }) { Text(instances.firstOrNull()?.displayName ?: "Add Plugin") }
-                        instances.forEach { inst ->
-                            Text("  ")
-                            Button(onClick = {
-                                windows.open(
-                                    "details:${inst.instanceId}",
-                                    "${inst.displayName} (${inst.formatName}) - Details",
-                                    DpSize(460.dp, 420.dp)
-                                ) { InstanceDetails(host, inst) }
-                            }) { Text("${inst.displayName} ⋮") }
-                        }
-                    }
-                }
+                // Platform-hosted plugin UIs (Android AAP) draw over everything.
+                PlatformHostedPluginUiLayer(host, Modifier.fillMaxSize())
             }
         }
     }
@@ -108,15 +78,11 @@ private fun BottomBar(host: UapmdHost, windows: dev.atsushieno.uapmd.cmp.ui.Floa
         Button(onClick = { host.addTrack() }) { Text("+") }
         Text("  ")
         Button(onClick = {
-            windows.toggle("mixer", "Mixer Monitor", DpSize(460.dp, 300.dp)) {
-                Text("Mixer monitor (Phase 7).")
-            }
+            windows.toggle("mixer", "Mixer Monitor", DpSize(480.dp, 340.dp)) { MixerMonitor(host) }
         }) { Text("Mixer Monitor") }
         Text("  ")
         Button(onClick = {
-            windows.toggle("instances", "Plugin Instances", DpSize(520.dp, 320.dp)) {
-                Text("Plugin instances (Phase 3).")
-            }
+            windows.toggle("instances", "Plugin Instances", DpSize(520.dp, 320.dp)) { PluginInstances(host, windows) }
         }) { Text("Plugin Instances") }
     }
 }

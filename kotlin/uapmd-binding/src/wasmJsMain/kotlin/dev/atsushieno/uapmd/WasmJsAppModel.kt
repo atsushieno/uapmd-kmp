@@ -153,6 +153,48 @@ class WasmJsAppModel internal constructor(internal val handle: Int) : AppModel {
 
     override fun loadProjectFromHandleToken(token: String): AppProjectResult =
         projectCall(token) { out, app, t -> wasmMod.uapmdAppLoadProjectFromHandleToken(out, app, t) }
+
+    // ── MIDI clip UMP events ────────────────────────────────────────────────
+    //
+    // uapmd_ump_events_result_t: bool @0, char* @4, uint32 @8, ptr @12 (size 16)
+    // uapmd_ump_event_t:         uint64 @0, uint32 @8, ptr @12 (size 16)
+
+    override fun getMidiClipUmpEvents(trackIndex: Int, clipId: Int): UmpEventsResult =
+        withWasmStruct(16) { out ->
+            wasmMod.uapmdAppGetMidiClipUmpEvents(out, handle, trackIndex, clipId)
+            val mod = wasmMod
+            val ok = mod.getValue(out, "i8").toInt() != 0
+            val errPtr = mod.getValue(out + 4, "i32").toInt()
+            val error = if (errPtr != 0) mod.utf8ToString(errPtr) else null
+            val count = mod.getValue(out + 8, "i32").toInt()
+            val eventsPtr = mod.getValue(out + 12, "i32").toInt()
+            if (!ok || eventsPtr == 0 || count == 0) UmpEventsResult(ok, error, emptyList())
+            else UmpEventsResult(ok, error, (0 until count).map { i ->
+                val base = eventsPtr + i * 16
+                val lo = mod.getValue(base, "i32").toInt().toLong() and 0xFFFFFFFFL
+                val hi = mod.getValue(base + 4, "i32").toInt().toLong()
+                val wordCount = mod.getValue(base + 8, "i32").toInt()
+                val wordsPtr = mod.getValue(base + 12, "i32").toInt()
+                UmpEvent(hi * 4294967296L + lo, UIntArray(wordCount) { w ->
+                    mod.getValue(wordsPtr + w * 4, "i32").toInt().toUInt()
+                })
+            })
+        }
+
+    override fun addUmpEventToClip(trackIndex: Int, clipId: Int, tick: Long, words: UIntArray): Boolean {
+        val mod = wasmMod
+        val buf = mod.malloc(words.size * 4)
+        return try {
+            words.forEachIndexed { i, w -> mod.setValue(buf + i * 4, w.toInt().toDouble(), "i32") }
+            wasmAppAddUmpEventToClip(mod, handle, trackIndex, clipId, tick.toString(), buf, words.size)
+        } finally { mod.free(buf) }
+    }
+
+    override fun removeUmpEventFromClip(trackIndex: Int, clipId: Int, eventIndex: Int): Boolean =
+        wasmMod.uapmdAppRemoveUmpEventFromClip(handle, trackIndex, clipId, eventIndex)
+
+    override fun removeClipFromTrack(trackIndex: Int, clipId: Int): Boolean =
+        wasmMod.uapmdAppRemoveClipFromTrack(handle, trackIndex, clipId)
 }
 
 private fun decodeProjectResult(ptr: Int): AppProjectResult {

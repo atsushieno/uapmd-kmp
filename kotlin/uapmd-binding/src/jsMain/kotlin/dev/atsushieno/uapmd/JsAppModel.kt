@@ -189,6 +189,46 @@ class JsAppModel internal constructor(internal val handle: Int) : AppModel {
 
     override fun loadProjectFromHandleToken(token: String): AppProjectResult =
         projectCall(token) { out, t -> jsMod._uapmd_app_load_project_from_handle_token(out, handle, t) }
+
+    // ── MIDI clip UMP events ────────────────────────────────────────────────
+    // uapmd_ump_events_result_t: bool @0, char* @4, uint32 @8, ptr @12 (16 bytes)
+    // uapmd_ump_event_t:         uint64 @0, uint32 @8, ptr @12 (16 bytes)
+
+    override fun getMidiClipUmpEvents(trackIndex: Int, clipId: Int): UmpEventsResult =
+        withWasmMem(16) { out ->
+            jsMod._uapmd_app_get_midi_clip_ump_events(out, handle, trackIndex, clipId)
+            val ok = (jsMod.getValue(out, "i8") as Int) != 0
+            val errPtr = jsMod.getValue(out + 4, "i32") as Int
+            val error = if (errPtr != 0) jsMod.UTF8ToString(errPtr) as String else null
+            val count = jsMod.getValue(out + 8, "i32") as Int
+            val eventsPtr = jsMod.getValue(out + 12, "i32") as Int
+            if (!ok || eventsPtr == 0 || count == 0) UmpEventsResult(ok, error, emptyList())
+            else UmpEventsResult(ok, error, (0 until count).map { i ->
+                val base = eventsPtr + i * 16
+                val lo = (jsMod.getValue(base, "i32") as Int).toLong() and 0xFFFFFFFFL
+                val hi = (jsMod.getValue(base + 4, "i32") as Int).toLong()
+                val wordCount = jsMod.getValue(base + 8, "i32") as Int
+                val wordsPtr = jsMod.getValue(base + 12, "i32") as Int
+                UmpEvent(hi * 4294967296L + lo, UIntArray(wordCount) { w ->
+                    (jsMod.getValue(wordsPtr + w * 4, "i32") as Int).toUInt()
+                })
+            })
+        }
+
+    override fun addUmpEventToClip(trackIndex: Int, clipId: Int, tick: Long, words: UIntArray): Boolean =
+        withWasmMem(words.size * 4) { buf ->
+            words.forEachIndexed { i, w -> jsMod.setValue(buf + i * 4, w.toInt(), "i32") }
+            // -sWASM_BIGINT: scalar i64 parameters must arrive as BigInt.
+            jsMod._uapmd_app_add_ump_event_to_clip(
+                handle, trackIndex, clipId, js("BigInt")(tick.toString()), buf, words.size
+            ) as Boolean
+        }
+
+    override fun removeUmpEventFromClip(trackIndex: Int, clipId: Int, eventIndex: Int): Boolean =
+        jsMod._uapmd_app_remove_ump_event_from_clip(handle, trackIndex, clipId, eventIndex) as Boolean
+
+    override fun removeClipFromTrack(trackIndex: Int, clipId: Int): Boolean =
+        jsMod._uapmd_app_remove_clip_from_track(handle, trackIndex, clipId) as Boolean
 }
 
 private fun decodeJsProjectResult(ptr: Int): AppProjectResult {

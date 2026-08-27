@@ -139,6 +139,34 @@ class NativeAppModel internal constructor(
 
     override fun loadProjectFromHandleToken(token: String): AppProjectResult =
         uapmd_app_load_project_from_handle_token(handle, token).useContents { toKotlin() }
+
+    // ── MIDI clip UMP events ────────────────────────────────────────────────
+
+    override fun getMidiClipUmpEvents(trackIndex: Int, clipId: Int): UmpEventsResult =
+        uapmd_app_get_midi_clip_ump_events(handle, trackIndex, clipId).useContents {
+            if (!success || events == null)
+                return@useContents UmpEventsResult(success, error?.toKString(), emptyList())
+            val list = (0 until event_count.toInt()).map { i ->
+                val e = events!![i]
+                val count = e.word_count.toInt()
+                val words = UIntArray(count) { w -> e.words!![w] }
+                UmpEvent(e.tick.toLong(), words)
+            }
+            UmpEventsResult(true, error?.toKString(), list)
+        }
+
+    override fun addUmpEventToClip(trackIndex: Int, clipId: Int, tick: Long, words: UIntArray): Boolean =
+        memScoped {
+            val buf = allocArray<UIntVar>(words.size)
+            words.forEachIndexed { i, w -> buf[i] = w }
+            uapmd_app_add_ump_event_to_clip(handle, trackIndex, clipId, tick.toULong(), buf, words.size.toUInt())
+        }
+
+    override fun removeUmpEventFromClip(trackIndex: Int, clipId: Int, eventIndex: Int): Boolean =
+        uapmd_app_remove_ump_event_from_clip(handle, trackIndex, clipId, eventIndex)
+
+    override fun removeClipFromTrack(trackIndex: Int, clipId: Int): Boolean =
+        uapmd_app_remove_clip_from_track(handle, trackIndex, clipId)
 }
 
 private fun uapmd_app_project_result_t.toKotlin() =

@@ -5,3 +5,8 @@ package dev.atsushieno.uapmd.cmp
 // the File System Access API plus uapmd's browser document provider.
 actual suspend fun pickProjectFileToOpen(): String? = null
 actual suspend fun pickProjectFileToSave(): String? = null
+actual suspend fun pickMediaFileToOpen(): String? = null
+
+actual fun startupImportPath(): String? = null
+
+actual fun startupInstantiateFormat(): String? = null

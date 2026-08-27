@@ -528,6 +528,27 @@ open class UapmdAppProjectResult : Structure() {
     class ByVal : UapmdAppProjectResult(), Structure.ByValue
 }
 
+@FieldOrder("tick", "word_count", "words")
+open class UapmdUmpEvent : Structure {
+    constructor() : super()
+    /** Reads one element of a C array in place; Structure.useMemory is protected. */
+    constructor(p: Pointer) : super(p) { read() }
+
+    @JvmField var tick: Long = 0
+    @JvmField var word_count: Int = 0
+    @JvmField var words: Pointer? = null
+}
+
+@FieldOrder("success", "error", "event_count", "events")
+open class UapmdUmpEventsResult : Structure() {
+    @JvmField var success: Byte = 0
+    @JvmField var error: String? = null
+    @JvmField var event_count: Int = 0
+    @JvmField var events: Pointer? = null
+
+    class ByVal : UapmdUmpEventsResult(), Structure.ByValue
+}
+
 interface ProjectSaveCb : Callback {
     fun invoke(result: UapmdAppProjectResult.ByVal, userData: Pointer?)
 }
@@ -1252,4 +1273,9 @@ interface UapmdLibrary : Library {
     fun uapmd_app_save_project_sync(app: Pointer?, filePath: String?): UapmdAppProjectResult.ByVal
     fun uapmd_app_save_project(app: Pointer?, filePath: String?, userData: Pointer?, callback: ProjectSaveCb?)
     fun uapmd_app_load_project_from_handle_token(app: Pointer?, token: String?): UapmdAppProjectResult.ByVal
+
+    fun uapmd_app_get_midi_clip_ump_events(app: Pointer?, trackIndex: Int, clipId: Int): UapmdUmpEventsResult.ByVal
+    fun uapmd_app_add_ump_event_to_clip(app: Pointer?, trackIndex: Int, clipId: Int, tick: Long, words: IntArray?, wordCount: Int): Boolean
+    fun uapmd_app_remove_ump_event_from_clip(app: Pointer?, trackIndex: Int, clipId: Int, eventIndex: Int): Boolean
+    fun uapmd_app_remove_clip_from_track(app: Pointer?, trackIndex: Int, clipId: Int): Boolean
 }

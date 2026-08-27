@@ -657,4 +657,10 @@ object JniBridge {
     /** cb: (success: Boolean, error: String?) -> Unit */
     @JvmStatic external fun uapmdAppSaveProject(app: Long, filePath: String, cb: Any)
     @JvmStatic external fun uapmdAppLoadProjectFromHandleToken(app: Long, token: String): Array<Any>?
+
+    /** Object[]{ long[1] success, String? error, long[] ticks, int[][] words } */
+    @JvmStatic external fun uapmdAppGetMidiClipUmpEvents(app: Long, trackIndex: Int, clipId: Int): Array<Any>?
+    @JvmStatic external fun uapmdAppAddUmpEventToClip(app: Long, trackIndex: Int, clipId: Int, tick: Long, words: IntArray): Boolean
+    @JvmStatic external fun uapmdAppRemoveUmpEventFromClip(app: Long, trackIndex: Int, clipId: Int, eventIndex: Int): Boolean
+    @JvmStatic external fun uapmdAppRemoveClipFromTrack(app: Long, trackIndex: Int, clipId: Int): Boolean
 }

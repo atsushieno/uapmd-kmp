@@ -923,6 +923,13 @@ external interface UapmdCApiModule : JsAny {
     fun uapmdAppSaveProject(app: Int, filePath: Int, userData: Int, callback: Int)
     @JsName("_uapmd_app_load_project_from_handle_token")
     fun uapmdAppLoadProjectFromHandleToken(out: Int, app: Int, token: Int)
+
+    @JsName("_uapmd_app_get_midi_clip_ump_events")
+    fun uapmdAppGetMidiClipUmpEvents(out: Int, app: Int, trackIndex: Int, clipId: Int)
+    @JsName("_uapmd_app_remove_ump_event_from_clip")
+    fun uapmdAppRemoveUmpEventFromClip(app: Int, trackIndex: Int, clipId: Int, eventIndex: Int): Boolean
+    @JsName("_uapmd_app_remove_clip_from_track")
+    fun uapmdAppRemoveClipFromTrack(app: Int, trackIndex: Int, clipId: Int): Boolean
 }
 
 
@@ -1167,6 +1174,11 @@ fun uapmdDispatchLoadState(cbId: Int, errorPtr: Int) {
 // The Wasm module is linked with -sWASM_BIGINT=1, so scalar i64 parameters must
 // arrive as BigInt. Passing the value as a decimal string keeps it exact for
 // magnitudes beyond 2^53.
+
+@JsFun("(mod, app, t, c, tick, words, n) => mod._uapmd_app_add_ump_event_to_clip(app, t, c, BigInt(tick), words, n)")
+internal external fun wasmAppAddUmpEventToClip(
+    mod: UapmdCApiModule, app: Int, trackIndex: Int, clipId: Int, tick: String, words: Int, wordCount: Int
+): Boolean
 
 @JsFun("(mod, eng, v) => mod._uapmd_undo_engine_mark_state_saved(eng, BigInt(v))")
 internal external fun wasmUndoEngineMarkStateSaved(mod: UapmdCApiModule, eng: Int, v: String): Boolean

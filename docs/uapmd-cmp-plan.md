@@ -883,3 +883,95 @@ So the outstanding work is **app-side porting**, already listed in §3 of this p
 
 Until that lands, Instance Details' "Show UI" button calls `requestShowPluginUi`, which nothing
 services — it is a no-op and should be disabled with a reason rather than left looking functional.
+
+### 2026-08-28 (cont.) — Timeline, plugin UI hosting, and a second upstream bug
+
+**Phase 2 — Timeline** (`ui/Timeline.kt`) is now the main content, replacing the placeholder
+track list: a legend column (per-track plugin button, bypass, delete) beside time-ruled lanes
+with clip rectangles, MIDI note previews drawn from `getMidiClipNotes()`, a playhead, and a zoom
+control. Verified with a real SMF — a 224-second clip with **3557 notes decoded** renders.
+
+Clip import needed **no new bindings**: `TimelineFacade.addMidiClipFromFile()` /
+`addAudioClip()` and `createAudioFileReader()` were already bound. Wired into the Import menu.
+
+The Seconds/Beats toggle is present but disabled — the beats view needs `TempoMap`, which the C
+API does not expose (inventory §3). Likewise the legend's gain slider and M/S buttons are
+disabled: the *setters* exist via `ProjectCommands`, but without `trackGain()`/`muted()`/`solo()`
+getters a correct control cannot be drawn.
+
+**Phase 4 completed — plugin UI hosting**, ported from `composeApp` rather than rewritten:
+`PluginUiHosting.kt` per platform plus the 481-line `AndroidPlatformHostedPluginUiLayer`, adapted
+to take `UapmdHost` and a four-field `HostedInstanceInfo` instead of composeApp's much larger
+`UapmdModel`/`InstanceInfo`. `UapmdHost.showPluginUi()` follows composeApp's negotiation:
+platform-hosted (Android AAP) → existing presentation → embedded target → floating window.
+The Details window now calls this instead of the `requestShowPluginUi` no-op.
+
+### Upstream bug #2: CLAP plugin UI creation passes a null api string
+
+`remidy/src/clap/PluginInstanceCLAP.UI.cpp:72` calls `tryCreateWith(nullptr, true)` as a
+fallback, and `tryCreateWith` null-guards only the *support check*:
+
+```cpp
+if (api && !owner->plugin->guiIsApiSupported(api, floating)) return;
+if (!owner->plugin->guiCreate(api, floating)) return;   // api may be nullptr
+```
+
+clap-helpers' `clapGuiCreate` then `strlen()`s it. Crash: `SIGSEGV`, `si_addr: 0x0`, frame
+`_platform_strlen` under `clap::helpers::Plugin<...>::clapGuiCreate`, reproduced with Dexed.
+
+Not our binding: it passes `host_kind = FloatingWindow` with a null *parent handle*, which is
+correct; remidy does its own api negotiation. Plugin-dependent — plugins that tolerate a null api
+will not crash, which is likely why `composeApp` looked fine on desktop with VST3/AU.
+
+Probe gate: `-Duapmd.probe.pluginUi=1` exercises it; the default run stays green at **28 checks**.
+
+Also fixed: `String.format` is JVM-only and had slipped into common code — caught only when
+building wasm and iOS. Build all five targets, not just the JVM.
+
+### 2026-08-28 (cont.) — regression fixed, Phase 7 windows
+
+**Regression (reported, mine).** Swapping the placeholder track list for the Timeline dropped the
+per-instance buttons that opened Instance Details, so Details became unreachable. Fixed by
+implementing the plugin context menu uapmd-app actually has, which is better than what was lost:
+the legend's plugin button is labelled with the first instance (or "Add Plugin" when empty) and
+opens Show/Hide *name* Details, Show/Hide *name* GUI, Delete *name* (at [n]), Add Plugin. A ⋮
+menu beside it carries Bypass/Enable Track Processing and Delete Track.
+
+Verified in the running app, not by inspection: with `-Duapmd.cmp.instantiate=AU` the legend
+reads "⋮ Gateway".
+
+**Phase 7 (part).**
+- **Mixer Monitor** — audible/render positions, master latency and render lead, and a per-track
+  table of plugin count, latency, render lead, tail length and dirty state. The monitoring-policy
+  and infinite-tail-policy dropdowns are absent: those enums are not in the C API.
+- **Device Settings** — audio in/out pickers, sample rate, buffer size, and AppModel's
+  auto-buffer-size switch, applied through `updateAudioDeviceSettings` + `reconfigureAudioDevice`.
+  Platform MIDI routing is absent: the MIDI port list is not exposed.
+- **Plugin Instances** — every instance across tracks with its Details toggle, UMP device name,
+  Enable/Disable device and removal.
+
+**Two dev hooks** (`-Duapmd.cmp.importMidi`, `-Duapmd.cmp.instantiate`) mirror uapmd-app's web
+auto-import, so the UI can be brought up in a known state for verification. The second has to
+wait for AppModel's asynchronous startup scan and retry across candidates, since the first
+catalog entry frequently fails to instantiate.
+
+Also worth noting: a sed-style edit corrupted an import because `DropdownMenu` is a prefix of
+`DropdownMenuItem`. Caught by the compiler, but a reminder to anchor such replacements.
+
+### 2026-08-28 (cont.) — Addins, MIDI clip events, dump editor
+
+**Addin Manager** window: the engine publishes its extension points, then the manager loads what
+is installed — uapmd-app's order. Lists each addin's state, built-in flag, package and path, with
+an enable switch and any failure message. `AddinManager` was already bound; no new API needed.
+
+**MIDI clip UMP events bound** on all five backends — `get_midi_clip_ump_events`,
+`add_ump_event_to_clip`, `remove_ump_event_from_clip`, `remove_clip_from_track` — taking the
+binding to **57 of 81**. This was the third and hardest by-value shape: a struct containing a
+count and a pointer to an array of structs. Verified on the real 224-second SMF: **8136 events**
+decoded, first word `40b16500` (a MIDI 2.0 CC), ticks non-decreasing.
+
+**MIDI dump editor** (`ui/MidiDumpWindow.kt`): the raw UMP stream of one clip with a hex filter,
+per-event removal and append. Reached by clicking a clip's label in the timeline, one window per
+`(track, clip)`.
+
+Probe now at **31 checks**, all passing.

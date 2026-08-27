@@ -112,7 +112,30 @@ interface AppModel {
     fun saveProject(filePath: String, callback: (AppProjectResult) -> Unit)
     /** Android's document-picker path: resolves a content:// handle token. */
     fun loadProjectFromHandleToken(token: String): AppProjectResult
+
+    // ── MIDI clip UMP events ────────────────────────────────────────────────
+
+    fun getMidiClipUmpEvents(trackIndex: Int, clipId: Int): UmpEventsResult
+    fun addUmpEventToClip(trackIndex: Int, clipId: Int, tick: Long, words: UIntArray): Boolean
+    fun removeUmpEventFromClip(trackIndex: Int, clipId: Int, eventIndex: Int): Boolean
+
+    fun removeClipFromTrack(trackIndex: Int, clipId: Int): Boolean
 }
+
+/** One UMP event in a MIDI clip: a tick plus the 1-4 words of the message. */
+data class UmpEvent(val tick: Long, val words: UIntArray) {
+    override fun equals(other: Any?): Boolean =
+        this === other || (other is UmpEvent && tick == other.tick && words.contentEquals(other.words))
+
+    override fun hashCode(): Int = 31 * tick.hashCode() + words.contentHashCode()
+}
+
+/** Mirrors `uapmd_ump_events_result_t`. */
+data class UmpEventsResult(
+    val success: Boolean,
+    val error: String?,
+    val events: List<UmpEvent>
+)
 
 /** Mirrors `uapmd_app_project_result_t`. */
 data class AppProjectResult(val success: Boolean, val error: String?)
