@@ -114,7 +114,7 @@ target_link_options(uapmd-c-api-web PRIVATE
     # causing Emscripten to auto-inject a narrower EXPORTED_RUNTIME_METHODS list
     # at link time that would otherwise override and drop getValue/addFunction.
     # Keeping HEAPU8 here as well lets us be the definitive last word.
-    "-sEXPORTED_RUNTIME_METHODS=[HEAPU8,UTF8ToString,stringToUTF8,allocate,ALLOC_NORMAL,allocateUTF8,FS,ccall,getValue,setValue,addFunction,removeFunction,lengthBytesUTF8]"
+    "-sEXPORTED_RUNTIME_METHODS=[HEAPU8,UTF8ToString,stringToUTF8,allocate,ALLOC_NORMAL,allocateUTF8,FS,IDBFS,ccall,getValue,setValue,addFunction,removeFunction,lengthBytesUTF8]"
     # Enable JS BigInt ↔ Wasm i64 so int64_t parameters (timestamps, frame
     # counts) round-trip correctly across the JS boundary.
     "-sWASM_BIGINT=1"
@@ -131,6 +131,9 @@ target_link_options(uapmd-c-api-web PRIVATE
     "-sPTHREAD_POOL_SIZE=8"
     # 8 MB stack for C++ deep call stacks
     "-sSTACK_SIZE=8388608"
+    # IndexedDB-backed filesystem: uapmd persists its plugin list cache and the
+    # blocklist under /browser, which the app mounts as IDBFS at startup.
+    "-lidbfs.js"
     # Target web + worker environments (no Node.js requirement)
     "-sENVIRONMENT=web,worker"
     # Disable filesystem (uapmd-c-api doesn't use stdio in the library binding)
@@ -144,5 +147,5 @@ target_link_options(uapmd-c-api-web PRIVATE
 # CMAKE_EXE_LINKER_FLAGS places this AFTER all target and dependency link options,
 # making it the final word on the link command line.
 string(APPEND CMAKE_EXE_LINKER_FLAGS
-    " -sEXPORTED_RUNTIME_METHODS=[HEAPU8,UTF8ToString,stringToUTF8,allocate,ALLOC_NORMAL,allocateUTF8,FS,ccall,getValue,setValue,addFunction,removeFunction,lengthBytesUTF8]"
+    " -sEXPORTED_RUNTIME_METHODS=[HEAPU8,UTF8ToString,stringToUTF8,allocate,ALLOC_NORMAL,allocateUTF8,FS,IDBFS,ccall,getValue,setValue,addFunction,removeFunction,lengthBytesUTF8]"
 )

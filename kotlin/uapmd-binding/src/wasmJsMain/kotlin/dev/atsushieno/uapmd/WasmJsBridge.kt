@@ -815,6 +815,9 @@ private external fun invokeFactory(factory: JsAny, wasmUrl: String): Promise<Uap
 @JsFun("(mod) => { globalThis.__uapmdWasmAdapter.setUapmdModule(mod); globalThis.__uapmdWasmAdapter.setKotlinDispatchers(wasmExports); }")
 private external fun setUapmdModule(mod: JsAny)
 
+@JsFun("() => globalThis.__uapmdWasmAdapter.initBrowserFileSystem()")
+private external fun initBrowserFileSystem(): Promise<JsAny?>
+
 @JsModule("uapmd-wasm-adapter")
 private external fun getUapmdModule(): JsAny?
 
@@ -892,6 +895,9 @@ suspend fun initUapmdWasm(factory: JsAny, wasmUrl: String = "uapmd-c-api.wasm") 
     val mod: UapmdCApiModule = invokeFactory(factory, wasmUrl).await()
     _uapmdModule = mod
     setUapmdModule(mod)
+    // uapmd stores the plugin list cache under /browser/remidy-tooling; that path has to
+    // exist (and be restored from IndexedDB) before anything reads or writes the catalog.
+    initBrowserFileSystem().await<JsAny?>()
 }
 
 // ── String helper extensions ───────────────────────────────────────────────────

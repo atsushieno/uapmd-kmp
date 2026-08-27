@@ -3,6 +3,8 @@
 #include "c-api/uapmd-c-tooling.h"
 #include <uapmd-plugin-hosting/uapmd-plugin-hosting.hpp>
 #include <cstring>
+#include <filesystem>
+#include <memory>
 #include <string>
 #include <vector>
 #include <unordered_map>
@@ -93,11 +95,169 @@ void uapmd_scan_tool_save_cache_to(uapmd_scan_tool_t tool, const char* path) {
     PST(tool)->savePluginListCache(p);
 }
 
+#ifdef __EMSCRIPTEN__
+
+/* ── Asynchronous scanning (browser build) ─────────────────────────────────
+ *
+ * uapmd's InProcessScanSessionManager waits on a condition variable until each
+ * bundle scan reports completion. In the browser, the WebCLAP scanner delivers
+ * that completion through the JS event loop of the very thread that issued the
+ * scan, so waiting on the main thread deadlocks the whole page (the UI never
+ * repaints and the scan never finishes).
+ *
+ * Here we run the same per-bundle scanning loop as a continuation chain that
+ * returns to the event loop between bundles, so the scan progresses and the UI
+ * stays responsive. Observer callbacks are invoked on the main thread, which is
+ * where the caller registered them.
+ */
+
+namespace {
+
+struct AsyncScanBundle {
+    remidy::FileOrUrlBasedPluginScanning* scanning;
+    std::string format_name;
+    std::filesystem::path path;
+};
+
+struct AsyncScanSession {
+    uapmd_plugin_hosting::PluginScanTool* tool{};
+    /* Copied by value: the caller may release its own struct once this returns. */
+    uapmd_scan_observer_t observer{};
+    bool has_observer{};
+    bool require_fast_scanning{};
+    std::vector<AsyncScanBundle> bundles{};
+    size_t index{};
+};
+
+void async_scan_notify_error(const std::shared_ptr<AsyncScanSession>& session, const std::string& message) {
+    if (session->has_observer && session->observer.error_occurred)
+        session->observer.error_occurred(message.c_str(), session->observer.user_data);
+}
+
+void async_scan_finish(const std::shared_ptr<AsyncScanSession>& session) {
+    if (session->has_observer && session->observer.slow_scan_completed)
+        session->observer.slow_scan_completed(session->observer.user_data);
+}
+
+void async_scan_merge(const std::shared_ptr<AsyncScanSession>& session,
+                      std::vector<remidy::PluginCatalogEntry>& results) {
+    auto& catalog = session->tool->catalog();
+    for (auto& entry : results) {
+        if (!catalog.contains(entry.format(), entry.pluginId()))
+            catalog.add(std::move(entry));
+    }
+}
+
+void async_scan_step(std::shared_ptr<AsyncScanSession> session) {
+    if (session->has_observer && session->observer.should_cancel &&
+        session->observer.should_cancel(session->observer.user_data)) {
+        async_scan_notify_error(session, "Scan canceled.");
+        async_scan_finish(session);
+        return;
+    }
+    if (session->index >= session->bundles.size()) {
+        async_scan_finish(session);
+        return;
+    }
+
+    auto& bundle = session->bundles[session->index];
+    auto* scanning = bundle.scanning;
+    auto path = bundle.path;
+
+    if (session->has_observer && session->observer.bundle_scan_started)
+        session->observer.bundle_scan_started(path.string().c_str(), session->observer.user_data);
+
+    auto results = std::make_shared<std::vector<remidy::PluginCatalogEntry>>();
+    scanning->scanBundle(path, session->require_fast_scanning, 0.0,
+        [results](remidy::PluginCatalogEntry entry) {
+            results->emplace_back(std::move(entry));
+        },
+        [session, results, path](std::string error) {
+            /* A failing bundle is reported but does not abort the remaining ones:
+               there is no caller left to catch an exception on the async chain. */
+            if (!error.empty())
+                async_scan_notify_error(session, path.string() + ": " + error);
+            async_scan_merge(session, *results);
+            if (session->has_observer && session->observer.bundle_scan_completed)
+                session->observer.bundle_scan_completed(path.string().c_str(), session->observer.user_data);
+            session->index++;
+            async_scan_step(session);
+        });
+}
+
+void perform_scanning_async(uapmd_scan_tool_t tool,
+                            bool require_fast_scanning,
+                            const uapmd_scan_observer_t* observer) {
+    auto session = std::make_shared<AsyncScanSession>();
+    session->tool = PST(tool);
+    session->require_fast_scanning = require_fast_scanning;
+    if (observer) {
+        session->observer = *observer;
+        session->has_observer = true;
+    }
+
+    auto* scan_tool = session->tool;
+    auto& catalog = scan_tool->catalog();
+
+    /* Seed the catalog from the plugin list cache, as the shared scan planner does. */
+    auto& cache_file = scan_tool->pluginListCacheFile();
+    if (!cache_file.empty() && std::filesystem::exists(cache_file)) {
+        remidy::PluginCatalog cached;
+        cached.load(cache_file);
+        for (auto* entry : cached.getPlugins())
+            if (entry && !catalog.contains(entry->format(), entry->pluginId()))
+                catalog.add(*entry);
+    }
+
+    for (auto* format : scan_tool->formats()) {
+        if (!format)
+            continue;
+        auto* scanning = format->scanning();
+        if (!scanning)
+            continue;
+
+        auto fast_results = scanning->getAllFastScannablePlugins();
+        async_scan_merge(session, fast_results);
+
+        if (require_fast_scanning || !scanning->scanningMayBeSlow())
+            continue;
+        auto* file_scanning = dynamic_cast<remidy::FileOrUrlBasedPluginScanning*>(scanning);
+        if (!file_scanning) {
+            async_scan_notify_error(session,
+                "Format " + format->name() + " reports slow scanning but does not implement FileOrUrlBasedPluginScanning.");
+            continue;
+        }
+        /* Already covered by the cache: nothing to re-fetch. */
+        if (!scan_tool->filterByFormat(catalog.getPlugins(), format->name()).empty())
+            continue;
+
+        for (auto& bundle : file_scanning->enumerateCandidateBundles(require_fast_scanning)) {
+            if (scan_tool->isBundleBlocklisted(format->name(), bundle))
+                continue;
+            if (!scanning->scanRequiresLoadLibrary(bundle))
+                continue;
+            session->bundles.emplace_back(AsyncScanBundle{file_scanning, format->name(), bundle});
+        }
+    }
+
+    if (session->has_observer && session->observer.slow_scan_started && !session->bundles.empty())
+        session->observer.slow_scan_started(static_cast<uint32_t>(session->bundles.size()),
+                                            session->observer.user_data);
+
+    async_scan_step(session);
+}
+
+} // namespace
+
+#endif /* __EMSCRIPTEN__ */
+
 void uapmd_scan_tool_perform_scanning(uapmd_scan_tool_t tool,
                                        bool require_fast_scanning,
                                        const uapmd_scan_observer_t* observer) {
-    // On WASM the scan is asynchronous (returns before callbacks fire), so obs must
-    // outlive this function. Heap-allocate and self-delete in slowScanCompleted.
+#ifdef __EMSCRIPTEN__
+    /* The browser build must not block the thread that delivers scan results. */
+    perform_scanning_async(tool, require_fast_scanning, observer);
+#else
     auto* obs = new uapmd_plugin_hosting::PluginScanObserver{};
     void* ud = observer ? observer->user_data : nullptr;
 
@@ -112,6 +272,7 @@ void uapmd_scan_tool_perform_scanning(uapmd_scan_tool_t tool,
     if (observer && observer->should_cancel)
         obs->shouldCancel = [cb = observer->should_cancel, ud]() -> bool { return cb(ud); };
 
+    /* obs is heap-allocated and self-deletes once the scan reports completion. */
     auto slow_complete_cb = observer ? observer->slow_scan_completed : nullptr;
     obs->slowScanCompleted = [obs, slow_complete_cb, ud]() {
         if (slow_complete_cb) slow_complete_cb(ud);
@@ -120,7 +281,7 @@ void uapmd_scan_tool_perform_scanning(uapmd_scan_tool_t tool,
 
     PST(tool)->performPluginScanning(require_fast_scanning,
         uapmd_plugin_hosting::ScanMode::InProcess, false, 0.0, obs);
-    // obs is now owned by the async scan chain; do not use it after this point.
+#endif
 }
 
 uint32_t uapmd_scan_tool_blocklist_count(uapmd_scan_tool_t tool) {
