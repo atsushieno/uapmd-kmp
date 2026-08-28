@@ -29,3 +29,8 @@ actual suspend fun pickProjectFileToSave(): String? = pick(FileDialog.SAVE)
 actual fun startupImportPath(): String? = System.getProperty("uapmd.cmp.importMidi")
 
 actual fun startupInstantiateFormat(): String? = System.getProperty("uapmd.cmp.instantiate")
+
+actual fun startupAddTracks(): Int = System.getProperty("uapmd.cmp.addTracks")?.toIntOrNull() ?: 0
+
+actual fun startupInstantiateCount(): Int =
+    System.getProperty("uapmd.cmp.instantiateCount")?.toIntOrNull() ?: 1

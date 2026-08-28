@@ -1,8 +1,7 @@
 # Plan: `uapmd-cmp` — a fresh Compose Multiplatform app for uapmd 0.5.6
 
-Status: **in progress.** Phase 0 essentially complete (0.0/0.1/0.5 verified); Phase 1 started.
-Open questions resolved — see §7. Progress log at the end of this document.
-Supersedes: `docs/ui-parity-tracker.md` (tracker for the *old* `composeApp`; keep as history).
+The standing rules and architecture for `uapmd-cmp`. Outstanding gaps against uapmd-app are
+tracked in `uapmd-cmp-ui-audit.md`; binding gaps in `uapmd-binding-missing-api.md`.
 
 Sources read for this plan:
 
@@ -65,30 +64,9 @@ to be re-derived by hand in Kotlin, and anything AppModel does that the engine A
 
 Scale of the gap today: `composeApp` is ~6,560 Kotlin lines; `uapmd-app/gui` is ~19,856 C++ lines.
 
-### 1.3 One real constraint: AppModel is not built for Wasm
+### 1.3 Provenance of the binding gaps — checked, and not a regression
 
-`c-api/CMakeLists.txt` excludes it deliberately:
-
-```cmake
-if(EMSCRIPTEN)
-    list(REMOVE_ITEM UAPMD_C_API_SOURCES src/uapmd-c-app.cpp)
-endif()
-...
-if(NOT EMSCRIPTEN)
-    target_link_libraries(uapmd-c-api PRIVATE uapmd-app-model)
-endif()
-```
-
-That is *our* exclusion, not an upstream impossibility: upstream `uapmd-app`'s own
-`web_main.cpp` uses `AppModel::instantiate()`, and `uapmd-app-model/CMakeLists.txt` already
-guards its desktop-only dependencies behind `UAPMD_BUILDING_WASM`. So it should be enable-able,
-but it is real work and it must be proven before the whole app is committed to that layer.
-
----
-
-### 1.4 Provenance of the binding gaps — checked, and not a regression
-
-The gaps listed in step 0.4 are **not** things commit `13dac10` ("bump uapmd to 0.5.6 and update
+The binding gaps are **not** things commit `13dac10` ("bump uapmd to 0.5.6 and update
 API bindings") dropped. Verified against the tags:
 
 ```
@@ -166,7 +144,7 @@ Three consequences for this plan, all corrections to earlier drafts:
   points based on platform is app logic; the `expect`/`actual` seam lives in `uapmd-cmp`, and the
   binding just exposes both calls as uapmd declares them.
 
-For reference, everything else step 0.4 asks for is genuine uapmd API and passes the rule:
+For reference, everything else needed is genuine uapmd API and passes the rule:
 
 | Item | Home |
 |---|---|
@@ -174,7 +152,7 @@ For reference, everything else step 0.4 asks for is genuine uapmd API and passes
 | `FrozenTrackManager` | `uapmd-engine` |
 | `MidiRecorder` | `uapmd-engine` |
 | `TempoMap` | `uapmd-data` |
-| `AppModel`, `TransportController`, `McpServer` | `tools/uapmd-app-model` — see §7.3 |
+| `AppModel`, `TransportController`, `McpServer` | `tools/uapmd-app-model` — see §5.3 |
 
 ### 2.1 Audio: match uapmd-app, not `composeApp`
 
@@ -250,9 +228,9 @@ The two rules compose into one policy:
 > Match uapmd-app by default. Where a platform cannot reach AppModel, fall back to
 > `composeApp`'s path — it is known to work.
 
-So the audio path depending on AppModel is **not** a blocker for any target. If step 0.1
-(Emscripten) slips, Wasm keeps engine control through the engine-level route `composeApp` uses on
-wasmJs today — `uapmd_engine_set_active` plus `RealtimeSequencer.startAudio()`/`stopAudio()`.
+So the audio path depending on AppModel is **not** a blocker for any target. Were Emscripten
+support to be lost, Wasm would keep engine control through the engine-level route `composeApp`
+uses on wasmJs today — `uapmd_engine_set_active` plus `RealtimeSequencer.startAudio()`/`stopAudio()`.
 What Wasm loses in that case is shutdown *quality* (the muted tail drain of §2.1), not engine
 control.
 
@@ -290,8 +268,8 @@ completed scan would still have produced an empty list.
 
 That is a general hazard, not a one-off: `uapmd-cmp` replaces uapmd-app's entry point, so
 anything that entry point does becomes ours to do, silently, with no compile error when we skip
-it. Adopting AppModel *increases* this surface. Phase 0 therefore includes an explicit audit of
-`main_common.cpp` and `web_main.cpp`, whose AppModel-related sequence is:
+it. Adopting AppModel *increases* this surface, so `main_common.cpp` and `web_main.cpp` have to be
+audited explicitly. Their AppModel-related sequence is:
 
 ```
 remidy::setEventLoop(...); remidy::EventLoop::initializeOnUIThread();
@@ -359,7 +337,7 @@ kotlin/uapmd-cmp/
 
 ### 3.1 The floating window manager — a core component, built first
 
-§7.2 has a bigger consequence than it looks. uapmd-app is a **multi-window** application, and
+§5.2 has a bigger consequence than it looks. uapmd-app is a **multi-window** application, and
 several of its windows are *multi-instance*:
 
 | Window | Key | Concurrent instances |
@@ -410,9 +388,9 @@ the table above so N instances coexist. This also happens to be exactly what uap
 that is the application window itself, not a child window. Plugin GUIs also remain real OS
 windows on desktop, hosted the way `composeApp` already does it.)
 
-The in-scene manager moves to **Phase 1**, ahead of nearly all feature work, because Phases 3
-through 8 each deliver one or more windows and would otherwise each invent their own container.
-It is the single highest-leverage piece of infrastructure in the plan, and getting it wrong late
+The in-scene manager comes ahead of nearly all feature work, because almost every feature
+delivers one or more windows and would otherwise invent its own container.
+It is the single highest-leverage piece of infrastructure here, and getting it wrong late
 is expensive.
 
 ### What is worth porting from `composeApp` rather than rewriting
@@ -433,207 +411,62 @@ rewritten against the new model.
 
 ---
 
-## 4 · Feature inventory (uapmd-app 0.5.6)
+## 4 · Risks
 
-This is the parity target. Each row becomes a checklist item in the tracker that replaces
-`docs/ui-parity-tracker.md`.
-
-**Toolbar (single row)** — engine on/off (colour-coded, tooltip) · Command ▾ (Undo *desc* /
-Redo *desc* with busy + disabled states, Device Settings, Addins, Script, MCP Settings) ·
-Ctrl/Cmd+Z, Shift+Ctrl+Z, Ctrl+Y shortcuts · play/stop · record · pause/resume · UI-scale combo
-(×0.5 … ×4.0) · theme toggle · Plugins · Import ▾ (SMF tracks, Demucs split audio) ·
-Project ▾ (Load, Save, Render To File) · In and Out spectrum analysers.
-
-**Timeline** — View: Seconds ⇄ View: Beats toggle · navigator (position + zoom) · master track
-row · unified multi-track timeline with lane assignment · clip drag/move · drag-to-select-range
-→ add clip · clip context actions.
-
-**Track legend, row 1** — clips button · graph button · gain slider (dB readout, muted state,
-undo *gesture* around the drag) · M (mute) · S (solo, Ctrl = additive).
-**Row 2** — freeze (policy toggle; spinner while rendering; frozen/queued colours; disabled
-while the track is busy) · plugin context button (labelled with the first instance, else
-"Add Plugin" / "Add Master Plugin") · ⋮ more.
-
-**Clips popup** — Edit Clips… · Add an Empty MIDI2 Clip · Add Empty Audio Clip · Create Audio
-Clip From File… · Add a MIDI Clip from File… · Add MIDI2 Clip from File… · Clear All.
-Master track gets a reduced set.
-
-**Plugin popup** — per instance: Show/Hide *name* Details, Show/Hide *name* GUI (disabled when
-the plugin has no UI), Delete *name* (at [n]) · Add Plugin.
-
-**More popup** — Bypass / Enable Track Processing · Delete Track.
-
-**Bottom bar** — ＋ add track · Mixer Monitor · Plugin Instances.
-
-**Windows / panels** —
-Plugin Selector — floating (scan, force rescan, remote scanner + timeout, collapsible blocked-bundle list,
-search, sortable Format/Name/Vendor/ID table, Instantiate Plugin, destination selector, device
-name + API) ·
-Plugin Graph Editor, one per track (nodes, audio + event buses, connect/disconnect, Revert to
-Simple Graph) ·
-Instance Details, one per instance (Hide UI, bypass, Save/Load State, Delete, pitch-bend,
-channel pressure, MIDI keyboard, preset combo, UMP group, parameter table with per-note
-Context/Value-Key keyboard, filter, Reset) ·
-Audio Graph Editor / "Plugin Instances" (track/plugin/format, enable toggle, details, remove,
-UMP device name, enable/disable device) ·
-Mixer Monitor (audible + render position, playback/preroll/latency-drain/output-alignment
-status, monitoring policy, realtime infinite-tail policy, per-track table) ·
-Device Settings (audio in/out, sample rate, buffer size, auto buffer, platform MIDI in/out
-mapped onto tracks) ·
-Addin Manager · Script Editor (JS runtime) · MCP Settings (Server/Client, port, relay URL,
-auto-reconnect, connect/disconnect, status; informational variant on Wasm) ·
-Exporter (render settings, progress, cancel) · Audio Import / Demucs ·
-MIDI Dump (editable) · Audio Event List (markers + warps) ·
-Piano Roll (h/v zoom + scroll, drag move/resize, snap grid, velocity, per-note automation,
-NRPN plugin-parameter picker, live note preview) — *deferred to Phase 8* ·
-Master marker editor + master meta dump · Unsaved Project dialog (Save / Discard / Cancel).
-
----
-
-## 5 · Phases
-
-### Phase 0 — Binding foundation *(blocking; no UI work in parallel)*
-
-0.0 **Stand up the bootstrap on AppModel from the start.** Platform event-loop init (§2.3),
-    then `uapmd_app_instantiate()`, then `uapmd_app_sequencer()`; drive engine on/off through
-    `uapmd_app_set_audio_engine_enabled`. Get a window up that starts and *cleanly stops* audio
-    on all five targets. Do **not** port `composeApp`'s `setActive`/`startAudio` pair as an
-    interim step — it would have to be torn out again, and it is the behaviour we are replacing.
-0.1 Enable `uapmd-c-app.cpp` + `uapmd-app-model` for Emscripten in `c-api/CMakeLists.txt`,
-    following the `UAPMD_BUILDING_WASM` guards upstream already has; add the `uapmd_app_*` and
-    `uapmd_transport_*` symbols to the wasm export list. Not a blocker: if it slips, Wasm takes
-    the §2.4 fallback and this step moves to a later phase.
-0.2 Common Kotlin API: `AppModel`, `TransportController` interfaces in `uapmd-binding`
-    (`commonMain`), mirroring `uapmd-c-app.h` in the style of the existing `UapmdEngine.kt`.
-    Includes the audio-engine and device-settings entry points listed in §2.1.
-0.3 Five backends: JNA (`JnaLibrary.kt`), JNI (`uapmd_jni.cpp` + `JniBridge.kt`), cinterop
-    (native), and the Emscripten bridge (`WasmJsBridge.kt`, and `JsBridge.kt` if `js()` is kept
-    in the binding).
-0.4 Fill the binding gaps the ImGui UI relies on but neither layer exposes yet — audit and
-    extend the C API where needed: **track gain / muted / solo / bypassed getters**,
-    `FrozenTrackManager` state (`isTrackBusy`, runtime state, freeze policy), `TempoMap`,
-    `MidiRecorder` and the MCP server handle — plus the three 0.5.6 engine items listed in §1.4
-    (`prepareTrack` family, lifecycle listener, `restoreNodeId`). **Not** clip-preview data: that
-    is GUI code upstream and belongs in the app (§2.0).
-0.45 Audit `main_common.cpp` / `web_main.cpp` against what `uapmd-cmp` does at startup and
-    teardown (§2.5), and reproduce the lifecycle calls, the per-platform initial engine state and
-    the ordered shutdown. Cheap to do, and the failure mode is silent.
-0.5 A JVM smoke probe (in the pattern of `runJvmInstantiationProbe`) that drives AppModel
-    headlessly: instantiate, add track, add plugin, undo, redo, save, load — plus an
-    engine off/on cycle that asserts no audible tail resumes on restart (the specific failure
-    `composeApp`'s shutdown would produce).
-
-*Exit criterion: audio starts **and stops cleanly** on all five targets through AppModel, and
-AppModel's document layer is reachable and exercised from Kotlin on all five.*
-
-### Phase 1 — Module skeleton, app shell, and the window manager
-Module, targets, theming (dark/light), UI-scale density override, the single-row toolbar with
-the Command ▾ popup and keyboard shortcuts, transport incl. record, In/Out spectra, bottom bar,
-unsaved-project dialog on quit. Ported: `SpectrumAnalyzer`.
-**Plus the floating window manager of §3.1** — draggable/resizable/stackable in-scene windows
-with a keyed registry for multi-instance windows. Everything from Phase 3 on depends on it.
-
-### Phase 2 — Timeline
-Seconds view first, then the beats/ticks view and the toggle; navigator; master + regular track
-rows; clip rendering with previews; drag/move; drag-to-select-range. The full track legend
-(gain/M/S/freeze/clips/graph/plugin/⋮) with undo gestures wired around the gain drag.
-
-### Phase 3 — Plugin lifecycle
-Plugin Selector as a **floating window** (§7.2), scanning with progress and cancel, blocklist,
-instantiate with destination + device name + API. Plugin
-Instances panel. Per-track plugin context popup.
-
-### Phase 4 — Instance details, parameters, plugin UI
-Instance Details window, parameter list with per-note context, presets, UMP group, state
-save/load, MIDI keyboard, pitch-bend / channel pressure. Platform plugin-UI hosting — port the
-existing `PluginUiHosting*` and the Android hosted-UI layer rather than rewriting.
-
-### Phase 5 — Project and history
-Undo/redo surfaced in Command ▾ with live descriptions and busy state; dirty tracking; project
-save/load; document transactions and gestures used correctly from the UI; offline render
-(Exporter window).
-
-### Phase 6 — Clip editors *(piano roll excluded)*
-MIDI dump editor, audio event list (markers/warps), master marker editor, clip
-add/remove/rename/change-file actions. Selecting a MIDI clip opens the dump editor; the piano
-roll arrives later (Phase 8).
-
-### Phase 7 — Monitoring and tooling windows
-Mixer Monitor, Device Settings incl. platform MIDI routing, Plugin Graph Editor (on the ported
-`NodeGraph.kt`), Addin Manager, Script Editor, MCP Settings, Demucs import.
-
-### Phase 8 — Piano roll
-The largest single item (~2,000 C++ lines): h/v zoom and scroll, drag move/resize, snap grid,
-velocity editing, per-note automation, the NRPN plugin-parameter picker, live note preview.
-Deliberately last of the feature work — by this point the clip, history and plugin-parameter
-plumbing it needs is all in place and proven.
-
-### Phase 9 — Platform passes and cutover
-Android (safe-area insets, document picker, AAP plugins), iOS simulator, Wasm, desktop
-packaging. Then delete `composeApp` and fold `docs/ui-parity-tracker.md` into the new tracker.
-
----
-
-## 6 · Risks
-
-- **Emscripten AppModel (0.1)** — no longer a blocker for any target, because of the fallback
-  rule in §2.4: if it slips, Wasm keeps engine control on the engine-level route and loses only
-  the tail-drain shutdown quality. The risk that remains is the fallback silently becoming
-  permanent; the `expect`/`actual` comment and a tracker row are the guard.
-- **Main-thread blocking is the known wasm failure mode.** `aaed96b`'s first defect was a
-  synchronous C API call (`uapmd_scan_tool_perform_scanning` -> `InProcessScanSessionManager::runScan`)
-  blocking on a condition variable while the completion it waited for could only be delivered by
-  the thread it had blocked — the page stopped compositing permanently. AppModel has the same
-  shape in places: `joinAudioShutdownWorker()` joins from the main thread, and
-  `completeAudioEngineShutdown()` sleeps on it for ~2 buffer periods. Upstream's comments show
-  they designed around the deadlock, but 0.1 must be **reviewed under this lens and verified in a
-  browser**, not assumed working because it compiles and pthreads are enabled.
+- **Main-thread blocking is the recurring failure mode, on wasm and on Android.** `aaed96b`'s
+  defect was a synchronous C API call (`uapmd_scan_tool_perform_scanning` ->
+  `InProcessScanSessionManager::runScan`) blocking on a condition variable while the completion it
+  waited for could only be delivered by the thread it had blocked — the page stopped compositing
+  permanently. Android has the same shape: an AAP plug-in bind waited on from the main thread can
+  never be satisfied, because `onServiceConnected` is delivered on the main looper. AppModel has
+  it too: `joinAudioShutdownWorker()` joins from the main thread and
+  `completeAudioEngineShutdown()` sleeps on it for ~2 buffer periods. Anything that blocks or
+  reaches a plug-in goes through `backgroundDispatcher()`; wasm must be verified **in a browser**,
+  not assumed working because it compiles and pthreads are enabled.
 - **Event-loop ordering.** AppModel's shutdown enqueues plugin deactivation on the main thread;
   if `initJvmEventLoop()` / `initAndroidEventLoop()` has not run first, that work never executes
-  and the engine appears to hang on stop. §2.3, step 0.0.
+  and the engine appears to hang on stop. See §2.3.
 - **Five backends per binding addition.** Every new C API surface costs work in JNA, JNI,
-  cinterop and the Emscripten bridge. This dominates Phase 0 and recurs in 0.4.
-- **No ImGui equivalents.** ImGui's *windowing* (§3.1), ImNodes (graph), ImTimeline (timeline)
-  and the immediate-mode interaction model all have to be rebuilt in Compose. The window manager
-  is front-loaded into Phase 1 to contain this; the timeline and piano roll are the two places
-  where it stays expensive rather than merely tedious.
+  cinterop and the Emscripten bridge.
+- **No ImGui equivalents.** ImGui's *windowing* (§3.1), ImNodes (graph) and ImTimeline (timeline)
+  and the immediate-mode interaction model all have to be rebuilt in Compose. The timeline and
+  piano roll are where this stays expensive rather than merely tedious.
 - **Testing.** There is no CI environment with plugins installed; verification is manual on
   desktop, and iOS is, per the guide, "tested only on simulators / rarely tested".
-- **Moving target.** uapmd is under heavy development. Pin the submodule for the duration of a
-  phase and re-baseline deliberately between phases.
+- **Moving target.** uapmd is under heavy development. Pin the submodule and re-baseline
+  deliberately.
 
 ---
 
-## 7 · Decisions (settled)
+## 5 · Decisions (settled)
 
-1. **Wasm is a target.** Not "if it works out" — it is in scope, so step 0.1 (enabling
-   `uapmd-app-model` for Emscripten) is planned work, not an experiment. The §2.4 fallback stays
-   as schedule insurance, not as an exit.
+1. **Wasm is a target.** Not "if it works out" — it is in scope, so enabling `uapmd-app-model`
+   for Emscripten is required work, not an experiment. The §2.4 fallback is insurance, not an exit.
 2. **Buffer sizes**: take AppModel's 1024 / 65536 / 48000. No parameterised
    `uapmd_app_instantiate_with(...)`.
 3. **`composeApp`** stays until it is removed at some later stage; it does not need freezing and
-   does not gate anything. This holds on one condition — see §7.1.
+   does not gate anything. This holds on one condition — see §5.1.
 4. **No tab navigation.** Confirmed: it brings in a lot of nonsense. The main UI is the timeline,
    always visible.
-5. **Piano roll is deferred** to a late stage of the migration (now Phase 8), not part of the
-   first parity pass. Everything else in the clip-editor group stays in Phase 6.
+5. **Piano roll is deferred** to a late stage of the migration, not part of the first parity
+   pass. Everything else in the clip-editor group is not deferred.
 
-### 7.1 The one constraint that keeps decision 3 true
+### 5.1 The one constraint that keeps decision 3 true
 
 `composeApp` is unaffected by this work **only for as long as every `uapmd-binding` change is
-additive**. Phase 0 does change that module — substantially — but it adds new interfaces
-(`AppModel`, `TransportController`) and new `expect`/`actual` pairs rather than altering existing
-signatures, so `composeApp` keeps compiling and can be deleted whenever convenient.
+additive**. The binding work does change that module — substantially — but it adds new
+interfaces (`AppModel`, `TransportController`) and new `expect`/`actual` pairs rather than
+altering existing signatures, so `composeApp` keeps compiling and can be deleted whenever convenient.
 
 Where 0.4 touches an *existing* declaration — for instance adding `restoreNodeId` to
 `addPluginToTrack()` — give it a default value so the change stays source-compatible. If some
 gap genuinely cannot be filled additively, that is the moment to remove `composeApp` rather than
 to contort the binding around it.
 
-### 7.2 Do not diverge from uapmd-app UI behaviour
+### 5.2 Do not diverge from uapmd-app UI behaviour
 
-The old tracker's remaining two ground rules are **dropped**. They were divergences, and
-divergence is the thing to avoid:
+Two rules an earlier tracker carried are **wrong** and must not come back. They were
+divergences, and divergence is the thing to avoid:
 
 - The plugin list **is a floating window**, not a side panel. A side panel wrecks the flow of
   picking a plugin to add to an already-selected track.
@@ -647,155 +480,27 @@ structural consequences, and they land early.
 (Native OS windows on desktop were considered as a sanctioned exception — ImGui's in-window
 placement being a constraint artifact rather than a design choice — but dropped; see §3.1.)
 
-### 7.3 Scope of "the uapmd API" — settled
+### 5.3 Scope of "the uapmd API" — settled
 
 Does "the uapmd API" include `tools/uapmd-app-model`? `AppModel`, `TransportController` and
 `McpServer` all live there rather than beside the libraries, and the whole architecture in §2
 rests on binding them.
 
-**Resolved: yes.** `uapmd-binding` already includes API bindings for AppModel, so it covers
-`tools/` by construction. Phase 0 proceeds as written.
+**Yes.** `uapmd-binding` already includes API bindings for AppModel, so it covers `tools/` by
+construction.
 
 
 ---
 
-## 8 · Progress log
+---
 
-### 2026-08-28 — Phase 0 landed, Phase 1 started
+## 6 · Open bugs in `external/uapmd`
 
-**0.1 Emscripten AppModel — done, and it was not the obstacle it looked like.**
-Removing the two exclusions (`c-api/CMakeLists.txt` dropping `uapmd-c-app.cpp` and not linking
-`uapmd-app-model`, plus `webMain/cpp/CMakeLists.txt` filtering `uapmd-c-app.h` out of the export
-list) was the whole change. `AppModel.cpp`, `McpServer.cpp` and `UapmdJSRuntime.cpp` all compile
-under Emscripten unmodified. Verified: **71 `uapmd_app_*` + 10 `uapmd_transport_*` symbols**
-exported in `build-wasm/uapmd-c-api.js`, where there were previously zero. The biggest unknown in
-the plan is retired, and the §2.4 fallback is now insurance nobody expects to need.
+Found while building `uapmd-cmp`, but neither is a binding or app defect — both are upstream, and
+`external/uapmd` is a submodule whose commits are yours, so they are left here rather than fixed.
+Both affect uapmd-app itself, not only uapmd-cmp.
 
-**0.2 / 0.3 bootstrap subset — bound on all five backends.**
-`AppModel` + `TransportController` in `commonMain`, with `JvmAppModel` (JNA), `NativeAppModel`
-(cinterop), `AndroidAppModel` (new `cpp/uapmd_jni_app.cpp`, 26 JNI functions), `WasmJsAppModel`
-and `JsAppModel`. Android symbols verified by diffing `external fun` names against `nm -D` of the
-built `libuapmd-jni.so`, per the known trap that a missing JNI impl only fails at runtime.
-
-One hazard found and handled: `AppModel` owns its `RealtimeSequencer`, but every platform's
-sequencer wrapper destroys the handle in `close()`. All five gained an internal `owned` flag so
-the borrowed instance handed out by `AppModel.sequencer` cannot double-free.
-
-**0.0 bootstrap — done and verified, not merely compiled.**
-`UapmdHost` (app-side, per §2.0) runs uapmd-app's own startup order: event loop → instantiate →
-`notifyUiReady` → `notifyPersistentStorageReady` → per-platform initial engine state → ordered
-teardown. `platformStartsWithAudioEngineEnabled` is `false` on wasm, `true` elsewhere, matching
-`web_main.cpp`.
-
-**0.5 probe — `./gradlew :uapmd-cmp:runBootstrapProbe`.** All checks pass on desktop:
-
-```
-sampleRate=48000 tracks=3
-PASS  engine reports enabled
-PASS  audio is playing after enable
-PASS  engine reports disabled immediately
-PASS  audio stopped within 15s (took 160ms)
-PASS  audio is playing after restart
-PASS  engine reports enabled after restart
-```
-
-The 160 ms is AppModel's tail drain doing its job — stop, mute, drain, deactivate on the main
-thread, reset — and the restart check is the one `composeApp`'s `setActive`+`stopAudio` could not
-have passed.
-
-Two behaviours came free with AppModel that `composeApp` never had: an automatic initial plugin
-scan at startup (the desktop run scans the real VST3/LV2/AU library), and three initial tracks,
-matching the guide's "UAPMD initially launches with a few empty tracks".
-
-**Phase 1 started: the floating window manager** (`ui/FloatingWindow.kt`) — keyed registry so
-multi-instance windows coexist, draggable title bar, resize handle, click-to-front z-ordering,
-cascade placement, and a drag clamp so a window cannot be lost off-edge.
-
-**Not yet verified:** the window manager's drag/resize/stacking has been exercised only by
-compiling and launching; the interactions themselves have not been driven. Worth a human pass, or
-Compose UI tests, before Phase 3 starts depending on it.
-
-**Next:** broaden the AppModel binding past the bootstrap subset (scanning, instances, tracks,
-timeline, history, project I/O), then the real toolbar.
-
-### 2026-08-28 (cont.) — AppModel binding slice 2
-
-Second slice bound across all five backends: **plugin scanning** (perform / cancel / report /
-clear blocklist), **track mutation** (add / remove / remove-all, asynchronous since 0.5.6),
-**timeline track access and timeline state**, and **history** (`historyState`, `undo`, `redo`).
-
-Extended `runBootstrapProbe` now covers the round trip, and passes:
-
-```
-PASS  addTrack callback fired (index=3, error=null)
-PASS  track count grew (3 -> 4)
-   history: canUndo=true undo='Add track' busy=false
-PASS  adding a track produced an undoable step
-PASS  undo callback fired (error=null)
-PASS  undo restored the track count
-PASS  redo is now available
-   timeline: tempo=120.0 sig=4/4 sr=48000
-```
-
-That exercises the full path end to end: an async mutation routed through the undo engine, its
-completion marshalled back over each binding's callback machinery, the resulting history entry
-carrying a description the toolbar can show, and undo actually restoring document state.
-
-Notes worth keeping:
-
-- **`extern "C"` vs `extern` on `uapmd_jni_env()`.** The Android link failed with
-  `undefined symbol: uapmd_jni_env` because the new file declared it `extern "C"` while
-  `uapmd_jni.cpp` defines it with C++ linkage (`uapmd_jni_history.cpp` declares it plain
-  `extern`). Match the existing declaration.
-- **Reuse over duplication where it was cheap:** `UapmdTimelineState.toKotlin()` (JVM),
-  `decodeTimelineStateAt` (wasm), and `decodeUndoState` / `Off` / `makeJsTrackMutation` (js) were
-  extracted or widened from `private` rather than copied. The one real duplication is
-  `pack_undo_state` in `uapmd_jni_app.cpp`, because the original sits in another file's anonymous
-  namespace.
-- **A new error-only callback shape** `(const char*, void*)` needed plumbing per backend:
-  `TrackClearCb`/`HistoryMutationCb` (JNA), a `staticCFunction` trampoline (native),
-  `app_error_only_trampoline` (JNI), `uapmdDispatchErrorOnly` (wasm), `makeJsErrorOnly` (js).
-
-`composeApp` still builds, as required by §7.1 — every binding change so far has been additive.
-
-**Still to do in the binding:** plugin instance lifecycle (create/remove, UMP device, plugin UI,
-state save/load), clips, project save/load, offline render, track graph editing. Several of those
-return or take structs by value, which is where the Emscripten ABI rules in the project memory
-start to matter.
-
-### 2026-08-28 (cont.) — process correction + Phase 1 toolbar
-
-**Process correction.** Binding changes caused by *missing API* are independent of this UI work
-and belong on `main` on their own. They must be reported as such, not folded into this plan.
-`docs/uapmd-binding-missing-api.md` is now the running inventory: 40 of `uapmd-c-app.h`'s 81
-functions bound, 41 still unbound, plus 8 items missing from the C API entirely. Two rules follow:
-
-1. `uapmd-binding` gets **only** API bindings — nothing app-shaped. The `owned` flag was reverted
-   accordingly; borrow safety now lives in `uapmd-cmp`'s `BorrowedRealtimeSequencer`.
-2. Where the app needs something unbound, it is **reported**, not worked around inside the
-   binding.
-
-**Phase 1 toolbar.** Single-row 0.5.6 layout: engine on/off (colour-coded), Command popup with
-live undo/redo descriptions and busy state, transport, Plugins, Scan/Cancel, Import and Project
-popups, bottom bar with add-track / Mixer Monitor / Plugin Instances. `UapmdHost` polls uapmd
-state at 100 ms, because it lives in C++ and changes without notifying Compose.
-
-Controls whose binding is missing are rendered **disabled** rather than omitted, so the gap is
-visible in the UI and traceable to the inventory: record (needs `MidiRecorder`), Import and
-Project (need the clip and project-I/O bindings), and instance creation in the Plugin Selector.
-
-### 2026-08-28 (cont.) — plugin instance lifecycle, and an upstream crash
-
-**Bound (JVM so far):** `create_plugin_instance`, `remove_plugin_instance`,
-`get/set_instance_group`, `enable/disable_ump_device`, `request_show_instance_details`,
-`request_show_plugin_ui`, `hide_plugin_ui` — plus the `uapmd_plugin_instance_config_t` /
-`uapmd_plugin_instance_result_t` mirrors. This is the first struct-by-value callback in the
-AppModel surface and it marshals correctly: real error strings and ids round-trip.
-
-Verified against the machine's real plugin library — 391 catalog entries, an AU plugin
-instantiated (`Gateway`, 13 parameters, UMP group 0), retrievable from the host, then removed.
-
-### Upstream bug found: crash on engine shutdown after removing a plugin
+### 6.1 Null deref in `completeAudioEngineShutdown()` after removing a plug-in
 
 `uapmd-app-model/src/AppModel.cpp:783`
 
@@ -806,367 +511,29 @@ for (auto id : host->instanceIds())
 ```
 
 After `uapmd_app_remove_plugin_instance()`, `instanceIds()` still reports the removed id while
-`getInstance()` returns `nullptr`, so `completeAudioEngineShutdown()` dereferences null.
+`getInstance()` returns `nullptr`.
 
-Evidence:
+Deterministic: instantiate → remove → engine off ⇒ `SIGSEGV`, `si_addr: 0x0`, in
+`uapmd_app::AppModel::completeAudioEngineShutdown()+0x110`, reached from the event-loop task.
+Skipping only the removal leaves teardown clean. Reproduce with `-Duapmd.probe.removeInstance=1`;
+the probe keeps it opt-in so default runs stay green.
 
-- `SIGSEGV`, `si_addr: 0x0`, problematic frame
-  `uapmd_app::AppModel::completeAudioEngineShutdown()+0x110`, reached from the event-loop task
-  (`CApiEventLoop::enqueueTaskOnMainThreadImpl` → AWT EDT).
-- Deterministic: instantiate → remove → engine off ⇒ crash. Skip only the removal and the same
-  teardown is clean and the probe passes.
-- **Not a binding artifact.** The crash is entirely inside `uapmd-app-model`; the binding's only
-  involvement is providing the event loop that runs the task.
+`tests/uapmd-app-shutdown-crash.c` is a started pure-C repro but **does not work yet**: a bare C
+host installs no remidy `EventLoop`, so instantiation never completes and it stalls before the
+interesting part.
 
-This affects uapmd-app itself, not just uapmd-cmp: removing a plugin and then toggling the audio
-engine off should hit the same path.
+### 6.2 CLAP plug-in UI creation passes a null api string
 
-Left for the human to fix — `external/uapmd` is a submodule, and commits there are yours. The
-probe therefore makes removal **opt-in**: `-Duapmd.probe.removeInstance=1` reproduces it, and the
-default run stays green. `tests/uapmd-app-shutdown-crash.c` is a started pure-C repro, but it is
-**not working yet** — a bare C host installs no remidy `EventLoop`, so instantiation never
-completes and it stalls before the interesting part.
-
-### 2026-08-28 (cont.) — Phases 3-5 landed
-
-**Phase 3 — Plugin Selector** (`ui/PluginSelector.kt`): scan / force-rescan / remote-scanner
-controls, live search, sortable Format/Name/Vendor table over the real catalog, destination
-selector (New Track or an existing track), Device Name + API fields, and instantiation reporting
-success or the plugin's own error. The blocked-bundle list is deliberately absent, not faked —
-enumerating it needs AppModel's `PluginScanTool`, which the C API does not expose.
-
-**Track list** now shows real tracks with their plugin instances, each opening its own Details
-window keyed `details:<instanceId>`, so several coexist.
-
-**Phase 4 — Instance Details** (`ui/InstanceDetails.kt`): Show/Hide UI, delete, pitch bend,
-channel pressure, a playable `MidiKeyboard`, presets, UMP group, and a filterable parameter table
-with per-parameter reset. Parameter edits route through `ProjectCommands.setPluginParameterValue`
-rather than poking the instance, so they are undoable — as in uapmd-app.
-
-**Phase 5 (part) — Project I/O**: `load_project`, `save_project`, `save_project_sync`,
-`load_project_from_handle_token` bound on all five backends and wired into the Project menu with
-an AWT-based desktop file chooser. Android/iOS/web pickers return null for now with a comment
-naming what each needs.
-
-Binding count: **53 of 81** `uapmd-c-app.h` functions. Probe now at **24 checks**, all passing on
-real plugins — instantiation, parameter edit through the undo engine, and a `.uapmd` project
-round-trip.
-
-### Correction: plugin GUI hosting is app work, NOT a missing API
-
-An earlier note in this session claimed the C API lacked a way to observe AppModel's
-`uiShowRequested`, and that this blocked plugin GUI support. **That was wrong**, and no such item
-was added to the missing-API inventory.
-
-Plugin UI is already fully bound, at the plugin level rather than through AppModel, on all five
-backends:
-
-```kotlin
-PluginInstance.uiCapabilities / hasUiSupport
-PluginInstance.createUiPresentation(request): PluginUiPresentation?
-PluginUiPresentation.show() / hide() / close() / setSize() / getSize()
-PluginUiHost.FloatingWindow | NativeEmbedded(parentHandle) | WebEmbedded(containerId)
-```
-
-`composeApp` uses exactly this and had working plugin UIs on **desktop and Android**. The
-`uapmd_app_request_show_plugin_ui` route I bound is uapmd-app's own indirection — AppModel raises
-a request and its `MainWindow` serves it by creating a `ContainerWindow`. We do not need that
-split: `uapmd-cmp` can call `createUiPresentation()` directly.
-
-So the outstanding work is **app-side porting**, already listed in §3 of this plan as
-"port, don't rewrite":
-
-- `PluginUiHosting.{jvm,android,ios,wasmJs}.kt`
-- `AndroidPlatformHostedPluginUiLayer.kt` (468 lines of hard-won AAP UI hosting)
-- Wasm was unsupported in `composeApp`, but `PluginUiHost.WebEmbedded(containerId)` is bound, so
-  hosting the plugin's web content in a container element should be reachable.
-
-Until that lands, Instance Details' "Show UI" button calls `requestShowPluginUi`, which nothing
-services — it is a no-op and should be disabled with a reason rather than left looking functional.
-
-### 2026-08-28 (cont.) — Timeline, plugin UI hosting, and a second upstream bug
-
-**Phase 2 — Timeline** (`ui/Timeline.kt`) is now the main content, replacing the placeholder
-track list: a legend column (per-track plugin button, bypass, delete) beside time-ruled lanes
-with clip rectangles, MIDI note previews drawn from `getMidiClipNotes()`, a playhead, and a zoom
-control. Verified with a real SMF — a 224-second clip with **3557 notes decoded** renders.
-
-Clip import needed **no new bindings**: `TimelineFacade.addMidiClipFromFile()` /
-`addAudioClip()` and `createAudioFileReader()` were already bound. Wired into the Import menu.
-
-The Seconds/Beats toggle is present but disabled — the beats view needs `TempoMap`, which the C
-API does not expose (inventory §3). Likewise the legend's gain slider and M/S buttons are
-disabled: the *setters* exist via `ProjectCommands`, but without `trackGain()`/`muted()`/`solo()`
-getters a correct control cannot be drawn.
-
-**Phase 4 completed — plugin UI hosting**, ported from `composeApp` rather than rewritten:
-`PluginUiHosting.kt` per platform plus the 481-line `AndroidPlatformHostedPluginUiLayer`, adapted
-to take `UapmdHost` and a four-field `HostedInstanceInfo` instead of composeApp's much larger
-`UapmdModel`/`InstanceInfo`. `UapmdHost.showPluginUi()` follows composeApp's negotiation:
-platform-hosted (Android AAP) → existing presentation → embedded target → floating window.
-The Details window now calls this instead of the `requestShowPluginUi` no-op.
-
-### Upstream bug #2: CLAP plugin UI creation passes a null api string
-
-`remidy/src/clap/PluginInstanceCLAP.UI.cpp:72` calls `tryCreateWith(nullptr, true)` as a
-fallback, and `tryCreateWith` null-guards only the *support check*:
+`remidy/src/clap/PluginInstanceCLAP.UI.cpp:72` calls `tryCreateWith(nullptr, true)` as a fallback,
+and `tryCreateWith` null-guards only the support check:
 
 ```cpp
 if (api && !owner->plugin->guiIsApiSupported(api, floating)) return;
 if (!owner->plugin->guiCreate(api, floating)) return;   // api may be nullptr
 ```
 
-clap-helpers' `clapGuiCreate` then `strlen()`s it. Crash: `SIGSEGV`, `si_addr: 0x0`, frame
-`_platform_strlen` under `clap::helpers::Plugin<...>::clapGuiCreate`, reproduced with Dexed.
+clap-helpers' `clapGuiCreate` then `strlen()`s it: `SIGSEGV`, `si_addr: 0x0`, in `_platform_strlen`
+under `clap::helpers::Plugin<...>::clapGuiCreate`. Reproduced with Dexed.
 
-Not our binding: it passes `host_kind = FloatingWindow` with a null *parent handle*, which is
-correct; remidy does its own api negotiation. Plugin-dependent — plugins that tolerate a null api
-will not crash, which is likely why `composeApp` looked fine on desktop with VST3/AU.
-
-Probe gate: `-Duapmd.probe.pluginUi=1` exercises it; the default run stays green at **28 checks**.
-
-Also fixed: `String.format` is JVM-only and had slipped into common code — caught only when
-building wasm and iOS. Build all five targets, not just the JVM.
-
-### 2026-08-28 (cont.) — regression fixed, Phase 7 windows
-
-**Regression (reported, mine).** Swapping the placeholder track list for the Timeline dropped the
-per-instance buttons that opened Instance Details, so Details became unreachable. Fixed by
-implementing the plugin context menu uapmd-app actually has, which is better than what was lost:
-the legend's plugin button is labelled with the first instance (or "Add Plugin" when empty) and
-opens Show/Hide *name* Details, Show/Hide *name* GUI, Delete *name* (at [n]), Add Plugin. A ⋮
-menu beside it carries Bypass/Enable Track Processing and Delete Track.
-
-Verified in the running app, not by inspection: with `-Duapmd.cmp.instantiate=AU` the legend
-reads "⋮ Gateway".
-
-**Phase 7 (part).**
-- **Mixer Monitor** — audible/render positions, master latency and render lead, and a per-track
-  table of plugin count, latency, render lead, tail length and dirty state. The monitoring-policy
-  and infinite-tail-policy dropdowns are absent: those enums are not in the C API.
-- **Device Settings** — audio in/out pickers, sample rate, buffer size, and AppModel's
-  auto-buffer-size switch, applied through `updateAudioDeviceSettings` + `reconfigureAudioDevice`.
-  Platform MIDI routing is absent: the MIDI port list is not exposed.
-- **Plugin Instances** — every instance across tracks with its Details toggle, UMP device name,
-  Enable/Disable device and removal.
-
-**Two dev hooks** (`-Duapmd.cmp.importMidi`, `-Duapmd.cmp.instantiate`) mirror uapmd-app's web
-auto-import, so the UI can be brought up in a known state for verification. The second has to
-wait for AppModel's asynchronous startup scan and retry across candidates, since the first
-catalog entry frequently fails to instantiate.
-
-Also worth noting: a sed-style edit corrupted an import because `DropdownMenu` is a prefix of
-`DropdownMenuItem`. Caught by the compiler, but a reminder to anchor such replacements.
-
-### 2026-08-28 (cont.) — Addins, MIDI clip events, dump editor
-
-**Addin Manager** window: the engine publishes its extension points, then the manager loads what
-is installed — uapmd-app's order. Lists each addin's state, built-in flag, package and path, with
-an enable switch and any failure message. `AddinManager` was already bound; no new API needed.
-
-**MIDI clip UMP events bound** on all five backends — `get_midi_clip_ump_events`,
-`add_ump_event_to_clip`, `remove_ump_event_from_clip`, `remove_clip_from_track` — taking the
-binding to **57 of 81**. This was the third and hardest by-value shape: a struct containing a
-count and a pointer to an array of structs. Verified on the real 224-second SMF: **8136 events**
-decoded, first word `40b16500` (a MIDI 2.0 CC), ticks non-decreasing.
-
-**MIDI dump editor** (`ui/MidiDumpWindow.kt`): the raw UMP stream of one clip with a hex filter,
-per-event removal and append. Reached by clicking a clip's label in the timeline, one window per
-`(track, clip)`.
-
-Probe now at **31 checks**, all passing.
-
-### 2026-08-28 (cont.) — Exporter, track graph editor
-
-**Exporter / Render To File** — output path with a native chooser, start/end/tail, stop-on-silence,
-progress bar and cancel. Uses the already-bound `SequencerEngine.renderOffline()` rather than
-AppModel's `start_render` family: same result, no new binding, and progress/cancel arrive as
-direct callbacks. The blocking render runs on a background dispatcher (on wasm that is still the
-main dispatcher, so a render there will block the page — noted in the actual).
-
-**Track Graph Editor** — the per-track DAG editor, on the `NodeGraph.kt` canvas ported from
-composeApp. "Use Editor Graph" / "Revert to Simple Graph", live connection list, link deletion.
-Reached from a Graph button in the track legend, one window per track.
-
-Graph API bound on all five backends, taking the binding to **62 of 81**.
-
-**Struct layouts were verified, not guessed.** Following the project's own ABI note, the wasm/js
-offsets came from `emcc -Xclang -fdump-record-layouts-complete`:
-`uapmd_graph_connection_t` is id@0, bus_type@8, source@12, target@24, **sizeof 40** — the guess
-happened to be right, but the check is what makes it safe to rely on.
-
-### 2026-08-28 (cont.) — Piano roll, clip context menu
-
-**Piano Roll** (`ui/PianoRollEditor.kt`, Phase 8): horizontal/vertical zoom, vertical scroll by
-drag, a tempo-derived snap grid, black/white key rows, velocity-shaded notes, selection, and
-audition on click through the track's first plugin.
-
-It is **read-and-audition today, not an editor**. Moving a note means rewriting the clip's UMP
-stream through `replaceMidiClipContent()`; synthesising correct UMP for an edited note is the
-remaining piece. Raw edits are available in the MIDI dump editor meanwhile. Said plainly in the
-file's own KDoc so it is not mistaken for finished.
-
-**Clip context menu.** Reusing the clip click for the piano roll would have removed access to the
-dump editor — the same regression shape reported earlier with Instance Details. Clicking a clip
-label now opens a menu instead: Piano Roll, Edit Events (UMP), Remove Clip. Every editor stays
-reachable from one place.
-
-### 2026-08-28 (cont.) — project markers; feature status
-
-**Project Markers** window: the engine-owned master-track markers, listed, added and removed.
-Edits go through `ProjectCommands.setMasterTrackMarkers()` so they are undoable — the engine's own
-setter applies them directly and bypasses history. No new binding was needed.
-
-Probe extended to **35 checks**, all passing, now covering markers (write, read back, offset
-preserved) and the track graph (switch to editor graph, read connections).
-
-### Feature status against uapmd-app 0.5.6
-
-Working: audio engine on/off with the proper drain, transport, undo/redo with live descriptions,
-plugin scanning, plugin selector, instantiate/remove, instance details with parameters/presets/
-keyboard, plugin UI hosting (desktop + Android), timeline with clips and MIDI previews, clip
-import, clip context menu, MIDI dump editor, piano roll (read/audition), track graph editor,
-mixer monitor, device settings, plugin instances, addins, project markers, project load/save,
-offline render.
-
-Not done, with the reason:
-
-| Missing | Why |
-|---|---|
-| Beats/ticks timeline view | needs `TempoMap` — not in the C API |
-| Track gain slider, mute, solo | setters exist; **getters** do not, so no correct control can be drawn |
-| Track freeze button | needs `FrozenTrackManager` runtime state |
-| Record button | needs `MidiRecorder` |
-| Script Editor | needs `UapmdJSRuntime` |
-| MCP settings | needs `McpServer` |
-| Demucs split import | app-model surface not bound |
-| Audio clip marker/warp editor | needs `get_clip_audio_events`; the setters are bound |
-| Piano roll **editing** | needs UMP synthesis for moved notes via `replaceMidiClipContent()` |
-| SMF multi-track import | uapmd-app splits one file across tracks; only single-clip import is wired |
-
-The first six are inventory §3 items — C API work that belongs on `main`, not app work.
-
-### 2026-08-28 (cont.) — Phase 9 platform pass; a real bug found
-
-**Bug: the Android entry point never installed the remidy EventLoop.** `MainActivity` called
-`setContent { App() }` directly, and `UapmdHost.start()` did not install one either — only the
-desktop `main()` did. On Android that means AppModel would have been instantiated with no event
-loop, so async completions (track mutations, history, plugin deactivation) would silently never
-fire and engine shutdown would hang. Exactly the failure §2.3 warns about, and it built cleanly.
-
-Fixed structurally rather than per-entry-point: `initPlatformEventLoop()` is now an
-`expect`/`actual` called at the top of `UapmdHost.start()`, before `instantiateAppModel()`.
-JVM → `initJvmEventLoop()`, Android → `initAndroidEventLoop()` (main thread), iOS and wasm no-op
-with a comment saying why. Android and iOS entry points also call it early; the implementations
-are idempotent.
-
-This is the second time ordering that is invisible to the compiler turned out to be wrong. The
-lesson is the one already in §2.3: platform bootstrap ordering needs checking per target, not
-inferring from the desktop build.
-
-### 2026-08-28 (cont.) — clip audio events; app work complete
-
-**`get_clip_audio_events` / `set_clip_audio_events` bound** on all five backends (**64 of 81**),
-with the struct layouts derived from `emcc -fdump-record-layouts-complete` rather than assumed.
-
-**Audio Event List editor** (`ui/AudioEventListEditor.kt`): a clip's markers and warp points,
-listed, added and removed. Reached from an audio clip's context menu, so the menu now offers
-Piano Roll / Edit Events for MIDI clips and Markers & Warps for audio clips.
-
-Probe at **37 checks**. One of them is worth noting because it started as a false failure: setting
-markers on a *MIDI* clip is refused by the engine — "Selected clip is not an audio clip." My first
-version of the check asserted success and failed. The engine was right and the probe was wrong;
-the check now asserts the refusal, which also proves the error string marshals back correctly.
-
-### App work status
-
-Everything reachable without new C API is done. What remains is either C API work for `main`
-(inventory §3: `TempoMap`, track gain/mute/solo getters, `FrozenTrackManager`, `MidiRecorder`,
-`UapmdJSRuntime`, `McpServer`) or two app items with a known shape:
-
-- **Piano roll editing** — moving a note means rewriting the clip's UMP stream through
-  `replaceMidiClipContent()`; the note→UMP synthesis is the missing piece. Read and audition work
-  today, and raw edits are available in the MIDI dump editor.
-- **SMF multi-track split import** — uapmd-app splits one file across tracks; only single-clip
-  import is wired.
-
-`composeApp` stays until the new app is finished, per instruction, and still builds.
-
-### 2026-08-28 (cont.) — piano roll editing
-
-**Piano roll is now an editor, not just a view.** Notes are parsed straight from the clip's UMP
-stream rather than from `getMidiClipNotes()`, so a drag can write the same events back through
-`replaceMidiClipContent()`. Working in ticks throughout avoids a lossy seconds↔ticks conversion
-on every edit.
-
-Two things had to be right, and both were checked rather than assumed:
-
-- **Ticks are per UMP *word*, not per event** — `MidiClipSourceNode`'s constructor comment says
-  "Cumulative ticks for each UMP word". `rebuildClipContent()` emits one tick entry per word and
-  sorts both arrays together.
-- **Note pairing** — `parseUmpNotes()` handles MIDI 1.0 (type 0x2, one word) and MIDI 2.0
-  (type 0x4, two words), treats a zero-velocity note-on as a note-off, and matches each on to the
-  next off on the same (group, channel, note).
-
-Verified on the real 8136-event clip: the parser recovers **exactly 3557 notes, the same count
-the engine's own `getMidiClipNotes()` reports**; an identity rebuild round-trips all 8136 events
-with the first tick preserved; and moving a note 120 ticks lands and reads back.
-
-Probe at **47 checks**, all passing.
-
-### 2026-08-28 — app work complete
-
-Everything reachable from the current C API is built. The two items I had listed as remaining app
-work turned out **not** to be app work:
-
-- **SMF multi-track split import** — `AppModel::importMidiTracksFromFile()` exists in C++ but has
-  no C API wrapper. Single-clip import already works through
-  `TimelineFacade.addMidiClipFromFile()`; splitting one file across tracks needs the binding.
-- **Demucs split audio import** — same story, nothing in `c-api/` at all.
-
-Both are now in inventory §3. I did not approximate either: adding N tracks and importing the same
-file into each would look like the feature without being it.
-
-**Final state.** Binding: **64 of 81** `uapmd-c-app.h` functions across five backends, plus the
-graph, UMP-event and clip-audio-event families. Probe: **47 checks**, all passing against real
-plugins and a real 8136-event SMF. All five targets build. `composeApp` untouched and still
-building, per instruction.
-
-Remaining work is C API work for `main` (§3): `TempoMap`, track gain/mute/solo **getters**,
-`FrozenTrackManager` runtime state, `MidiRecorder`, `UapmdJSRuntime`, `McpServer`, the SMF and
-Demucs import entry points, and the three 0.5.6 engine leftovers. Each has a disabled control or
-an absent window in the app pointing at it, rather than a fake.
-
-### 2026-08-28 (cont.) — the clip/track editing surface I had skipped
-
-Audit finding that prompted this: **16 of 17 `ProjectCommands` were bound and completely
-unused.** The clip and track editing surface needed no new API at all — I simply had not built it,
-and had then written "app work complete". Where the C API genuinely lacked something, writing it
-is in scope: `c-api/` is in this repo and I had already edited it.
-
-**New C API** (all mirroring existing uapmd C++):
-- `uapmd_track_get_gain` / `_muted` / `_solo` — the getters whose absence I had used to justify
-  disabled Mute/Solo buttons. `SequencerTrack` now exposes `gain`/`muted`/`solo` as read-only,
-  with the undoable setters staying on `ProjectCommands`.
-- `uapmd_engine_midi_recorder` + `uapmd_midi_recorder_{start,stop,cancel,is_recording}` — wraps
-  `uapmd::MidiRecorder`, the playback-engine extension behind the record button.
-- `uapmd_app_create_empty_midi_clip` bound (it existed, unbound).
-
-**New app features:**
-- **Clips popup** per track: Add an Empty MIDI2 Clip, Add a MIDI Clip from File, Create Audio
-  Clip From File, Clear All.
-- **Real gain slider, Mute and Solo** in the legend — value read from the track, written through
-  `ProjectCommands`; Solo clears other tracks inside one `documentTransaction`, as uapmd-app does.
-- **Freeze / Unfreeze** in the track's ⋮ menu.
-- **Clip Properties** window: name, position, length, gain, mute, enable, source file — every
-  field a separate undoable command.
-- **Clip dragging** directly on the timeline, committing through `setClipAnchor`.
-- **Record button**, targeting the selected MIDI clip by its *document* reference id (not the
-  runtime index), so it survives edits. Clicking a MIDI clip selects it.
-- **Beats view.** uapmd-app uses `uapmd::TempoMap`, built from a master-track snapshot the C API
-  does not expose; this converts at the project tempo, which is exact without tempo changes, and
-  the axis states the tempo and signature so the assumption is visible. Bar lines are drawn
-  brighter than beat lines.
-
-Probe at **63 checks**, covering clip rename/gain/mute/resize/removal round trips and track
-gain/mute/solo read-back through the new getters.
+Plug-in dependent — plug-ins that tolerate a null api do not crash, which is why `composeApp`
+looked fine on desktop with VST3/AU. Reproduce with `-Duapmd.probe.pluginUi=1`.

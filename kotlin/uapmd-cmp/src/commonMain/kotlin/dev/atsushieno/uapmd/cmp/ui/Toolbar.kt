@@ -39,9 +39,12 @@ private val EngineOff = Color(0xFF944536)
 private val RecordActive = Color(0xFFE03333)
 
 /**
- * uapmd-app 0.5.6's toolbar: one row, with Device Settings / Script / MCP /
- * Addins and undo-redo folded into a "Command" popup. The two-row layout in the
- * users-guide screenshots is v0.5 and no longer current.
+ * uapmd-app 0.5.6's toolbar is two rows: there is no `SameLine()` after the theme
+ * toggle (`MainWindow.cpp:576-581`), so `Plugins` starts a second line, and the
+ * toolbar child is `90.0f * uiScale_` tall. Row 1 is engine / Command / transport
+ * / scale / theme; row 2 is Plugins / Import / Project / In+Out meters. Device
+ * Settings, Script, MCP and Addins live inside the "Command" popup, along with
+ * undo/redo. Both rows are FlowRows so they wrap rather than clip on a phone.
  */
 @OptIn(ExperimentalLayoutApi::class)
 @Composable

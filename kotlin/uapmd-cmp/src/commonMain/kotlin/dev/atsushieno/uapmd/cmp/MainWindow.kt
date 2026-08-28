@@ -19,6 +19,9 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.foundation.focusable
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.safeDrawing
+import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.input.key.Key
@@ -74,6 +77,7 @@ fun MainWindow() {
         ) {
             Surface(
                 modifier = Modifier.fillMaxSize()
+                    .windowInsetsPadding(WindowInsets.safeDrawing)
                     .focusRequester(focus)
                     .focusable()
                     // Ctrl/Cmd+Z, Shift+Ctrl+Z and Ctrl+Y, as uapmd-app binds them.

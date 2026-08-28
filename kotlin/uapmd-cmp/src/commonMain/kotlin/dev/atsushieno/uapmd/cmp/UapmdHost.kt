@@ -8,6 +8,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.runtime.LaunchedEffect
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import dev.atsushieno.uapmd.AddinManager
 import dev.atsushieno.uapmd.AppModel
 import dev.atsushieno.uapmd.AppProjectResult
@@ -53,9 +54,32 @@ import dev.atsushieno.uapmd.prepareProjectLoad
  */
 class UapmdHost private constructor(val model: AppModel) {
 
+    private val uiDispatcher = kotlinx.coroutines.Dispatchers.Main
+
     private val scope = kotlinx.coroutines.CoroutineScope(
-        kotlinx.coroutines.SupervisorJob() + kotlinx.coroutines.Dispatchers.Main
+        kotlinx.coroutines.SupervisorJob() + uiDispatcher
     )
+
+    /**
+     * Async engine completions land on whatever thread finished the operation,
+     * not the UI thread (verified: `AWT-EventQueue-0` while the caller was
+     * `main`). Compose state must only change on the UI thread, so every
+     * callback routes its state update through here.
+     */
+    private fun onUiThread(block: () -> Unit) {
+        scope.launch { block() }
+    }
+
+    /**
+     * Native calls that can block must leave the UI thread. On Android this is
+     * not merely a responsiveness matter: instantiating an AAP plugin binds to
+     * another process and the bind is completed on the main looper, so issuing
+     * it from the main thread deadlocks and the completion never arrives.
+     * See [backgroundDispatcher].
+     */
+    private fun offUiThread(block: suspend () -> Unit) {
+        scope.launch(backgroundDispatcher()) { block() }
+    }
 
     /** AppModel owns the underlying handle, so the app only ever holds a borrow. */
     val sequencer: RealtimeSequencer = BorrowedRealtimeSequencer(model.sequencer)
@@ -127,8 +151,8 @@ class UapmdHost private constructor(val model: AppModel) {
     var history by mutableStateOf(model.historyState)
         private set
 
-    fun undo() = model.undo { refresh() }
-    fun redo() = model.redo { refresh() }
+    fun undo() = model.undo { onUiThread { refresh() } }
+    fun redo() = model.redo { onUiThread { refresh() } }
 
     // ── Scanning ────────────────────────────────────────────────────────────
 
@@ -136,7 +160,7 @@ class UapmdHost private constructor(val model: AppModel) {
         private set
 
     fun scanPlugins(forceRescan: Boolean = false, mode: ScanMode = ScanMode.InProcess) {
-        model.performPluginScanning(forceRescan, mode)
+        offUiThread { model.performPluginScanning(forceRescan, mode) }
         refresh()
     }
 
@@ -221,42 +245,54 @@ class UapmdHost private constructor(val model: AppModel) {
     fun instantiate(entry: CatalogEntry, trackIndex: Int, config: PluginInstanceConfig = PluginInstanceConfig()) {
         if (isInstantiating) return
         isInstantiating = true
-        model.createPluginInstance(entry.format, entry.pluginId, trackIndex, config) { result ->
-            lastInstantiation = result
-            isInstantiating = false
-            refresh()
+        offUiThread {
+            model.createPluginInstance(entry.format, entry.pluginId, trackIndex, config) { result ->
+                onUiThread {
+                    lastInstantiation = result
+                    isInstantiating = false
+                    refresh()
+                }
+            }
         }
     }
 
-    /** Plug-in state to/from a file, as uapmd-app's Save/Load State buttons. */
-    fun savePluginState(instanceId: Int, path: String): String {
-        val inst = model.sequencer.engine.getPluginInstance(instanceId)
-            ?: return "Instance $instanceId is gone."
-        return runCatching {
-            writeBytesToFile(path, inst.saveStateSync())
-            "Saved state to $path"
-        }.getOrElse { "Failed to save state: ${it.message}" }
-    }
+    /**
+     * Plug-in state to/from a file, as uapmd-app's Save/Load State buttons.
+     * Suspending because both talk to the plug-in and to the filesystem; on
+     * Android the plug-in lives in another process. See [backgroundDispatcher].
+     */
+    suspend fun savePluginState(instanceId: Int, path: String): String =
+        withContext(backgroundDispatcher()) {
+            val inst = model.sequencer.engine.getPluginInstance(instanceId)
+                ?: return@withContext "Instance $instanceId is gone."
+            runCatching {
+                writeBytesToFile(path, inst.saveStateSync())
+                "Saved state to $path"
+            }.getOrElse { "Failed to save state: ${it.message}" }
+        }
 
-    fun loadPluginState(instanceId: Int, path: String): String {
-        val inst = model.sequencer.engine.getPluginInstance(instanceId)
-            ?: return "Instance $instanceId is gone."
-        return runCatching {
-            val bytes = readBytesFromFile(path) ?: return "Could not read $path."
-            // Route through ProjectCommands so the state change is undoable.
-            model.sequencer.engine.timeline.setPluginState(instanceId, bytes)
-            "Loaded state from $path"
-        }.getOrElse { "Failed to load state: ${it.message}" }
-    }
+    suspend fun loadPluginState(instanceId: Int, path: String): String =
+        withContext(backgroundDispatcher()) {
+            val inst = model.sequencer.engine.getPluginInstance(instanceId)
+                ?: return@withContext "Instance $instanceId is gone."
+            runCatching {
+                val bytes = readBytesFromFile(path)
+                    ?: return@runCatching "Could not read $path."
+                // Route through ProjectCommands so the state change is undoable.
+                model.sequencer.engine.timeline.setPluginState(instanceId, bytes)
+                "Loaded state from $path"
+            }.getOrElse { "Failed to load state: ${it.message}" }
+        }
 
     fun setInstanceGroup(instanceId: Int, group: Int) {
         model.sequencer.engine.timeline.commands.setPluginGroup(instanceId, group.toUByte())
         refresh()
     }
 
-    fun removeInstance(instanceId: Int) {
+    /** Tears down an out-of-process plug-in on Android, so not on the UI thread. */
+    fun removeInstance(instanceId: Int) = offUiThread {
         model.removePluginInstance(instanceId)
-        refresh()
+        onUiThread { refresh() }
     }
 
     // ── Project I/O ─────────────────────────────────────────────────────────
@@ -270,37 +306,52 @@ class UapmdHost private constructor(val model: AppModel) {
      * `.uapmdz`. It also has to be *unpacked* first: `.uapmdz` is an archive,
      * and handing its path straight to loadProject() is not valid.
      */
-    fun loadProject(path: String) {
+    /**
+     * Runs off the UI thread - unpacking, engine stop/start and plug-in teardown
+     * all block, and on Android tearing down an out-of-process plug-in from the
+     * main thread deadlocks the same way instancing does. The steps still happen
+     * in the original order; only the thread each runs on differs, so the
+     * teardown below still cannot run before a successful prepare.
+     */
+    fun loadProject(path: String) = offUiThread {
         val prepared = runCatching { prepareProjectLoad(path) }.getOrNull()
         if (prepared == null || !prepared.success) {
-            lastProjectResult = AppProjectResult(false, prepared?.error?.ifEmpty { null }
-                ?: "Could not open $path.")
+            val message = prepared?.error?.ifEmpty { null } ?: "Could not open $path."
             prepared?.close()
-            return
+            onUiThread { lastProjectResult = AppProjectResult(false, message) }
+            return@offUiThread
         }
 
         val wasRunning = model.isAudioEngineEnabled
         // Close plug-in UIs first: the instances behind them are about to go.
-        nativeUiPresentations.values.forEach { runCatching { it.close() } }
-        nativeUiPresentations.clear()
-        platformHostedUiInstanceIds = emptySet()
-        selectedMidiClip = null
+        // These are UI objects, so they are closed on the UI thread.
+        withContext(uiDispatcher) {
+            nativeUiPresentations.values.forEach { runCatching { it.close() } }
+            nativeUiPresentations.clear()
+            platformHostedUiInstanceIds = emptySet()
+            selectedMidiClip = null
+        }
         if (wasRunning) model.setAudioEngineEnabled(false)
 
-        lastProjectResult = try {
+        val result = try {
             model.loadProject(prepared.path)
         } finally {
             prepared.close()
             if (wasRunning) model.setAudioEngineEnabled(true)
         }
-        noteCache.clear()
-        refresh()
+        onUiThread {
+            lastProjectResult = result
+            noteCache.clear()
+            refresh()
+        }
     }
 
-    fun saveProject(path: String) {
+    fun saveProject(path: String) = offUiThread {
         model.saveProject(path) { result ->
-            lastProjectResult = result
-            refresh()
+            onUiThread {
+                lastProjectResult = result
+                refresh()
+            }
         }
     }
 
@@ -604,12 +655,34 @@ class UapmdHost private constructor(val model: AppModel) {
         refresh()
     }
 
-    fun addTrack() = model.addTrack { _, _ -> refresh() }
-    fun removeTrack(trackIndex: Int) = model.removeTrack(trackIndex) { _, _ -> refresh() }
+    /** Counts completions actually delivered by the engine; the dev hook reports it. */
+    internal var addTrackCompletions = 0
+        private set
+
+    fun addTrack() = offUiThread {
+        model.addTrack { _, _ -> addTrackCompletions++; onUiThread { refresh() } }
+    }
+
+    fun removeTrack(trackIndex: Int) = offUiThread {
+        model.removeTrack(trackIndex) { _, _ -> onUiThread { refresh() } }
+    }
 
     /**
      * Read state back rather than assuming a request took effect — engine
      * transitions in particular are asynchronous.
+     */
+    /**
+     * Mirrors engine state into Compose state.
+     *
+     * Every per-track lookup is guarded. Track mutations are asynchronous, so
+     * the track *count* can update before the track itself is retrievable, and
+     * both `getTrack()` and `getTimelineTrack()` throw on a miss — with this
+     * polling every 100 ms, that window was reliably hit and crashed the app on
+     * "+ Add Track".
+     *
+     * Both lists are also built from **one** count. Reading `engine.trackCount`
+     * for one and `timelineTrackCount` for the other let the legend and the
+     * lanes disagree mid-mutation.
      */
     fun refresh() {
         isAudioEngineEnabled = model.isAudioEngineEnabled
@@ -619,20 +692,23 @@ class UapmdHost private constructor(val model: AppModel) {
         isPaused = t.isPaused
         isRecording = t.isRecording || model.sequencer.engine.midiRecorder?.isRecording == true
         history = model.historyState
-        trackCount = model.timelineTrackCount.toInt()
         timeline = model.getTimelineState()
 
         val engine = model.sequencer.engine
-        val count = engine.trackCount.toInt()
+        val count = minOf(engine.trackCount.toInt(), model.timelineTrackCount.toInt())
+        trackCount = count
+
         trackInstances = (0 until count).map { ti ->
-            engine.getTrack(ti.toUInt()).getOrderedInstanceIds().mapNotNull { id ->
-                engine.getPluginInstance(id)?.let { inst ->
-                    TrackInstance(id, inst.displayName, inst.formatName)
+            runCatching {
+                engine.getTrack(ti.toUInt()).getOrderedInstanceIds().mapNotNull { id ->
+                    engine.getPluginInstance(id)?.let { inst ->
+                        TrackInstance(id, inst.displayName, inst.formatName)
+                    }
                 }
-            }
+            }.getOrDefault(emptyList())
         }
-        trackClips = (0 until model.timelineTrackCount.toInt()).map { ti ->
-            model.getTimelineTrack(ti.toUInt()).getClips()
+        trackClips = (0 until count).map { ti ->
+            runCatching { model.getTimelineTrack(ti.toUInt()).getClips() }.getOrDefault(emptyList())
         }
 
         masterClips = runCatching { model.masterTimelineTrack.getClips() }.getOrDefault(emptyList())
@@ -706,15 +782,53 @@ fun rememberUapmdHost(): UapmdHost {
         // candidates until one instantiates - many plugins fail for their own
         // reasons, so the first entry is not a reliable choice.
         var pendingFormat = startupInstantiateFormat()
+        // Dev hook: exercise the "+" button path with the poll running.
+        val devAddTracks = startupAddTracks()
+        repeat(devAddTracks) {
+            host.addTrack()
+            kotlinx.coroutines.delay(150)
+        }
+        if (devAddTracks > 0) {
+            kotlinx.coroutines.delay(1000)
+            host.refresh()
+            println(
+                "uapmd.cmp dev hook: addTracks=$devAddTracks " +
+                    "completions=${host.addTrackCompletions} trackCount=${host.trackCount}"
+            )
+        }
         while (true) {
             host.refresh()
             if (pendingFormat != null && !host.isScanning && host.catalog.isNotEmpty()) {
                 val format = pendingFormat
                 pendingFormat = null
-                for (entry in host.catalog.filter { it.format == format }.take(12)) {
+                println(
+                    "uapmd.cmp dev hook: catalog=${host.catalog.size} by format=" +
+                        host.catalog.groupingBy { it.format }.eachCount()
+                )
+                // "*" means "whatever the scan found" - useful when the set of
+                // formats on the device is not known up front.
+                val candidates =
+                    if (format == "*") host.catalog else host.catalog.filter { it.format == format }
+                // Keep going after the first success when a count is asked for,
+                // so repeated instancing is exercised, not just the first one.
+                var succeeded = 0
+                for (entry in candidates.take(12)) {
+                    println("uapmd.cmp dev hook: instantiating ${entry.format} ${entry.pluginId} ${entry.displayName}")
                     host.instantiate(entry, 0)
-                    while (host.isInstantiating) kotlinx.coroutines.delay(50)
-                    if (host.lastInstantiation?.error == null) break
+                    var waited = 0
+                    while (host.isInstantiating && waited < 30_000) {
+                        kotlinx.coroutines.delay(50); waited += 50
+                    }
+                    println(
+                        if (host.isInstantiating) "uapmd.cmp dev hook: TIMED OUT after ${waited}ms - no completion"
+                        else "uapmd.cmp dev hook: completed in ${waited}ms err=${host.lastInstantiation?.error} " +
+                            "id=${host.lastInstantiation?.instanceId}"
+                    )
+                    if (host.isInstantiating) break
+                    if (host.lastInstantiation?.error == null) {
+                        succeeded++
+                        if (succeeded >= startupInstantiateCount()) break
+                    }
                 }
             }
             kotlinx.coroutines.delay(100)

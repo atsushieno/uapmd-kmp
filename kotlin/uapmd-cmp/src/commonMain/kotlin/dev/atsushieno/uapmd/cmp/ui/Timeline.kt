@@ -15,6 +15,7 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
@@ -73,7 +74,12 @@ private fun fixed(value: Double, decimals: Int): String {
  */
 private enum class TimeUnit { Seconds, Beats }
 
-private val TightPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 8.dp, vertical = 2.dp)
+/**
+ * uapmd-app's legend uses icon buttons sized to one glyph plus frame padding.
+ * Text-sized buttons overflow the legend and push Solo off the edge.
+ */
+private val TightPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 4.dp, vertical = 0.dp)
+private val IconButtonSize = 30.dp
 
 /**
  * Legend width adapts to the window: a fixed 260dp eats two thirds of a phone
@@ -461,7 +467,11 @@ private fun TrackLegend(
 
             // Clips popup, as uapmd-app's first legend button.
             Box {
-                Button(onClick = { clipsMenu = true }, contentPadding = TightPadding) { Text("Clips") }
+                Button(
+                    onClick = { clipsMenu = true },
+                    contentPadding = TightPadding,
+                    modifier = Modifier.size(IconButtonSize)
+                ) { Text("▤", style = MaterialTheme.typography.labelSmall) }
                 DropdownMenu(expanded = clipsMenu, onDismissRequest = { clipsMenu = false }) {
                     DropdownMenuItem(text = { Text("Add an Empty MIDI2 Clip") }, onClick = {
                         clipsMenu = false
@@ -505,26 +515,27 @@ private fun TrackLegend(
                     onValueChange = { gainDb = it; host.setTrackGain(trackIndex, dbToLinear(gainDb.toDouble())) },
                     onValueChangeFinished = { host.endTrackGainGesture() },
                     valueRange = MinGainDb..MaxGainDb,
-                    modifier = Modifier.width(if (isNarrow) 48.dp else 70.dp).onFocusChanged { }
+                    modifier = Modifier.width(if (isNarrow) 44.dp else 60.dp).onFocusChanged { }
                 )
-                if (!isNarrow) {
-                    Text(
-                        if (gainDb <= MinGainDb) "-∞" else "${fixed(gainDb.toDouble(), 1)}dB",
-                        style = MaterialTheme.typography.labelSmall
-                    )
+                // uapmd-app shows no inline value: the slider label is empty,
+                // or "Mute" at the bottom of the range.
+                if (gainDb <= MinGainDb) {
+                    Text("Mute", style = MaterialTheme.typography.labelSmall)
                 }
                 Button(
                     onClick = { host.setTrackMuted(trackIndex, !t.muted) },
                     contentPadding = TightPadding,
+                    modifier = Modifier.size(IconButtonSize),
                     colors = if (t.muted) ButtonDefaults.buttonColors(containerColor = MutedColor)
                     else ButtonDefaults.buttonColors()
-                ) { Text("M") }
+                ) { Text("M", style = MaterialTheme.typography.labelSmall) }
                 Button(
                     onClick = { host.setTrackSolo(trackIndex, !t.solo, additive = additiveSolo) },
                     contentPadding = TightPadding,
+                    modifier = Modifier.size(IconButtonSize),
                     colors = if (t.solo) ButtonDefaults.buttonColors(containerColor = SoloColor)
                     else ButtonDefaults.buttonColors()
-                ) { Text("S") }
+                ) { Text("S", style = MaterialTheme.typography.labelSmall) }
             }
             engineTrack?.let { t ->
                 Button(
@@ -595,11 +606,16 @@ private fun TrackLegend(
                         TrackGraphEditor(host, trackIndex)
                     }
                 },
-                contentPadding = TightPadding
-            ) { Text("Graph") }
+                contentPadding = TightPadding,
+                modifier = Modifier.size(IconButtonSize)
+            ) { Text("⛓", style = MaterialTheme.typography.labelSmall) }
 
             Box {
-                Button(onClick = { moreMenu = true }, contentPadding = TightPadding) { Text("⋮") }
+                Button(
+                    onClick = { moreMenu = true },
+                    contentPadding = TightPadding,
+                    modifier = Modifier.size(IconButtonSize)
+                ) { Text("⋮", style = MaterialTheme.typography.labelSmall) }
                 DropdownMenu(expanded = moreMenu, onDismissRequest = { moreMenu = false }) {
                     engineTrack?.let { t ->
                         DropdownMenuItem(

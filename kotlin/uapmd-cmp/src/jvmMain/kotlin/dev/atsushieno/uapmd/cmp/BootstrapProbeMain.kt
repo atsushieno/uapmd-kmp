@@ -279,6 +279,92 @@ fun main() {
         println("NOTE  no test MIDI file at $midi; skipped clip checks")
     }
 
+    // ── which thread do async completions land on? ───────────────────────────
+    // The UI mutates Compose state in these callbacks, so if they arrive off the
+    // main thread that is a concurrent snapshot mutation.
+    run {
+        val mainThread = Thread.currentThread().name
+        var cbThread: String? = null
+        var done = false
+        model.addTrack { _, _ -> cbThread = Thread.currentThread().name; done = true }
+        val t0 = System.currentTimeMillis()
+        while (!done && System.currentTimeMillis() - t0 < 10_000) Thread.sleep(20)
+        println("   addTrack: caller='$mainThread' callback='$cbThread'")
+        check("addTrack callback observed", cbThread != null)
+        check("addTrack callback is NOT on the caller thread (so UI state must be dispatched)",
+            cbThread != mainThread)
+    }
+
+    // ── the "+ Add Track" crash: a poll racing an async mutation ─────────────
+    // The UI refreshes every 100ms while a track add is still committing. The
+    // count updates before the track is retrievable, and getTrack() /
+    // getTimelineTrack() throw on a miss.
+    run {
+        val pollFailure = java.util.concurrent.atomic.AtomicReference<Throwable?>(null)
+        val polling = java.util.concurrent.atomic.AtomicBoolean(true)
+        val poller = Thread {
+            while (polling.get()) {
+                try {
+                    val engine = model.sequencer.engine
+                    val n = minOf(engine.trackCount.toInt(), model.timelineTrackCount.toInt())
+                    for (i in 0 until n) {
+                        engine.getTrack(i.toUInt()).getOrderedInstanceIds()
+                        model.getTimelineTrack(i.toUInt()).getClips()
+                    }
+                } catch (e: Throwable) {
+                    pollFailure.compareAndSet(null, e)
+                }
+                Thread.sleep(10)
+            }
+        }
+        poller.start()
+
+        repeat(6) {
+            var done = false
+            model.addTrack { _, _ -> done = true }
+            val t0 = System.currentTimeMillis()
+            while (!done && System.currentTimeMillis() - t0 < 8_000) Thread.sleep(5)
+        }
+        Thread.sleep(400)
+        polling.set(false)
+        poller.join(3000)
+
+        // Now demonstrate the ORIGINAL shape: separate counts, no guards. If this
+        // never fails the diagnosis is wrong and the fix is cargo cult.
+        val oldFailure = java.util.concurrent.atomic.AtomicReference<Throwable?>(null)
+        val polling2 = java.util.concurrent.atomic.AtomicBoolean(true)
+        val oldPoller = Thread {
+            while (polling2.get()) {
+                try {
+                    val engine = model.sequencer.engine
+                    // exactly what refresh() used to do: two independent counts,
+                    // unguarded lookups
+                    (0 until engine.trackCount.toInt()).map { engine.getTrack(it.toUInt()) }
+                    (0 until model.timelineTrackCount.toInt()).map { model.getTimelineTrack(it.toUInt()) }
+                } catch (e: Throwable) {
+                    oldFailure.compareAndSet(null, e)
+                }
+                Thread.sleep(2)
+            }
+        }
+        oldPoller.start()
+        repeat(6) {
+            var d = false
+            model.addTrack { _, _ -> d = true }
+            val t0 = System.currentTimeMillis()
+            while (!d && System.currentTimeMillis() - t0 < 8_000) Thread.sleep(5)
+        }
+        Thread.sleep(400)
+        polling2.set(false)
+        oldPoller.join(3000)
+        println("   unguarded poll: ${oldFailure.get()?.let { it::class.simpleName + ": " + it.message } ?: "(did not fail this run)"}")
+
+        val failure = pollFailure.get()
+        println("   add-track race: pollFailure=${failure?.let { it::class.simpleName + ": " + it.message }}")
+        check("guarded refresh survives adds racing the poll", failure == null)
+        check("tracks were actually added", model.timelineTrackCount.toInt() >= 6)
+    }
+
     // ── clip + track editing commands (the surface the UI drives) ────────────
     run {
         val cmds = model.sequencer.engine.timeline.commands

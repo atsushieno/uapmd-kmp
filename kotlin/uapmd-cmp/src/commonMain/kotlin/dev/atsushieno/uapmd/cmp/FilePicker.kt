@@ -18,3 +18,9 @@ expect fun startupImportPath(): String?
 
 /** Dev hook: instantiate the first catalog entry of this format at startup. */
 expect fun startupInstantiateFormat(): String?
+
+/** Dev hook: press "+ Add Track" this many times at startup. */
+expect fun startupAddTracks(): Int
+
+/** How many plug-ins the instantiate dev hook should create; defaults to 1. */
+expect fun startupInstantiateCount(): Int

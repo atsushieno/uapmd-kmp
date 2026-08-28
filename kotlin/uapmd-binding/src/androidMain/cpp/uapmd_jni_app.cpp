@@ -41,7 +41,21 @@ struct AppCtx {
 
     AppCtx(JNIEnv* env, jobject o, const char* signature)
         : obj(env->NewGlobalRef(o)),
-          mid(env->GetMethodID(env->GetObjectClass(o), "invoke", signature)) {}
+          mid(env->GetMethodID(env->GetObjectClass(o), "invoke", signature)) {
+        if (!mid) {
+            /*
+             * The callback object does not declare invoke() with this exact
+             * descriptor - the usual cause is a bare Kotlin lambda, which only
+             * carries the erased FunctionN.invoke(Object...)Object. Leaving the
+             * pending NoSuchMethodError in place would abort the whole process
+             * at the next unrelated JNI call ("FindClass called with pending
+             * exception"), so rethrow it here where the signature is known.
+             */
+            env->ExceptionClear();
+            if (jclass err = env->FindClass("java/lang/NoSuchMethodError"))
+                env->ThrowNew(err, signature);
+        }
+    }
 
     ~AppCtx() {
         if (obj) {

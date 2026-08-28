@@ -1,5 +1,38 @@
 package dev.atsushieno.uapmd
 
+/*
+ * JNI callback wrappers.
+ *
+ * uapmd_jni_app.cpp resolves the completion method with GetMethodID(cls, "invoke", <sig>)
+ * using the *specialized* descriptor, e.g. "(ILjava/lang/String;)V". A Kotlin lambda
+ * compiles to kotlin.jvm.functions.FunctionN, whose only invoke is the erased
+ * (Ljava/lang/Object;...)Ljava/lang/Object;, so that lookup fails, leaves a pending
+ * NoSuchMethodError, and the next JNI call aborts the process. Wrapping the lambda in a
+ * class that declares the exact parameter types gives the method the descriptor the
+ * native side asks for. AndroidHistory.kt does the same for the history surface.
+ */
+
+private class AppTrackMutationCallback(private val callback: (Int, String?) -> Unit) {
+    @Suppress("unused")
+    fun invoke(trackIndex: Int, error: String?) = callback(trackIndex, error)
+}
+
+private class AppErrorCallback(private val callback: (String?) -> Unit) {
+    @Suppress("unused")
+    fun invoke(error: String?) = callback(error)
+}
+
+private class AppInstanceCreatedCallback(private val callback: (Int, String?, String?) -> Unit) {
+    @Suppress("unused")
+    fun invoke(instanceId: Int, pluginName: String?, error: String?) =
+        callback(instanceId, pluginName, error)
+}
+
+private class AppProjectSaveCallback(private val callback: (Boolean, String?) -> Unit) {
+    @Suppress("unused")
+    fun invoke(success: Boolean, error: String?) = callback(success, error)
+}
+
 class AndroidAppModel internal constructor(internal val handle: Long) : AppModel {
 
     override val sequencer: RealtimeSequencer
@@ -43,13 +76,13 @@ class AndroidAppModel internal constructor(internal val handle: Long) : AppModel
     // ── Tracks ──────────────────────────────────────────────────────────────
 
     override fun addTrack(callback: (Int, String?) -> Unit) =
-        JniBridge.uapmdAppAddTrack(handle, callback)
+        JniBridge.uapmdAppAddTrack(handle, AppTrackMutationCallback(callback))
 
     override fun removeTrack(trackIndex: Int, callback: (Int, String?) -> Unit) =
-        JniBridge.uapmdAppRemoveTrack(handle, trackIndex, callback)
+        JniBridge.uapmdAppRemoveTrack(handle, trackIndex, AppTrackMutationCallback(callback))
 
     override fun removeAllTracks(callback: (String?) -> Unit) =
-        JniBridge.uapmdAppRemoveAllTracks(handle, callback)
+        JniBridge.uapmdAppRemoveAllTracks(handle, AppErrorCallback(callback))
 
     override val timelineTrackCount: UInt get() = JniBridge.uapmdAppTimelineTrackCount(handle).toUInt()
 
@@ -80,8 +113,8 @@ class AndroidAppModel internal constructor(internal val handle: Long) : AppModel
         get() = JniBridge.uapmdAppGetHistoryState(handle)?.toUndoState()
             ?: error("uapmdAppGetHistoryState returned null")
 
-    override fun undo(callback: ((String?) -> Unit)?) = JniBridge.uapmdAppUndo(handle, callback)
-    override fun redo(callback: ((String?) -> Unit)?) = JniBridge.uapmdAppRedo(handle, callback)
+    override fun undo(callback: ((String?) -> Unit)?) = JniBridge.uapmdAppUndo(handle, callback?.let { AppErrorCallback(it) })
+    override fun redo(callback: ((String?) -> Unit)?) = JniBridge.uapmdAppRedo(handle, callback?.let { AppErrorCallback(it) })
 
     // ── Plugin instances ────────────────────────────────────────────────────
 
@@ -90,10 +123,11 @@ class AndroidAppModel internal constructor(internal val handle: Long) : AppModel
         config: PluginInstanceConfig, callback: (PluginInstanceResult) -> Unit
     ) = JniBridge.uapmdAppCreatePluginInstance(
         handle, format, pluginId, trackIndex,
-        config.apiName, config.deviceName, config.manufacturer, config.version, config.stateFile
-    ) { instanceId: Int, pluginName: String?, error: String? ->
-        callback(PluginInstanceResult(instanceId, pluginName ?: "", error))
-    }
+        config.apiName, config.deviceName, config.manufacturer, config.version, config.stateFile,
+        AppInstanceCreatedCallback { instanceId, pluginName, error ->
+            callback(PluginInstanceResult(instanceId, pluginName ?: "", error))
+        }
+    )
 
     override fun removePluginInstance(instanceId: Int) = JniBridge.uapmdAppRemovePluginInstance(handle, instanceId)
 
@@ -123,9 +157,9 @@ class AndroidAppModel internal constructor(internal val handle: Long) : AppModel
         JniBridge.uapmdAppSaveProjectSync(handle, filePath).toProjectResult()
 
     override fun saveProject(filePath: String, callback: (AppProjectResult) -> Unit) =
-        JniBridge.uapmdAppSaveProject(handle, filePath) { success: Boolean, error: String? ->
+        JniBridge.uapmdAppSaveProject(handle, filePath, AppProjectSaveCallback { success, error ->
             callback(AppProjectResult(success, error))
-        }
+        })
 
     override fun loadProjectFromHandleToken(token: String): AppProjectResult =
         JniBridge.uapmdAppLoadProjectFromHandleToken(handle, token).toProjectResult()

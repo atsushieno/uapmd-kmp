@@ -10,3 +10,7 @@ actual suspend fun pickMediaFileToOpen(): String? = null
 actual fun startupImportPath(): String? = null
 
 actual fun startupInstantiateFormat(): String? = null
+
+actual fun startupAddTracks(): Int = 0
+
+actual fun startupInstantiateCount(): Int = 1

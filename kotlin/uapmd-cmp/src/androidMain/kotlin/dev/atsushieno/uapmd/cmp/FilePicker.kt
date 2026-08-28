@@ -7,6 +7,16 @@ actual suspend fun pickProjectFileToOpen(): String? = null
 actual suspend fun pickProjectFileToSave(): String? = null
 actual suspend fun pickMediaFileToOpen(): String? = null
 
-actual fun startupImportPath(): String? = null
+// Set by MainActivity from launch-intent extras; see MainActivity.onCreate.
+internal var androidStartupImportPath: String? = null
+internal var androidStartupInstantiateFormat: String? = null
+internal var androidStartupAddTracks: Int = 0
+internal var androidStartupInstantiateCount: Int = 1
 
-actual fun startupInstantiateFormat(): String? = null
+actual fun startupImportPath(): String? = androidStartupImportPath
+
+actual fun startupInstantiateFormat(): String? = androidStartupInstantiateFormat
+
+actual fun startupAddTracks(): Int = androidStartupAddTracks
+
+actual fun startupInstantiateCount(): Int = androidStartupInstantiateCount
