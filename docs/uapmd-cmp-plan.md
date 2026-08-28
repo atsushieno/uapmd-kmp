@@ -1,113 +1,21 @@
-# Plan: `uapmd-cmp` — a fresh Compose Multiplatform app for uapmd 0.5.6
+# `uapmd-cmp` — standing rules and architecture
 
-The standing rules and architecture for `uapmd-cmp`. Outstanding gaps against uapmd-app are
-tracked in `uapmd-cmp-ui-audit.md`; binding gaps in `uapmd-binding-missing-api.md`.
+The rules that constrain `uapmd-cmp`, and the defects still open against it. Outstanding gaps
+versus uapmd-app are tracked in `uapmd-cmp-ui-audit.md`; binding gaps in
+`uapmd-binding-missing-api.md`.
 
-Sources read for this plan:
-
-- `external/uapmd/docs/users/USERS_GUIDE.md`, `USE_VIRTUAL_MIDI_DEVICES.md` and the
-  screenshots under `external/uapmd/docs/images/` (v0.1 … v0.5.2 plus the v0.5 walkthrough set).
-- `external/uapmd/source/tools/uapmd-app/` at the pinned submodule commit (`93c25a70`, 0.5.6).
-- `kotlin/composeApp/` and `kotlin/uapmd-binding/` as they stand today.
-- `c-api/include/c-api/*.h` and `c-api/CMakeLists.txt`.
+Reference for every question of behaviour: `external/uapmd/source/tools/uapmd-app/` at the pinned
+submodule commit (`93c25a70`, 0.5.6).
 
 ---
 
-## 1 · Findings that shape the plan
+## 2 · Architecture
 
-### 1.1 The users guide is behind the code
-
-The guide documents the v0.5 UI: a two-row toolbar (`Audio Engine`, `Device Settings`, play,
-pause, `Scale`, theme / `Plugins`, `Script`, `MCP`, `Import`, `Project`, In/Out spectra), a
-seconds-only timeline, a plugin selector, and a plugin-instance details window. It says so
-itself: *"Screenshots might be outdated, but they would still mostly make sense."*
-
-At 0.5.6 the app has moved on substantially. Building only to the guide would land us one
-release behind on day one. The guide is the right source for **what the app is for** and for
-the user-visible vocabulary; the 0.5.6 source is the right source for **the actual feature
-list**. This plan uses both.
-
-What changed since the guide's screenshots:
-
-| Area | v0.5 (guide) | 0.5.6 (source) |
-|---|---|---|
-| Toolbar | two rows, everything inline | one row; `Device Settings` / `Script` / `MCP` / addins folded into a **Command ▾** popup that also carries Undo/Redo |
-| Transport | play, pause | play/stop, **record** (into the selected MIDI clip), pause/resume |
-| Timeline | seconds only | **seconds ⇄ beats/ticks** toggle, two full editor implementations, a navigator row |
-| Track legend | 3–4 icon buttons + "Add Plugin" | clips, graph, **gain slider**, **M**, **S**, **freeze**, plugin context, "more" menu |
-| Clips | import only | add empty MIDI2 / empty audio / from file (SMF, SMF2, audio), clear all, **piano roll editor**, MIDI dump editor, **audio event (marker/warp) editor** |
-| History | none | **undo/redo** engine, gestures, compounds, dirty tracking, unsaved-project dialog on quit |
-| Windows | selector, details, device settings, script, exporter, import | + **Mixer Monitor**, **Addin Manager**, **Plugin Graph Editor** (per track), master marker editor |
-
-### 1.2 The old app is not just behind — it is built one layer too low
-
-This is the decisive finding.
-
-`c-api/include/c-api/uapmd-c-app.h` (432 lines) already wraps `uapmd_app::AppModel` — the
-*exact* façade that uapmd-app's ImGui code renders against. It covers audio-engine enable,
-scanning, instance create/remove, UMP device enable/disable, plugin UI show/hide, plugin state
-save/load, clip add/remove, track add/remove, timeline tracks and state, **track graph editing**,
-clip markers/warps, master markers, UMP event editing, **undo/redo**, project save/load, offline
-render, and the whole `TransportController`.
-
-`kotlin/uapmd-binding` binds **none of it**:
-
-```
-$ grep -rn "uapmd_app_\|uapmd_transport_" kotlin/uapmd-binding/src | wc -l
-0
-```
-
-Instead, `composeApp/…/UapmdModel.kt` (891 lines) re-implements app-model concerns in Kotlin on
-top of the *engine-level* binding. That is why the app drifts: every AppModel change upstream has
-to be re-derived by hand in Kotlin, and anything AppModel does that the engine API doesn't expose
-(track gain/mute/solo, freeze, graph editing, history) simply cannot be reached.
-
-Scale of the gap today: `composeApp` is ~6,560 Kotlin lines; `uapmd-app/gui` is ~19,856 C++ lines.
-
-### 1.3 Provenance of the binding gaps — checked, and not a regression
-
-The binding gaps are **not** things commit `13dac10` ("bump uapmd to 0.5.6 and update
-API bindings") dropped. Verified against the tags:
-
-```
-$ git show 0.5.5:.../SequencerTrack.hpp  | grep "trackGain\|muted()\|solo()"      → present
-$ git show 0.5.5:.../SequencerEngine.hpp | grep "setOutputMuted\|outputAnalyser"   → present
-FrozenTrackManager / MidiRecorder / TempoMap → present in 0.5.5 headers too
-```
-
-Every one of them already existed in **0.5.5**, before that commit, so none was part of the
-0.5.6 delta it was scoped to. They are the older and wider boundary: `c-api/` was only ever
-wrapped as far as the KMP app happened to need, and the KMP app never had a track legend with
-gain/mute/solo, a freeze button, or a record button to need them for.
-
-Against its actual scope, `13dac10` did the job: the undo/history engine (`uapmd-c-undo.h` 369
-lines + 806-line implementation), the addin manager, project/track dirty state, master-track
-markers, `ProjectCommands`, `ProjectAddressBook` and the fragment types — bound across all five
-backends (~4,500 lines). Three items of the 0.5.6 engine delta *were* left out and are worth
-picking up when something needs them:
-
-- the `PreparedSequencerTrack` family — `prepareTrack()`, `addPluginToPreparedTrack()`,
-  `publishPreparedTrack()`
-- `PluginInstanceLifecycleListener` add/remove
-- the `restoreNodeId` parameter on `addPluginToTrack()`
-
-Separately: `setEngineActive` / `setOutputMuted` / `resetProcessingState` / `outputAnalyser`
-being absent from `c-api/` is **not** a gap to fill (§2.2). They are the internals of a sequence
-`uapmd_app_set_audio_engine_enabled` already performs correctly; wrapping them would only invite
-a worse reimplementation in Kotlin.
-
-## 2 · Architecture decision
-
-**Build `uapmd-cmp` as a thin Compose view layer over a new Kotlin binding of `AppModel`,
-including for audio-engine control — matching uapmd-app rather than `composeApp`.**
-
-The three options considered:
-
-| | Approach | Verdict |
-|---|---|---|
-| A | Keep the engine-level binding; re-implement app logic in Kotlin (what `composeApp` does) | Rejected — this is the thing that produced the current drift, and it structurally cannot reach gain/mute/solo/freeze/graph/history |
-| B | Bind `AppModel` through the existing C API; Compose renders it | **Chosen** — parity becomes structural, not a chase; the Kotlin app and the ImGui app render the same façade |
-| C | Hybrid: AppModel on JVM/Android/iOS, engine-level fallback on Wasm | Rejected — with audio control on AppModel too (§2.1), the fallback would be a second, weaker audio layer, which is exactly what we are removing |
+`uapmd-cmp` is a thin Compose view layer over the Kotlin binding of `AppModel` — including
+audio-engine control. Parity with uapmd-app is structural rather than a chase: both render the
+same façade. Re-implementing app logic in Kotlin (what `composeApp` does) is the thing that
+produced the drift being corrected, and it structurally cannot reach gain/mute/solo/freeze/graph/
+history.
 
 ### 2.0 Layering rule: `uapmd-binding` mirrors uapmd, and nothing more
 
@@ -156,10 +64,21 @@ For reference, everything else needed is genuine uapmd API and passes the rule:
 
 ### 2.1 Audio: match uapmd-app, not `composeApp`
 
+**The audio device configuration is part of "match uapmd-app".** Leaving the engine's automatic
+buffer sizing on makes the Oboe device come up at `internalCapacity=1024 stabilizedBlock=1024`,
+and on that block size the engine cannot sustain real time with a six-plug-in project on Android:
+measured repeatedly at 87-92% of real time, i.e. the playhead advances ~10.7 s per 12 s of wall
+clock, heard as continuous stuttering. uapmd-app runs at `stabilizedBlock=512`; matching it gives
+99.95-99.98%. `UapmdHost.applyDefaultAudioBufferSize()` therefore turns auto sizing off and
+configures 512 frames, and it must run **after** the engine is enabled - the audio device is
+created asynchronously when the engine starts, so configuring earlier silently does nothing.
+
+Compare the two apps' `OboeAudioIODevice: opened stream` log lines when this is in doubt; they
+should agree on `internalCapacity` and `stabilizedBlock`.
+
 `composeApp`'s audio layer works, but working is not the same as being good enough, and it has
 never been shown to be. **uapmd-app's behaviour is the target.** That means adopting AppModel's
-audio entry points rather than reimplementing them — and it turns out reimplementing them is not
-even possible today (§2.2).
+audio entry points rather than reimplementing them.
 
 The gap is not cosmetic. Turning the engine **off**:
 
@@ -186,40 +105,13 @@ So, adopted from AppModel — the reverse of what an earlier draft of this plan 
 - `uapmd_app_set_auto_buffer_size_enabled` / `uapmd_app_auto_buffer_size_enabled`
   (auto buffer size has no `composeApp` equivalent at all)
 
-### 2.2 Why this is not optional
+### 2.3 Event-loop ordering
 
-The careful shutdown is built from `setEngineActive()`, `setOutputMuted()`,
-`resetProcessingState()` and `outputAnalyser()`. **The C API exposes none of them** — the only
-engine-activation entry point is `uapmd_engine_set_active`:
+remidy marshals engine completions through an `EventLoop`. A host must install one
+(`initJvmEventLoop()` / `initAndroidEventLoop()`) **before** creating any engine or sequencer, or
+async completions silently never fire — `addEmptyTrack` still creates the track, but its callback
+never runs. On Android the loop must also not be the main looper; see `AndroidEventLoop.kt`.
 
-```
-$ grep -n "set_engine_active\|set_output_muted\|reset_processing_state\|output_analyser" c-api/include/c-api/*.h
-(no matches)
-```
-
-So AppModel's audio behaviour cannot be reproduced in Kotlin through today's C API at all. Either
-we call `uapmd_app_set_audio_engine_enabled` and let C++ run the sequence, or we widen the C API
-with four more primitives and then re-derive a subtle, thread-sensitive algorithm in Kotlin — for
-no benefit. **Call the AppModel entry point.**
-
-### 2.3 What `composeApp` still supplies
-
-One thing only, and it is not audio-layer design — it is the KMP-side bootstrap ordering that has
-no C++ counterpart, because uapmd-app's equivalent lives in its own `main()`:
-
-1. **Platform event-loop init runs first, before `uapmd_app_instantiate()`.**
-   `initJvmEventLoop()` on desktop (also from `main()` before `application {}`),
-   `initAndroidEventLoop()` on Android **from the Android main thread** — it routes remidy
-   `EventLoop` tasks to the main looper so plugins that require the UI thread initialise
-   correctly. iOS and Wasm init nothing. AppModel does not do this and cannot; it also *depends*
-   on it, since its shutdown path enqueues plugin deactivation via
-   `remidy::EventLoop::enqueueTaskOnMainThread`.
-2. The UI discipline of **reading state back** rather than assuming it — engine state from
-   `isAudioEngineEnabled()`, playback from `engine.isPlaybackActive`, via a ~16 ms `tick()`.
-   Spectra from `engine.getInputSpectrum(32)` / `getOutputSpectrum(32)`.
-
-Device *enumeration* (`getAudioDeviceManager()`) and `reconfigureAudioDevice(...)` stay on the
-existing bindings, but the settings they apply come from AppModel's values, not our own defaults.
 
 ### 2.4 Fallback rule: where AppModel is unreachable, do what `composeApp` does
 
@@ -259,157 +151,32 @@ copy that into the new module.)
 
 ---
 
-### 2.5 We do not run uapmd-app's `main()` — enumerate what it sets up
+### 2.5 We do not run uapmd-app's `main()` — so its setup is ours to reproduce
 
-The second defect in `aaed96b` is the one with the longest reach. uapmd writes its plugin cache
-to `/browser/remidy-tooling/`, **a directory only upstream's `web_main.cpp` creates** — so in the
-KMP app the wasm FS root held just `tmp,home,dev,proc` and the cache write went nowhere. A
-completed scan would still have produced an empty list.
+uapmd-cmp replaces `main_common.cpp`, and anything that entry point does silently becomes ours to
+do, with no compile error when we skip it. The order is load-bearing:
 
-That is a general hazard, not a one-off: `uapmd-cmp` replaces uapmd-app's entry point, so
-anything that entry point does becomes ours to do, silently, with no compile error when we skip
-it. Adopting AppModel *increases* this surface, so `main_common.cpp` and `web_main.cpp` have to be
-audited explicitly. Their AppModel-related sequence is:
+1. install the platform event loop **before** AppModel exists (§2.3)
+2. `uapmd_app_instantiate()`, then `notifyUiReady()`, then `notifyPersistentStorageReady()`
+3. bring the audio engine to its per-platform initial state (desktop and mobile on, web off —
+   browsers require a user gesture)
+4. configure the audio device once the engine is up (§2.1)
+5. teardown in reverse: engine off, flush the event loop, then `cleanupAppModel()`
 
-```
-remidy::setEventLoop(...); remidy::EventLoop::initializeOnUIThread();
-AppModel::instantiate();
-  ... construct UI ...
-AppModel::instance().notifyUiReady();
-AppModel::instance().notifyPersistentStorageReady();   // desktop
-uapmd_init_browser_storage();                          // web, instead of the above
-AppModel::instance().setAudioEngineEnabled(true);      // desktop
-AppModel::instance().setAudioEngineEnabled(false);     // web - starts DISABLED
-  ... run ...
-AppModel::instance().setAudioEngineEnabled(false); AppModel::cleanupInstance();
-```
+`BootstrapProbeMain` exercises this headlessly; on web the persistent-storage step is what mounts
+the IDBFS the plug-in list cache lives in.
 
-**This needs no new C API surface.** Every entry point already exists — it is a matter of
-calling them, in order, at the right time:
 
-| Step | Entry point | Status |
-|---|---|---|
-| event loop | `uapmd_set_event_loop` (`uapmd-c-engine.h`) | exists; Kotlin already uses it via `initJvmEventLoop()` / `initAndroidEventLoop()` |
-| instantiate | `uapmd_app_instantiate` / `uapmd_app_cleanup` | exists (`uapmd-c-app.h:25,27`), unbound |
-| UI ready | `uapmd_app_notify_ui_ready` | exists (`:425`), unbound |
-| storage ready | `uapmd_app_notify_persistent_storage_ready` | exists (`:426`), unbound |
-| browser FS | *(upstream's `EM_JS uapmd_init_browser_storage`)* | **already ported into the binding** — see below |
+## 3 · Window model
 
-"Unbound" here is not extra work: none of `uapmd-c-app.h` is bound, so these come along with
-steps 0.2/0.3 for free.
+### 3.1 Floating, in-scene windows
 
-The one item that genuinely is *not* in the C API — `uapmd_init_browser_storage`, an `EM_JS`
-block living inside `web_main.cpp` — was already solved by `aaed96b`, in the binding rather than
-the app: `initUapmdWasm()` now awaits `initBrowserFileSystem()` from `uapmd-wasm-adapter.mjs`,
-which creates `/browser`, `/browser/uploads` and `/browser/remidy-tooling`, mounts IDBFS, and
-falls back to in-memory when IDBFS is absent. `uapmd-cmp` inherits it.
+uapmd-app is a multi-window application and several of its windows are *multi-instance*: instance
+details, the track graph and the MIDI dump are per id, and more than one can be open at once.
+Compose Multiplatform's `Window` is desktop-only, so the app draws its own draggable, resizable,
+stackable windows inside the scene, addressed by a string key (`details:<id>`, `graph:<track>`,
+`dump:<track>:<clip>`). Everything from the plug-in selector onwards depends on it.
 
-Three things fall out of that sequence which `composeApp` does not do at all:
-
-- **`notifyUiReady()` / `notifyPersistentStorageReady()`** must actually be called. Skipping
-  them is exactly the `aaed96b` failure mode. On wasm there is a specific wiring job once 0.1
-  lands: upstream's `EM_JS` signals `_uapmd_web_storage_ready(...)` back into C++, whereas our
-  `initBrowserFileSystem()` only resolves a JS promise — that resolution has to be connected to
-  `notifyPersistentStorageReady()`.
-- **Web starts with the audio engine disabled**, desktop enabled. `composeApp` starts audio
-  unconditionally everywhere. Browsers need a user gesture before audio anyway, so match this.
-- **Teardown is ordered**: engine off, *then* `cleanupInstance()`. `composeApp` has no
-  equivalent shutdown path.
-
-## 3 · Module skeleton
-
-```
-kotlin/uapmd-cmp/
-  build.gradle.kts          # modelled on composeApp/build.gradle.kts
-  src/commonMain/kotlin/dev/atsushieno/uapmd/cmp/
-  src/{androidMain,jvmMain,iosMain,wasmJsMain,webMain}/…
-```
-
-- `settings.gradle.kts`: `include(":uapmd-cmp")`.
-- Android `namespace` / `applicationId`: `dev.atsushieno.uapmd_cmp` (installable side-by-side
-  with the old app during the transition).
-- iOS framework `baseName = "UapmdCmp"`; desktop `mainClass = "dev.atsushieno.uapmd.cmp.MainKt"`,
-  `packageName = "uapmd-cmp"`.
-- Carry over the `afterEvaluate` wasm-resource hook and the JVM probe tasks pattern from
-  `composeApp/build.gradle.kts`.
-- **`composeApp` stays untouched and buildable** until `uapmd-cmp` reaches parity, then it is
-  removed in one commit.
-
-### 3.1 The floating window manager — a core component, built first
-
-§5.2 has a bigger consequence than it looks. uapmd-app is a **multi-window** application, and
-several of its windows are *multi-instance*:
-
-| Window | Key | Concurrent instances |
-|---|---|---|
-| Instance Details | `instanceId` | one per plugin instance |
-| Plugin Graph Editor | `trackIndex` | one per track |
-| MIDI Dump / Piano Roll | `(trackIndex, clipId)` | one per clip |
-| Clip editor ("Edit Clips…") | `trackIndex` | one per track |
-| Plugin Selector, Mixer Monitor, Device Settings, Addins, Script, MCP, Exporter, Audio Import | — | singleton |
-
-Critically, these are **not OS windows**. uapmd-app does not enable ImGui's multi-viewport mode
-(no `ConfigFlags_ViewportsEnable` anywhere in the tree), so every one of them is an ImGui window
-drawn inside the single application window — which is exactly what the screenshots show: the
-Plugin Selector's own title bar and ✕ overlapping the toolbar behind it. The one genuine
-exception is plugin GUIs, which use `remidy::gui::ContainerWindow` and *are* real OS windows.
-
-#### Is `Window` available off desktop? No — verified
-
-Checked against the Compose Multiplatform **1.10.3** klibs this project resolves, not from
-memory. The `androidx.compose.ui.window` package contains:
-
-| Target | What is there | `Window` / `application` |
-|---|---|---|
-| jvm | `Window`, `DialogWindow`, `application`, `Dialog`, `Popup` | **yes** |
-| wasmJs | `Dialog`, `Popup`, `ComposeViewport*`, `ComposeWindow` (root host) | **no** |
-| iOS | `Dialog`, `Popup`, `ComposeUIViewController`, `ComposeView` | **no** |
-| Android | `Dialog`, `Popup` | **no** |
-
-`ComposeWindow` / `ComposeUIViewController` are the *root* hosts — the surface the whole app is
-drawn into — not a child-window API. And `Dialog`/`Popup` are not substitutes: `Dialog` is modal
-and centred, `Popup` is anchored and lightweight, and neither is draggable, resizable, or
-stackable as a peer alongside others. Nothing there expresses "six details windows open at once,
-arranged by the user".
-
-#### Decision: one in-scene manager, all five targets
-
-Native `Window` on desktop was considered and **dropped**. It would have saved no work — three of
-five targets need the in-scene manager regardless, so the desktop path would be additive — and it
-would have forced a shared abstraction spanning a real OS window and an in-scene panel, which
-leaks or sinks to the lowest common denominator.
-
-So: a single implementation in `commonMain`, no `expect`/`actual` split, identical behaviour
-everywhere. Absolutely-positioned surfaces over the main content, with a draggable title bar,
-close button, resize handle, focus/z-order stacking, and a registry keyed by the identifiers in
-the table above so N instances coexist. This also happens to be exactly what uapmd-app does.
-
-(The desktop *root* window is still `androidx.compose.ui.window.Window` from `application {}` —
-that is the application window itself, not a child window. Plugin GUIs also remain real OS
-windows on desktop, hosted the way `composeApp` already does it.)
-
-The in-scene manager comes ahead of nearly all feature work, because almost every feature
-delivers one or more windows and would otherwise invent its own container.
-It is the single highest-leverage piece of infrastructure here, and getting it wrong late
-is expensive.
-
-### What is worth porting from `composeApp` rather than rewriting
-
-These are UI-shaped and largely model-agnostic; they should be moved over and re-fitted to the
-new model rather than written again:
-
-- `nodegraph/NodeGraph.kt` (552 lines) — there is no ImNodes for Compose; this is the graph
-  editor substrate.
-- `ui/MidiKeyboard.kt`, `ui/SpectrumAnalyzer.kt`, `ui/ParameterList.kt`.
-- The platform `DocumentPicker*` / `ProjectArchiveLoader*` / `PluginUiHosting*` families,
-  including `AndroidPlatformHostedPluginUiLayer.kt` (468 lines) — that one is hard-won
-  Android AAP plugin-UI hosting and must not be rewritten.
-- `timeline/ClipPreviewData.kt` as a starting point for clip previews.
-
-Everything else — `MainWindow.kt`, `UapmdModel.kt`, `ClipTimeline.kt`, `TrackList.kt` — is
-rewritten against the new model.
-
----
 
 ## 4 · Risks
 
@@ -495,6 +262,15 @@ construction.
 ---
 
 ## 6 · Open bugs in `external/uapmd`
+
+### 6.0 Audio never recovers from an output route change
+
+`OboeAudioIODevice` reports `stream error ErrorDisconnected`, logs `reopening stream after error`,
+and then `restart after close failed: ErrorClosed` - after which audio never returns. Reproduced
+twice on Android by starting an audio capture while a stream was open; any route change
+(headphones, Bluetooth, another app capturing) takes the same path. The restart logic is in
+`uapmd-engine/src/devices/OboeAudioIODevice.cpp`.
+
 
 Found while building `uapmd-cmp`, but neither is a binding or app defect — both are upstream, and
 `external/uapmd` is a submodule whose commits are yours, so they are left here rather than fixed.

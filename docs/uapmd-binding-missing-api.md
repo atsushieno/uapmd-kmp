@@ -10,7 +10,7 @@ uapmd API. Anything else belongs in the app.
 
 ---
 
-## 1 · Still unbound in `uapmd-c-app.h` (17 of 81)
+## 1 · Still unbound in `uapmd-c-app.h`
 
 Ordered by when `uapmd-cmp` needs them. Several pass or return structs **by value**, which is
 where the Emscripten ABI rules (sret first-argument, byval-as-pointer, `WASM_BIGINT`) bite.
@@ -45,9 +45,8 @@ uint32@8, ptr@12, sizeof 16; `uapmd_ump_event_t` tick@0, word_count@8, words@12,
 | Plugin UI | `show_plugin_ui` (the parent-handle/resize-handler form) | no |
 | Plugin state | `save_plugin_state`, `load_plugin_state` | **yes** — `uapmd_plugin_state_result_t` |
 | Project I/O | `document_provider` | no |
-| Clips | `add_clip_to_track`, `add_midi_clip_to_track`, `add_midi_clip_from_data`, `create_empty_midi_clip` | **yes** — `uapmd_clip_add_result_t`. Note `TimelineFacade.addMidiClipFromFile()` / `addAudioClip()` were already bound and cover the common cases |
+| Clips | `add_clip_to_track`, `add_midi_clip_to_track`, `add_midi_clip_from_data` | **yes** — `uapmd_clip_add_result_t`. Note `TimelineFacade.addMidiClipFromFile()` / `addAudioClip()` were already bound and cover the common cases |
 | Offline render | `start_render`, `cancel_render`, `get_render_status`, `clear_render_status` | **yes**. Not needed so far: `SequencerEngine.renderOffline()` was already bound and drives the Exporter directly |
-| Clip audio events | `get_clip_audio_events`, `set_clip_audio_events` | `AppModel` members + `ClipAudioEventsResult` mirror |
 | Track graph | `request_show_track_graph` (the request/serve indirection; not needed — the app opens its own window) | no |
 | Master markers | `master_marker_count`, `get_master_marker`, `set_master_markers` | **yes**. Not needed: `SequencerEngine.masterTrackMarkers` and `ProjectCommands.setMasterTrackMarkers()` already cover both directions |
 | Misc | `add_device_input_to_track` | no |
@@ -62,6 +61,7 @@ first. All predate 0.5.6 — they were simply never needed by a KMP app before.
 | Item | Home in uapmd | Needed for |
 |---|---|---|
 | `TempoMap` | `uapmd-data/…/TempoMap.hpp` | beats/ticks timeline view |
+| `UapmdJSRuntime` | `tools/uapmd-app-model/…/UapmdJSRuntime.hpp` | Script editor window |
 | `McpServer` | `tools/uapmd-app-model/…/McpServer.hpp` | MCP settings window |
 | `PreparedSequencerTrack` family — `prepareTrack`, `addPluginToPreparedTrack`, `publishPreparedTrack` | `uapmd-engine/…/SequencerEngine.hpp` | 0.5.6 delta not covered by `13dac10` |
 | `PluginInstanceLifecycleListener` add/remove | same | 0.5.6 delta not covered by `13dac10` |
