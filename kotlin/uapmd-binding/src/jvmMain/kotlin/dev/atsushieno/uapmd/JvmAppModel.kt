@@ -183,6 +183,13 @@ class JvmAppModel internal constructor(
     override fun removeClipFromTrack(trackIndex: Int, clipId: Int): Boolean =
         lib.uapmd_app_remove_clip_from_track(handle, trackIndex, clipId)
 
+    override fun createEmptyMidiClip(
+        trackIndex: Int, positionSamples: Long, tickResolution: UInt, bpm: Double
+    ): ClipAddResult {
+        val r = lib.uapmd_app_create_empty_midi_clip(handle, trackIndex, positionSamples, tickResolution.toInt(), bpm)
+        return ClipAddResult(r.clip_id, r.source_node_id, r.success != 0.toByte(), r.error)
+    }
+
     // ── Track graph ─────────────────────────────────────────────────────────
 
     override fun ensureTrackUsesEditorGraph(trackIndex: Int): Boolean =

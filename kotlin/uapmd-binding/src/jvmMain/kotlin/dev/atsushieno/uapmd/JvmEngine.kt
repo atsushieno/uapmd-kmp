@@ -114,6 +114,9 @@ class JvmSequencerEngine internal constructor(
     override fun getOutputSpectrum(numBars: Int): FloatArray =
         FloatArray(numBars).also { lib.uapmd_engine_get_output_spectrum(handle, it, numBars) }
 
+    override val midiRecorder: MidiRecorder?
+        get() = lib.uapmd_engine_midi_recorder(handle)?.let { JvmMidiRecorder(it) }
+
     override val timeline: TimelineFacade
         get() = JvmTimelineFacade(lib.uapmd_engine_timeline(handle) ?: error("uapmd_engine_timeline returned null"))
 
@@ -203,6 +206,10 @@ class JvmSequencerTrack internal constructor(
     override val latencyInSamples: UInt get() = lib.uapmd_track_latency_in_samples(handle).toUInt()
     override val renderLeadInSamples: UInt get() = lib.uapmd_track_render_lead_in_samples(handle).toUInt()
     override val tailLengthInSeconds: Double get() = lib.uapmd_track_tail_length_in_seconds(handle)
+
+    override val gain: Double get() = lib.uapmd_track_get_gain(handle)
+    override val muted: Boolean get() = lib.uapmd_track_get_muted(handle)
+    override val solo: Boolean get() = lib.uapmd_track_get_solo(handle)
 
     override var bypassed: Boolean
         get() = lib.uapmd_track_get_bypassed(handle)
@@ -315,4 +322,12 @@ class JvmRealtimeSequencer internal constructor(
     )
 
     override fun close() = lib.uapmd_rt_sequencer_destroy(handle)
+}
+
+class JvmMidiRecorder internal constructor(private val handle: Pointer) : MidiRecorder {
+    override val isRecording: Boolean get() = lib.uapmd_midi_recorder_is_recording(handle)
+    override fun start(trackReferenceId: String, clipId: Int, startSample: Long) =
+        lib.uapmd_midi_recorder_start(handle, trackReferenceId, clipId, startSample)
+    override fun stop() = lib.uapmd_midi_recorder_stop(handle)
+    override fun cancel() = lib.uapmd_midi_recorder_cancel(handle)
 }

@@ -1,5 +1,6 @@
 package dev.atsushieno.uapmd
 
+import kotlinx.cinterop.*
 import uapmd.*
 
 actual fun createPluginHost(): PluginHost =
@@ -46,3 +47,13 @@ actual fun createPluginInstancing(scanTool: ScanTool, format: String, pluginId: 
         uapmd_instancing_create((scanTool as NativeScanTool).handle, format, pluginId)
             ?: error("uapmd_instancing_create failed for $format / $pluginId")
     )
+
+class NativePreparedProject internal constructor(private val handle: uapmd_prepared_project_t) : PreparedProject {
+    override val success: Boolean get() = uapmd_prepared_project_success(handle)
+    override val path: String get() = readCString { b, n -> uapmd_prepared_project_path(handle, b, n) }
+    override val error: String get() = readCString { b, n -> uapmd_prepared_project_error(handle, b, n) }
+    override fun close() = uapmd_prepared_project_destroy(handle)
+}
+
+actual fun prepareProjectLoad(filePath: String): PreparedProject =
+    NativePreparedProject(uapmd_prepare_project_load(filePath) ?: error("uapmd_prepare_project_load failed"))

@@ -52,3 +52,16 @@ actual fun createPluginInstancing(scanTool: ScanTool, format: String, pluginId: 
             )
         )
     }
+
+/**
+ * The browser has no local filesystem to unpack an archive into; a web build
+ * receives projects through uapmd's browser document provider, so the path is
+ * passed through unchanged.
+ */
+private class PassThroughPreparedProject(override val path: String) : PreparedProject {
+    override val success = true
+    override val error = ""
+    override fun close() = Unit
+}
+
+actual fun prepareProjectLoad(filePath: String): PreparedProject = PassThroughPreparedProject(filePath)

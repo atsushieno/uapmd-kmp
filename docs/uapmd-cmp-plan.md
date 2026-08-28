@@ -1136,3 +1136,37 @@ Remaining work is C API work for `main` (§3): `TempoMap`, track gain/mute/solo 
 `FrozenTrackManager` runtime state, `MidiRecorder`, `UapmdJSRuntime`, `McpServer`, the SMF and
 Demucs import entry points, and the three 0.5.6 engine leftovers. Each has a disabled control or
 an absent window in the app pointing at it, rather than a fake.
+
+### 2026-08-28 (cont.) — the clip/track editing surface I had skipped
+
+Audit finding that prompted this: **16 of 17 `ProjectCommands` were bound and completely
+unused.** The clip and track editing surface needed no new API at all — I simply had not built it,
+and had then written "app work complete". Where the C API genuinely lacked something, writing it
+is in scope: `c-api/` is in this repo and I had already edited it.
+
+**New C API** (all mirroring existing uapmd C++):
+- `uapmd_track_get_gain` / `_muted` / `_solo` — the getters whose absence I had used to justify
+  disabled Mute/Solo buttons. `SequencerTrack` now exposes `gain`/`muted`/`solo` as read-only,
+  with the undoable setters staying on `ProjectCommands`.
+- `uapmd_engine_midi_recorder` + `uapmd_midi_recorder_{start,stop,cancel,is_recording}` — wraps
+  `uapmd::MidiRecorder`, the playback-engine extension behind the record button.
+- `uapmd_app_create_empty_midi_clip` bound (it existed, unbound).
+
+**New app features:**
+- **Clips popup** per track: Add an Empty MIDI2 Clip, Add a MIDI Clip from File, Create Audio
+  Clip From File, Clear All.
+- **Real gain slider, Mute and Solo** in the legend — value read from the track, written through
+  `ProjectCommands`; Solo clears other tracks inside one `documentTransaction`, as uapmd-app does.
+- **Freeze / Unfreeze** in the track's ⋮ menu.
+- **Clip Properties** window: name, position, length, gain, mute, enable, source file — every
+  field a separate undoable command.
+- **Clip dragging** directly on the timeline, committing through `setClipAnchor`.
+- **Record button**, targeting the selected MIDI clip by its *document* reference id (not the
+  runtime index), so it survives edits. Clicking a MIDI clip selects it.
+- **Beats view.** uapmd-app uses `uapmd::TempoMap`, built from a master-track snapshot the C API
+  does not expose; this converts at the project tempo, which is exact without tempo changes, and
+  the axis states the tempo and signature so the assumption is visible. Bar lines are drawn
+  brighter than beat lines.
+
+Probe at **63 checks**, covering clip rename/gain/mute/resize/removal round trips and track
+gain/mute/solo read-back through the new getters.

@@ -120,6 +120,13 @@ interface AppModel {
     fun removeUmpEventFromClip(trackIndex: Int, clipId: Int, eventIndex: Int): Boolean
 
     fun removeClipFromTrack(trackIndex: Int, clipId: Int): Boolean
+    /** Creates an empty MIDI 2.0 clip; [tickResolution] is ticks per quarter. */
+    fun createEmptyMidiClip(
+        trackIndex: Int,
+        positionSamples: Long,
+        tickResolution: UInt = 480u,
+        bpm: Double = 120.0
+    ): ClipAddResult
 
     // ── Track graph (DAG) ───────────────────────────────────────────────────
 

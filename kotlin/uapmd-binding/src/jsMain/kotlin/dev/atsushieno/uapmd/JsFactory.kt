@@ -52,3 +52,11 @@ actual fun createPluginInstancing(scanTool: ScanTool, format: String, pluginId: 
             ) as Int
         )
     }
+
+private class PassThroughPreparedProject(override val path: String) : PreparedProject {
+    override val success = true
+    override val error = ""
+    override fun close() = Unit
+}
+
+actual fun prepareProjectLoad(filePath: String): PreparedProject = PassThroughPreparedProject(filePath)

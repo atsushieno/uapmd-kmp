@@ -53,6 +53,12 @@ interface SequencerEngine {
 
     val timeline: TimelineFacade
 
+    /**
+     * Live MIDI capture into one clip, or null when the extension is absent.
+     * Backed by `uapmd::MidiRecorder`.
+     */
+    val midiRecorder: MidiRecorder?
+
     // ─── Project / track dirty state (uapmd 0.5.6) ──────────────────────────
 
     /**
@@ -89,6 +95,15 @@ interface SequencerEngine {
     ): OfflineRenderResult
 }
 
+/** `uapmd::MidiRecorder` — captures live MIDI input into a selected clip. */
+interface MidiRecorder {
+    val isRecording: Boolean
+    /** [trackReferenceId] is the document identity, not a runtime index. */
+    fun start(trackReferenceId: String, clipId: Int, startSample: Long = 0L): Boolean
+    fun stop()
+    fun cancel()
+}
+
 interface SequencerTrack {
     val graph: PluginGraph
     val latencyInSamples: UInt
@@ -96,6 +111,14 @@ interface SequencerTrack {
     val tailLengthInSeconds: Double
     var bypassed: Boolean
     var frozen: Boolean
+
+    /**
+     * Mixer state. Read-only here on purpose: the undoable setters live on
+     * [ProjectCommands], so a UI reads from the track and writes through commands.
+     */
+    val gain: Double
+    val muted: Boolean
+    val solo: Boolean
     fun getOrderedInstanceIds(): List<Int>
     fun setInstanceGroup(instanceId: Int, group: UByte)
     fun getInstanceGroup(instanceId: Int): UByte

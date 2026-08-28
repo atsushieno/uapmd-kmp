@@ -452,6 +452,20 @@ external interface UapmdCApiModule : JsAny {
     // ── Track ──────────────────────────────────────────────────────────────
     @JsName("_uapmd_track_graph")
     fun uapmdTrackGraph(handle: Int): Int
+    @JsName("_uapmd_engine_midi_recorder")
+    fun uapmdEngineMidiRecorder(engine: Int): Int
+    @JsName("_uapmd_midi_recorder_stop")
+    fun uapmdMidiRecorderStop(rec: Int)
+    @JsName("_uapmd_midi_recorder_cancel")
+    fun uapmdMidiRecorderCancel(rec: Int)
+    @JsName("_uapmd_midi_recorder_is_recording")
+    fun uapmdMidiRecorderIsRecording(rec: Int): Boolean
+    @JsName("_uapmd_track_get_gain")
+    fun uapmdTrackGetGain(track: Int): Double
+    @JsName("_uapmd_track_get_muted")
+    fun uapmdTrackGetMuted(track: Int): Boolean
+    @JsName("_uapmd_track_get_solo")
+    fun uapmdTrackGetSolo(track: Int): Boolean
     @JsName("_uapmd_track_get_bypassed")
     fun uapmdTrackGetBypassed(handle: Int): Boolean
     @JsName("_uapmd_track_set_bypassed")
@@ -1199,6 +1213,16 @@ internal external fun wasmWriteI64(mod: UapmdCApiModule, ptr: Int, value: String
 
 @JsFun("(mod, ptr) => new DataView(mod.HEAPU8.buffer).getBigInt64(ptr, true).toString()")
 internal external fun wasmReadI64(mod: UapmdCApiModule, ptr: Int): String
+
+@JsFun("(mod, rec, t, c, s) => mod._uapmd_midi_recorder_start(rec, t, c, BigInt(s))")
+internal external fun wasmMidiRecorderStart(
+    mod: UapmdCApiModule, rec: Int, trackReferenceId: Int, clipId: Int, startSample: String
+): Boolean
+
+@JsFun("(mod, out, app, t, pos, res, bpm) => mod._uapmd_app_create_empty_midi_clip(out, app, t, BigInt(pos), res, bpm)")
+internal external fun wasmAppCreateEmptyMidiClip(
+    mod: UapmdCApiModule, out: Int, app: Int, trackIndex: Int, positionSamples: String, tickResolution: Int, bpm: Double
+)
 
 @JsFun("(mod, app, t, c, tick, words, n) => mod._uapmd_app_add_ump_event_to_clip(app, t, c, BigInt(tick), words, n)")
 internal external fun wasmAppAddUmpEventToClip(

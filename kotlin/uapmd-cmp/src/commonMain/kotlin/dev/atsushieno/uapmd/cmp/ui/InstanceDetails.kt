@@ -27,7 +27,11 @@ import androidx.compose.ui.unit.dp
 import dev.atsushieno.uapmd.ParameterMetadata
 import dev.atsushieno.uapmd.PresetMetadata
 import dev.atsushieno.uapmd.cmp.TrackInstance
+import androidx.compose.runtime.rememberCoroutineScope
 import dev.atsushieno.uapmd.cmp.UapmdHost
+import dev.atsushieno.uapmd.cmp.pickProjectFileToOpen
+import dev.atsushieno.uapmd.cmp.pickProjectFileToSave
+import kotlinx.coroutines.launch
 
 /**
  * uapmd-app's per-instance Details window: pitch bend, channel pressure, a
@@ -51,6 +55,9 @@ fun InstanceDetails(host: UapmdHost, inst: TrackInstance) {
     var presetsOpen by remember { mutableStateOf(false) }
     var selectedPreset by remember { mutableStateOf<PresetMetadata?>(null) }
     var revision by remember { mutableStateOf(0) }
+    var groupMenu by remember { mutableStateOf(false) }
+    var stateStatus by remember { mutableStateOf<String?>(null) }
+    val scope = rememberCoroutineScope()
 
     val parameters = remember(inst.instanceId, revision) {
         (0 until instance.parameterCount.toInt()).mapNotNull { instance.getParameterMetadata(it.toUInt()) }
@@ -71,6 +78,41 @@ fun InstanceDetails(host: UapmdHost, inst: TrackInstance) {
             ) { Text("Hide UI") }
             Button(onClick = { host.removeInstance(inst.instanceId) }) { Text("Delete") }
         }
+
+        // uapmd-app keeps plug-in state save/load next to the UI buttons.
+        Row(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalAlignment = Alignment.CenterVertically) {
+            Button(onClick = {
+                scope.launch {
+                    pickProjectFileToSave()?.let { path ->
+                        stateStatus = host.savePluginState(inst.instanceId, path)
+                    }
+                }
+            }) { Text("Save State") }
+            Button(onClick = {
+                scope.launch {
+                    pickProjectFileToOpen()?.let { path ->
+                        stateStatus = host.loadPluginState(inst.instanceId, path)
+                        revision++
+                    }
+                }
+            }) { Text("Load State") }
+
+            Text("UMP Group", style = MaterialTheme.typography.bodySmall)
+            androidx.compose.foundation.layout.Box {
+                Button(onClick = { groupMenu = true }) {
+                    Text("${host.model.getInstanceGroup(inst.instanceId)}")
+                }
+                DropdownMenu(expanded = groupMenu, onDismissRequest = { groupMenu = false }) {
+                    (0..15).forEach { g ->
+                        DropdownMenuItem(text = { Text("$g") }, onClick = {
+                            host.setInstanceGroup(inst.instanceId, g)
+                            groupMenu = false
+                        })
+                    }
+                }
+            }
+        }
+        stateStatus?.let { Text(it, style = MaterialTheme.typography.bodySmall) }
 
         Text(
             "${inst.formatName} · instance ${inst.instanceId} · UMP group " +

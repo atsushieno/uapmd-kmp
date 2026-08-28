@@ -52,10 +52,14 @@ fun PluginSelector(host: UapmdHost) {
     var selected by remember { mutableStateOf<CatalogEntry?>(null) }
     var forceRescan by remember { mutableStateOf(false) }
     var remoteScanner by remember { mutableStateOf(false) }
-    var destinationTrack by remember { mutableStateOf(-1) }
+
     var deviceName by remember { mutableStateOf("") }
     var apiName by remember { mutableStateOf("default") }
     var destinationOpen by remember { mutableStateOf(false) }
+
+    // The destination lives on the host so opening the selector from a track's
+    // Add Plugin button pre-targets that track, as uapmd-app does.
+    val destinationTrack = host.pluginDestinationTrack
 
     val entries = remember(host.catalog, filter, sortBy, ascending) {
         val f = filter.trim()
@@ -149,12 +153,12 @@ fun PluginSelector(host: UapmdHost) {
                 DropdownMenu(expanded = destinationOpen, onDismissRequest = { destinationOpen = false }) {
                     DropdownMenuItem(
                         text = { Text("New Track (new UMP device)") },
-                        onClick = { destinationTrack = -1; destinationOpen = false }
+                        onClick = { host.targetPluginDestination(-1); destinationOpen = false }
                     )
                     repeat(host.trackCount) { i ->
                         DropdownMenuItem(
                             text = { Text("Track $i") },
-                            onClick = { destinationTrack = i; destinationOpen = false }
+                            onClick = { host.targetPluginDestination(i); destinationOpen = false }
                         )
                     }
                 }

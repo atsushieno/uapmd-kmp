@@ -1,5 +1,17 @@
 package dev.atsushieno.uapmd
 
+/**
+ * A project file made loadable. `.uapmdz` archives are unpacked to a temporary
+ * directory; a plain `.uapmd` resolves to itself. Close it after loading to
+ * remove any temporary files.
+ */
+interface PreparedProject : AutoCloseable {
+    val success: Boolean
+    /** The path to hand to [TimelineFacade.loadProject]. */
+    val path: String
+    val error: String
+}
+
 interface AudioFileReader : AutoCloseable {
     fun getProperties(): AudioFileProperties?
     /**

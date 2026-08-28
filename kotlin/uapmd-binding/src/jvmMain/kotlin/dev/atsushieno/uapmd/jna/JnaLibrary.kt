@@ -938,6 +938,14 @@ interface UapmdLibrary : Library {
     fun uapmd_track_latency_in_samples(track: Pointer?): Int
     fun uapmd_track_render_lead_in_samples(track: Pointer?): Int
     fun uapmd_track_tail_length_in_seconds(track: Pointer?): Double
+    fun uapmd_engine_midi_recorder(engine: Pointer?): Pointer?
+    fun uapmd_midi_recorder_start(rec: Pointer?, trackReferenceId: String?, clipId: Int, startSample: Long): Boolean
+    fun uapmd_midi_recorder_stop(rec: Pointer?)
+    fun uapmd_midi_recorder_cancel(rec: Pointer?)
+    fun uapmd_midi_recorder_is_recording(rec: Pointer?): Boolean
+    fun uapmd_track_get_gain(track: Pointer?): Double
+    fun uapmd_track_get_muted(track: Pointer?): Boolean
+    fun uapmd_track_get_solo(track: Pointer?): Boolean
     fun uapmd_track_get_bypassed(track: Pointer?): Boolean
     fun uapmd_track_get_frozen(track: Pointer?): Boolean
     fun uapmd_track_set_bypassed(track: Pointer?, value: Boolean)
@@ -1334,6 +1342,7 @@ interface UapmdLibrary : Library {
     fun uapmd_app_add_ump_event_to_clip(app: Pointer?, trackIndex: Int, clipId: Int, tick: Long, words: IntArray?, wordCount: Int): Boolean
     fun uapmd_app_remove_ump_event_from_clip(app: Pointer?, trackIndex: Int, clipId: Int, eventIndex: Int): Boolean
     fun uapmd_app_remove_clip_from_track(app: Pointer?, trackIndex: Int, clipId: Int): Boolean
+    fun uapmd_app_create_empty_midi_clip(app: Pointer?, trackIndex: Int, positionSamples: Long, tickResolution: Int, bpm: Double): UapmdClipAddResult.ByVal
 
     fun uapmd_app_ensure_track_uses_editor_graph(app: Pointer?, trackIndex: Int): Boolean
     fun uapmd_app_revert_track_to_simple_graph(app: Pointer?, trackIndex: Int): Boolean

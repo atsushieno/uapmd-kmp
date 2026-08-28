@@ -270,6 +270,35 @@ uint32_t uapmd_track_latency_in_samples(uapmd_sequencer_track_t track)  { return
 uint32_t uapmd_track_render_lead_in_samples(uapmd_sequencer_track_t track) { return ST(track)->renderLeadInSamples(); }
 double   uapmd_track_tail_length_in_seconds(uapmd_sequencer_track_t track) { return ST(track)->tailLengthInSeconds(); }
 
+static uapmd::MidiRecorder* MR(uapmd_midi_recorder_t h) {
+    return reinterpret_cast<uapmd::MidiRecorder*>(h);
+}
+
+uapmd_midi_recorder_t uapmd_engine_midi_recorder(uapmd_sequencer_engine_t engine) {
+    auto* ext = E(engine)->findPlaybackEngineExtension("midi-recorder");
+    return reinterpret_cast<uapmd_midi_recorder_t>(dynamic_cast<uapmd::MidiRecorder*>(ext));
+}
+
+bool uapmd_midi_recorder_start(uapmd_midi_recorder_t rec, const char* trackReferenceId,
+                                 int32_t clipId, int64_t startSample) {
+    if (!rec) return false;
+    uapmd::MidiRecorder::Target target;
+    target.trackId = trackReferenceId ? trackReferenceId : "";
+    target.clipId = clipId;
+    target.startSample = startSample;
+    return MR(rec)->start(std::move(target));
+}
+
+void uapmd_midi_recorder_stop(uapmd_midi_recorder_t rec)   { if (rec) MR(rec)->stop(); }
+void uapmd_midi_recorder_cancel(uapmd_midi_recorder_t rec) { if (rec) MR(rec)->cancel(); }
+bool uapmd_midi_recorder_is_recording(uapmd_midi_recorder_t rec) {
+    return rec && MR(rec)->isRecording();
+}
+
+double uapmd_track_get_gain(uapmd_sequencer_track_t track)  { return ST(track)->trackGain(); }
+bool   uapmd_track_get_muted(uapmd_sequencer_track_t track) { return ST(track)->muted(); }
+bool   uapmd_track_get_solo(uapmd_sequencer_track_t track)  { return ST(track)->solo(); }
+
 bool uapmd_track_get_bypassed(uapmd_sequencer_track_t track) { return ST(track)->bypassed(); }
 bool uapmd_track_get_frozen(uapmd_sequencer_track_t track)   { return ST(track)->frozen(); }
 void uapmd_track_set_bypassed(uapmd_sequencer_track_t track, bool v) { ST(track)->bypassed(v); }

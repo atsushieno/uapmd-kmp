@@ -105,6 +105,9 @@ class AndroidSequencerEngine internal constructor(
     override fun getInputSpectrum(numBars: Int): FloatArray = JniBridge.uapmdEngineGetInputSpectrum(handle, numBars)
     override fun getOutputSpectrum(numBars: Int): FloatArray = JniBridge.uapmdEngineGetOutputSpectrum(handle, numBars)
 
+    override val midiRecorder: MidiRecorder?
+        get() = JniBridge.uapmdEngineMidiRecorder(handle).takeIf { it != 0L }?.let { AndroidMidiRecorder(it) }
+
     override val timeline: TimelineFacade get() = AndroidTimelineFacade(JniBridge.uapmdEngineTimeline(handle))
 
     // ─── Project / track dirty state (uapmd 0.5.6) ──────────────────────────
@@ -197,6 +200,10 @@ class AndroidSequencerTrack internal constructor(
     override val latencyInSamples: UInt get() = JniBridge.uapmdTrackLatencyInSamples(handle).toUInt()
     override val renderLeadInSamples: UInt get() = JniBridge.uapmdTrackRenderLeadInSamples(handle).toUInt()
     override val tailLengthInSeconds: Double get() = JniBridge.uapmdTrackTailLengthInSeconds(handle)
+
+    override val gain: Double get() = JniBridge.uapmdTrackGetGain(handle)
+    override val muted: Boolean get() = JniBridge.uapmdTrackGetMuted(handle)
+    override val solo: Boolean get() = JniBridge.uapmdTrackGetSolo(handle)
 
     override var bypassed: Boolean
         get() = JniBridge.uapmdTrackGetBypassed(handle)
@@ -305,4 +312,12 @@ class AndroidRealtimeSequencer internal constructor(
     )
 
     override fun close() = JniBridge.uapmdRtSequencerDestroy(handle)
+}
+
+class AndroidMidiRecorder internal constructor(private val handle: Long) : MidiRecorder {
+    override val isRecording: Boolean get() = JniBridge.uapmdMidiRecorderIsRecording(handle)
+    override fun start(trackReferenceId: String, clipId: Int, startSample: Long) =
+        JniBridge.uapmdMidiRecorderStart(handle, trackReferenceId, clipId, startSample)
+    override fun stop() = JniBridge.uapmdMidiRecorderStop(handle)
+    override fun cancel() = JniBridge.uapmdMidiRecorderCancel(handle)
 }

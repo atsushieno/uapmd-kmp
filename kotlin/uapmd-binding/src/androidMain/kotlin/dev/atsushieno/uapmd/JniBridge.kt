@@ -257,6 +257,14 @@ object JniBridge {
     @JvmStatic external fun uapmdTrackLatencyInSamples(h: Long): Int
     @JvmStatic external fun uapmdTrackRenderLeadInSamples(h: Long): Int
     @JvmStatic external fun uapmdTrackTailLengthInSeconds(h: Long): Double
+    @JvmStatic external fun uapmdEngineMidiRecorder(engine: Long): Long
+    @JvmStatic external fun uapmdMidiRecorderStart(rec: Long, trackReferenceId: String, clipId: Int, startSample: Long): Boolean
+    @JvmStatic external fun uapmdMidiRecorderStop(rec: Long)
+    @JvmStatic external fun uapmdMidiRecorderCancel(rec: Long)
+    @JvmStatic external fun uapmdMidiRecorderIsRecording(rec: Long): Boolean
+    @JvmStatic external fun uapmdTrackGetGain(h: Long): Double
+    @JvmStatic external fun uapmdTrackGetMuted(h: Long): Boolean
+    @JvmStatic external fun uapmdTrackGetSolo(h: Long): Boolean
     @JvmStatic external fun uapmdTrackGetBypassed(h: Long): Boolean
     @JvmStatic external fun uapmdTrackGetFrozen(h: Long): Boolean
     @JvmStatic external fun uapmdTrackSetBypassed(h: Long, v: Boolean)
@@ -663,6 +671,8 @@ object JniBridge {
     @JvmStatic external fun uapmdAppAddUmpEventToClip(app: Long, trackIndex: Int, clipId: Int, tick: Long, words: IntArray): Boolean
     @JvmStatic external fun uapmdAppRemoveUmpEventFromClip(app: Long, trackIndex: Int, clipId: Int, eventIndex: Int): Boolean
     @JvmStatic external fun uapmdAppRemoveClipFromTrack(app: Long, trackIndex: Int, clipId: Int): Boolean
+    /** Object[]{ long[3] clipId/sourceNodeId/success, String? error } */
+    @JvmStatic external fun uapmdAppCreateEmptyMidiClip(app: Long, trackIndex: Int, positionSamples: Long, tickResolution: Int, bpm: Double): Array<Any>?
 
     @JvmStatic external fun uapmdAppEnsureTrackUsesEditorGraph(app: Long, trackIndex: Int): Boolean
     @JvmStatic external fun uapmdAppRevertTrackToSimpleGraph(app: Long, trackIndex: Int): Boolean

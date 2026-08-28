@@ -25,3 +25,6 @@ expect fun createAddinManager(): AddinManager
 expect fun instantiateAppModel()
 expect fun getAppModel(): AppModel
 expect fun cleanupAppModel()
+
+/** Unpacks a `.uapmdz` archive (or passes a `.uapmd` through) before loading. */
+expect fun prepareProjectLoad(filePath: String): PreparedProject

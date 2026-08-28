@@ -168,6 +168,12 @@ class NativeAppModel internal constructor(
     override fun removeClipFromTrack(trackIndex: Int, clipId: Int): Boolean =
         uapmd_app_remove_clip_from_track(handle, trackIndex, clipId)
 
+    override fun createEmptyMidiClip(
+        trackIndex: Int, positionSamples: Long, tickResolution: UInt, bpm: Double
+    ): ClipAddResult =
+        uapmd_app_create_empty_midi_clip(handle, trackIndex, positionSamples, tickResolution, bpm)
+            .useContents { ClipAddResult(clip_id, source_node_id, success, error?.toKString()) }
+
     // ── Track graph ─────────────────────────────────────────────────────────
 
     override fun ensureTrackUsesEditorGraph(trackIndex: Int): Boolean =

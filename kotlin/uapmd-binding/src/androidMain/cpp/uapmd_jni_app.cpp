@@ -674,6 +674,21 @@ JNI_FN(jobjectArray, uapmdAppSetClipAudioEvents)(JNIEnv* env, jclass, jlong app,
         wn ? warps.data() : nullptr, static_cast<uint32_t>(wn)));
 }
 
+/** Object[]{ long[3] clipId/sourceNodeId/success, String? error } */
+JNI_FN(jobjectArray, uapmdAppCreateEmptyMidiClip)(JNIEnv* env, jclass, jlong app, jint t,
+                                                    jlong positionSamples, jint tickResolution, jdouble bpm) {
+    auto r = uapmd_app_create_empty_midi_clip(AM(app), t, positionSamples,
+                                                static_cast<uint32_t>(tickResolution), bpm);
+    jlong nums[3] = { r.clip_id, r.source_node_id, r.success ? 1 : 0 };
+    jlongArray arr = env->NewLongArray(3);
+    env->SetLongArrayRegion(arr, 0, 3, nums);
+    jclass objectClass = env->FindClass("java/lang/Object");
+    jobjectArray result = env->NewObjectArray(2, objectClass, nullptr);
+    env->SetObjectArrayElement(result, 0, arr);
+    if (r.error) env->SetObjectArrayElement(result, 1, env->NewStringUTF(r.error));
+    return result;
+}
+
 #undef JNI_FN
 
 } // extern "C"

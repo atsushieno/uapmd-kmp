@@ -117,6 +117,9 @@ class NativeSequencerEngine internal constructor(
         arr.usePinned { uapmd_engine_get_output_spectrum(handle, it.addressOf(0), numBars) }
     }
 
+    override val midiRecorder: MidiRecorder?
+        get() = uapmd_engine_midi_recorder(handle)?.let { NativeMidiRecorder(it) }
+
     override val timeline: TimelineFacade
         get() = NativeTimelineFacade(uapmd_engine_timeline(handle)!!)
 
@@ -204,6 +207,10 @@ class NativeSequencerTrack internal constructor(
     override val latencyInSamples: UInt get() = uapmd_track_latency_in_samples(handle)
     override val renderLeadInSamples: UInt get() = uapmd_track_render_lead_in_samples(handle)
     override val tailLengthInSeconds: Double get() = uapmd_track_tail_length_in_seconds(handle)
+
+    override val gain: Double get() = uapmd_track_get_gain(handle)
+    override val muted: Boolean get() = uapmd_track_get_muted(handle)
+    override val solo: Boolean get() = uapmd_track_get_solo(handle)
 
     override var bypassed: Boolean
         get() = uapmd_track_get_bypassed(handle)
@@ -315,4 +322,12 @@ class NativeRealtimeSequencer internal constructor(
     )
 
     override fun close() = uapmd_rt_sequencer_destroy(handle)
+}
+
+class NativeMidiRecorder internal constructor(private val handle: uapmd_midi_recorder_t) : MidiRecorder {
+    override val isRecording: Boolean get() = uapmd_midi_recorder_is_recording(handle)
+    override fun start(trackReferenceId: String, clipId: Int, startSample: Long) =
+        uapmd_midi_recorder_start(handle, trackReferenceId, clipId, startSample)
+    override fun stop() = uapmd_midi_recorder_stop(handle)
+    override fun cancel() = uapmd_midi_recorder_cancel(handle)
 }

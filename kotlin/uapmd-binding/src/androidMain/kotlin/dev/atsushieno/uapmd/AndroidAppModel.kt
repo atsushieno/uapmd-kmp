@@ -156,6 +156,15 @@ class AndroidAppModel internal constructor(internal val handle: Long) : AppModel
     override fun removeClipFromTrack(trackIndex: Int, clipId: Int): Boolean =
         JniBridge.uapmdAppRemoveClipFromTrack(handle, trackIndex, clipId)
 
+    override fun createEmptyMidiClip(
+        trackIndex: Int, positionSamples: Long, tickResolution: UInt, bpm: Double
+    ): ClipAddResult {
+        val packed = JniBridge.uapmdAppCreateEmptyMidiClip(handle, trackIndex, positionSamples, tickResolution.toInt(), bpm)
+            ?: return ClipAddResult(-1, -1, false, "native call returned null")
+        val nums = packed[0] as LongArray
+        return ClipAddResult(nums[0].toInt(), nums[1].toInt(), nums[2] != 0L, packed.getOrNull(1) as? String)
+    }
+
     // ── Track graph ─────────────────────────────────────────────────────────
 
     override fun ensureTrackUsesEditorGraph(trackIndex: Int): Boolean =

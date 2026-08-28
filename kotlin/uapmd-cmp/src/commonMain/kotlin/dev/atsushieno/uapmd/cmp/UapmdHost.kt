@@ -22,6 +22,8 @@ import dev.atsushieno.uapmd.RealtimeSequencer
 import dev.atsushieno.uapmd.CatalogEntry
 import dev.atsushieno.uapmd.ClipAddResult
 import dev.atsushieno.uapmd.ClipData
+import dev.atsushieno.uapmd.TimeReference
+import dev.atsushieno.uapmd.TimeReferenceType
 import dev.atsushieno.uapmd.TimelinePosition
 import dev.atsushieno.uapmd.createAudioFileReader
 import dev.atsushieno.uapmd.MidiNoteData
@@ -33,6 +35,7 @@ import dev.atsushieno.uapmd.TimelineState
 import dev.atsushieno.uapmd.UndoState
 import dev.atsushieno.uapmd.getAppModel
 import dev.atsushieno.uapmd.instantiateAppModel
+import dev.atsushieno.uapmd.prepareProjectLoad
 
 /**
  * Owns the uapmd startup sequence and mirrors AppModel state into Compose.
@@ -84,6 +87,33 @@ class UapmdHost private constructor(val model: AppModel) {
         val t = model.transport
         if (t.isPlaying) t.stop() else t.play()
         refresh()
+    }
+
+    /** The clip the record button captures into, as uapmd-app's selected MIDI clip. */
+    var selectedMidiClip by mutableStateOf<Pair<Int, Int>?>(null)
+
+    /**
+     * Records into the selected MIDI clip. uapmd-app targets the clip by its
+     * *document* reference id, not the runtime index, so it survives edits.
+     */
+    fun toggleRecording(): String? {
+        val recorder = model.sequencer.engine.midiRecorder
+            ?: return "This build has no MIDI recorder extension."
+        if (recorder.isRecording) {
+            recorder.stop()
+            model.transport.record()
+            refresh()
+            return null
+        }
+        val target = selectedMidiClip ?: return "Select a MIDI clip first."
+        val (trackIndex, clipId) = target
+        val trackRef = model.sequencer.engine.timeline.addresses.trackReferenceId(trackIndex)
+            ?: return "Track $trackIndex has no document identity."
+        return if (recorder.start(trackRef, clipId, model.sequencer.engine.playbackPosition)) {
+            model.transport.record()
+            refresh()
+            null
+        } else "The recorder rejected the target."
     }
 
     fun pauseOrResume() {
@@ -171,6 +201,16 @@ class UapmdHost private constructor(val model: AppModel) {
     var isInstantiating by mutableStateOf(false)
         private set
 
+    /**
+     * Where the Plugin Selector will put the next instance: a track index, or
+     * -1 for "new track". uapmd-app sets this when the selector is opened from
+     * a track's Add Plugin button, so per-track adds land on that track.
+     */
+    var pluginDestinationTrack by mutableStateOf(-1)
+        private set
+
+    fun targetPluginDestination(trackIndex: Int) { pluginDestinationTrack = trackIndex }
+
     fun refreshCatalog() {
         val pluginHost = model.sequencer.engine.pluginHost
         catalog = (0 until pluginHost.catalogEntryCount.toInt())
@@ -188,6 +228,32 @@ class UapmdHost private constructor(val model: AppModel) {
         }
     }
 
+    /** Plug-in state to/from a file, as uapmd-app's Save/Load State buttons. */
+    fun savePluginState(instanceId: Int, path: String): String {
+        val inst = model.sequencer.engine.getPluginInstance(instanceId)
+            ?: return "Instance $instanceId is gone."
+        return runCatching {
+            writeBytesToFile(path, inst.saveStateSync())
+            "Saved state to $path"
+        }.getOrElse { "Failed to save state: ${it.message}" }
+    }
+
+    fun loadPluginState(instanceId: Int, path: String): String {
+        val inst = model.sequencer.engine.getPluginInstance(instanceId)
+            ?: return "Instance $instanceId is gone."
+        return runCatching {
+            val bytes = readBytesFromFile(path) ?: return "Could not read $path."
+            // Route through ProjectCommands so the state change is undoable.
+            model.sequencer.engine.timeline.setPluginState(instanceId, bytes)
+            "Loaded state from $path"
+        }.getOrElse { "Failed to load state: ${it.message}" }
+    }
+
+    fun setInstanceGroup(instanceId: Int, group: Int) {
+        model.sequencer.engine.timeline.commands.setPluginGroup(instanceId, group.toUByte())
+        refresh()
+    }
+
     fun removeInstance(instanceId: Int) {
         model.removePluginInstance(instanceId)
         refresh()
@@ -198,8 +264,36 @@ class UapmdHost private constructor(val model: AppModel) {
     var lastProjectResult by mutableStateOf<AppProjectResult?>(null)
         private set
 
+    /**
+     * Loading a project tears down every live plug-in, so it cannot run while
+     * audio is going or while plug-in UIs are open — that is what crashed on
+     * `.uapmdz`. It also has to be *unpacked* first: `.uapmdz` is an archive,
+     * and handing its path straight to loadProject() is not valid.
+     */
     fun loadProject(path: String) {
-        lastProjectResult = model.loadProject(path)
+        val prepared = runCatching { prepareProjectLoad(path) }.getOrNull()
+        if (prepared == null || !prepared.success) {
+            lastProjectResult = AppProjectResult(false, prepared?.error?.ifEmpty { null }
+                ?: "Could not open $path.")
+            prepared?.close()
+            return
+        }
+
+        val wasRunning = model.isAudioEngineEnabled
+        // Close plug-in UIs first: the instances behind them are about to go.
+        nativeUiPresentations.values.forEach { runCatching { it.close() } }
+        nativeUiPresentations.clear()
+        platformHostedUiInstanceIds = emptySet()
+        selectedMidiClip = null
+        if (wasRunning) model.setAudioEngineEnabled(false)
+
+        lastProjectResult = try {
+            model.loadProject(prepared.path)
+        } finally {
+            prepared.close()
+            if (wasRunning) model.setAudioEngineEnabled(true)
+        }
+        noteCache.clear()
         refresh()
     }
 
@@ -368,6 +462,100 @@ class UapmdHost private constructor(val model: AppModel) {
         refresh()
     }
 
+    // ── Clip properties (all through ProjectCommands, so every edit is undoable) ──
+
+    private val commands get() = model.sequencer.engine.timeline.commands
+
+    fun setClipName(trackIndex: Int, clipId: Int, name: String) =
+        commands.setClipName(trackIndex, clipId, name).also { invalidateMidiCache() }
+
+    fun setClipGain(trackIndex: Int, clipId: Int, gain: Double) =
+        commands.setClipGain(trackIndex, clipId, gain).also { invalidateMidiCache() }
+
+    fun setClipMuted(trackIndex: Int, clipId: Int, muted: Boolean) =
+        commands.setClipMuted(trackIndex, clipId, muted).also { invalidateMidiCache() }
+
+    fun setClipEnabled(trackIndex: Int, clipId: Int, enabled: Boolean) =
+        commands.setClipEnabled(trackIndex, clipId, enabled).also { invalidateMidiCache() }
+
+    fun isClipEnabled(trackIndex: Int, clipId: Int) =
+        model.sequencer.engine.timeline.isClipEnabled(trackIndex, clipId)
+
+    fun resizeClip(trackIndex: Int, clipId: Int, durationSamples: Long) =
+        commands.resizeClip(trackIndex, clipId, durationSamples).also { invalidateMidiCache() }
+
+    fun setClipFilepath(trackIndex: Int, clipId: Int, path: String) =
+        commands.setClipFilepath(trackIndex, clipId, path).also { invalidateMidiCache() }
+
+    /** Moves a clip by rewriting its anchor offset, in seconds from the timeline origin. */
+    fun moveClip(trackIndex: Int, clipId: Int, seconds: Double) =
+        commands.setClipAnchor(
+            trackIndex, clipId,
+            TimeReference(TimeReferenceType.ContainerStart, "", seconds)
+        ).also { invalidateMidiCache() }
+
+    // ── Track mixer (read from the track, write through commands) ────────────
+
+    private var gainGestureOpen = false
+
+    /**
+     * Opens an undo *gesture* on the first change of a drag so the whole drag
+     * collapses into one history entry, as uapmd-app does around its slider.
+     */
+    fun setTrackGain(trackIndex: Int, gain: Double): Boolean {
+        if (!gainGestureOpen) {
+            model.sequencer.engine.timeline.undoEngine.beginGesture("Change track gain")
+            gainGestureOpen = true
+        }
+        return commands.setTrackGain(trackIndex, gain).also { refresh() }
+    }
+
+    fun endTrackGainGesture() {
+        if (gainGestureOpen) {
+            model.sequencer.engine.timeline.undoEngine.endGesture()
+            gainGestureOpen = false
+            refresh()
+        }
+    }
+
+    fun setTrackMuted(trackIndex: Int, muted: Boolean) =
+        commands.setTrackMuted(trackIndex, muted).also { refresh() }
+
+    /** Ctrl/Cmd-click is additive; otherwise soloing one track clears the others. */
+    fun setTrackSolo(trackIndex: Int, solo: Boolean, additive: Boolean = false) {
+        model.sequencer.engine.timeline.documentTransaction {
+            if (solo && !additive) {
+                (0 until model.sequencer.engine.trackCount.toInt()).forEach { i ->
+                    if (i != trackIndex) commands.setTrackSolo(i, false)
+                }
+            }
+            commands.setTrackSolo(trackIndex, solo)
+        }
+        refresh()
+    }
+
+    fun setTrackFreezePolicyEnabled(trackIndex: Int, enabled: Boolean) =
+        commands.setTrackFreezePolicyEnabled(trackIndex, enabled).also { refresh() }
+
+    fun setPluginBypassed(instanceId: Int, bypassed: Boolean) =
+        commands.setPluginBypassed(instanceId, bypassed).also { refresh() }
+
+    fun setPluginGroup(instanceId: Int, group: Int) =
+        commands.setPluginGroup(instanceId, group.toUByte()).also { refresh() }
+
+    fun clearClipsFromTrack(trackIndex: Int) {
+        model.sequencer.engine.timeline.clearClipsFromTrack(trackIndex)
+        invalidateMidiCache()
+    }
+
+    /** Empty MIDI 2.0 clip, as uapmd-app's "Add an Empty MIDI2 Clip". */
+    fun addEmptyMidiClip(trackIndex: Int, positionSamples: Long = 0L): ClipAddResult {
+        val r = model.createEmptyMidiClip(trackIndex, positionSamples, 480u, timeline?.tempo ?: 120.0)
+        lastClipResult = r
+        invalidateMidiCache()
+        return r
+    }
+
     fun removeClip(trackIndex: Int, clipId: Int): Boolean {
         val ok = model.removeClipFromTrack(trackIndex, clipId)
         invalidateMidiCache()
@@ -385,11 +573,22 @@ class UapmdHost private constructor(val model: AppModel) {
     var trackInstances by mutableStateOf<List<List<TrackInstance>>>(emptyList())
         private set
 
+    /** Clips on the master track, which sits above the regular tracks. */
+    var masterClips by mutableStateOf<List<ClipData>>(emptyList())
+        private set
+    var masterInstances by mutableStateOf<List<TrackInstance>>(emptyList())
+        private set
+
     /** Per timeline track, its clips. Index matches [trackInstances]. */
     var trackClips by mutableStateOf<List<List<ClipData>>>(emptyList())
         private set
 
     var playheadSeconds by mutableStateOf(0.0)
+        private set
+
+    var inputSpectrum by mutableStateOf(FloatArray(24))
+        private set
+    var outputSpectrum by mutableStateOf(FloatArray(24))
         private set
 
     /** MIDI note previews, cached per (track, clip) because decoding is not free. */
@@ -418,7 +617,7 @@ class UapmdHost private constructor(val model: AppModel) {
         val t = model.transport
         isPlaying = t.isPlaying
         isPaused = t.isPaused
-        isRecording = t.isRecording
+        isRecording = t.isRecording || model.sequencer.engine.midiRecorder?.isRecording == true
         history = model.historyState
         trackCount = model.timelineTrackCount.toInt()
         timeline = model.getTimelineState()
@@ -436,8 +635,18 @@ class UapmdHost private constructor(val model: AppModel) {
             model.getTimelineTrack(ti.toUInt()).getClips()
         }
 
+        masterClips = runCatching { model.masterTimelineTrack.getClips() }.getOrDefault(emptyList())
+        masterInstances = runCatching {
+            engine.masterTrack.getOrderedInstanceIds().mapNotNull { id ->
+                engine.getPluginInstance(id)?.let { TrackInstance(id, it.displayName, it.formatName) }
+            }
+        }.getOrDefault(emptyList())
+
         val sr = model.sampleRate.takeIf { it > 0 } ?: 48000
         playheadSeconds = engine.playbackPosition.toDouble() / sr
+
+        inputSpectrum = runCatching { engine.getInputSpectrum(24) }.getOrDefault(inputSpectrum)
+        outputSpectrum = runCatching { engine.getOutputSpectrum(24) }.getOrDefault(outputSpectrum)
 
         if (catalog.isEmpty() && !isScanning) refreshCatalog()
     }

@@ -1168,6 +1168,37 @@ JNIEXPORT jint JNICALL Java_dev_atsushieno_uapmd_JniBridge_uapmdTrackRenderLeadI
         JNIEnv*, jclass, jlong h) { return static_cast<jint>(uapmd_track_render_lead_in_samples(j2p<uapmd_sequencer_track_t>(h))); }
 JNIEXPORT jdouble JNICALL Java_dev_atsushieno_uapmd_JniBridge_uapmdTrackTailLengthInSeconds(
         JNIEnv*, jclass, jlong h) { return uapmd_track_tail_length_in_seconds(j2p<uapmd_sequencer_track_t>(h)); }
+JNIEXPORT jlong JNICALL Java_dev_atsushieno_uapmd_JniBridge_uapmdEngineMidiRecorder(
+        JNIEnv*, jclass, jlong e) { return p2j(uapmd_engine_midi_recorder(j2p<uapmd_sequencer_engine_t>(e))); }
+JNIEXPORT jboolean JNICALL Java_dev_atsushieno_uapmd_JniBridge_uapmdMidiRecorderStart(
+        JNIEnv* env, jclass, jlong r, jstring t, jint c, jlong s) {
+    const char* tid = t ? env->GetStringUTFChars(t, nullptr) : nullptr;
+    bool ok = uapmd_midi_recorder_start(j2p<uapmd_midi_recorder_t>(r), tid, c, s);
+    if (t) env->ReleaseStringUTFChars(t, tid);
+    return ok;
+}
+JNIEXPORT void JNICALL Java_dev_atsushieno_uapmd_JniBridge_uapmdMidiRecorderStop(
+        JNIEnv*, jclass, jlong r) { uapmd_midi_recorder_stop(j2p<uapmd_midi_recorder_t>(r)); }
+JNIEXPORT void JNICALL Java_dev_atsushieno_uapmd_JniBridge_uapmdMidiRecorderCancel(
+        JNIEnv*, jclass, jlong r) { uapmd_midi_recorder_cancel(j2p<uapmd_midi_recorder_t>(r)); }
+JNIEXPORT jboolean JNICALL Java_dev_atsushieno_uapmd_JniBridge_uapmdMidiRecorderIsRecording(
+        JNIEnv*, jclass, jlong r) { return uapmd_midi_recorder_is_recording(j2p<uapmd_midi_recorder_t>(r)); }
+
+JNIEXPORT jdouble JNICALL Java_dev_atsushieno_uapmd_JniBridge_uapmdTrackGetGain(
+        JNIEnv*, jclass, jlong track) {
+    return uapmd_track_get_gain(j2p<uapmd_sequencer_track_t>(track));
+}
+
+JNIEXPORT jboolean JNICALL Java_dev_atsushieno_uapmd_JniBridge_uapmdTrackGetMuted(
+        JNIEnv*, jclass, jlong track) {
+    return uapmd_track_get_muted(j2p<uapmd_sequencer_track_t>(track));
+}
+
+JNIEXPORT jboolean JNICALL Java_dev_atsushieno_uapmd_JniBridge_uapmdTrackGetSolo(
+        JNIEnv*, jclass, jlong track) {
+    return uapmd_track_get_solo(j2p<uapmd_sequencer_track_t>(track));
+}
+
 JNIEXPORT jboolean JNICALL Java_dev_atsushieno_uapmd_JniBridge_uapmdTrackGetBypassed(
         JNIEnv*, jclass, jlong h) { return uapmd_track_get_bypassed(j2p<uapmd_sequencer_track_t>(h)); }
 JNIEXPORT jboolean JNICALL Java_dev_atsushieno_uapmd_JniBridge_uapmdTrackGetFrozen(

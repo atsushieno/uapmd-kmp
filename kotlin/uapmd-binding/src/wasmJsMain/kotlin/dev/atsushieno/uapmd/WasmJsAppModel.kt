@@ -196,6 +196,21 @@ class WasmJsAppModel internal constructor(internal val handle: Int) : AppModel {
     override fun removeClipFromTrack(trackIndex: Int, clipId: Int): Boolean =
         wasmMod.uapmdAppRemoveClipFromTrack(handle, trackIndex, clipId)
 
+    // uapmd_clip_add_result_t: int32 @0, int32 @4, bool @8, char* @12 (size 16)
+    override fun createEmptyMidiClip(
+        trackIndex: Int, positionSamples: Long, tickResolution: UInt, bpm: Double
+    ): ClipAddResult = withWasmStruct(16) { out ->
+        wasmAppCreateEmptyMidiClip(wasmMod, out, handle, trackIndex, positionSamples.toString(), tickResolution.toInt(), bpm)
+        val mod = wasmMod
+        val errPtr = mod.getValue(out + 12, "i32").toInt()
+        ClipAddResult(
+            mod.getValue(out, "i32").toInt(),
+            mod.getValue(out + 4, "i32").toInt(),
+            mod.getValue(out + 8, "i8").toInt() != 0,
+            if (errPtr != 0) mod.utf8ToString(errPtr) else null
+        )
+    }
+
     // ── Track graph ─────────────────────────────────────────────────────────
     //
     // uapmd_graph_endpoint_t:          int32 @0, int32 @4, uint32 @8 (12 bytes)

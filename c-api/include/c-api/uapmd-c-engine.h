@@ -136,6 +136,12 @@ UAPMD_C_EXPORT uint32_t uapmd_track_latency_in_samples(uapmd_sequencer_track_t t
 UAPMD_C_EXPORT uint32_t uapmd_track_render_lead_in_samples(uapmd_sequencer_track_t track);
 UAPMD_C_EXPORT double   uapmd_track_tail_length_in_seconds(uapmd_sequencer_track_t track);
 
+/* Mixer state. The setters live on ProjectCommands (uapmd-c-undo.h) so edits are
+ * undoable; these getters exist so a UI can draw the current value. */
+UAPMD_C_EXPORT double uapmd_track_get_gain(uapmd_sequencer_track_t track);
+UAPMD_C_EXPORT bool   uapmd_track_get_muted(uapmd_sequencer_track_t track);
+UAPMD_C_EXPORT bool   uapmd_track_get_solo(uapmd_sequencer_track_t track);
+
 UAPMD_C_EXPORT bool uapmd_track_get_bypassed(uapmd_sequencer_track_t track);
 UAPMD_C_EXPORT bool uapmd_track_get_frozen(uapmd_sequencer_track_t track);
 UAPMD_C_EXPORT void uapmd_track_set_bypassed(uapmd_sequencer_track_t track, bool value);
@@ -390,6 +396,24 @@ UAPMD_C_EXPORT uapmd_offline_render_result_t uapmd_render_offline(uapmd_sequence
                                                                      void* user_data,
                                                                      uapmd_render_progress_cb_t progress_cb,
                                                                      uapmd_render_should_cancel_cb_t cancel_cb);
+
+/* ═══════════════════════════════════════════════════════════════════════════
+ *  MIDI recorder (uapmd::MidiRecorder, a playback engine extension)
+ *
+ *  Captures live MIDI input into one selected clip. `uapmd_engine_recorder()`
+ *  returns NULL when the extension is not installed.
+ * ═══════════════════════════════════════════════════════════════════════════ */
+
+typedef struct uapmd_midi_recorder* uapmd_midi_recorder_t;
+
+UAPMD_C_EXPORT uapmd_midi_recorder_t uapmd_engine_midi_recorder(uapmd_sequencer_engine_t engine);
+UAPMD_C_EXPORT bool uapmd_midi_recorder_start(uapmd_midi_recorder_t rec,
+                                                 const char* track_reference_id,
+                                                 int32_t clip_id,
+                                                 int64_t start_sample);
+UAPMD_C_EXPORT void uapmd_midi_recorder_stop(uapmd_midi_recorder_t rec);
+UAPMD_C_EXPORT void uapmd_midi_recorder_cancel(uapmd_midi_recorder_t rec);
+UAPMD_C_EXPORT bool uapmd_midi_recorder_is_recording(uapmd_midi_recorder_t rec);
 
 /* ═══════════════════════════════════════════════════════════════════════════
  *  Custom Event Loop

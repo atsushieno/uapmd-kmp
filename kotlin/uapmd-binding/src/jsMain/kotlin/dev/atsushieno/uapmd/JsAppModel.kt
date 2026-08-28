@@ -230,6 +230,21 @@ class JsAppModel internal constructor(internal val handle: Int) : AppModel {
     override fun removeClipFromTrack(trackIndex: Int, clipId: Int): Boolean =
         jsMod._uapmd_app_remove_clip_from_track(handle, trackIndex, clipId) as Boolean
 
+    override fun createEmptyMidiClip(
+        trackIndex: Int, positionSamples: Long, tickResolution: UInt, bpm: Double
+    ): ClipAddResult = withWasmMem(16) { out ->
+        jsMod._uapmd_app_create_empty_midi_clip(
+            out, handle, trackIndex, js("BigInt")(positionSamples.toString()), tickResolution.toInt(), bpm
+        )
+        val errPtr = jsMod.getValue(out + 12, "i32") as Int
+        ClipAddResult(
+            jsMod.getValue(out, "i32") as Int,
+            jsMod.getValue(out + 4, "i32") as Int,
+            (jsMod.getValue(out + 8, "i8") as Int) != 0,
+            if (errPtr != 0) jsMod.UTF8ToString(errPtr) as String else null
+        )
+    }
+
     // ── Track graph ─────────────────────────────────────────────────────────
 
     override fun ensureTrackUsesEditorGraph(trackIndex: Int): Boolean =

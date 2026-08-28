@@ -279,6 +279,40 @@ fun main() {
         println("NOTE  no test MIDI file at $midi; skipped clip checks")
     }
 
+    // ── clip + track editing commands (the surface the UI drives) ────────────
+    run {
+        val cmds = model.sequencer.engine.timeline.commands
+        val t0 = model.sequencer.engine.getTrack(0u)
+
+        val empty = model.createEmptyMidiClip(0, 0L, 480u, 120.0)
+        println("   createEmptyMidiClip -> id=${empty.clipId} ok=${empty.success} err=${empty.error}")
+        check("empty MIDI clip created", empty.success)
+
+        if (empty.success) {
+            check("clip rename accepted", cmds.setClipName(0, empty.clipId, "Probe clip"))
+            check("clip gain accepted", cmds.setClipGain(0, empty.clipId, 0.5))
+            check("clip mute accepted", cmds.setClipMuted(0, empty.clipId, true))
+            check("clip resize accepted", cmds.resizeClip(0, empty.clipId, 96000L))
+            val clips = model.getTimelineTrack(0u).getClips()
+            val c = clips.firstOrNull { it.clipId == empty.clipId }
+            println("   clip now: name='${c?.name}' gain=${c?.gain} muted=${c?.muted} len=${c?.durationSamples}")
+            check("clip name round-tripped", c?.name == "Probe clip")
+            check("clip gain round-tripped", c?.gain == 0.5)
+            check("clip mute round-tripped", c?.muted == true)
+            check("clip resize round-tripped", c?.durationSamples == 96000L)
+            check("clip removal", model.removeClipFromTrack(0, empty.clipId))
+        }
+
+        // Track mixer: the getters added to the C API for this.
+        check("track gain accepted", cmds.setTrackGain(0, 0.25))
+        check("track gain readable back", kotlin.math.abs(t0.gain - 0.25) < 1e-6)
+        check("track mute accepted", cmds.setTrackMuted(0, true))
+        check("track mute readable back", t0.muted)
+        check("track solo accepted", cmds.setTrackSolo(0, true))
+        check("track solo readable back", t0.solo)
+        cmds.setTrackGain(0, 1.0); cmds.setTrackMuted(0, false); cmds.setTrackSolo(0, false)
+    }
+
     // ── project markers (engine-owned, edited through ProjectCommands) ───────
     val markersBefore = model.sequencer.engine.masterTrackMarkers.size
     val added = model.sequencer.engine.timeline.commands.setMasterTrackMarkers(
@@ -304,9 +338,32 @@ fun main() {
     check("saveProjectSync returned a decodable struct", saved.success || saved.error != null)
     if (saved.success) {
         check("project file exists on disk", java.io.File(projectPath).length() > 0)
-        val loaded = model.loadProject(projectPath)
+        // Load the way the app does: unpack first. A plain .uapmd must pass
+        // through; a .uapmdz archive must be extracted. Handing an archive path
+        // straight to loadProject() is what crashed.
+        val prepared = dev.atsushieno.uapmd.prepareProjectLoad(projectPath)
+        println("   prepareProjectLoad -> ok=${prepared.success} path=${prepared.path} err=${prepared.error}")
+        check("prepareProjectLoad accepts a .uapmd", prepared.success)
+        check("prepared path is usable", prepared.path.isNotEmpty())
+        val loaded = model.loadProject(prepared.path)
+        prepared.close()
         println("   loadProject -> success=${loaded.success} error=${loaded.error}")
         check("loadProject round-tripped", loaded.success)
+
+        val zipPath = projectPath.removeSuffix(".uapmd") + ".uapmdz"
+        val zipped = model.saveProjectSync(zipPath)
+        println("   saveProjectSync(.uapmdz) -> ${zipped.success} ${zipped.error}")
+        if (zipped.success) {
+            val p2 = dev.atsushieno.uapmd.prepareProjectLoad(zipPath)
+            println("   prepare(.uapmdz) -> ok=${p2.success} path=${p2.path} err=${p2.error}")
+            check("prepareProjectLoad unpacks a .uapmdz", p2.success && p2.path.isNotEmpty())
+            if (p2.success) {
+                val l2 = model.loadProject(p2.path)
+                println("   loadProject(.uapmdz) -> ${l2.success} ${l2.error}")
+                check("archived project loads", l2.success)
+            }
+            p2.close()
+        }
     }
 
     // ── ordered teardown: engine off, then cleanup (§2.5) ────────────────────
