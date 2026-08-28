@@ -36,6 +36,13 @@ actual fun getMidiIODevice(driverName: String): MidiIODevice =
 actual fun createAudioFileReader(filepath: String): AudioFileReader =
     NativeAudioFileReader(uapmd_audio_file_reader_create(filepath) ?: error("uapmd_audio_file_reader_create failed for: $filepath"))
 
+actual fun createSilentAudioFileReader(numFrames: Long, numChannels: Int, sampleRate: Int): AudioFileReader =
+    NativeAudioFileReader(
+        uapmd_audio_file_reader_create_silent(
+            numFrames.toULong(), numChannels.toUInt(), sampleRate.toUInt()
+        ) ?: error("uapmd_audio_file_reader_create_silent failed")
+    )
+
 actual fun createScanTool(): ScanTool =
     NativeScanTool(uapmd_scan_tool_create() ?: error("uapmd_scan_tool_create failed"))
 

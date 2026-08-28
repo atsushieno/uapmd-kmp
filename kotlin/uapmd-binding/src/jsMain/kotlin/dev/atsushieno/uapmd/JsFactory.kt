@@ -38,6 +38,13 @@ actual fun getMidiIODevice(driverName: String): MidiIODevice =
 actual fun createAudioFileReader(filepath: String): AudioFileReader =
     withJsCString(filepath) { ptr -> JsAudioFileReader(jsMod._uapmd_audio_file_reader_create(ptr) as Int) }
 
+actual fun createSilentAudioFileReader(numFrames: Long, numChannels: Int, sampleRate: Int): AudioFileReader =
+    JsAudioFileReader(
+        jsMod._uapmd_audio_file_reader_create_silent(
+            js("BigInt")(numFrames.toString()), numChannels, sampleRate
+        ) as Int
+    )
+
 actual fun createScanTool(): ScanTool =
     JsScanTool(jsMod._uapmd_scan_tool_create() as Int)
 

@@ -379,6 +379,7 @@ external interface UapmdCApiModule : JsAny {
     // ── Audio file reader ──────────────────────────────────────────────────
     @JsName("_uapmd_audio_file_reader_create")
     fun uapmdAudioFileReaderCreate(filePathPtr: Int): Int
+
     @JsName("_uapmd_audio_file_reader_destroy")
     fun uapmdAudioFileReaderDestroy(handle: Int)
     @JsName("_uapmd_audio_file_reader_get_properties")
@@ -1213,6 +1214,12 @@ internal external fun wasmWriteI64(mod: UapmdCApiModule, ptr: Int, value: String
 
 @JsFun("(mod, ptr) => new DataView(mod.HEAPU8.buffer).getBigInt64(ptr, true).toString()")
 internal external fun wasmReadI64(mod: UapmdCApiModule, ptr: Int): String
+
+// num_frames is uint64_t, so it crosses as BigInt; pass it as a decimal string.
+@JsFun("(mod, n, ch, sr) => mod._uapmd_audio_file_reader_create_silent(BigInt(n), ch, sr)")
+internal external fun wasmAudioFileReaderCreateSilent(
+    mod: UapmdCApiModule, numFrames: String, numChannels: Int, sampleRate: Int
+): Int
 
 @JsFun("(mod, rec, t, c, s) => mod._uapmd_midi_recorder_start(rec, t, c, BigInt(s))")
 internal external fun wasmMidiRecorderStart(

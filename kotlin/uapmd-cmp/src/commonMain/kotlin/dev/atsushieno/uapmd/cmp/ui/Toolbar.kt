@@ -52,7 +52,6 @@ fun Toolbar(
     host: UapmdHost,
     onToggleAddins: () -> Unit,
     onToggleExporter: () -> Unit,
-    onToggleMarkers: () -> Unit,
     onToggleDeviceSettings: () -> Unit,
     onTogglePlugins: () -> Unit,
     uiScale: Float = 1f,
@@ -61,7 +60,6 @@ fun Toolbar(
     onToggleTheme: () -> Unit = {},
     isDeviceSettingsOpen: Boolean = false,
     isAddinsOpen: Boolean = false,
-    isMarkersOpen: Boolean = false,
     modifier: Modifier = Modifier
 ) {
     var commandOpen by remember { mutableStateOf(false) }
@@ -112,10 +110,6 @@ fun Toolbar(
                     DropdownMenuItem(
                         text = { Text(if (isAddinsOpen) "Hide Addins" else "Show Addins") },
                         onClick = { commandOpen = false; onToggleAddins() }
-                    )
-                    DropdownMenuItem(
-                        text = { Text(if (isMarkersOpen) "Hide Project Markers" else "Show Project Markers") },
-                        onClick = { commandOpen = false; onToggleMarkers() }
                     )
                     // Script and MCP Settings live here in uapmd-app; both need
                     // C API that does not exist yet (UapmdJSRuntime, McpServer).

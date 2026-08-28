@@ -51,6 +51,8 @@ class NativeAudioFileReader internal constructor(
 class NativeTimelineTrack internal constructor(
     private val handle: uapmd_timeline_track_t
 ) : TimelineTrack {
+    override val channelCount: Int get() = uapmd_tt_channel_count(handle).toInt()
+
     override fun getClips(): List<ClipData> = memScoped {
         val cm = uapmd_tt_clip_manager(handle) ?: return emptyList()
         val count = uapmd_cm_clip_count(cm).toInt()

@@ -37,6 +37,12 @@ actual fun getMidiIODevice(driverName: String): MidiIODevice =
 actual fun createAudioFileReader(filepath: String): AudioFileReader =
     JvmAudioFileReader(lib.uapmd_audio_file_reader_create(filepath) ?: error("uapmd_audio_file_reader_create failed for: $filepath"))
 
+actual fun createSilentAudioFileReader(numFrames: Long, numChannels: Int, sampleRate: Int): AudioFileReader =
+    JvmAudioFileReader(
+        lib.uapmd_audio_file_reader_create_silent(numFrames, numChannels, sampleRate)
+            ?: error("uapmd_audio_file_reader_create_silent failed")
+    )
+
 actual fun createScanTool(): ScanTool =
     JvmScanTool(lib.uapmd_scan_tool_create() ?: error("uapmd_scan_tool_create failed"))
 

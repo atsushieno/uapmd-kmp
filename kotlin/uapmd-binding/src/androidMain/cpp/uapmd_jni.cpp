@@ -1393,6 +1393,11 @@ JNIEXPORT void JNICALL Java_dev_atsushieno_uapmd_JniBridge_uapmdTlSetTimelineCha
 
 // ─── TimelineTrack (clip data) ────────────────────────────────────────────────
 
+JNIEXPORT jint JNICALL Java_dev_atsushieno_uapmd_JniBridge_uapmdTtChannelCount(
+        JNIEnv*, jclass, jlong tt) {
+    return static_cast<jint>(uapmd_tt_channel_count(j2p<uapmd_timeline_track_t>(tt)));
+}
+
 JNIEXPORT jint JNICALL Java_dev_atsushieno_uapmd_JniBridge_uapmdTtClipCount(
         JNIEnv*, jclass, jlong h) {
     auto cm = uapmd_tt_clip_manager(j2p<uapmd_timeline_track_t>(h));
@@ -1524,6 +1529,13 @@ JNIEXPORT jlong JNICALL Java_dev_atsushieno_uapmd_JniBridge_uapmdAudioFileReader
     jlong r = p2j(uapmd_audio_file_reader_create(p));
     jstr_release(env, path, p);
     return r;
+}
+JNIEXPORT jlong JNICALL Java_dev_atsushieno_uapmd_JniBridge_uapmdAudioFileReaderCreateSilent(
+        JNIEnv*, jclass, jlong numFrames, jint numChannels, jint sampleRate) {
+    return p2j(uapmd_audio_file_reader_create_silent(
+        static_cast<uint64_t>(numFrames),
+        static_cast<uint32_t>(numChannels),
+        static_cast<uint32_t>(sampleRate)));
 }
 JNIEXPORT void JNICALL Java_dev_atsushieno_uapmd_JniBridge_uapmdAudioFileReaderDestroy(
         JNIEnv*, jclass, jlong h) { uapmd_audio_file_reader_destroy(j2p<uapmd_audio_file_reader_t>(h)); }

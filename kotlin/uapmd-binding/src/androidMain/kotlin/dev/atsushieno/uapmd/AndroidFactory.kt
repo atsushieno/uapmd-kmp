@@ -34,6 +34,9 @@ actual fun getMidiIODevice(driverName: String): MidiIODevice =
 actual fun createAudioFileReader(filepath: String): AudioFileReader =
     AndroidAudioFileReader(JniBridge.uapmdAudioFileReaderCreate(filepath))
 
+actual fun createSilentAudioFileReader(numFrames: Long, numChannels: Int, sampleRate: Int): AudioFileReader =
+    AndroidAudioFileReader(JniBridge.uapmdAudioFileReaderCreateSilent(numFrames, numChannels, sampleRate))
+
 actual fun createScanTool(): ScanTool =
     AndroidScanTool(JniBridge.uapmdScanToolCreate())
 

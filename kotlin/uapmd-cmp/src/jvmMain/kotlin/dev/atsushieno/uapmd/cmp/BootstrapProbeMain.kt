@@ -1,6 +1,9 @@
 package dev.atsushieno.uapmd.cmp
 
+import dev.atsushieno.uapmd.ClipType
+import dev.atsushieno.uapmd.TimelinePosition
 import dev.atsushieno.uapmd.cleanupAppModel
+import dev.atsushieno.uapmd.createSilentAudioFileReader
 import dev.atsushieno.uapmd.getAppModel
 import dev.atsushieno.uapmd.initJvmEventLoop
 import dev.atsushieno.uapmd.PluginInstanceResult
@@ -449,6 +452,59 @@ fun main() {
                 check("archived project loads", l2.success)
             }
             p2.close()
+        }
+    }
+
+    // ── Sequence Editor clip actions: positioned adds, silent audio clip ─────
+    //
+    // These are what the per-lane context menus call. The position and the size
+    // are the point: uapmd-app's "Add … Here" lands the clip under the pointer,
+    // and the range adds size it to the drag.
+    run {
+        val sr = model.sampleRate.takeIf { it > 0 } ?: 48000
+        val trackClipsBefore = model.getTimelineTrack(0u).getClips().size
+
+        // "Add an Empty MIDI2 Clip Here" at 3.5s
+        val atSamples = (3.5 * sr).toLong()
+        val midi = model.createEmptyMidiClip(0, atSamples, 480u, 120.0)
+        check("empty MIDI2 clip added at a position", midi.success)
+        if (midi.success) {
+            val c = model.getTimelineTrack(0u).getClips().firstOrNull { it.clipId == midi.clipId }
+            check("positioned MIDI clip lands at 3.5s", c != null && c.positionSamples == atSamples)
+        }
+
+        // "Add Empty Audio Clip" over a 2s range, via the silent reader.
+        val start = 7.0
+        val end = 9.0
+        val frames = ((end - start) * sr).toLong()
+        val channels = model.getTimelineTrack(0u).channelCount
+        check("track reports a channel count", channels > 0)
+        val silent = createSilentAudioFileReader(frames, channels, sr)
+        val props = silent.getProperties()
+        check("silent reader reports the requested frames", props?.numFrames?.toLong() == frames)
+        val audio = model.sequencer.engine.timeline.addAudioClip(
+            0, TimelinePosition((start * sr).toLong(), 0.0), silent, ""
+        )
+        println("   empty audio clip -> id=${audio.clipId} ok=${audio.success} err=${audio.error}")
+        check("empty audio clip added", audio.success)
+        if (audio.success) {
+            val c = model.getTimelineTrack(0u).getClips().firstOrNull { it.clipId == audio.clipId }
+            check("empty audio clip lands at 7s", c != null && c.positionSamples == (start * sr).toLong())
+            check("empty audio clip is sized to the range", c != null && c.durationSamples == frames)
+            check("empty audio clip has no source file", c != null && c.filepath.isEmpty())
+            check("empty audio clip is an audio clip", c != null && c.clipType == ClipType.Audio)
+        }
+
+        val after = model.getTimelineTrack(0u).getClips().size
+        check("both clips are on the track", after == trackClipsBefore + 2)
+
+        // Enable/disable, the clip menu's toggle.
+        if (midi.success) {
+            val tl = model.sequencer.engine.timeline
+            val was = tl.isClipEnabled(0, midi.clipId)
+            tl.commands.setClipEnabled(0, midi.clipId, !was)
+            check("clip enabled state toggles", tl.isClipEnabled(0, midi.clipId) == !was)
+            tl.commands.setClipEnabled(0, midi.clipId, was)
         }
     }
 

@@ -23,6 +23,8 @@ interface AudioFileReader : AutoCloseable {
 
 interface TimelineTrack {
     fun getClips(): List<ClipData>
+    /** Audio channels the track carries; `uapmd_tt_channel_count`. */
+    val channelCount: Int
 }
 
 interface TimelineFacade {

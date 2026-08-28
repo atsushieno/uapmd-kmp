@@ -26,6 +26,8 @@ class AndroidAudioFileReader internal constructor(
 class AndroidTimelineTrack internal constructor(
     private val handle: Long
 ) : TimelineTrack {
+    override val channelCount: Int get() = JniBridge.uapmdTtChannelCount(handle)
+
     override fun getClips(): List<ClipData> {
         val count = JniBridge.uapmdTtClipCount(handle)
         if (count == 0) return emptyList()

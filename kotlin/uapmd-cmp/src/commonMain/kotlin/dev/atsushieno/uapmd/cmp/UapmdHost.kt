@@ -27,6 +27,7 @@ import dev.atsushieno.uapmd.TimeReference
 import dev.atsushieno.uapmd.TimeReferenceType
 import dev.atsushieno.uapmd.TimelinePosition
 import dev.atsushieno.uapmd.createAudioFileReader
+import dev.atsushieno.uapmd.createSilentAudioFileReader
 import dev.atsushieno.uapmd.MidiNoteData
 import dev.atsushieno.uapmd.OfflineRenderSettings
 import dev.atsushieno.uapmd.PluginInstanceConfig
@@ -489,21 +490,53 @@ class UapmdHost private constructor(val model: AppModel) {
     var lastClipResult by mutableStateOf<ClipAddResult?>(null)
         private set
 
-    /** SMF or .midi2, added at the start of [trackIndex]. */
-    fun importMidiClip(trackIndex: Int, filePath: String) {
+    private fun samplesAt(seconds: Double): Long {
+        val sampleRate = (model.sampleRate.takeIf { it > 0 } ?: 48000).toDouble()
+        return (seconds.coerceAtLeast(0.0) * sampleRate).toLong()
+    }
+
+    /** SMF or .midi2, added at [positionSeconds] on [trackIndex]. */
+    fun importMidiClip(trackIndex: Int, filePath: String, positionSeconds: Double = 0.0) {
         lastClipResult = model.sequencer.engine.timeline
-            .addMidiClipFromFile(trackIndex, TimelinePosition(0L, 0.0), filePath)
+            .addMidiClipFromFile(trackIndex, TimelinePosition(samplesAt(positionSeconds), 0.0), filePath)
         invalidateClips()
         refresh()
     }
 
-    fun importAudioClip(trackIndex: Int, filePath: String) {
+    fun importAudioClip(trackIndex: Int, filePath: String, positionSeconds: Double = 0.0) {
         val reader = createAudioFileReader(filePath)
         lastClipResult = model.sequencer.engine.timeline
-            .addAudioClip(trackIndex, TimelinePosition(0L, 0.0), reader, filePath)
+            .addAudioClip(trackIndex, TimelinePosition(samplesAt(positionSeconds), 0.0), reader, filePath)
         invalidateClips()
         refresh()
     }
+
+    /**
+     * uapmd-app's "Add Empty Audio Clip": a clip backed by a silent reader
+     * sized to the range, with no source file
+     * (`TimelineEditor::addEmptyAudioClipInRange`). The master track takes only
+     * MIDI clips, as it does there.
+     */
+    fun addEmptyAudioClip(trackIndex: Int, startSeconds: Double, endSeconds: Double) {
+        // uapmd's kMasterTrackIndex; the master track takes only MIDI clips.
+        if (trackIndex == Int.MIN_VALUE) {
+            lastClipResult = ClipAddResult(-1, -1, false, "The master track only accepts MIDI/SMF clips.")
+            return
+        }
+        val sampleRate = model.sampleRate.takeIf { it > 0 } ?: 48000
+        val frames = ((endSeconds - startSeconds).coerceAtLeast(0.0) * sampleRate).toLong().coerceAtLeast(1L)
+        val channels = runCatching { model.getTimelineTrack(trackIndex.toUInt()).channelCount }
+            .getOrDefault(2).coerceAtLeast(1)
+        val reader = createSilentAudioFileReader(frames, channels, sampleRate)
+        lastClipResult = model.sequencer.engine.timeline
+            .addAudioClip(trackIndex, TimelinePosition(samplesAt(startSeconds), 0.0), reader, "")
+        invalidateClips()
+        refresh()
+    }
+
+    /** The one-second default uapmd-app uses when there is no dragged range. */
+    fun addEmptyAudioClip(trackIndex: Int, positionSeconds: Double) =
+        addEmptyAudioClip(trackIndex, positionSeconds, positionSeconds + 1.0)
 
     private fun invalidateClips() = noteCache.clear()
 
@@ -544,6 +577,18 @@ class UapmdHost private constructor(val model: AppModel) {
             trackIndex, clipId,
             TimeReference(TimeReferenceType.ContainerStart, "", seconds)
         ).also { invalidateMidiCache() }
+
+    /**
+     * Which tracks the user has asked to freeze.
+     *
+     * uapmd-app reads `FrozenTrackManager::freezePolicyForTrack()` to colour the
+     * legend's freeze button, and `isTrackBusy()` to disable it while rendering.
+     * Neither is exposed by the C API, so the app can only remember what it
+     * requested — the button reflects intent, not engine state. Listed in
+     * `uapmd-cmp-ui-audit.md` under the blocked gaps.
+     */
+    var freezeRequested by mutableStateOf<Set<Int>>(emptySet())
+        private set
 
     // ── Track mixer (read from the track, write through commands) ────────────
 
@@ -586,7 +631,11 @@ class UapmdHost private constructor(val model: AppModel) {
     }
 
     fun setTrackFreezePolicyEnabled(trackIndex: Int, enabled: Boolean) =
-        commands.setTrackFreezePolicyEnabled(trackIndex, enabled).also { refresh() }
+        commands.setTrackFreezePolicyEnabled(trackIndex, enabled).also {
+            freezeRequested =
+                if (enabled) freezeRequested + trackIndex else freezeRequested - trackIndex
+            refresh()
+        }
 
     fun setPluginBypassed(instanceId: Int, bypassed: Boolean) =
         commands.setPluginBypassed(instanceId, bypassed).also { refresh() }

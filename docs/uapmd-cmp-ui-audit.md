@@ -16,14 +16,12 @@ listed; matched behaviour is not.
 | Track busy state | freeze button disabled and spinning while the track renders | `FrozenTrackManager::isTrackBusy` and the runtime freeze state are not exposed |
 
 The menu entries for the first four exist in `Toolbar.kt`, disabled, so the gap is visible in the
-UI rather than silently absent. These belong in `uapmd-binding-missing-api.md` §3 as C API work.
+UI rather than silently absent. These belong in `uapmd-binding-missing-api.md` §2 as C API work.
 
 ## Not yet built
 
 | Feature | uapmd-app | Notes |
 |---|---|---|
-| Sequence Editor window ("Edit Clips…") | Clips ▸ Edit Clips… | the whole window |
-| Clip resize by dragging its edges | timeline | numeric resize exists in Clip Properties |
-| Drag-to-select a range → add clip in range | timeline | |
+| Clip resize by dragging its edges | timeline | numeric resize exists in Clip Properties, and range-drag sizes a new clip |
 | Timeline navigator position control | navigator | zoom is implemented, scrub position is not |
 | Piano roll: per-note automation, NRPN picker | piano roll | deliberately deferred |

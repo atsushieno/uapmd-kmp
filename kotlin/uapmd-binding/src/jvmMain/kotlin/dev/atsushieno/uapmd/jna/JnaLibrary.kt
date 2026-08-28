@@ -646,7 +646,9 @@ interface UapmdLibrary : Library {
 
     // ── AudioFileReader ──────────────────────────────────────────────────────
 
+    fun uapmd_tt_channel_count(tt: Pointer): Int
     fun uapmd_audio_file_reader_create(filepath: String): Pointer?
+    fun uapmd_audio_file_reader_create_silent(numFrames: Long, numChannels: Int, sampleRate: Int): Pointer?
     fun uapmd_audio_file_reader_destroy(reader: Pointer?)
     fun uapmd_audio_file_reader_get_properties(reader: Pointer?, out: UapmdAudioFileProperties): Boolean
     fun uapmd_audio_file_reader_read_frames(

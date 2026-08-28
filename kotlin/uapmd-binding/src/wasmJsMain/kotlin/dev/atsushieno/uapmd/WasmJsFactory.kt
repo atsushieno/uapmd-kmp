@@ -38,6 +38,11 @@ actual fun getMidiIODevice(driverName: String): MidiIODevice =
 actual fun createAudioFileReader(filepath: String): AudioFileReader =
     withCStringKt(filepath) { ptr -> WasmJsAudioFileReader(wasmMod.uapmdAudioFileReaderCreate(ptr)) }
 
+actual fun createSilentAudioFileReader(numFrames: Long, numChannels: Int, sampleRate: Int): AudioFileReader =
+    WasmJsAudioFileReader(
+        wasmAudioFileReaderCreateSilent(wasmMod, numFrames.toString(), numChannels, sampleRate)
+    )
+
 actual fun createScanTool(): ScanTool =
     WasmJsScanTool(wasmMod.uapmdScanToolCreate())
 

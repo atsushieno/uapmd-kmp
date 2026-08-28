@@ -224,6 +224,13 @@ typedef struct uapmd_audio_file_properties {
 } uapmd_audio_file_properties_t;
 
 UAPMD_C_EXPORT uapmd_audio_file_reader_t uapmd_audio_file_reader_create(const char* filepath);
+/**
+ * A reader that yields silence, for clips created with no source file
+ * (uapmd-app's "Add Empty Audio Clip"). Wraps uapmd::SilentAudioFileReader.
+ */
+UAPMD_C_EXPORT uapmd_audio_file_reader_t uapmd_audio_file_reader_create_silent(uint64_t num_frames,
+                                                                              uint32_t num_channels,
+                                                                              uint32_t sample_rate);
 UAPMD_C_EXPORT void uapmd_audio_file_reader_destroy(uapmd_audio_file_reader_t reader);
 UAPMD_C_EXPORT bool uapmd_audio_file_reader_get_properties(uapmd_audio_file_reader_t reader, uapmd_audio_file_properties_t* out);
 UAPMD_C_EXPORT void uapmd_audio_file_reader_read_frames(uapmd_audio_file_reader_t reader,

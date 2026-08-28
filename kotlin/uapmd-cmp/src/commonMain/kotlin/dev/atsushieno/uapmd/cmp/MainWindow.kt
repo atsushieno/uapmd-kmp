@@ -109,12 +109,6 @@ fun MainWindow() {
                             onToggleTheme = { darkTheme = !darkTheme },
                             isDeviceSettingsOpen = windows.isOpen("devices"),
                             isAddinsOpen = windows.isOpen("addins"),
-                            isMarkersOpen = windows.isOpen("markers"),
-                            onToggleMarkers = {
-                                windows.toggle("markers", "Project Markers", DpSize(520.dp, 340.dp)) {
-                                    MasterMarkersWindow(host)
-                                }
-                            },
                             onToggleExporter = {
                                 windows.toggle("exporter", "Render To File", DpSize(560.dp, 280.dp)) {
                                     ExporterWindow(host)

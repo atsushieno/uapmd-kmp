@@ -209,6 +209,8 @@ class JvmTimelineFacade internal constructor(
 class JvmTimelineTrack internal constructor(
     private val handle: Pointer
 ) : TimelineTrack {
+    override val channelCount: Int get() = lib.uapmd_tt_channel_count(handle).toInt()
+
     override fun getClips(): List<ClipData> {
         val cm = lib.uapmd_tt_clip_manager(handle) ?: return emptyList()
         val count = lib.uapmd_cm_clip_count(cm).toInt()

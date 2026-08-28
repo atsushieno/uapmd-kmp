@@ -362,7 +362,9 @@ object JniBridge {
 
     // ─── AudioFileReader ──────────────────────────────────────────────────────
 
+    @JvmStatic external fun uapmdTtChannelCount(tt: Long): Int
     @JvmStatic external fun uapmdAudioFileReaderCreate(path: String): Long
+    @JvmStatic external fun uapmdAudioFileReaderCreateSilent(numFrames: Long, numChannels: Int, sampleRate: Int): Long
     @JvmStatic external fun uapmdAudioFileReaderDestroy(h: Long)
     /** Returns long[3]{numFrames, numChannels, sampleRate} or null */
     @JvmStatic external fun uapmdAudioFileReaderGetProperties(h: Long): LongArray?

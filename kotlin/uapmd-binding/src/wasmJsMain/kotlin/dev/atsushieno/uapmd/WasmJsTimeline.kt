@@ -5,6 +5,8 @@ package dev.atsushieno.uapmd
 class WasmJsTimelineTrack internal constructor(
     internal val handle: Int
 ) : TimelineTrack {
+    override val channelCount: Int get() = wasmMod.uapmdTtChannelCount(handle)
+
     override fun getClips(): List<ClipData> {
         val mod = wasmMod
         val cm = mod.uapmdTtClipManager(handle)

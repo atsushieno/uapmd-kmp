@@ -4,6 +4,7 @@ import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.detectDragGestures
+import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -23,8 +24,14 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.PlainTooltip
+import androidx.compose.material3.TooltipBox
+import androidx.compose.material3.TooltipDefaults
+import androidx.compose.material3.rememberTooltipState
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.HorizontalDivider
+import androidx.compose.material3.LocalContentColor
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Slider
 import androidx.compose.material3.Text
@@ -46,6 +53,7 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.DpSize
+import androidx.compose.ui.unit.DpOffset
 import androidx.compose.ui.unit.dp
 import dev.atsushieno.uapmd.ClipData
 import dev.atsushieno.uapmd.ClipType
@@ -104,6 +112,7 @@ private val NoteColor = Color(0xFFBFD8F0)
 private val Playhead = Color(0xFFE8C547)
 private val LaneBackground = Color(0xFF1E1E24)
 private val MasterLaneBackground = Color(0xFF26262F)
+private val RangeFill = Color(0x552F6FA8)
 
 /** Mirrors UAPMD_MASTER_TRACK_INDEX / ProjectAddressBook.MASTER_TRACK_INDEX. */
 private const val MasterTrackIndex = Int.MIN_VALUE
@@ -120,6 +129,7 @@ private fun dbToLinear(db: Double): Double =
     if (db <= MinGainDb) 0.0 else kotlin.math.exp(db / 20.0 * kotlin.math.ln(10.0))
 private val MutedColor = Color(0xFFB32828)
 private val SoloColor = Color(0xFFD1850F)
+private val FrozenColor = Color(0xFF7FD4F0)
 
 /**
  * The main content: a track legend on the left and a time-ruled lane per track
@@ -274,22 +284,52 @@ private fun TrackLane(
     var draggingClipId by remember { mutableStateOf<Int?>(null) }
     var dragSeconds by remember { mutableStateOf(0.0) }
     val density = LocalDensity.current
+    val scope = rememberCoroutineScope()
+
+    // uapmd-app's main timeline lanes ARE the sequence editor's unified timeline
+    // (`TimelineEditor.cpp:1016` renderUnifiedTimeline; the per-track render at
+    // :1572 is only a vtable stub), so its lane context menus belong here.
+    var addMenuOpen by remember { mutableStateOf(false) }
+    var rangeMenuOpen by remember { mutableStateOf(false) }
+    var menuAnchor by remember { mutableStateOf(DpOffset.Zero) }
+    var clickedSeconds by remember { mutableStateOf(0.0) }
+    var rangeAnchorSeconds by remember { mutableStateOf<Double?>(null) }
+    var rangeCurrentSeconds by remember { mutableStateOf(0.0) }
+    var rangeStart by remember { mutableStateOf(0.0) }
+    var rangeEnd by remember { mutableStateOf(0.0) }
+
+    fun clipAt(seconds: Double): ClipData? = clips.firstOrNull { c ->
+        val start = c.positionSamples / sampleRate
+        seconds >= start && seconds <= start + c.durationSamples / sampleRate
+    }
 
     Box(
         Modifier.height(trackHeight).width(laneWidth)
             .background(LaneBackground)
+            .pointerInput(clips, pixelsPerSecond) {
+                detectTapGestures(onDoubleTap = { offset ->
+                    val seconds = (offset.x / pixelsPerSecond).toDouble().coerceAtLeast(0.0)
+                    clickedSeconds = seconds
+                    menuAnchor = with(density) { DpOffset(offset.x.toDp(), 0.dp) }
+                    // A double-click on a clip is that clip's menu, which the
+                    // clip label already opens; empty space offers the adds.
+                    if (clipAt(seconds) == null) addMenuOpen = true
+                })
+            }
             // Direct manipulation: drag a clip along the lane to move it. The
             // commit goes through setClipAnchor, so it lands in history as one step.
             .pointerInput(clips, pixelsPerSecond) {
                 detectDragGestures(
                     onDragStart = { offset ->
-                        val seconds = offset.x / pixelsPerSecond
-                        draggingClipId = clips.firstOrNull { c ->
-                            val start = c.positionSamples / sampleRate
-                            val end = start + c.durationSamples / sampleRate
-                            seconds >= start && seconds <= end
-                        }?.clipId
+                        val seconds = (offset.x / pixelsPerSecond).toDouble()
+                        draggingClipId = clipAt(seconds)?.clipId
                         dragSeconds = 0.0
+                        // Only empty space starts a range selection; a drag that
+                        // began on a clip is that clip's move gesture.
+                        if (draggingClipId == null) {
+                            rangeAnchorSeconds = seconds.coerceAtLeast(0.0)
+                            rangeCurrentSeconds = seconds.coerceAtLeast(0.0)
+                        }
                     },
                     onDragEnd = {
                         val id = draggingClipId
@@ -300,15 +340,30 @@ private fun TrackLane(
                                 host.moveClip(trackIndex, id, target)
                             }
                         }
+                        rangeAnchorSeconds?.let { anchor ->
+                            val a = minOf(anchor, rangeCurrentSeconds)
+                            val b = maxOf(anchor, rangeCurrentSeconds)
+                            // uapmd-app needs a few pixels of travel before a drag
+                            // counts as a range rather than a stray click.
+                            if ((b - a) * pixelsPerSecond >= 4.0) {
+                                rangeStart = a
+                                rangeEnd = b
+                                menuAnchor = with(density) { DpOffset((a * pixelsPerSecond).toFloat().toDp(), 0.dp) }
+                                rangeMenuOpen = true
+                            }
+                        }
+                        rangeAnchorSeconds = null
                         draggingClipId = null
                         dragSeconds = 0.0
                     },
-                    onDragCancel = { draggingClipId = null; dragSeconds = 0.0 }
-                ) { change, delta ->
-                    if (draggingClipId != null) {
-                        change.consume()
-                        dragSeconds += delta.x / pixelsPerSecond
+                    onDragCancel = {
+                        draggingClipId = null; dragSeconds = 0.0; rangeAnchorSeconds = null
                     }
+                ) { change, delta ->
+                    change.consume()
+                    if (draggingClipId != null) dragSeconds += delta.x / pixelsPerSecond
+                    else if (rangeAnchorSeconds != null)
+                        rangeCurrentSeconds = (change.position.x / pixelsPerSecond).toDouble().coerceAtLeast(0.0)
                 }
             }
     ) {
@@ -332,9 +387,25 @@ private fun TrackLane(
                 )
                 if (isMidi) drawMidiNotes(host, trackIndex, clip, x, w, pixelsPerSecond)
             }
+            rangeAnchorSeconds?.let { anchor ->
+                val a = minOf(anchor, rangeCurrentSeconds).toFloat() * pixelsPerSecond
+                val b = maxOf(anchor, rangeCurrentSeconds).toFloat() * pixelsPerSecond
+                drawRect(RangeFill, Offset(a, 0f), Size(b - a, size.height))
+            }
             val px = (host.playheadSeconds * pixelsPerSecond).toFloat()
             drawLine(Playhead, Offset(px, 0f), Offset(px, size.height), 2f)
         }
+
+        LaneAddMenu(
+            host = host, trackIndex = trackIndex, expanded = addMenuOpen, anchor = menuAnchor,
+            seconds = clickedSeconds, sampleRate = sampleRate, scope = scope,
+            onDismiss = { addMenuOpen = false }
+        )
+        LaneRangeMenu(
+            host = host, trackIndex = trackIndex, expanded = rangeMenuOpen, anchor = menuAnchor,
+            startSeconds = rangeStart, endSeconds = rangeEnd, sampleRate = sampleRate,
+            onDismiss = { rangeMenuOpen = false }
+        )
 
         // A clip's label opens its context menu, so every editor stays reachable
         // from one place - piano roll, raw events, properties, removal.
@@ -409,6 +480,89 @@ private fun TrackLane(
     }
 }
 
+/**
+ * The lane's "add a clip here" menu — uapmd-app's `TimelineAddClipContext`
+ * (`SequenceEditor.cpp:700`), opened by a double-click on empty lane space. Every
+ * entry lands the clip at the clicked position; the master track takes MIDI only.
+ */
+@Composable
+private fun LaneAddMenu(
+    host: UapmdHost,
+    trackIndex: Int,
+    expanded: Boolean,
+    anchor: DpOffset,
+    seconds: Double,
+    sampleRate: Double,
+    scope: kotlinx.coroutines.CoroutineScope,
+    onDismiss: () -> Unit
+) {
+    val isMaster = trackIndex == MasterTrackIndex
+    DropdownMenu(expanded = expanded, onDismissRequest = onDismiss, offset = anchor) {
+        DropdownMenuItem(text = { Text("Add an Empty MIDI2 Clip") }, onClick = {
+            onDismiss()
+            host.addEmptyMidiClip(trackIndex, (seconds * sampleRate).toLong())
+        })
+        if (!isMaster) {
+            HorizontalDivider()
+            DropdownMenuItem(text = { Text("Add Empty Audio Clip") }, onClick = {
+                onDismiss()
+                host.addEmptyAudioClip(trackIndex, seconds)
+            })
+            DropdownMenuItem(text = { Text("Create Audio Clip From File…") }, onClick = {
+                onDismiss()
+                scope.launch { pickMediaFileToOpen()?.let { host.importAudioClip(trackIndex, it, seconds) } }
+            })
+        }
+        HorizontalDivider()
+        DropdownMenuItem(text = { Text("Add a MIDI Clip from File…") }, onClick = {
+            onDismiss()
+            scope.launch { pickMediaFileToOpen()?.let { host.importMidiClip(trackIndex, it, seconds) } }
+        })
+        if (!isMaster) {
+            DropdownMenuItem(text = { Text("Add MIDI2 Clip from File…") }, onClick = {
+                onDismiss()
+                scope.launch { pickMediaFileToOpen()?.let { host.importMidiClip(trackIndex, it, seconds) } }
+            })
+            HorizontalDivider()
+            DropdownMenuItem(text = { Text("Clear All") }, onClick = {
+                onDismiss()
+                host.clearClipsFromTrack(trackIndex)
+            })
+        }
+    }
+}
+
+/**
+ * uapmd-app's `TimelineRangeAddContext` (`SequenceEditor.cpp:743`): after a
+ * drag across empty lane space, add a clip sized to that range. Regular tracks
+ * only, as there.
+ */
+@Composable
+private fun LaneRangeMenu(
+    host: UapmdHost,
+    trackIndex: Int,
+    expanded: Boolean,
+    anchor: DpOffset,
+    startSeconds: Double,
+    endSeconds: Double,
+    sampleRate: Double,
+    onDismiss: () -> Unit
+) {
+    if (trackIndex == MasterTrackIndex) return
+    DropdownMenu(expanded = expanded, onDismissRequest = onDismiss, offset = anchor) {
+        DropdownMenuItem(text = { Text("Add New MIDI Clip") }, onClick = {
+            onDismiss()
+            val r = host.addEmptyMidiClip(trackIndex, (startSeconds * sampleRate).toLong())
+            if (r.success)
+                host.resizeClip(trackIndex, r.clipId, ((endSeconds - startSeconds) * sampleRate).toLong())
+        })
+        DropdownMenuItem(text = { Text("Add Empty Audio Clip") }, onClick = {
+            onDismiss()
+            host.addEmptyAudioClip(trackIndex, startSeconds, endSeconds)
+        })
+    }
+}
+
 private fun androidx.compose.ui.graphics.drawscope.DrawScope.drawMidiNotes(
     host: UapmdHost,
     trackIndex: Int,
@@ -430,6 +584,120 @@ private fun androidx.compose.ui.graphics.drawscope.DrawScope.drawMidiNotes(
         if (nx > clipX + clipW) return@forEach
         val ny = top + usable * (1f - (n.note - lo).toFloat() / span) * 0.85f
         drawRect(NoteColor, Offset(nx, ny), Size(nw, 2.5f))
+    }
+}
+
+/**
+ * The legend gain slider.
+ *
+ * uapmd-app draws no value on the slider itself — its format string is `""`, or
+ * `"Mute"` at the bottom of the range (`TimelineEditor.cpp:1255`) — and puts the
+ * dB in the hover tooltip, so the tooltip is the only place the number appears.
+ * The slider is `iconButtonWidth * 1.5f` wide there, i.e. as narrow as this one.
+ */
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun GainSlider(
+    gainDb: Float,
+    isNarrow: Boolean = false,
+    onChange: (Float) -> Unit,
+    onFinished: () -> Unit
+) {
+    TooltipBox(
+        positionProvider = TooltipDefaults.rememberTooltipPositionProvider(),
+        tooltip = {
+            PlainTooltip {
+                Text(if (gainDb <= MinGainDb) "Mute" else "${fixed(gainDb.toDouble(), 1)} dB")
+            }
+        },
+        state = rememberTooltipState()
+    ) {
+        Slider(
+            value = gainDb,
+            onValueChange = onChange,
+            onValueChangeFinished = onFinished,
+            valueRange = MinGainDb..MaxGainDb,
+            modifier = Modifier.width(if (isNarrow) 44.dp else 60.dp)
+        )
+    }
+}
+
+/*
+ * Legend button icons.
+ *
+ * uapmd-app labels these with Font Awesome glyphs plus a hover tooltip
+ * (`renderIconButtonWithTooltip`; `FontIcons.hpp` picks clipboard-list,
+ * diagram-project and ellipsis-vertical). We ship no icon font, and bare Unicode
+ * substitutes were the wrong answer: `⛓` renders as tofu on macOS and `▤` reads
+ * as a smudge at this size. Compose Multiplatform 1.10 has no material-icons
+ * artifact either, so the three shapes are drawn here - they cost nothing,
+ * render identically on all five targets, and each carries uapmd-app's tooltip.
+ */
+
+private val LegendIconSize = 16.dp
+
+/** clipboard-list: a stack of bars. */
+@Composable
+private fun ClipsIcon(tint: Color) = Canvas(Modifier.size(LegendIconSize)) {
+    val barHeight = size.height / 7f
+    listOf(0f, 3f, 6f).forEach { slot ->
+        drawRect(tint, Offset(0f, slot * barHeight), Size(size.width, barHeight))
+    }
+}
+
+/** diagram-project: two nodes feeding a third. */
+@Composable
+private fun GraphIcon(tint: Color) = Canvas(Modifier.size(LegendIconSize)) {
+    val r = size.minDimension * 0.16f
+    val upper = Offset(r, r)
+    val lower = Offset(r, size.height - r)
+    val out = Offset(size.width - r, size.height / 2f)
+    drawLine(tint, upper, out, 1.5f)
+    drawLine(tint, lower, out, 1.5f)
+    listOf(upper, lower, out).forEach { drawCircle(tint, r, it) }
+}
+
+/** snowflake: track freeze. */
+@Composable
+private fun FreezeIcon(tint: Color) = Canvas(Modifier.size(LegendIconSize)) {
+    val c = Offset(size.width / 2f, size.height / 2f)
+    val r = size.minDimension * 0.45f
+    // Three crossing spokes at 60 degrees, the usual snowflake shorthand.
+    listOf(0.0, 1.0471975, 2.0943951).forEach { a ->
+        val dx = (r * kotlin.math.cos(a)).toFloat()
+        val dy = (r * kotlin.math.sin(a)).toFloat()
+        drawLine(tint, Offset(c.x - dx, c.y - dy), Offset(c.x + dx, c.y + dy), 1.5f)
+    }
+}
+
+/** ellipsis-vertical. */
+@Composable
+private fun MoreIcon(tint: Color) = Canvas(Modifier.size(LegendIconSize)) {
+    val r = size.minDimension * 0.11f
+    listOf(0.18f, 0.5f, 0.82f).forEach {
+        drawCircle(tint, r, Offset(size.width / 2f, size.height * it))
+    }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun LegendIconButton(
+    tooltip: String,
+    onClick: () -> Unit,
+    icon: @Composable (Color) -> Unit
+) {
+    TooltipBox(
+        positionProvider = TooltipDefaults.rememberTooltipPositionProvider(),
+        tooltip = { PlainTooltip { Text(tooltip) } },
+        state = rememberTooltipState()
+    ) {
+        Button(
+            onClick = onClick,
+            contentPadding = TightPadding,
+            modifier = Modifier.size(IconButtonSize)
+        ) {
+            icon(LocalContentColor.current)
+        }
     }
 }
 
@@ -467,12 +735,17 @@ private fun TrackLegend(
 
             // Clips popup, as uapmd-app's first legend button.
             Box {
-                Button(
-                    onClick = { clipsMenu = true },
-                    contentPadding = TightPadding,
-                    modifier = Modifier.size(IconButtonSize)
-                ) { Text("▤", style = MaterialTheme.typography.labelSmall) }
+                LegendIconButton("Edit clips", onClick = { clipsMenu = true }) { ClipsIcon(it) }
                 DropdownMenu(expanded = clipsMenu, onDismissRequest = { clipsMenu = false }) {
+                    // First item in uapmd-app's Clips popup (TimelineEditor.cpp:1449);
+                    // the per-lane context actions live in that window.
+                    DropdownMenuItem(text = { Text("Edit Clips…") }, onClick = {
+                        clipsMenu = false
+                        windows.open("sequence", "Sequence Editor", DpSize(720.dp, 420.dp)) {
+                            SequenceEditor(host, windows)
+                        }
+                    })
+                    HorizontalDivider()
                     DropdownMenuItem(text = { Text("Add an Empty MIDI2 Clip") }, onClick = {
                         clipsMenu = false
                         host.addEmptyMidiClip(trackIndex)
@@ -505,17 +778,25 @@ private fun TrackLegend(
                 }
             }
 
+            LegendIconButton(
+                "Show track graph",
+                onClick = {
+                    windows.open("graph:$trackIndex", "Track $trackIndex Graph", DpSize(620.dp, 440.dp)) {
+                        TrackGraphEditor(host, trackIndex)
+                    }
+                }
+            ) { GraphIcon(it) }
+
             engineTrack?.takeIf { !isNarrow }?.let { t ->
                 // Read the value from the track, write it through ProjectCommands.
                 // uapmd-app's slider is in dB and wraps the drag in an undo
                 // gesture, so a drag is one history entry rather than dozens.
                 var gainDb by remember(trackIndex) { mutableStateOf(linearToDb(t.gain).toFloat()) }
-                Slider(
-                    value = gainDb,
-                    onValueChange = { gainDb = it; host.setTrackGain(trackIndex, dbToLinear(gainDb.toDouble())) },
-                    onValueChangeFinished = { host.endTrackGainGesture() },
-                    valueRange = MinGainDb..MaxGainDb,
-                    modifier = Modifier.width(if (isNarrow) 44.dp else 60.dp).onFocusChanged { }
+                GainSlider(
+                    gainDb = gainDb,
+                    isNarrow = isNarrow,
+                    onChange = { gainDb = it; host.setTrackGain(trackIndex, dbToLinear(it.toDouble())) },
+                    onFinished = { host.endTrackGainGesture() }
                 )
                 // uapmd-app shows no inline value: the slider label is empty,
                 // or "Mute" at the bottom of the range.
@@ -537,17 +818,22 @@ private fun TrackLegend(
                     else ButtonDefaults.buttonColors()
                 ) { Text("S", style = MaterialTheme.typography.labelSmall) }
             }
-            engineTrack?.let { t ->
-                Button(
-                    onClick = { host.setTrackBypassed(trackIndex, !t.bypassed) },
-                    contentPadding = TightPadding
-                ) { Text(if (t.bypassed) "Byp" else "On") }
-            }
         }
 
-        // Row 2: the plugin context button, exactly as uapmd-app labels it -
-        // the first instance's name, or "Add Plugin" when the track is empty.
+        // Row 2, as uapmd-app orders it: Freeze switch, then the plugin context
+        // button labelled with the first instance's name (or "Add Plugin" when
+        // the track is empty), then the More menu.
         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(3.dp)) {
+            LegendIconButton(
+                if (trackIndex in host.freezeRequested)
+                    "Track freezing: On (click to unfreeze)"
+                else
+                    "Track freezing: Off (click to render and freeze)",
+                onClick = {
+                    host.setTrackFreezePolicyEnabled(trackIndex, trackIndex !in host.freezeRequested)
+                }
+            ) { FreezeIcon(if (trackIndex in host.freezeRequested) FrozenColor else it) }
+
             Box {
                 Button(
                     onClick = { if (instances.isEmpty()) openSelectorForTrack() else pluginMenu = true },
@@ -600,22 +886,8 @@ private fun TrackLegend(
                 }
             }
 
-            Button(
-                onClick = {
-                    windows.open("graph:$trackIndex", "Track $trackIndex Graph", DpSize(620.dp, 440.dp)) {
-                        TrackGraphEditor(host, trackIndex)
-                    }
-                },
-                contentPadding = TightPadding,
-                modifier = Modifier.size(IconButtonSize)
-            ) { Text("⛓", style = MaterialTheme.typography.labelSmall) }
-
             Box {
-                Button(
-                    onClick = { moreMenu = true },
-                    contentPadding = TightPadding,
-                    modifier = Modifier.size(IconButtonSize)
-                ) { Text("⋮", style = MaterialTheme.typography.labelSmall) }
+                LegendIconButton("More track actions", onClick = { moreMenu = true }) { MoreIcon(it) }
                 DropdownMenu(expanded = moreMenu, onDismissRequest = { moreMenu = false }) {
                     engineTrack?.let { t ->
                         DropdownMenuItem(
@@ -665,11 +937,65 @@ private fun TrackLegend(
 @Composable
 private fun MasterTrackLegend(host: UapmdHost, windows: FloatingWindowManager, trackHeight: Dp) {
     var pluginMenu by remember { mutableStateOf(false) }
+    var clipsMenu by remember { mutableStateOf(false) }
     val instances = host.masterInstances
+    // uapmd-app builds the master legend from the same code as a regular track
+    // (`renderTrackLegendContent`, via `engine()->masterTrack()`): row 1 is
+    // Clips + Graph + the gain slider — this is the project's total volume —
+    // and only Mute/Solo, Freeze and the More menu are gated to regular tracks.
+    val masterTrack = remember(host.trackCount) {
+        runCatching { host.model.sequencer.engine.masterTrack }.getOrNull()
+    }
 
     Column(Modifier.height(trackHeight).fillMaxWidth().padding(4.dp)) {
         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(3.dp)) {
             Text("Master", style = MaterialTheme.typography.labelMedium)
+
+            Box {
+                LegendIconButton("Edit clips", onClick = { clipsMenu = true }) { ClipsIcon(it) }
+                DropdownMenu(expanded = clipsMenu, onDismissRequest = { clipsMenu = false }) {
+                    DropdownMenuItem(text = { Text("Edit Clips…") }, onClick = {
+                        clipsMenu = false
+                        windows.open("sequence", "Sequence Editor", DpSize(720.dp, 420.dp)) {
+                            SequenceEditor(host, windows)
+                        }
+                    })
+                    HorizontalDivider()
+                    // The master track takes MIDI clips only.
+                    DropdownMenuItem(text = { Text("Add an Empty MIDI2 Clip") }, onClick = {
+                        clipsMenu = false
+                        host.addEmptyMidiClip(MasterTrackIndex)
+                    })
+                    HorizontalDivider()
+                    DropdownMenuItem(text = { Text("Markers") }, onClick = {
+                        clipsMenu = false
+                        windows.open("markers", "Markers", DpSize(520.dp, 340.dp)) {
+                            MasterMarkersWindow(host)
+                        }
+                    })
+                }
+            }
+
+            LegendIconButton(
+                "Show track graph",
+                onClick = {
+                    windows.open("graph:master", "Master Track Graph", DpSize(620.dp, 440.dp)) {
+                        TrackGraphEditor(host, MasterTrackIndex)
+                    }
+                }
+            ) { GraphIcon(it) }
+
+            masterTrack?.let { t ->
+                var gainDb by remember { mutableStateOf(linearToDb(t.gain).toFloat()) }
+                GainSlider(
+                    gainDb = gainDb,
+                    onChange = {
+                        gainDb = it
+                        host.setTrackGain(MasterTrackIndex, dbToLinear(it.toDouble()))
+                    },
+                    onFinished = { host.endTrackGainGesture() }
+                )
+            }
         }
         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(3.dp)) {
             Box {
@@ -720,7 +1046,33 @@ private fun MasterTrackLegend(host: UapmdHost, windows: FloatingWindowManager, t
 @Composable
 private fun MasterTrackLane(host: UapmdHost, pixelsPerSecond: Float, laneWidth: Dp, trackHeight: Dp) {
     val sampleRate = (host.model.sampleRate.takeIf { it > 0 } ?: 48000).toDouble()
-    Box(Modifier.height(trackHeight).width(laneWidth).background(MasterLaneBackground)) {
+    val density = LocalDensity.current
+    val scope = rememberCoroutineScope()
+    var addMenuOpen by remember { mutableStateOf(false) }
+    var menuAnchor by remember { mutableStateOf(DpOffset.Zero) }
+    var clickedSeconds by remember { mutableStateOf(0.0) }
+    Box(
+        Modifier.height(trackHeight).width(laneWidth).background(MasterLaneBackground)
+            .pointerInput(host.masterClips, pixelsPerSecond) {
+                detectTapGestures(onDoubleTap = { offset ->
+                    val seconds = (offset.x / pixelsPerSecond).toDouble().coerceAtLeast(0.0)
+                    val onClip = host.masterClips.any { c ->
+                        val start = c.positionSamples / sampleRate
+                        seconds >= start && seconds <= start + c.durationSamples / sampleRate
+                    }
+                    if (!onClip) {
+                        clickedSeconds = seconds
+                        menuAnchor = with(density) { DpOffset(offset.x.toDp(), 0.dp) }
+                        addMenuOpen = true
+                    }
+                })
+            }
+    ) {
+        LaneAddMenu(
+            host = host, trackIndex = MasterTrackIndex, expanded = addMenuOpen, anchor = menuAnchor,
+            seconds = clickedSeconds, sampleRate = sampleRate, scope = scope,
+            onDismiss = { addMenuOpen = false }
+        )
         Canvas(Modifier.fillMaxSize()) {
             host.masterClips.forEach { clip ->
                 val x = (clip.positionSamples / sampleRate * pixelsPerSecond).toFloat()

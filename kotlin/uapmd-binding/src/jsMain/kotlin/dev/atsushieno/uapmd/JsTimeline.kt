@@ -5,6 +5,8 @@ package dev.atsushieno.uapmd
 class JsTimelineTrack internal constructor(
     internal val handle: Int
 ) : TimelineTrack {
+    override val channelCount: Int get() = jsMod._uapmd_tt_channel_count(handle) as Int
+
     override fun getClips(): List<ClipData> = emptyList()
 }
 
