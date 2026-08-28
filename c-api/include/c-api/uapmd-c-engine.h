@@ -63,6 +63,28 @@ UAPMD_C_EXPORT void uapmd_engine_enqueue_ump(uapmd_sequencer_engine_t engine,
                                                uapmd_timestamp_t timestamp);
 
 UAPMD_C_EXPORT uapmd_plugin_host_t uapmd_engine_plugin_host(uapmd_sequencer_engine_t engine);
+
+/* ── FrozenTrackManager ─────────────────────────────────────────────────────
+ * Track freeze state, which the track legend's freeze button renders: the
+ * requested policy, the runtime state, and whether a render is in flight. */
+
+typedef enum uapmd_freeze_policy {
+    UAPMD_FREEZE_POLICY_OFF = 0,
+    UAPMD_FREEZE_POLICY_ON  = 1
+} uapmd_freeze_policy_t;
+
+typedef enum uapmd_freeze_runtime_state {
+    UAPMD_FREEZE_STATE_LIVE      = 0,
+    UAPMD_FREEZE_STATE_RENDERING = 1,
+    UAPMD_FREEZE_STATE_FROZEN    = 2,
+    UAPMD_FREEZE_STATE_ERROR     = 3
+} uapmd_freeze_runtime_state_t;
+
+UAPMD_C_EXPORT uapmd_freeze_policy_t uapmd_engine_track_freeze_policy(uapmd_sequencer_engine_t engine,
+                                                                     int32_t track_index);
+UAPMD_C_EXPORT uapmd_freeze_runtime_state_t uapmd_engine_track_freeze_state(uapmd_sequencer_engine_t engine,
+                                                                           int32_t track_index);
+UAPMD_C_EXPORT bool uapmd_engine_is_track_busy(uapmd_sequencer_engine_t engine, int32_t track_index);
 UAPMD_C_EXPORT uapmd_plugin_instance_t uapmd_engine_get_plugin_instance(uapmd_sequencer_engine_t engine, int32_t instance_id);
 UAPMD_C_EXPORT uapmd_function_block_mgr_t uapmd_engine_function_block_manager(uapmd_sequencer_engine_t engine);
 

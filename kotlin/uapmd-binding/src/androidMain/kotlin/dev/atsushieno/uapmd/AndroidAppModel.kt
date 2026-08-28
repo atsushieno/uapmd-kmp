@@ -28,6 +28,12 @@ private class AppInstanceCreatedCallback(private val callback: (Int, String?, St
         callback(instanceId, pluginName, error)
 }
 
+private class AppMidiTracksImportCallback(private val callback: (Boolean, String?, Int) -> Unit) {
+    @Suppress("unused")
+    fun invoke(success: Boolean, error: String?, importedTrackCount: Int) =
+        callback(success, error, importedTrackCount)
+}
+
 private class AppProjectSaveCallback(private val callback: (Boolean, String?) -> Unit) {
     @Suppress("unused")
     fun invoke(success: Boolean, error: String?) = callback(success, error)
@@ -189,6 +195,11 @@ class AndroidAppModel internal constructor(internal val handle: Long) : AppModel
 
     override fun removeClipFromTrack(trackIndex: Int, clipId: Int): Boolean =
         JniBridge.uapmdAppRemoveClipFromTrack(handle, trackIndex, clipId)
+
+    override fun importMidiTracksFromFile(filepath: String, callback: (Boolean, String?, Int) -> Unit) =
+        JniBridge.uapmdAppImportMidiTracksFromFile(
+            handle, filepath, AppMidiTracksImportCallback(callback)
+        )
 
     override fun createEmptyMidiClip(
         trackIndex: Int, positionSamples: Long, tickResolution: UInt, bpm: Double

@@ -59,7 +59,11 @@ class WasmJsTimelineTrack internal constructor(
                     muted               = getBool(48),
                     name                = getStr(52),
                     filepath            = getStr(56),
-                    clipType            = ClipType.fromNative(getI32(64))
+                    clipType            = ClipType.fromNative(getI32(64)),
+                    referenceId         = getStr(4),
+                    anchorReferenceId   = getStr(84),
+                    anchorOrigin        = AnchorOrigin.fromNative(getI32(88)),
+                    anchorOffsetSamples = getI64(96)
                 )
             }
         } finally { mod.free(buf) }

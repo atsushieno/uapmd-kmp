@@ -197,6 +197,13 @@ class WasmJsAppModel internal constructor(internal val handle: Int) : AppModel {
         wasmMod.uapmdAppRemoveClipFromTrack(handle, trackIndex, clipId)
 
     // uapmd_clip_add_result_t: int32 @0, int32 @4, bool @8, char* @12 (size 16)
+    override fun importMidiTracksFromFile(filepath: String, callback: (Boolean, String?, Int) -> Unit) {
+        // The wasm bridge marshals C callbacks through its own dispatcher table;
+        // this one is not registered there yet, so report the failure rather
+        // than silently doing nothing.
+        callback(false, "Multi-track SMF import is not wired up on this platform yet.", 0)
+    }
+
     override fun createEmptyMidiClip(
         trackIndex: Int, positionSamples: Long, tickResolution: UInt, bpm: Double
     ): ClipAddResult = withWasmStruct(16) { out ->

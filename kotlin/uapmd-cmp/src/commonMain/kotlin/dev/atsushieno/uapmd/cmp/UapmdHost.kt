@@ -26,6 +26,8 @@ import dev.atsushieno.uapmd.ClipData
 import dev.atsushieno.uapmd.TimeReference
 import dev.atsushieno.uapmd.TimeReferenceType
 import dev.atsushieno.uapmd.TimelinePosition
+import dev.atsushieno.uapmd.FreezePolicy
+import dev.atsushieno.uapmd.FreezeRuntimeState
 import dev.atsushieno.uapmd.createAudioFileReader
 import dev.atsushieno.uapmd.createSilentAudioFileReader
 import dev.atsushieno.uapmd.MidiNoteData
@@ -37,6 +39,7 @@ import dev.atsushieno.uapmd.TimelineState
 import dev.atsushieno.uapmd.UndoState
 import dev.atsushieno.uapmd.getAppModel
 import dev.atsushieno.uapmd.instantiateAppModel
+import dev.atsushieno.uapmd.PreparedProject
 import dev.atsushieno.uapmd.prepareProjectLoad
 
 /**
@@ -53,6 +56,9 @@ import dev.atsushieno.uapmd.prepareProjectLoad
  * The event-loop step happens earlier, in each platform entry point, because it
  * has to run before AppModel exists at all.
  */
+/** The block size uapmd-app runs at on Android; see applyDefaultAudioBufferSize. */
+private const val DefaultAudioBufferFrames = 512
+
 class UapmdHost private constructor(val model: AppModel) {
 
     private val uiDispatcher = kotlinx.coroutines.Dispatchers.Main
@@ -160,6 +166,13 @@ class UapmdHost private constructor(val model: AppModel) {
     var isScanning by mutableStateOf(false)
         private set
 
+    /**
+     * Drops the scan blocklist. A plug-in that crashed a previous scan stays out
+     * of the catalog, which is indistinguishable from "not installed" when a
+     * project fails to resolve it.
+     */
+    fun clearPluginBlocklist() = model.clearPluginBlocklist()
+
     fun scanPlugins(forceRescan: Boolean = false, mode: ScanMode = ScanMode.InProcess) {
         offUiThread { model.performPluginScanning(forceRescan, mode) }
         refresh()
@@ -242,6 +255,31 @@ class UapmdHost private constructor(val model: AppModel) {
             .mapNotNull { pluginHost.getCatalogEntry(it.toUInt()) }
     }
 
+    /**
+     * Configures the audio device with an explicit block size at startup.
+     *
+     * Leaving it unset makes the Oboe device come up with
+     * `internalCapacity=1024 stabilizedBlock=1024`, and on that configuration the
+     * engine cannot sustain real time with a six-plug-in project: measured
+     * repeatedly at 87-90% of real time (the playhead advances ~10.7s per 12s of
+     * wall clock), which is heard as continuous stuttering. The same project on
+     * the same device at 512 measures 99.95-99.98%.
+     *
+     * The engine's automatic buffer sizing is what chooses 1024 here, so it is
+     * turned off: uapmd-app runs at `internalCapacity=512 stabilizedBlock=512`,
+     * and this matches it rather than inventing a value. Device Settings still
+     * lets the user re-enable auto sizing or pick another size.
+     */
+    fun applyDefaultAudioBufferSize() {
+        model.autoBufferSizeEnabled = false
+        val sampleRate = model.sampleRate.takeIf { it > 0 } ?: 48000
+        val ok = runCatching {
+            model.updateAudioDeviceSettings(sampleRate, DefaultAudioBufferFrames.toUInt())
+            sequencer.reconfigureAudioDevice(-1, -1, sampleRate.toUInt(), DefaultAudioBufferFrames.toUInt())
+        }.getOrDefault(false)
+        println("uapmd.cmp: default audio buffer ${DefaultAudioBufferFrames} applied=$ok")
+    }
+
     /** [trackIndex] < 0 creates a new track, matching the C API. */
     fun instantiate(entry: CatalogEntry, trackIndex: Int, config: PluginInstanceConfig = PluginInstanceConfig()) {
         if (isInstantiating) return
@@ -314,35 +352,103 @@ class UapmdHost private constructor(val model: AppModel) {
      * in the original order; only the thread each runs on differs, so the
      * teardown below still cannot run before a successful prepare.
      */
-    fun loadProject(path: String) = offUiThread {
+    /**
+     * True while a project load is in flight.
+     *
+     * The load runs off the UI thread, but the 100 ms poll keeps calling
+     * `refresh()`, which reads track and clip state the load is busy replacing.
+     * Those reads block on the engine's own locks, so the UI thread stalls for
+     * the whole load — the freeze seen opening a `.uapmdz`. The poll skips its
+     * refresh while this is set.
+     */
+    var isLoadingProject by mutableStateOf(false)
+        private set
+
+    /**
+     * Bumped whenever the engine's tracks are replaced wholesale. UI state
+     * derived from track values keys on this so a load re-reads them; native
+     * handles are never cached across it.
+     */
+    var projectRevision by mutableStateOf(0)
+        private set
+
+    /**
+     * Loads a project, following `composeApp`'s sequence exactly
+     * (`UapmdModel.loadProject`), which is the one proven on Android.
+     *
+     * Three things I had wrong before, all mine, none upstream:
+     *  - it went through `AppModel::loadProject`, whose instantiation chain is
+     *    marshalled onto the remidy event loop — the Android main thread — so the
+     *    second plug-in's service bind was issued from the main looper and blocked
+     *    it waiting for its own callback. `TimelineFacade.loadProject` is the
+     *    engine-level load composeApp uses, and it does not marshal that way.
+     *  - it hopped to the UI thread to close plug-in UIs. Nothing in a load
+     *    belongs on the main thread.
+     *  - it closed the prepared archive in a `finally`, deleting the unpacked
+     *    directory the freshly loaded audio clips still point at. The temp
+     *    directory has to outlive the load and is only retired on the next one.
+     */
+    fun loadProject(path: String) {
+        // Set synchronously: posting it through onUiThread left a window where
+        // the poll saw "not loading" and refreshed straight into the load.
+        isLoadingProject = true
+        loadProjectInternal(path)
+    }
+
+    /** Kept alive while its project is loaded; the clips reference files inside it. */
+    private var activePreparedProject: PreparedProject? = null
+
+    private fun loadProjectInternal(path: String) = offUiThread {
         val prepared = runCatching { prepareProjectLoad(path) }.getOrNull()
         if (prepared == null || !prepared.success) {
             val message = prepared?.error?.ifEmpty { null } ?: "Could not open $path."
             prepared?.close()
-            onUiThread { lastProjectResult = AppProjectResult(false, message) }
+            onUiThread {
+                lastProjectResult = AppProjectResult(false, message)
+                isLoadingProject = false
+            }
             return@offUiThread
         }
 
+        // Stop the engine the way composeApp does, at the engine level.
+        // AppModel.setAudioEngineEnabled() runs its shutdown through the remidy
+        // event loop, which on Android is the main looper — the same thread the
+        // load then needs for plug-in service binds.
+        val engine = model.sequencer.engine
         val wasRunning = model.isAudioEngineEnabled
-        // Close plug-in UIs first: the instances behind them are about to go.
-        // These are UI objects, so they are closed on the UI thread.
-        withContext(uiDispatcher) {
+        if (wasRunning) {
+            engine.setActive(false)
+            sequencer.stopAudio()
+        }
+        val result = try {
+            engine.timeline.loadProject(prepared.path)
+        } finally {
+            if (wasRunning) {
+                engine.setActive(true)
+                sequencer.startAudio()
+            }
+        }
+
+        if (result.success) {
             nativeUiPresentations.values.forEach { runCatching { it.close() } }
             nativeUiPresentations.clear()
-            platformHostedUiInstanceIds = emptySet()
-            selectedMidiClip = null
-        }
-        if (wasRunning) model.setAudioEngineEnabled(false)
-
-        val result = try {
-            model.loadProject(prepared.path)
-        } finally {
+            // The previous project's unpacked files are only safe to drop once a
+            // new project has taken over.
+            activePreparedProject?.let { runCatching { it.close() } }
+            activePreparedProject = prepared
+        } else {
             prepared.close()
-            if (wasRunning) model.setAudioEngineEnabled(true)
         }
+
         onUiThread {
-            lastProjectResult = result
+            if (result.success) {
+                platformHostedUiInstanceIds = emptySet()
+                selectedMidiClip = null
+            }
+            lastProjectResult = AppProjectResult(result.success, result.error)
             noteCache.clear()
+            isLoadingProject = false
+            projectRevision++
             refresh()
         }
     }
@@ -495,6 +601,26 @@ class UapmdHost private constructor(val model: AppModel) {
         return (seconds.coerceAtLeast(0.0) * sampleRate).toLong()
     }
 
+    /** Last result of the multi-track SMF import, for the toolbar to report. */
+    var lastImportStatus by mutableStateOf<String?>(null)
+        private set
+
+    /**
+     * uapmd-app's Import ▸ MIDI Tracks: one new track per SMF track, with a
+     * master-track clip for any source track carrying tempo data.
+     */
+    fun importMidiTracks(filePath: String) = offUiThread {
+        model.importMidiTracksFromFile(filePath) { success, error, count ->
+            onUiThread {
+                lastImportStatus =
+                    if (success) "Imported $count track(s) from $filePath."
+                    else "Import failed: ${error ?: "unknown error"}"
+                invalidateClips()
+                refresh()
+            }
+        }
+    }
+
     /** SMF or .midi2, added at [positionSeconds] on [trackIndex]. */
     fun importMidiClip(trackIndex: Int, filePath: String, positionSeconds: Double = 0.0) {
         lastClipResult = model.sequencer.engine.timeline
@@ -572,23 +698,18 @@ class UapmdHost private constructor(val model: AppModel) {
         commands.setClipFilepath(trackIndex, clipId, path).also { invalidateMidiCache() }
 
     /** Moves a clip by rewriting its anchor offset, in seconds from the timeline origin. */
+    /**
+     * Anchor, origin and offset in one command, as the Sequence Editor's
+     * Anchor / Origin / Position columns edit them together.
+     */
+    fun setClipAnchor(trackIndex: Int, clipId: Int, anchor: TimeReference) =
+        commands.setClipAnchor(trackIndex, clipId, anchor).also { invalidateMidiCache() }
+
     fun moveClip(trackIndex: Int, clipId: Int, seconds: Double) =
         commands.setClipAnchor(
             trackIndex, clipId,
             TimeReference(TimeReferenceType.ContainerStart, "", seconds)
         ).also { invalidateMidiCache() }
-
-    /**
-     * Which tracks the user has asked to freeze.
-     *
-     * uapmd-app reads `FrozenTrackManager::freezePolicyForTrack()` to colour the
-     * legend's freeze button, and `isTrackBusy()` to disable it while rendering.
-     * Neither is exposed by the C API, so the app can only remember what it
-     * requested — the button reflects intent, not engine state. Listed in
-     * `uapmd-cmp-ui-audit.md` under the blocked gaps.
-     */
-    var freezeRequested by mutableStateOf<Set<Int>>(emptySet())
-        private set
 
     // ── Track mixer (read from the track, write through commands) ────────────
 
@@ -631,11 +752,40 @@ class UapmdHost private constructor(val model: AppModel) {
     }
 
     fun setTrackFreezePolicyEnabled(trackIndex: Int, enabled: Boolean) =
-        commands.setTrackFreezePolicyEnabled(trackIndex, enabled).also {
-            freezeRequested =
-                if (enabled) freezeRequested + trackIndex else freezeRequested - trackIndex
-            refresh()
-        }
+        commands.setTrackFreezePolicyEnabled(trackIndex, enabled).also { refresh() }
+
+    /**
+     * Track state, looked up fresh on every read.
+     *
+     * A `SequencerTrack` handle must never be cached across a project load:
+     * loading frees the engine's tracks and builds new ones, so a composable
+     * holding the old pointer is holding freed memory. The legend used to
+     * `remember` it keyed on the track count, which does not change when the
+     * same project is loaded twice — the second load then crashed in
+     * `uapmd_track_get_muted` on a dangling pointer.
+     */
+    private fun engineTrackAt(trackIndex: Int) = runCatching {
+        if (trackIndex == Int.MIN_VALUE) model.sequencer.engine.masterTrack
+        else model.sequencer.engine.getTrack(trackIndex.toUInt())
+    }.getOrNull()
+
+    fun trackExists(trackIndex: Int) = engineTrackAt(trackIndex) != null
+    fun trackGain(trackIndex: Int) = engineTrackAt(trackIndex)?.gain ?: 1.0
+    fun trackMuted(trackIndex: Int) = engineTrackAt(trackIndex)?.muted ?: false
+    fun trackSolo(trackIndex: Int) = engineTrackAt(trackIndex)?.solo ?: false
+    fun trackBypassed(trackIndex: Int) = engineTrackAt(trackIndex)?.bypassed ?: false
+
+    /** What uapmd-app's freeze button renders: the policy, and whether it is busy. */
+    fun trackFreezePolicy(trackIndex: Int) =
+        runCatching { model.sequencer.engine.trackFreezePolicy(trackIndex) }
+            .getOrDefault(FreezePolicy.Off)
+
+    fun trackFreezeState(trackIndex: Int) =
+        runCatching { model.sequencer.engine.trackFreezeState(trackIndex) }
+            .getOrDefault(FreezeRuntimeState.Live)
+
+    fun isTrackBusy(trackIndex: Int) =
+        runCatching { model.sequencer.engine.isTrackBusy(trackIndex) }.getOrDefault(false)
 
     fun setPluginBypassed(instanceId: Int, bypassed: Boolean) =
         commands.setPluginBypassed(instanceId, bypassed).also { refresh() }
@@ -733,21 +883,33 @@ class UapmdHost private constructor(val model: AppModel) {
      * for one and `timelineTrackCount` for the other let the legend and the
      * lanes disagree mid-mutation.
      */
-    fun refresh() {
+    /**
+     * [structural] re-reads the things that only change when the project does:
+     * every track's plug-in list (each one costing two JNI string reads), every
+     * track's clips, and the history state.
+     *
+     * The poll runs at 10 Hz, and doing all of that every tick measurably stole
+     * CPU from the audio callback - with the poll on, the engine reported 132%
+     * of its buffer budget against 108% with it off, i.e. the UI was taking
+     * roughly a quarter of the time the audio thread needed. Transport and
+     * meters still update every tick; structure is re-read on a slower cadence
+     * and whenever something actually edits the project.
+     */
+    fun refresh(structural: Boolean = true) {
         isAudioEngineEnabled = model.isAudioEngineEnabled
         isScanning = model.isScanning
         val t = model.transport
         isPlaying = t.isPlaying
         isPaused = t.isPaused
         isRecording = t.isRecording || model.sequencer.engine.midiRecorder?.isRecording == true
-        history = model.historyState
         timeline = model.getTimelineState()
+        if (structural) history = model.historyState
 
         val engine = model.sequencer.engine
         val count = minOf(engine.trackCount.toInt(), model.timelineTrackCount.toInt())
         trackCount = count
 
-        trackInstances = (0 until count).map { ti ->
+        if (structural) trackInstances = (0 until count).map { ti ->
             runCatching {
                 engine.getTrack(ti.toUInt()).getOrderedInstanceIds().mapNotNull { id ->
                     engine.getPluginInstance(id)?.let { inst ->
@@ -756,12 +918,13 @@ class UapmdHost private constructor(val model: AppModel) {
                 }
             }.getOrDefault(emptyList())
         }
-        trackClips = (0 until count).map { ti ->
+        if (structural) trackClips = (0 until count).map { ti ->
             runCatching { model.getTimelineTrack(ti.toUInt()).getClips() }.getOrDefault(emptyList())
         }
 
-        masterClips = runCatching { model.masterTimelineTrack.getClips() }.getOrDefault(emptyList())
-        masterInstances = runCatching {
+        if (structural) masterClips =
+            runCatching { model.masterTimelineTrack.getClips() }.getOrDefault(emptyList())
+        if (structural) masterInstances = runCatching {
             engine.masterTrack.getOrderedInstanceIds().mapNotNull { id ->
                 engine.getPluginInstance(id)?.let { TrackInstance(id, it.displayName, it.formatName) }
             }
@@ -787,6 +950,13 @@ class UapmdHost private constructor(val model: AppModel) {
     }
 
     companion object {
+        /**
+         * Wraps an AppModel that is already running, for the headless UI
+         * snapshot tool — it drives the bootstrap itself and only needs a host
+         * to render against.
+         */
+        internal fun attach(model: AppModel) = UapmdHost(model)
+
         fun start(): UapmdHost {
             // Ordering is load-bearing: the event loop must exist first (§2.3).
             initPlatformEventLoop()
@@ -817,6 +987,13 @@ expect fun notifyPersistentStorageReadyForPlatform(model: AppModel)
 
 expect fun cleanupUapmdAppModel()
 
+private fun fixedSeconds(v: Double): String = ((v * 100).toLong() / 100.0).toString()
+
+/** Monotonic elapsed milliseconds, for the dev hook's stall measurement. */
+private val clockOrigin = kotlin.time.TimeSource.Monotonic.markNow()
+
+private fun nowMillis(): Long = clockOrigin.elapsedNow().inWholeMilliseconds
+
 /** One plugin instance on a track, flattened for the UI. */
 data class TrackInstance(val instanceId: Int, val displayName: String, val formatName: String)
 
@@ -830,23 +1007,17 @@ fun rememberUapmdHost(): UapmdHost {
         // catalog is empty when start() returns. Wait for it, then try
         // candidates until one instantiates - many plugins fail for their own
         // reasons, so the first entry is not a reliable choice.
+        launch { runStartupDevHooks(host) }
         var pendingFormat = startupInstantiateFormat()
-        // Dev hook: exercise the "+" button path with the poll running.
-        val devAddTracks = startupAddTracks()
-        repeat(devAddTracks) {
-            host.addTrack()
-            kotlinx.coroutines.delay(150)
-        }
-        if (devAddTracks > 0) {
-            kotlinx.coroutines.delay(1000)
-            host.refresh()
-            println(
-                "uapmd.cmp dev hook: addTracks=$devAddTracks " +
-                    "completions=${host.addTrackCompletions} trackCount=${host.trackCount}"
-            )
-        }
+        var pollTick = 0
         while (true) {
-            host.refresh()
+            // Skip the poll while a project load owns the engine; refreshing
+            // through it is what froze the UI.
+            if (!host.isLoadingProject && !startupSuppressPolling()) {
+                pollTick++
+                host.refresh(structural = pollTick % 5 == 0)
+            }
+            tickPlatformFilePicker()
             if (pendingFormat != null && !host.isScanning && host.catalog.isNotEmpty()) {
                 val format = pendingFormat
                 pendingFormat = null
@@ -879,9 +1050,190 @@ fun rememberUapmdHost(): UapmdHost {
                         if (succeeded >= startupInstantiateCount()) break
                     }
                 }
+                startupSaveProjectPath()?.let { savePath ->
+                    kotlinx.coroutines.delay(1500)
+                    host.saveProject(savePath)
+                    kotlinx.coroutines.delay(4000)
+                    println(
+                        "uapmd.cmp dev hook: saveProject -> ${host.lastProjectResult?.success} " +
+                            "err=${host.lastProjectResult?.error} path=$savePath"
+                    )
+                }
             }
             kotlinx.coroutines.delay(100)
         }
     }
     return host
+}
+
+/**
+ * Startup dev hooks, run concurrently with the UI poll.
+ *
+ * They used to run ahead of the poll loop, which meant `refresh()` never ran
+ * while a hook was measuring - playback looked frozen at playhead 0 even
+ * though the engine was advancing. Anything measured here needs the same
+ * refresh cadence the real UI has.
+ */
+private suspend fun runStartupDevHooks(host: UapmdHost) = kotlinx.coroutines.coroutineScope {
+        // Dev hook: exercise the "+" button path with the poll running.
+        // The audio device is created asynchronously when the engine starts, so
+        // the block size can only be applied once it exists.
+        run {
+            var waited = 0
+            while (!host.isAudioEngineEnabled && waited < 5_000) {
+                kotlinx.coroutines.delay(100); waited += 100
+            }
+            kotlinx.coroutines.delay(500)
+            host.applyDefaultAudioBufferSize()
+        }
+        startupBufferSize().takeIf { it > 0 }?.let { bs ->
+            val sr = host.model.sampleRate.takeIf { it > 0 } ?: 48000
+            println("uapmd.cmp dev hook: reconfiguring audio device to bufferSize=$bs")
+            host.applyDeviceSettings(-1, -1, sr, bs)
+            kotlinx.coroutines.delay(1500)
+        }
+        startupLoadProjectPath()?.let { path ->
+            // Wait for the plug-in scan: a project can only resolve plug-ins the
+            // catalog knows about, so loading before the scan finishes silently
+            // drops instances.
+            if (startupForceRescan()) {
+                // Clear the blocklist too: a plug-in that crashed an earlier scan
+                // stays excluded from the catalog, which looks identical to "not
+                // installed" when a project cannot resolve it.
+                println("uapmd.cmp dev hook: clearing blocklist and rescanning")
+                host.clearPluginBlocklist()
+                host.scanPlugins(forceRescan = true)
+                // Wait for the scan to actually start, then to finish.
+                var spin = 0
+                while (!host.isScanning && spin < 5_000) { kotlinx.coroutines.delay(100); spin += 100 }
+                var scanning = 0
+                while (host.isScanning && scanning < 180_000) {
+                    kotlinx.coroutines.delay(500); scanning += 500
+                }
+                println("uapmd.cmp dev hook: rescan finished after ${scanning}ms")
+            }
+            var waited = 0
+            while ((host.isScanning || host.catalog.isEmpty()) && waited < 120_000) {
+                kotlinx.coroutines.delay(200); waited += 200
+            }
+            println("uapmd.cmp dev hook: catalog ready after ${waited}ms, entries=${host.catalog.size}")
+            host.catalog.forEach { println("uapmd.cmp catalog: ${it.format} | ${it.pluginId} | ${it.displayName}") }
+            // Heartbeat on the UI dispatcher: every gap longer than a frame is a
+            // stall the user would see as a freeze.
+            var worstGapMs = 0L
+            var ticks = 0
+            val beat = launch {
+                var last = nowMillis()
+                while (true) {
+                    kotlinx.coroutines.delay(16)
+                    val t = nowMillis()
+                    val gap = t - last
+                    if (gap > worstGapMs) worstGapMs = gap
+                    last = t
+                    ticks++
+                }
+            }
+            repeat(startupLoadCount()) { pass ->
+            println("uapmd.cmp dev hook: load pass ${pass + 1}")
+            val started = nowMillis()
+            // The watchdog must not live on the UI dispatcher: that is the thread
+            // a hung load blocks, so a timer there would never fire.
+            val watchdog = launch(backgroundDispatcher()) {
+                kotlinx.coroutines.delay(20_000)
+                if (host.isLoadingProject) {
+                    println("uapmd.cmp dev hook: load exceeded 20s, stacks follow")
+                    dumpThreadStacks().lineSequence().forEach { println("uapmd.cmp stack $it") }
+                }
+            }
+            host.loadProject(path)
+            while (host.isLoadingProject) kotlinx.coroutines.delay(16)
+            watchdog.cancel()
+            val elapsed = nowMillis() - started
+            beat.cancel()
+            println(
+                "uapmd.cmp dev hook: loadProject took ${elapsed}ms, " +
+                    "UI ticks=$ticks worstStall=${worstGapMs}ms, " +
+                    "result=${host.lastProjectResult?.success} err=${host.lastProjectResult?.error}"
+            )
+            kotlinx.coroutines.delay(2000)
+            }
+            startupRenderPath()?.let { renderPath ->
+                println("uapmd.cmp dev hook: rendering to $renderPath")
+                host.startRender(renderPath, 0.0, null, 2.0, false)
+                var waited = 0
+                while (host.isRendering && waited < 300_000) {
+                    kotlinx.coroutines.delay(500); waited += 500
+                }
+                println("uapmd.cmp dev hook: render done in ${waited}ms status=${host.renderStatus}")
+            }
+            startupPlaySeconds().takeIf { it > 0 }?.let { seconds ->
+                println(
+                    "uapmd.cmp dev hook: engine=${host.isAudioEngineEnabled} playing=${host.isPlaying}"
+                )
+                println("uapmd.cmp dev hook: playing for ${seconds}s")
+                host.playOrStop()
+                repeat(5) {
+                    kotlinx.coroutines.delay(400)
+                    println(
+                        "uapmd.cmp dev hook: t.isPlaying=${host.model.transport.isPlaying} " +
+                            "host.isPlaying=${host.isPlaying} " +
+                            "rawPos=${host.model.sequencer.engine.playbackPosition} " +
+                            "playhead=${fixedSeconds(host.playheadSeconds)}"
+                    )
+                }
+                // Real-time ratio: the engine's own sample position against the
+                // monotonic clock. If playback is real-time these advance together;
+                // anything less means the audio graph is not keeping up.
+                val sr0 = host.model.sampleRate.takeIf { it > 0 } ?: 48000
+                val posA = host.model.sequencer.engine.playbackPosition
+                val tA = nowMillis()
+                val startPos = host.playheadSeconds
+                // Sample finely so a uniform slowdown can be told apart from
+                // periodic stalls.
+                val samples = mutableListOf<Pair<Long, Long>>()
+                repeat((seconds * 4).coerceAtMost(80)) {
+                    kotlinx.coroutines.delay(250)
+                    samples += nowMillis() to host.model.sequencer.engine.playbackPosition
+                }
+                var prevT = tA; var prevP = posA
+                val ratios = samples.map { (t, pos) ->
+                    val r = ((pos - prevP).toDouble() / sr0) / ((t - prevT) / 1000.0)
+                    prevT = t; prevP = pos
+                    r
+                }
+                println(
+                    "uapmd.cmp dev hook: per-250ms realtime ratios: " +
+                        ratios.joinToString(" ") { ((it * 100).toInt()).toString() }
+                )
+                val posB = host.model.sequencer.engine.playbackPosition
+                val tB = nowMillis()
+                val endPos = host.playheadSeconds
+                host.playOrStop()
+                val audioSeconds = (posB - posA).toDouble() / sr0
+                val wallSeconds = (tB - tA) / 1000.0
+                println(
+                    "uapmd.cmp dev hook: realtime ratio = " +
+                        "${fixedSeconds(audioSeconds)}s audio / ${fixedSeconds(wallSeconds)}s wall = " +
+                        "${fixedSeconds(100.0 * audioSeconds / wallSeconds)}%"
+                )
+                println(
+                    "uapmd.cmp dev hook: playback finished, playhead ${fixedSeconds(startPos)} -> " +
+                        "${fixedSeconds(endPos)} (advanced ${fixedSeconds(endPos - startPos)}s)"
+                )
+            }
+        }
+
+        val devAddTracks = startupAddTracks()
+        repeat(devAddTracks) {
+            host.addTrack()
+            kotlinx.coroutines.delay(150)
+        }
+        if (devAddTracks > 0) {
+            kotlinx.coroutines.delay(1000)
+            host.refresh()
+            println(
+                "uapmd.cmp dev hook: addTracks=$devAddTracks " +
+                    "completions=${host.addTrackCompletions} trackCount=${host.trackCount}"
+            )
+        }
 }

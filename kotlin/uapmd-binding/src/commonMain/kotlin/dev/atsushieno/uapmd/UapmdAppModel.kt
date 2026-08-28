@@ -120,6 +120,13 @@ interface AppModel {
     fun removeUmpEventFromClip(trackIndex: Int, clipId: Int, eventIndex: Int): Boolean
 
     fun removeClipFromTrack(trackIndex: Int, clipId: Int): Boolean
+    /**
+     * Imports a possibly multi-track SMF, one new track per SMF track.
+     * [callback] receives success, an error when it failed, and how many tracks
+     * were created.
+     */
+    fun importMidiTracksFromFile(filepath: String, callback: (Boolean, String?, Int) -> Unit)
+
     /** Creates an empty MIDI 2.0 clip; [tickResolution] is ticks per quarter. */
     fun createEmptyMidiClip(
         trackIndex: Int,

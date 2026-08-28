@@ -229,7 +229,11 @@ class JvmTimelineTrack internal constructor(
                 muted               = c.muted != 0.toByte(),
                 name                = c.name ?: "",
                 filepath            = c.filepath ?: "",
-                clipType            = ClipType.fromNative(c.clip_type)
+                clipType            = ClipType.fromNative(c.clip_type),
+                referenceId         = c.reference_id ?: "",
+                anchorReferenceId   = c.anchor_reference_id ?: "",
+                anchorOrigin        = AnchorOrigin.fromNative(c.anchor_origin),
+                anchorOffsetSamples = c.anchor_offset.samples
             )
         }
     }

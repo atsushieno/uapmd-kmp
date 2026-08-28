@@ -14,3 +14,25 @@ actual fun startupInstantiateFormat(): String? = null
 actual fun startupAddTracks(): Int = 0
 
 actual fun startupInstantiateCount(): Int = 1
+
+actual fun tickPlatformFilePicker() {}
+
+actual fun startupLoadProjectPath(): String? = null
+
+@androidx.compose.runtime.Composable
+actual fun PlatformQuitBackHandler() {}
+
+actual fun startupSaveProjectPath(): String? = null
+
+actual fun dumpThreadStacks(): String = "(not available)"
+
+actual fun startupForceRescan(): Boolean = false
+actual fun startupLoadCount(): Int = 1
+
+actual fun startupPlaySeconds(): Int = 0
+
+actual fun startupSuppressPolling(): Boolean = false
+
+actual fun startupRenderPath(): String? = null
+
+actual fun startupBufferSize(): Int = 0

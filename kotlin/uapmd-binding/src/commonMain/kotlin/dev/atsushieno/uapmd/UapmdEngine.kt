@@ -9,6 +9,13 @@ interface SequencerEngine {
     val trackCount: UInt
     fun getTrack(index: UInt): SequencerTrack
     val masterTrack: SequencerTrack
+
+    /** `FrozenTrackManager::freezePolicyForTrack` — what the user asked for. */
+    fun trackFreezePolicy(trackIndex: Int): FreezePolicy
+    /** `FrozenTrackManager::runtimeStateForTrack` — what the engine is doing. */
+    fun trackFreezeState(trackIndex: Int): FreezeRuntimeState
+    /** True while a freeze render is in flight; the legend disables the track's controls. */
+    fun isTrackBusy(trackIndex: Int): Boolean
     fun addEmptyTrack(): Int
     fun addPluginToTrack(
         trackIndex: Int,
@@ -165,4 +172,21 @@ interface RealtimeSequencer : AutoCloseable {
         sampleRate: UInt,
         bufferSize: UInt
     ): Boolean
+}
+
+enum class FreezePolicy(val nativeValue: Int) {
+    Off(0), On(1);
+
+    companion object {
+        fun fromNative(v: Int): FreezePolicy = entries.firstOrNull { it.nativeValue == v } ?: Off
+    }
+}
+
+enum class FreezeRuntimeState(val nativeValue: Int) {
+    Live(0), Rendering(1), Frozen(2), Error(3);
+
+    companion object {
+        fun fromNative(v: Int): FreezeRuntimeState =
+            entries.firstOrNull { it.nativeValue == v } ?: Live
+    }
 }

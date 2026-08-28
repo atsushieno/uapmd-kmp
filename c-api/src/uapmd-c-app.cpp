@@ -254,6 +254,21 @@ uapmd_clip_add_result_t uapmd_app_add_clip_to_track(uapmd_app_model_t app,
     return to_c_clip_result(r);
 }
 
+void uapmd_app_import_midi_tracks_from_file(uapmd_app_model_t app,
+                                            const char* filepath,
+                                            void* user_data,
+                                            uapmd_midi_tracks_import_cb_t callback) {
+    if (!app || !callback) return;
+    AM(app)->importMidiTracksFromFile(
+        filepath ? filepath : "",
+        [callback, user_data](uapmd_app::AppModel::MidiTracksImportResult result) {
+            callback(result.success,
+                     result.error.empty() ? nullptr : result.error.c_str(),
+                     static_cast<uint32_t>(result.importedTracks.size()),
+                     user_data);
+        });
+}
+
 uapmd_clip_add_result_t uapmd_app_add_midi_clip_to_track(uapmd_app_model_t app,
                                                            int32_t track_index,
                                                            uapmd_timeline_position_t position,

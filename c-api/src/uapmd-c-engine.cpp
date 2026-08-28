@@ -68,6 +68,32 @@ void uapmd_engine_enqueue_ump(uapmd_sequencer_engine_t engine, int32_t instance_
     E(engine)->enqueueUmp(instance_id, ump, size_in_bytes, timestamp);
 }
 
+uapmd_freeze_policy_t uapmd_engine_track_freeze_policy(uapmd_sequencer_engine_t engine,
+                                                       int32_t track_index) {
+    if (!engine) return UAPMD_FREEZE_POLICY_OFF;
+    auto policy = E(engine)->frozenTrackManager().freezePolicyForTrack(track_index);
+    return policy == uapmd::FrozenTrackManager::FreezePolicy::On
+        ? UAPMD_FREEZE_POLICY_ON : UAPMD_FREEZE_POLICY_OFF;
+}
+
+uapmd_freeze_runtime_state_t uapmd_engine_track_freeze_state(uapmd_sequencer_engine_t engine,
+                                                             int32_t track_index) {
+    if (!engine) return UAPMD_FREEZE_STATE_LIVE;
+    using RS = uapmd::FrozenTrackManager::RuntimeState;
+    switch (E(engine)->frozenTrackManager().runtimeStateForTrack(track_index)) {
+        case RS::Rendering: return UAPMD_FREEZE_STATE_RENDERING;
+        case RS::Frozen:    return UAPMD_FREEZE_STATE_FROZEN;
+        case RS::Error:     return UAPMD_FREEZE_STATE_ERROR;
+        case RS::Live:
+        default:            return UAPMD_FREEZE_STATE_LIVE;
+    }
+}
+
+bool uapmd_engine_is_track_busy(uapmd_sequencer_engine_t engine, int32_t track_index) {
+    if (!engine) return false;
+    return E(engine)->frozenTrackManager().isTrackBusy(track_index);
+}
+
 uapmd_plugin_host_t uapmd_engine_plugin_host(uapmd_sequencer_engine_t engine) {
     return reinterpret_cast<uapmd_plugin_host_t>(E(engine)->pluginHost());
 }

@@ -230,6 +230,13 @@ class JsAppModel internal constructor(internal val handle: Int) : AppModel {
     override fun removeClipFromTrack(trackIndex: Int, clipId: Int): Boolean =
         jsMod._uapmd_app_remove_clip_from_track(handle, trackIndex, clipId) as Boolean
 
+    override fun importMidiTracksFromFile(filepath: String, callback: (Boolean, String?, Int) -> Unit) {
+        // The js bridge marshals C callbacks through its own dispatcher table;
+        // this one is not registered there yet, so report the failure rather
+        // than silently doing nothing.
+        callback(false, "Multi-track SMF import is not wired up on this platform yet.", 0)
+    }
+
     override fun createEmptyMidiClip(
         trackIndex: Int, positionSamples: Long, tickResolution: UInt, bpm: Double
     ): ClipAddResult = withWasmMem(16) { out ->

@@ -158,6 +158,21 @@ UAPMD_C_EXPORT uapmd_clip_add_result_t uapmd_app_add_clip_to_track(uapmd_app_mod
                                                                       uapmd_audio_file_reader_t reader,
                                                                       const char* filepath);
 
+/**
+ * Imports a possibly multi-track SMF, creating one track per SMF track
+ * (`AppModel::importMidiTracksFromFile`). The C shape is flattened to
+ * success/error plus the number of tracks created; the caller re-reads the
+ * timeline for the detail, which is what a UI does anyway. Per-track warnings
+ * from the C++ result are not carried across.
+ */
+typedef void (*uapmd_midi_tracks_import_cb_t)(bool success, const char* error,
+                                              uint32_t imported_track_count, void* user_data);
+
+UAPMD_C_EXPORT void uapmd_app_import_midi_tracks_from_file(uapmd_app_model_t app,
+                                                           const char* filepath,
+                                                           void* user_data,
+                                                           uapmd_midi_tracks_import_cb_t callback);
+
 UAPMD_C_EXPORT uapmd_clip_add_result_t uapmd_app_add_midi_clip_to_track(uapmd_app_model_t app,
                                                                            int32_t track_index,
                                                                            uapmd_timeline_position_t position,

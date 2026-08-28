@@ -167,9 +167,11 @@ fun Toolbar(
                         importOpen = false
                         scope.launch { pickMediaFileToOpen()?.let { host.importAudioClip(0, it) } }
                     })
-                    // Both need C API that does not exist: importMidiTracksFromFile
-                    // for the SMF split, and the Demucs import path.
-                    DropdownMenuItem(text = { Text("Import MIDI Tracks (SMF)") }, enabled = false, onClick = {})
+                    DropdownMenuItem(text = { Text("Import MIDI Tracks (SMF)") }, onClick = {
+                        importOpen = false
+                        scope.launch { pickMediaFileToOpen()?.let { host.importMidiTracks(it) } }
+                    })
+                    // Still needs a C entry point for the Demucs separation path.
                     DropdownMenuItem(text = { Text("Import Split Audio Tracks (Demucs)") }, enabled = false, onClick = {})
                 }
             }

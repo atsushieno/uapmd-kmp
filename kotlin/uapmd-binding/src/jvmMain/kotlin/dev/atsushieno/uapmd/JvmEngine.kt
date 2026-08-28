@@ -28,6 +28,12 @@ class JvmSequencerEngine internal constructor(
     override fun getTrack(index: UInt): SequencerTrack =
         JvmSequencerTrack(lib.uapmd_engine_get_track(handle, index.toInt()) ?: error("track $index not found"))
 
+    override fun trackFreezePolicy(trackIndex: Int) =
+        FreezePolicy.fromNative(lib.uapmd_engine_track_freeze_policy(handle, trackIndex))
+    override fun trackFreezeState(trackIndex: Int) =
+        FreezeRuntimeState.fromNative(lib.uapmd_engine_track_freeze_state(handle, trackIndex))
+    override fun isTrackBusy(trackIndex: Int) = lib.uapmd_engine_is_track_busy(handle, trackIndex)
+
     override val masterTrack: SequencerTrack
         get() = JvmSequencerTrack(lib.uapmd_engine_master_track(handle) ?: error("master track not found"))
 

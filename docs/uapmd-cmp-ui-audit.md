@@ -11,17 +11,14 @@ listed; matched behaviour is not.
 | Script editor | Command ▸ Show/Hide Script | `UapmdJSRuntime` is not exposed by the C API |
 | MCP settings | Command ▸ Show/Hide MCP Settings | `McpServer` handle is not exposed |
 | Import split audio tracks (Demucs) | Import ▾ | no C entry point for the Demucs import path |
-| Import SMF as split tracks | Import ▾ | `importMidiTracksFromFile` is not exposed |
 | Blocked-bundle list in Plugin Selector | collapsible list of blocked bundles | `uapmd_app_clear_plugin_blocklist` exists, but nothing enumerates the blocklist |
-| Track busy state | freeze button disabled and spinning while the track renders | `FrozenTrackManager::isTrackBusy` and the runtime freeze state are not exposed |
 
-The menu entries for the first four exist in `Toolbar.kt`, disabled, so the gap is visible in the
+The menu entries for these exist in `Toolbar.kt`, disabled, so the gap is visible in the
 UI rather than silently absent. These belong in `uapmd-binding-missing-api.md` §2 as C API work.
 
 ## Not yet built
 
 | Feature | uapmd-app | Notes |
 |---|---|---|
-| Clip resize by dragging its edges | timeline | numeric resize exists in Clip Properties, and range-drag sizes a new clip |
-| Timeline navigator position control | navigator | zoom is implemented, scrub position is not |
+| Beats view tempo map | `View: Beats` | uses the project tempo; `TempoMap` is not exposed, so tempo changes mid-project are not honoured |
 | Piano roll: per-note automation, NRPN picker | piano roll | deliberately deferred |

@@ -13,6 +13,7 @@ import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -45,7 +46,9 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
+import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.platform.LocalDensity
@@ -56,13 +59,15 @@ import androidx.compose.ui.unit.DpSize
 import androidx.compose.ui.unit.DpOffset
 import androidx.compose.ui.unit.dp
 import dev.atsushieno.uapmd.ClipData
+import dev.atsushieno.uapmd.FreezePolicy
+import dev.atsushieno.uapmd.FreezeRuntimeState
 import dev.atsushieno.uapmd.ClipType
 import dev.atsushieno.uapmd.cmp.UapmdHost
 import dev.atsushieno.uapmd.cmp.pickMediaFileToOpen
 import kotlinx.coroutines.launch
 
 /** kotlin.text has no common String.format, so round and splice manually. */
-private fun fixed(value: Double, decimals: Int): String {
+internal fun fixed(value: Double, decimals: Int): String {
     var factor = 1.0
     repeat(decimals) { factor *= 10 }
     val scaled = kotlin.math.round(value * factor).toLong()
@@ -93,8 +98,29 @@ private val IconButtonSize = 30.dp
  * Legend width adapts to the window: a fixed 260dp eats two thirds of a phone
  * screen, leaving no room for the lanes it is supposed to label.
  */
-private val LegendWidthWide = 260.dp
-private val LegendWidthNarrow = 150.dp
+/*
+ * uapmd-app computes the legend width from the row-1 buttons rather than fixing
+ * it (TimelineEditor.cpp:634):
+ *     pad + clips + gap + graph + gap + slider(iconW * 1.5) + gap + mute + gap + solo + pad
+ * The same sum here, plus the track label and the editable dB readout, which
+ * ImGui draws inside the slider and Compose cannot. Pinning this at 150dp is
+ * what pushed Freeze / Add Plugin / the More menu out of the visible area.
+ */
+private val LegendPad = 4.dp
+private val LegendGap = 3.dp
+private val TrackLabelWidth = 26.dp
+private val GainReadoutWidth = 40.dp
+private val GainSliderWidth = IconButtonSize * 1.5f
+
+/**
+ * The master track's slider is the project's total volume, and its row carries
+ * no Mute or Solo, so it reclaims their width rather than staying as narrow as a
+ * track's. Same legend width as every other row.
+ */
+private val MasterVolumeSliderWidth = GainSliderWidth + IconButtonSize * 2 + LegendGap * 2
+private val LegendWidth =
+    LegendPad * 2 + TrackLabelWidth + IconButtonSize * 4 + GainSliderWidth +
+        GainReadoutWidth + LegendGap * 6
 private const val NarrowWidthThreshold = 620
 /**
  * Row height. Narrow screens wrap the legend controls onto a third line, so the
@@ -104,6 +130,7 @@ private const val NarrowWidthThreshold = 620
 private val TrackHeightWide = 84.dp
 private val TrackHeightNarrow = 92.dp
 private val RulerHeight = 22.dp
+private val NavigatorHeight = 26.dp
 
 private val AudioClip = Color(0xFF4A3D75)
 private val MidiClip = Color(0xFF3D5A75)
@@ -111,11 +138,16 @@ private val ClipBorder = Color(0xFF9A8FC7)
 private val NoteColor = Color(0xFFBFD8F0)
 private val Playhead = Color(0xFFE8C547)
 private val LaneBackground = Color(0xFF1E1E24)
+private val NavigatorBackground = Color(0xFF17171C)
+private val NavigatorWindow = Color(0x334F8FD0)
 private val MasterLaneBackground = Color(0xFF26262F)
 private val RangeFill = Color(0x552F6FA8)
 
+/** How close to a clip's right edge a drag counts as a resize. */
+private const val ResizeGripPx = 6f
+
 /** Mirrors UAPMD_MASTER_TRACK_INDEX / ProjectAddressBook.MASTER_TRACK_INDEX. */
-private const val MasterTrackIndex = Int.MIN_VALUE
+internal const val MasterTrackIndex = Int.MIN_VALUE
 
 /** Gain slider range in dB; the bottom of the range is treated as silence. */
 private const val MinGainDb = -60f
@@ -130,6 +162,7 @@ private fun dbToLinear(db: Double): Double =
 private val MutedColor = Color(0xFFB32828)
 private val SoloColor = Color(0xFFD1850F)
 private val FrozenColor = Color(0xFF7FD4F0)
+private val RenderingColor = Color(0xFFD1850F)
 
 /**
  * The main content: a track legend on the left and a time-ruled lane per track
@@ -139,6 +172,80 @@ private val FrozenColor = Color(0xFF7FD4F0)
  * toggles to needs `TempoMap`, which the C API does not expose yet
  * (docs/uapmd-binding-missing-api.md §3).
  */
+/**
+ * The navigator's position control — a whole-song overview with the visible
+ * window drawn on it, matching uapmd-app's `renderTimelineNavigator`. Clicking
+ * or dragging scrolls the lanes: uapmd-app moves the view with
+ * `Timeline::SetStartTimestamp` (`TimelineNavigator.cpp:141`), which for a
+ * scrolling Compose column is the horizontal scroll offset.
+ */
+@Composable
+private fun NavigatorBar(
+    host: UapmdHost,
+    contentSeconds: Double,
+    pixelsPerSecond: Float,
+    hScroll: androidx.compose.foundation.ScrollState,
+    modifier: Modifier = Modifier
+) {
+    val sampleRate = (host.model.sampleRate.takeIf { it > 0 } ?: 48000).toDouble()
+    val scope = rememberCoroutineScope()
+    val lanes = remember(host.masterClips, host.trackClips) {
+        listOf(host.masterClips) + host.trackClips
+    }
+
+    fun scrollTo(fraction: Float) {
+        val max = hScroll.maxValue
+        if (max <= 0) return
+        // Centre the click, as dragging the navigator's window does.
+        val viewport = (hScroll.viewportSize).coerceAtLeast(1)
+        val target = (fraction * (max + viewport) - viewport / 2f).coerceIn(0f, max.toFloat())
+        scope.launch { hScroll.scrollTo(target.toInt()) }
+    }
+
+    Box(
+        modifier.height(NavigatorHeight).background(NavigatorBackground)
+            .pointerInput(contentSeconds, pixelsPerSecond) {
+                detectTapGestures { offset -> scrollTo(offset.x / size.width.toFloat()) }
+            }
+            .pointerInput(contentSeconds, pixelsPerSecond) {
+                detectDragGestures { change, _ ->
+                    change.consume()
+                    scrollTo(change.position.x / size.width.toFloat())
+                }
+            }
+    ) {
+        Canvas(Modifier.fillMaxSize()) {
+            if (contentSeconds <= 0.0) return@Canvas
+            val laneHeight = size.height / lanes.size.coerceAtLeast(1)
+            lanes.forEachIndexed { row, clips ->
+                clips.forEach { clip ->
+                    val x = (clip.positionSamples / sampleRate / contentSeconds).toFloat() * size.width
+                    val w = ((clip.durationSamples / sampleRate / contentSeconds).toFloat() * size.width)
+                        .coerceAtLeast(1f)
+                    drawRect(
+                        if (clip.clipType == ClipType.Midi) MidiClip else AudioClip,
+                        Offset(x, row * laneHeight + 1f),
+                        Size(w, (laneHeight - 2f).coerceAtLeast(1f))
+                    )
+                }
+            }
+            // The window currently visible in the lanes.
+            val total = (hScroll.maxValue + hScroll.viewportSize).toFloat()
+            if (total > 0f && hScroll.viewportSize > 0) {
+                val x = hScroll.value / total * size.width
+                val w = (hScroll.viewportSize / total * size.width).coerceAtLeast(2f)
+                drawRect(NavigatorWindow, Offset(x, 0f), Size(w, size.height))
+                drawRect(
+                    ClipBorder, Offset(x, 0f), Size(w, size.height),
+                    style = androidx.compose.ui.graphics.drawscope.Stroke(1f)
+                )
+            }
+            val px = (host.playheadSeconds / contentSeconds).toFloat() * size.width
+            drawLine(Playhead, Offset(px, 0f), Offset(px, size.height), 1.5f)
+        }
+    }
+}
+
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
 fun Timeline(
@@ -164,14 +271,16 @@ fun Timeline(
 
     BoxWithConstraints(modifier.fillMaxSize()) {
     val isNarrow = maxWidth.value < NarrowWidthThreshold
-    val legendWidth = if (isNarrow) LegendWidthNarrow else LegendWidthWide
+    val legendWidth = LegendWidth
     val trackHeight = if (isNarrow) TrackHeightNarrow else TrackHeightWide
 
     Column(Modifier.fillMaxSize()) {
         // ── Navigator row ────────────────────────────────────────────────────
-        Row(
+        // A FlowRow, like the toolbar: at a phone width the controls alone
+        // exceed the row, which squeezed the readout to one character per line.
+        FlowRow(
             Modifier.fillMaxWidth().padding(6.dp),
-            verticalAlignment = Alignment.CenterVertically,
+            verticalArrangement = Arrangement.spacedBy(4.dp),
             horizontalArrangement = Arrangement.spacedBy(8.dp)
         ) {
             Button(onClick = {
@@ -182,7 +291,7 @@ fun Timeline(
                 value = pixelsPerSecond,
                 onValueChange = { pixelsPerSecond = it },
                 valueRange = 8f..240f,
-                modifier = Modifier.width(220.dp)
+                modifier = Modifier.width(140.dp)
             )
             Text(
                 if (timeUnit == TimeUnit.Seconds)
@@ -193,6 +302,12 @@ fun Timeline(
                         "${host.timeline?.timeSignatureNumerator ?: 4}/${host.timeline?.timeSignatureDenominator ?: 4}",
                 style = MaterialTheme.typography.bodySmall
             )
+        }
+        // uapmd-app draws the navigator across the lane area, starting at the
+        // legend's right edge (TimelineEditor.cpp:990).
+        Row(Modifier.fillMaxWidth().padding(horizontal = 6.dp)) {
+            Spacer(Modifier.width(legendWidth))
+            NavigatorBar(host, contentSeconds, pixelsPerSecond, hScroll, Modifier.weight(1f))
         }
         HorizontalDivider()
 
@@ -282,6 +397,7 @@ private fun TrackLane(
     val clips = host.trackClips.getOrNull(trackIndex).orEmpty()
     val sampleRate = (host.model.sampleRate.takeIf { it > 0 } ?: 48000).toDouble()
     var draggingClipId by remember { mutableStateOf<Int?>(null) }
+    var resizingClipId by remember { mutableStateOf<Int?>(null) }
     var dragSeconds by remember { mutableStateOf(0.0) }
     val density = LocalDensity.current
     val scope = rememberCoroutineScope()
@@ -322,16 +438,33 @@ private fun TrackLane(
                 detectDragGestures(
                     onDragStart = { offset ->
                         val seconds = (offset.x / pixelsPerSecond).toDouble()
-                        draggingClipId = clipAt(seconds)?.clipId
+                        val hit = clipAt(seconds)
+                        // Within the grip of a clip's right edge the drag resizes
+                        // it instead of moving it.
+                        val grip = ResizeGripPx / pixelsPerSecond
+                        resizingClipId = hit?.takeIf { c ->
+                            val end = (c.positionSamples + c.durationSamples) / sampleRate
+                            seconds >= end - grip
+                        }?.clipId
+                        draggingClipId = if (resizingClipId == null) hit?.clipId else null
                         dragSeconds = 0.0
                         // Only empty space starts a range selection; a drag that
-                        // began on a clip is that clip's move gesture.
-                        if (draggingClipId == null) {
+                        // began on a clip is that clip's move or resize gesture.
+                        if (draggingClipId == null && resizingClipId == null) {
                             rangeAnchorSeconds = seconds.coerceAtLeast(0.0)
                             rangeCurrentSeconds = seconds.coerceAtLeast(0.0)
                         }
                     },
                     onDragEnd = {
+                        val resizeId = resizingClipId
+                        if (resizeId != null && dragSeconds != 0.0) {
+                            val clip = clips.firstOrNull { it.clipId == resizeId }
+                            if (clip != null) {
+                                val samples = clip.durationSamples + (dragSeconds * sampleRate).toLong()
+                                // A clip shorter than a single frame is not a clip.
+                                host.resizeClip(trackIndex, resizeId, samples.coerceAtLeast(1L))
+                            }
+                        }
                         val id = draggingClipId
                         if (id != null && dragSeconds != 0.0) {
                             val clip = clips.firstOrNull { it.clipId == id }
@@ -354,14 +487,17 @@ private fun TrackLane(
                         }
                         rangeAnchorSeconds = null
                         draggingClipId = null
+                        resizingClipId = null
                         dragSeconds = 0.0
                     },
                     onDragCancel = {
-                        draggingClipId = null; dragSeconds = 0.0; rangeAnchorSeconds = null
+                        draggingClipId = null; resizingClipId = null
+                        dragSeconds = 0.0; rangeAnchorSeconds = null
                     }
                 ) { change, delta ->
                     change.consume()
-                    if (draggingClipId != null) dragSeconds += delta.x / pixelsPerSecond
+                    if (draggingClipId != null || resizingClipId != null)
+                        dragSeconds += delta.x / pixelsPerSecond
                     else if (rangeAnchorSeconds != null)
                         rangeCurrentSeconds = (change.position.x / pixelsPerSecond).toDouble().coerceAtLeast(0.0)
                 }
@@ -370,8 +506,10 @@ private fun TrackLane(
         Canvas(Modifier.fillMaxSize()) {
             clips.forEach { clip ->
                 val shift = if (clip.clipId == draggingClipId) dragSeconds else 0.0
+                val stretch = if (clip.clipId == resizingClipId) dragSeconds else 0.0
                 val x = ((clip.positionSamples / sampleRate + shift) * pixelsPerSecond).toFloat()
-                val w = (clip.durationSamples / sampleRate * pixelsPerSecond).toFloat().coerceAtLeast(2f)
+                val w = ((clip.durationSamples / sampleRate + stretch) * pixelsPerSecond)
+                    .toFloat().coerceAtLeast(2f)
                 val isMidi = clip.clipType == ClipType.Midi
                 val base = if (isMidi) MidiClip else AudioClip
                 drawRect(
@@ -588,37 +726,69 @@ private fun androidx.compose.ui.graphics.drawscope.DrawScope.drawMidiNotes(
 }
 
 /**
- * The legend gain slider.
+ * The legend gain slider, plus an editable dB readout.
  *
- * uapmd-app draws no value on the slider itself — its format string is `""`, or
- * `"Mute"` at the bottom of the range (`TimelineEditor.cpp:1255`) — and puts the
- * dB in the hover tooltip, so the tooltip is the only place the number appears.
- * The slider is `iconButtonWidth * 1.5f` wide there, i.e. as narrow as this one.
+ * uapmd-app draws no value on the slider — its format string is `""`, or `"Mute"`
+ * at the bottom (`TimelineEditor.cpp:1255`) — and puts the dB in a tooltip. Its
+ * slider is `iconButtonWidth * 1.5f`, as narrow as this one, but ImGui's
+ * SliderFloat takes a ctrl+click to type an exact value. Compose's Slider has no
+ * such affordance, and at 45dp a drag gives only a few dozen usable steps, so the
+ * readout beside it is a text field: tap it and type the dB. That is the one
+ * deliberate addition here, and it exists because the widget is weaker, not
+ * because the layout should differ.
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun GainSlider(
     gainDb: Float,
-    isNarrow: Boolean = false,
     onChange: (Float) -> Unit,
-    onFinished: () -> Unit
+    onFinished: () -> Unit,
+    modifier: Modifier = Modifier,
+    sliderWidth: Dp = GainSliderWidth
 ) {
-    TooltipBox(
-        positionProvider = TooltipDefaults.rememberTooltipPositionProvider(),
-        tooltip = {
-            PlainTooltip {
-                Text(if (gainDb <= MinGainDb) "Mute" else "${fixed(gainDb.toDouble(), 1)} dB")
-            }
-        },
-        state = rememberTooltipState()
-    ) {
-        Slider(
-            value = gainDb,
-            onValueChange = onChange,
-            onValueChangeFinished = onFinished,
-            valueRange = MinGainDb..MaxGainDb,
-            modifier = Modifier.width(if (isNarrow) 44.dp else 60.dp)
-        )
+    Row(modifier, verticalAlignment = Alignment.CenterVertically) {
+        TooltipBox(
+            positionProvider = TooltipDefaults.rememberTooltipPositionProvider(),
+            tooltip = {
+                PlainTooltip {
+                    Text(if (gainDb <= MinGainDb) "Mute" else "${fixed(gainDb.toDouble(), 1)} dB")
+                }
+            },
+            state = rememberTooltipState()
+        ) {
+            Slider(
+                value = gainDb,
+                onValueChange = onChange,
+                onValueChangeFinished = onFinished,
+                valueRange = MinGainDb..MaxGainDb,
+                modifier = Modifier.width(sliderWidth)
+            )
+        }
+        var editing by remember { mutableStateOf<String?>(null) }
+        val shown = if (gainDb <= MinGainDb) "Mute" else fixed(gainDb.toDouble(), 1)
+        if (editing == null) {
+            Text(
+                shown,
+                Modifier.width(GainReadoutWidth).clickable { editing = fixed(gainDb.toDouble(), 1) },
+                style = MaterialTheme.typography.labelSmall
+            )
+        } else {
+            BasicTextField(
+                value = editing.orEmpty(),
+                onValueChange = { editing = it },
+                singleLine = true,
+                textStyle = MaterialTheme.typography.labelSmall.copy(color = LocalContentColor.current),
+                cursorBrush = SolidColor(LocalContentColor.current),
+                modifier = Modifier.width(GainReadoutWidth).onFocusChanged { state ->
+                    if (!state.isFocused) {
+                        editing?.toFloatOrNull()
+                            ?.coerceIn(MinGainDb, MaxGainDb)
+                            ?.let { onChange(it); onFinished() }
+                        editing = null
+                    }
+                }
+            )
+        }
     }
 }
 
@@ -657,16 +827,36 @@ private fun GraphIcon(tint: Color) = Canvas(Modifier.size(LegendIconSize)) {
     listOf(upper, lower, out).forEach { drawCircle(tint, r, it) }
 }
 
-/** snowflake: track freeze. */
+/**
+ * snowflake: track freeze. Drawn as a vertical stem with barbed arms rather than
+ * bare crossing spokes — at 16dp on a round button, spokes alone read as a
+ * starburst rather than as a snowflake.
+ */
 @Composable
 private fun FreezeIcon(tint: Color) = Canvas(Modifier.size(LegendIconSize)) {
     val c = Offset(size.width / 2f, size.height / 2f)
-    val r = size.minDimension * 0.45f
-    // Three crossing spokes at 60 degrees, the usual snowflake shorthand.
-    listOf(0.0, 1.0471975, 2.0943951).forEach { a ->
-        val dx = (r * kotlin.math.cos(a)).toFloat()
-        val dy = (r * kotlin.math.sin(a)).toFloat()
-        drawLine(tint, Offset(c.x - dx, c.y - dy), Offset(c.x + dx, c.y + dy), 1.5f)
+    val r = size.minDimension * 0.42f
+    val barb = r * 0.34f
+    // Vertical stem plus the two diagonals at +/-60 degrees from it.
+    listOf(-1.0471975, 0.0, 1.0471975).forEach { a ->
+        val ux = kotlin.math.sin(a).toFloat()
+        val uy = kotlin.math.cos(a).toFloat()
+        val tip = Offset(c.x + ux * r, c.y + uy * r)
+        val opp = Offset(c.x - ux * r, c.y - uy * r)
+        drawLine(tint, opp, tip, 1.2f)
+        // A V at each end is what separates a snowflake from an asterisk.
+        listOf(tip, opp).forEach { end ->
+            val toCentre = Offset(c.x - end.x, c.y - end.y)
+            val len = kotlin.math.sqrt(toCentre.x * toCentre.x + toCentre.y * toCentre.y)
+            if (len <= 0f) return@forEach
+            val nx = toCentre.x / len
+            val ny = toCentre.y / len
+            val px = -ny * barb * 0.7f
+            val py = nx * barb * 0.7f
+            val base = Offset(end.x + nx * barb, end.y + ny * barb)
+            drawLine(tint, end, Offset(base.x + px, base.y + py), 1.0f)
+            drawLine(tint, end, Offset(base.x - px, base.y - py), 1.0f)
+        }
     }
 }
 
@@ -683,6 +873,7 @@ private fun MoreIcon(tint: Color) = Canvas(Modifier.size(LegendIconSize)) {
 @Composable
 private fun LegendIconButton(
     tooltip: String,
+    enabled: Boolean = true,
     onClick: () -> Unit,
     icon: @Composable (Color) -> Unit
 ) {
@@ -693,6 +884,7 @@ private fun LegendIconButton(
     ) {
         Button(
             onClick = onClick,
+            enabled = enabled,
             contentPadding = TightPadding,
             modifier = Modifier.size(IconButtonSize)
         ) {
@@ -711,12 +903,12 @@ private fun TrackLegend(
     trackHeight: Dp = TrackHeightWide
 ) {
     val instances = host.trackInstances.getOrNull(trackIndex).orEmpty()
-    val engineTrack = remember(trackIndex, host.trackCount) {
-        runCatching { host.model.sequencer.engine.getTrack(trackIndex.toUInt()) }.getOrNull()
-    }
     var pluginMenu by remember { mutableStateOf(false) }
     var moreMenu by remember { mutableStateOf(false) }
     var clipsMenu by remember { mutableStateOf(false) }
+    // uapmd-app disables the graph button and the plugin popup while a freeze
+    // render is in flight (TimelineEditor.cpp:1217-1240).
+    val trackBusy = host.isTrackBusy(trackIndex)
     // uapmd-app treats Ctrl/Cmd-click on Solo as additive.
     var additiveSolo by remember { mutableStateOf(false) }
     var emptyAudioNotice by remember { mutableStateOf<String?>(null) }
@@ -730,7 +922,7 @@ private fun TrackLegend(
     Column(Modifier.height(trackHeight).fillMaxWidth().padding(4.dp)) {
         // Rows wrap so a phone-width legend keeps every control reachable
         // instead of pushing Solo off the edge.
-        FlowRow(horizontalArrangement = Arrangement.spacedBy(3.dp), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+        FlowRow(horizontalArrangement = Arrangement.spacedBy(LegendGap), verticalArrangement = Arrangement.spacedBy(2.dp)) {
             Text("T$trackIndex", style = MaterialTheme.typography.labelMedium)
 
             // Clips popup, as uapmd-app's first legend button.
@@ -741,9 +933,11 @@ private fun TrackLegend(
                     // the per-lane context actions live in that window.
                     DropdownMenuItem(text = { Text("Edit Clips…") }, onClick = {
                         clipsMenu = false
-                        windows.open("sequence", "Sequence Editor", DpSize(720.dp, 420.dp)) {
-                            SequenceEditor(host, windows)
-                        }
+                        windows.open(
+                            "sequence:$trackIndex",
+                            "Track $trackIndex - Clips",
+                            DpSize(840.dp, 360.dp)
+                        ) { SequenceEditor(host, windows, trackIndex) }
                     })
                     HorizontalDivider()
                     DropdownMenuItem(text = { Text("Add an Empty MIDI2 Clip") }, onClick = {
@@ -780,6 +974,7 @@ private fun TrackLegend(
 
             LegendIconButton(
                 "Show track graph",
+                enabled = !trackBusy,
                 onClick = {
                     windows.open("graph:$trackIndex", "Track $trackIndex Graph", DpSize(620.dp, 440.dp)) {
                         TrackGraphEditor(host, trackIndex)
@@ -787,34 +982,33 @@ private fun TrackLegend(
                 }
             ) { GraphIcon(it) }
 
-            engineTrack?.takeIf { !isNarrow }?.let { t ->
+            if (host.trackExists(trackIndex)) {
                 // Read the value from the track, write it through ProjectCommands.
                 // uapmd-app's slider is in dB and wraps the drag in an undo
                 // gesture, so a drag is one history entry rather than dozens.
-                var gainDb by remember(trackIndex) { mutableStateOf(linearToDb(t.gain).toFloat()) }
+                // Keyed on the project revision so a load re-reads the new value.
+                var gainDb by remember(trackIndex, host.projectRevision) {
+                    mutableStateOf(linearToDb(host.trackGain(trackIndex)).toFloat())
+                }
                 GainSlider(
                     gainDb = gainDb,
-                    isNarrow = isNarrow,
                     onChange = { gainDb = it; host.setTrackGain(trackIndex, dbToLinear(it.toDouble())) },
                     onFinished = { host.endTrackGainGesture() }
                 )
-                // uapmd-app shows no inline value: the slider label is empty,
-                // or "Mute" at the bottom of the range.
-                if (gainDb <= MinGainDb) {
-                    Text("Mute", style = MaterialTheme.typography.labelSmall)
-                }
+                val muted = host.trackMuted(trackIndex)
+                val solo = host.trackSolo(trackIndex)
                 Button(
-                    onClick = { host.setTrackMuted(trackIndex, !t.muted) },
+                    onClick = { host.setTrackMuted(trackIndex, !muted) },
                     contentPadding = TightPadding,
                     modifier = Modifier.size(IconButtonSize),
-                    colors = if (t.muted) ButtonDefaults.buttonColors(containerColor = MutedColor)
+                    colors = if (muted) ButtonDefaults.buttonColors(containerColor = MutedColor)
                     else ButtonDefaults.buttonColors()
                 ) { Text("M", style = MaterialTheme.typography.labelSmall) }
                 Button(
-                    onClick = { host.setTrackSolo(trackIndex, !t.solo, additive = additiveSolo) },
+                    onClick = { host.setTrackSolo(trackIndex, !solo, additive = additiveSolo) },
                     contentPadding = TightPadding,
                     modifier = Modifier.size(IconButtonSize),
-                    colors = if (t.solo) ButtonDefaults.buttonColors(containerColor = SoloColor)
+                    colors = if (solo) ButtonDefaults.buttonColors(containerColor = SoloColor)
                     else ButtonDefaults.buttonColors()
                 ) { Text("S", style = MaterialTheme.typography.labelSmall) }
             }
@@ -824,24 +1018,34 @@ private fun TrackLegend(
         // button labelled with the first instance's name (or "Add Plugin" when
         // the track is empty), then the More menu.
         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(3.dp)) {
+            val frozen = host.trackFreezePolicy(trackIndex) == FreezePolicy.On
+            val freezeState = host.trackFreezeState(trackIndex)
             LegendIconButton(
-                if (trackIndex in host.freezeRequested)
-                    "Track freezing: On (click to unfreeze)"
-                else
-                    "Track freezing: Off (click to render and freeze)",
-                onClick = {
-                    host.setTrackFreezePolicyEnabled(trackIndex, trackIndex !in host.freezeRequested)
-                }
-            ) { FreezeIcon(if (trackIndex in host.freezeRequested) FrozenColor else it) }
+                if (frozen) "Track freezing: On (click to unfreeze)"
+                else "Track freezing: Off (click to render and freeze)",
+                enabled = !trackBusy,
+                onClick = { host.setTrackFreezePolicyEnabled(trackIndex, !frozen) }
+            ) { tint ->
+                FreezeIcon(
+                    when (freezeState) {
+                        FreezeRuntimeState.Rendering -> RenderingColor
+                        FreezeRuntimeState.Frozen -> FrozenColor
+                        FreezeRuntimeState.Error -> MutedColor
+                        FreezeRuntimeState.Live -> if (frozen) FrozenColor else tint
+                    }
+                )
+            }
 
-            Box {
+            Box(Modifier.weight(1f)) {
                 Button(
                     onClick = { if (instances.isEmpty()) openSelectorForTrack() else pluginMenu = true },
-                    contentPadding = TightPadding
+                    contentPadding = TightPadding,
+                    modifier = Modifier.fillMaxWidth()
                 ) {
                     Text(
-                        instances.firstOrNull()?.let { "⋮ ${it.displayName}" } ?: "Add Plugin",
-                        style = MaterialTheme.typography.labelSmall
+                        instances.firstOrNull()?.displayName ?: "Add Plugin",
+                        style = MaterialTheme.typography.labelSmall,
+                        maxLines = 1
                     )
                 }
                 DropdownMenu(expanded = pluginMenu, onDismissRequest = { pluginMenu = false }) {
@@ -889,35 +1093,16 @@ private fun TrackLegend(
             Box {
                 LegendIconButton("More track actions", onClick = { moreMenu = true }) { MoreIcon(it) }
                 DropdownMenu(expanded = moreMenu, onDismissRequest = { moreMenu = false }) {
-                    engineTrack?.let { t ->
+                    if (host.trackExists(trackIndex)) {
+                        val bypassed = host.trackBypassed(trackIndex)
                         DropdownMenuItem(
-                            text = { Text(if (t.bypassed) "Enable Track Processing" else "Bypass Track Processing") },
-                            onClick = { moreMenu = false; host.setTrackBypassed(trackIndex, !t.bypassed) }
+                            text = { Text(if (bypassed) "Enable Track Processing" else "Bypass Track Processing") },
+                            onClick = { moreMenu = false; host.setTrackBypassed(trackIndex, !bypassed) }
                         )
                     }
-                    engineTrack?.takeIf { isNarrow }?.let { t ->
-                        // On a phone the mixer controls live here rather than as
-                        // top-level buttons, which do not fit a 412dp legend.
-                        DropdownMenuItem(
-                            text = { Text(if (t.muted) "Unmute Track" else "Mute Track") },
-                            onClick = { moreMenu = false; host.setTrackMuted(trackIndex, !t.muted) }
-                        )
-                        DropdownMenuItem(
-                            text = { Text(if (t.solo) "Clear Solo" else "Solo Track") },
-                            onClick = { moreMenu = false; host.setTrackSolo(trackIndex, !t.solo) }
-                        )
-                        DropdownMenuItem(
-                            text = { Text("Gain: ${if (t.gain <= 0.0) "-∞" else fixed(linearToDb(t.gain), 1)}dB") },
-                            enabled = false, onClick = {}
-                        )
-                        HorizontalDivider()
-                    }
-                    engineTrack?.let { t ->
-                        DropdownMenuItem(
-                            text = { Text(if (t.frozen) "Unfreeze Track" else "Freeze Track") },
-                            onClick = { moreMenu = false; host.setTrackFreezePolicyEnabled(trackIndex, !t.frozen) }
-                        )
-                    }
+                    // uapmd-app's misc popup is exactly Bypass + Delete Track
+                    // (TimelineEditor.cpp:1550-1564). Freeze is the row-2 button,
+                    // not a menu entry.
                     HorizontalDivider()
                     DropdownMenuItem(
                         text = { Text("Delete Track") },
@@ -943,9 +1128,6 @@ private fun MasterTrackLegend(host: UapmdHost, windows: FloatingWindowManager, t
     // (`renderTrackLegendContent`, via `engine()->masterTrack()`): row 1 is
     // Clips + Graph + the gain slider — this is the project's total volume —
     // and only Mute/Solo, Freeze and the More menu are gated to regular tracks.
-    val masterTrack = remember(host.trackCount) {
-        runCatching { host.model.sequencer.engine.masterTrack }.getOrNull()
-    }
 
     Column(Modifier.height(trackHeight).fillMaxWidth().padding(4.dp)) {
         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(3.dp)) {
@@ -956,9 +1138,11 @@ private fun MasterTrackLegend(host: UapmdHost, windows: FloatingWindowManager, t
                 DropdownMenu(expanded = clipsMenu, onDismissRequest = { clipsMenu = false }) {
                     DropdownMenuItem(text = { Text("Edit Clips…") }, onClick = {
                         clipsMenu = false
-                        windows.open("sequence", "Sequence Editor", DpSize(720.dp, 420.dp)) {
-                            SequenceEditor(host, windows)
-                        }
+                        windows.open(
+                            "sequence:master",
+                            "Master Track - Clips",
+                            DpSize(840.dp, 360.dp)
+                        ) { SequenceEditor(host, windows, MasterTrackIndex) }
                     })
                     HorizontalDivider()
                     // The master track takes MIDI clips only.
@@ -985,15 +1169,18 @@ private fun MasterTrackLegend(host: UapmdHost, windows: FloatingWindowManager, t
                 }
             ) { GraphIcon(it) }
 
-            masterTrack?.let { t ->
-                var gainDb by remember { mutableStateOf(linearToDb(t.gain).toFloat()) }
+            if (host.trackExists(MasterTrackIndex)) {
+                var gainDb by remember(host.projectRevision) {
+                    mutableStateOf(linearToDb(host.trackGain(MasterTrackIndex)).toFloat())
+                }
                 GainSlider(
                     gainDb = gainDb,
                     onChange = {
                         gainDb = it
                         host.setTrackGain(MasterTrackIndex, dbToLinear(it.toDouble()))
                     },
-                    onFinished = { host.endTrackGainGesture() }
+                    onFinished = { host.endTrackGainGesture() },
+                    sliderWidth = MasterVolumeSliderWidth
                 )
             }
         }

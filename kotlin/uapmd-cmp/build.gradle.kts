@@ -47,6 +47,7 @@ kotlin {
             implementation(libs.compose.foundation)
             implementation(libs.compose.material3)
             implementation(libs.compose.ui)
+            implementation(libs.compose.audio.controls)
             implementation(libs.compose.components.resources)
             implementation(libs.compose.uiToolingPreview)
             implementation(libs.androidx.lifecycle.viewmodelCompose)
@@ -118,6 +119,21 @@ compose.desktop {
 }
 
 val jvmMainCompilation = kotlin.targets.getByName("jvm").compilations.getByName("main")
+
+tasks.register<JavaExec>("renderUiSnapshot") {
+    group = "verification"
+    description = "Renders the timeline off-screen to a PNG, so layout changes can be seen without a device."
+    dependsOn("jvmJar")
+    mainClass.set("dev.atsushieno.uapmd.cmp.UiSnapshotMainKt")
+    classpath(
+        files(tasks.named("jvmJar")),
+        jvmMainCompilation.runtimeDependencyFiles
+    )
+    jvmArgs("-Djava.awt.headless=true")
+    listOf(
+        "uapmd.cmp.snapshot", "uapmd.cmp.snapshotSize", "uapmd.cmp.snapshotDensity"
+    ).forEach { key -> System.getProperty(key)?.let { systemProperty(key, it) } }
+}
 
 tasks.register<JavaExec>("runBootstrapProbe") {
     group = "verification"

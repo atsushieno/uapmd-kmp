@@ -646,6 +646,13 @@ interface UapmdLibrary : Library {
 
     // ── AudioFileReader ──────────────────────────────────────────────────────
 
+    interface MidiTracksImportCb : com.sun.jna.Callback {
+        fun invoke(success: Boolean, error: String?, importedTrackCount: Int, userData: Pointer?)
+    }
+    fun uapmd_app_import_midi_tracks_from_file(app: Pointer, filepath: String, userData: Pointer?, cb: MidiTracksImportCb)
+    fun uapmd_engine_track_freeze_policy(engine: Pointer, trackIndex: Int): Int
+    fun uapmd_engine_track_freeze_state(engine: Pointer, trackIndex: Int): Int
+    fun uapmd_engine_is_track_busy(engine: Pointer, trackIndex: Int): Boolean
     fun uapmd_tt_channel_count(tt: Pointer): Int
     fun uapmd_audio_file_reader_create(filepath: String): Pointer?
     fun uapmd_audio_file_reader_create_silent(numFrames: Long, numChannels: Int, sampleRate: Int): Pointer?

@@ -77,6 +77,20 @@ void app_track_mutation_trampoline(int32_t trackIndex, const char* error, void* 
     delete ctx;
 }
 
+/** cb signature: (success: Boolean, error: String?, importedTrackCount: Int) -> Unit */
+void app_midi_tracks_import_trampoline(bool success, const char* error,
+                                       uint32_t importedTrackCount, void* ud) {
+    auto* ctx = static_cast<AppCtx*>(ud);
+    if (!ctx) return;
+    JNIEnv* e = uapmd_jni_env();
+    if (e && ctx->mid) {
+        jstring err = error ? e->NewStringUTF(error) : nullptr;
+        e->CallVoidMethod(ctx->obj, ctx->mid, static_cast<jboolean>(success), err,
+                          static_cast<jint>(importedTrackCount));
+    }
+    delete ctx;
+}
+
 /** cb signature: (error: String?) -> Unit */
 void app_error_only_trampoline(const char* error, void* ud) {
     auto* ctx = static_cast<AppCtx*>(ud);
@@ -430,6 +444,15 @@ JNI_FN(jobjectArray, uapmdAppSaveProjectSync)(JNIEnv* env, jclass, jlong app, js
     auto r = uapmd_app_save_project_sync(AM(app), p);
     if (path) env->ReleaseStringUTFChars(path, p);
     return pack_project_result(env, r);
+}
+
+JNI_FN(void, uapmdAppImportMidiTracksFromFile)(JNIEnv* env, jclass, jlong app,
+                                                jstring filepath, jobject cb) {
+    if (!cb) return;
+    auto* ctx = new AppCtx(env, cb, "(ZLjava/lang/String;I)V");
+    const char* p = filepath ? env->GetStringUTFChars(filepath, nullptr) : nullptr;
+    uapmd_app_import_midi_tracks_from_file(AM(app), p, ctx, app_midi_tracks_import_trampoline);
+    if (filepath) env->ReleaseStringUTFChars(filepath, p);
 }
 
 JNI_FN(void, uapmdAppSaveProject)(JNIEnv* env, jclass, jlong app, jstring path, jobject cb) {

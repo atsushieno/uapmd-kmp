@@ -39,6 +39,13 @@ class JsSequencerEngine internal constructor(
     override fun getTrack(index: UInt): SequencerTrack =
         JsSequencerTrack(jsMod._uapmd_engine_get_track(handle, index.toInt()) as Int)
 
+    override fun trackFreezePolicy(trackIndex: Int) =
+        FreezePolicy.fromNative(jsMod._uapmd_engine_track_freeze_policy(handle, trackIndex) as Int)
+    override fun trackFreezeState(trackIndex: Int) =
+        FreezeRuntimeState.fromNative(jsMod._uapmd_engine_track_freeze_state(handle, trackIndex) as Int)
+    override fun isTrackBusy(trackIndex: Int) =
+        jsMod._uapmd_engine_is_track_busy(handle, trackIndex) as Boolean
+
     override val masterTrack: SequencerTrack
         get() = JsSequencerTrack(jsMod._uapmd_engine_master_track(handle) as Int)
 

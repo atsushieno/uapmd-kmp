@@ -168,6 +168,11 @@ class NativeAppModel internal constructor(
     override fun removeClipFromTrack(trackIndex: Int, clipId: Int): Boolean =
         uapmd_app_remove_clip_from_track(handle, trackIndex, clipId)
 
+    override fun importMidiTracksFromFile(filepath: String, callback: (Boolean, String?, Int) -> Unit) =
+        uapmd_app_import_midi_tracks_from_file(
+            handle, filepath, StableRef.create(callback).asCPointer(), appMidiTracksImportTrampoline
+        )
+
     override fun createEmptyMidiClip(
         trackIndex: Int, positionSamples: Long, tickResolution: UInt, bpm: Double
     ): ClipAddResult =
@@ -322,6 +327,15 @@ private val appTrackClearTrampoline =
         if (userData != null) {
             val ref = userData.asStableRef<(String?) -> Unit>()
             ref.get()(error?.toKString())
+            ref.dispose()
+        }
+    }
+
+private val appMidiTracksImportTrampoline =
+    staticCFunction<Boolean, CPointer<ByteVar>?, UInt, COpaquePointer?, Unit> { success, error, count, userData ->
+        if (userData != null) {
+            val ref = userData.asStableRef<(Boolean, String?, Int) -> Unit>()
+            ref.get()(success, error?.toKString(), count.toInt())
             ref.dispose()
         }
     }

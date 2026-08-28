@@ -136,6 +136,15 @@ enum class ClipType(val nativeValue: Int) {
     companion object { fun fromNative(v: Int) = entries.firstOrNull { it.nativeValue == v } ?: Audio }
 }
 
+/** `uapmd_anchor_origin_t`: which end of the anchor the offset is measured from. */
+enum class AnchorOrigin(val nativeValue: Int) {
+    Start(0), End(1);
+
+    companion object {
+        fun fromNative(v: Int): AnchorOrigin = entries.firstOrNull { it.nativeValue == v } ?: Start
+    }
+}
+
 data class ClipData(
     val clipId: Int,
     val positionSamples: Long,
@@ -145,7 +154,13 @@ data class ClipData(
     val muted: Boolean,
     val name: String,
     val filepath: String,
-    val clipType: ClipType
+    val clipType: ClipType,
+    /** Stable document id, the handle anchors and history refer to clips by. */
+    val referenceId: String = "",
+    /** Empty when the clip is anchored to its track rather than to another clip. */
+    val anchorReferenceId: String = "",
+    val anchorOrigin: AnchorOrigin = AnchorOrigin.Start,
+    val anchorOffsetSamples: Long = 0L
 )
 
 enum class ScanMode { InProcess, Remote }

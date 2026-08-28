@@ -27,6 +27,12 @@ class NativeSequencerEngine internal constructor(
     override fun getTrack(index: UInt): SequencerTrack =
         NativeSequencerTrack(uapmd_engine_get_track(handle, index)!!)
 
+    override fun trackFreezePolicy(trackIndex: Int) =
+        FreezePolicy.fromNative(uapmd_engine_track_freeze_policy(handle, trackIndex).toInt())
+    override fun trackFreezeState(trackIndex: Int) =
+        FreezeRuntimeState.fromNative(uapmd_engine_track_freeze_state(handle, trackIndex).toInt())
+    override fun isTrackBusy(trackIndex: Int) = uapmd_engine_is_track_busy(handle, trackIndex)
+
     override val masterTrack: SequencerTrack
         get() = NativeSequencerTrack(uapmd_engine_master_track(handle)!!)
 

@@ -25,6 +25,12 @@ class AndroidSequencerEngine internal constructor(
     override fun getTrack(index: UInt): SequencerTrack =
         AndroidSequencerTrack(JniBridge.uapmdEngineGetTrack(handle, index.toInt()))
 
+    override fun trackFreezePolicy(trackIndex: Int) =
+        FreezePolicy.fromNative(JniBridge.uapmdEngineTrackFreezePolicy(handle, trackIndex))
+    override fun trackFreezeState(trackIndex: Int) =
+        FreezeRuntimeState.fromNative(JniBridge.uapmdEngineTrackFreezeState(handle, trackIndex))
+    override fun isTrackBusy(trackIndex: Int) = JniBridge.uapmdEngineIsTrackBusy(handle, trackIndex)
+
     override val masterTrack: SequencerTrack
         get() = AndroidSequencerTrack(JniBridge.uapmdEngineMasterTrack(handle))
 

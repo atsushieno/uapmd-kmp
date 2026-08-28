@@ -39,6 +39,12 @@ class WasmJsSequencerEngine internal constructor(
     override fun getTrack(index: UInt): SequencerTrack =
         WasmJsSequencerTrack(wasmMod.uapmdEngineGetTrack(handle, index.toInt()))
 
+    override fun trackFreezePolicy(trackIndex: Int) =
+        FreezePolicy.fromNative(wasmMod.uapmdEngineTrackFreezePolicy(handle, trackIndex))
+    override fun trackFreezeState(trackIndex: Int) =
+        FreezeRuntimeState.fromNative(wasmMod.uapmdEngineTrackFreezeState(handle, trackIndex))
+    override fun isTrackBusy(trackIndex: Int) = wasmMod.uapmdEngineIsTrackBusy(handle, trackIndex)
+
     override val masterTrack: SequencerTrack
         get() = WasmJsSequencerTrack(wasmMod.uapmdEngineMasterTrack(handle))
 

@@ -18,6 +18,8 @@ object JniBridge {
     @JvmStatic external fun uapmdDocumentProviderTick(h: Long)
     /** cb: (success: Boolean, path: String?, error: String?) -> Unit */
     @JvmStatic external fun uapmdDocumentProviderPickOpenPath(h: Long, kind: Int, cb: Any)
+    /** cb.onResult(success: Boolean, path: String?, error: String?) */
+    @JvmStatic external fun uapmdDocumentProviderPickSavePath(h: Long, kind: Int, defaultName: String, cb: Any)
     @JvmStatic external fun uapmdPrepareProjectLoad(filePath: String): Long
     @JvmStatic external fun uapmdPreparedProjectSuccess(h: Long): Boolean
     @JvmStatic external fun uapmdPreparedProjectPath(h: Long): String
@@ -362,6 +364,11 @@ object JniBridge {
 
     // ─── AudioFileReader ──────────────────────────────────────────────────────
 
+    /** cb.invoke(success: Boolean, error: String?, importedTrackCount: Int) */
+    @JvmStatic external fun uapmdAppImportMidiTracksFromFile(app: Long, filepath: String, cb: Any)
+    @JvmStatic external fun uapmdEngineTrackFreezePolicy(engine: Long, trackIndex: Int): Int
+    @JvmStatic external fun uapmdEngineTrackFreezeState(engine: Long, trackIndex: Int): Int
+    @JvmStatic external fun uapmdEngineIsTrackBusy(engine: Long, trackIndex: Int): Boolean
     @JvmStatic external fun uapmdTtChannelCount(tt: Long): Int
     @JvmStatic external fun uapmdAudioFileReaderCreate(path: String): Long
     @JvmStatic external fun uapmdAudioFileReaderCreateSilent(numFrames: Long, numChannels: Int, sampleRate: Int): Long

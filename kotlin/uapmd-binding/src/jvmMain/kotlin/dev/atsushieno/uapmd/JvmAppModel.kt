@@ -183,6 +183,20 @@ class JvmAppModel internal constructor(
     override fun removeClipFromTrack(trackIndex: Int, clipId: Int): Boolean =
         lib.uapmd_app_remove_clip_from_track(handle, trackIndex, clipId)
 
+    private val importCallbacks = mutableListOf<UapmdLibrary.MidiTracksImportCb>()
+
+    override fun importMidiTracksFromFile(filepath: String, callback: (Boolean, String?, Int) -> Unit) {
+        // JNA callbacks must stay reachable until the native side is done with them.
+        val cb = object : UapmdLibrary.MidiTracksImportCb {
+            override fun invoke(success: Boolean, error: String?, importedTrackCount: Int, userData: com.sun.jna.Pointer?) {
+                importCallbacks.remove(this)
+                callback(success, error, importedTrackCount)
+            }
+        }
+        importCallbacks.add(cb)
+        lib.uapmd_app_import_midi_tracks_from_file(handle, filepath, null, cb)
+    }
+
     override fun createEmptyMidiClip(
         trackIndex: Int, positionSamples: Long, tickResolution: UInt, bpm: Double
     ): ClipAddResult {

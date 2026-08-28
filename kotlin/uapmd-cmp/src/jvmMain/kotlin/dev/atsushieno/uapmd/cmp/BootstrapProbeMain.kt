@@ -1,6 +1,11 @@
 package dev.atsushieno.uapmd.cmp
 
+import dev.atsushieno.uapmd.AnchorOrigin
 import dev.atsushieno.uapmd.ClipType
+import dev.atsushieno.uapmd.FreezePolicy
+import dev.atsushieno.uapmd.FreezeRuntimeState
+import dev.atsushieno.uapmd.TimeReference
+import dev.atsushieno.uapmd.TimeReferenceType
 import dev.atsushieno.uapmd.TimelinePosition
 import dev.atsushieno.uapmd.cleanupAppModel
 import dev.atsushieno.uapmd.createSilentAudioFileReader
@@ -506,6 +511,58 @@ fun main() {
             check("clip enabled state toggles", tl.isClipEnabled(0, midi.clipId) == !was)
             tl.commands.setClipEnabled(0, midi.clipId, was)
         }
+    }
+
+    // ── Sequence Editor columns: clip reference ids and anchoring ────────────
+    //
+    // The Anchor / Origin / Position columns all edit one setClipAnchor, and
+    // they can only render if ClipData carries reference_id / anchor_* — fields
+    // the C struct always had but the binding used to drop.
+    run {
+        val tl = model.sequencer.engine.timeline
+        val clips = model.getTimelineTrack(0u).getClips()
+        check("track has clips to anchor", clips.size >= 2)
+        if (clips.size >= 2) {
+            val (first, second) = clips[0] to clips[1]
+            check("clips expose a reference id", first.referenceId.isNotEmpty())
+            check("a track-anchored clip has no anchor reference", first.anchorReferenceId.isEmpty())
+
+            // Anchor the second clip to the first, measured from the first's end.
+            val ok = tl.commands.setClipAnchor(
+                0, second.clipId,
+                TimeReference(TimeReferenceType.ContainerEnd, first.referenceId, 0.25)
+            )
+            check("setClipAnchor to another clip accepted", ok)
+
+            val after = model.getTimelineTrack(0u).getClips().firstOrNull { it.clipId == second.clipId }
+            println("   anchored -> ref=${after?.anchorReferenceId} origin=${after?.anchorOrigin} offset=${after?.anchorOffsetSamples}")
+            check("anchor reference round-tripped", after?.anchorReferenceId == first.referenceId)
+            check("anchor origin round-tripped", after?.anchorOrigin == AnchorOrigin.End)
+            check(
+                "anchor offset round-tripped",
+                after != null && kotlin.math.abs(after.anchorOffsetSamples - (0.25 * model.sampleRate)) < 2
+            )
+
+            // Back to the track, as the Anchor column's "Track" entry does.
+            tl.commands.setClipAnchor(
+                0, second.clipId, TimeReference(TimeReferenceType.ContainerStart, "", 1.0)
+            )
+            val back = model.getTimelineTrack(0u).getClips().firstOrNull { it.clipId == second.clipId }
+            check("re-anchoring to the track clears the reference", back?.anchorReferenceId.isNullOrEmpty())
+        }
+    }
+
+    // ── Freeze state, which the legend's freeze button renders ───────────────
+    run {
+        val engine = model.sequencer.engine
+        check("freeze policy defaults to Off", engine.trackFreezePolicy(0) == FreezePolicy.Off)
+        check("freeze runtime state defaults to Live", engine.trackFreezeState(0) == FreezeRuntimeState.Live)
+        check("an idle track is not busy", !engine.isTrackBusy(0))
+        engine.timeline.commands.setTrackFreezePolicyEnabled(0, true)
+        println("   after freeze request: policy=${engine.trackFreezePolicy(0)} state=${engine.trackFreezeState(0)} busy=${engine.isTrackBusy(0)}")
+        check("freeze policy reads back as On", engine.trackFreezePolicy(0) == FreezePolicy.On)
+        engine.timeline.commands.setTrackFreezePolicyEnabled(0, false)
+        check("freeze policy reads back as Off again", engine.trackFreezePolicy(0) == FreezePolicy.Off)
     }
 
     // ── ordered teardown: engine off, then cleanup (§2.5) ────────────────────

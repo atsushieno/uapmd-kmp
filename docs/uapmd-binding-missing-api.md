@@ -61,13 +61,11 @@ first. All predate 0.5.6 — they were simply never needed by a KMP app before.
 
 | Item | Home in uapmd | Needed for |
 |---|---|---|
-| `FrozenTrackManager` runtime state — `isTrackBusy`, runtime state, freeze policy | `uapmd-engine/…/FrozenTrackManager.hpp` | per-track freeze button (busy spinner, frozen/queued colours) |
 | `TempoMap` | `uapmd-data/…/TempoMap.hpp` | beats/ticks timeline view |
 | `McpServer` | `tools/uapmd-app-model/…/McpServer.hpp` | MCP settings window |
 | `PreparedSequencerTrack` family — `prepareTrack`, `addPluginToPreparedTrack`, `publishPreparedTrack` | `uapmd-engine/…/SequencerEngine.hpp` | 0.5.6 delta not covered by `13dac10` |
 | `PluginInstanceLifecycleListener` add/remove | same | 0.5.6 delta not covered by `13dac10` |
 | `restoreNodeId` parameter on `addPluginToTrack()` | same | 0.5.6 delta not covered by `13dac10` |
-| `AppModel::importMidiTracksFromFile()` | `tools/uapmd-app-model` | SMF **multi-track split** import — uapmd-app spreads one file across tracks. Single-clip import already works via `TimelineFacade.addMidiClipFromFile()` |
 | Demucs source-separation import | `tools/uapmd-app-model` | the Import ▸ Split Audio Tracks path |
 
 Deliberately **not** wanted, for the record: `setEngineActive` / `setOutputMuted` /

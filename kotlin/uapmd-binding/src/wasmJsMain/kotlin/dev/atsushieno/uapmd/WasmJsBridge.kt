@@ -358,6 +358,12 @@ external interface UapmdCApiModule : JsAny {
     // ── Timeline track ─────────────────────────────────────────────────────
     @JsName("_uapmd_tt_reference_id")
     fun uapmdTtReferenceId(handle: Int): Int
+    @JsName("_uapmd_engine_track_freeze_policy")
+    fun uapmdEngineTrackFreezePolicy(engine: Int, trackIndex: Int): Int
+    @JsName("_uapmd_engine_track_freeze_state")
+    fun uapmdEngineTrackFreezeState(engine: Int, trackIndex: Int): Int
+    @JsName("_uapmd_engine_is_track_busy")
+    fun uapmdEngineIsTrackBusy(engine: Int, trackIndex: Int): Boolean
     @JsName("_uapmd_tt_channel_count")
     fun uapmdTtChannelCount(handle: Int): Int
     @JsName("_uapmd_tt_sample_rate")
