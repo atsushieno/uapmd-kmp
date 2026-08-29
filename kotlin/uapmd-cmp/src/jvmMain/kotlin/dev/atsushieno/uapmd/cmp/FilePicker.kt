@@ -17,13 +17,23 @@ private suspend fun pick(mode: Int, name: String = "*.uapmd"): String? = withCon
 
 actual suspend fun pickProjectFileToOpen(): String? = pick(FileDialog.LOAD)
 
-actual suspend fun pickMediaFileToOpen(): String? = withContext(Dispatchers.Main) {
-    val dialog = FileDialog(null as Frame?, "MIDI or audio file", FileDialog.LOAD)
-    dialog.isVisible = true
-    val dir = dialog.directory
-    val file = dialog.file
-    if (dir == null || file == null) null else dir + file
-}
+private suspend fun pickMedia(title: String, extensions: List<String>): String? =
+    withContext(Dispatchers.Main) {
+        val dialog = FileDialog(null as Frame?, title, FileDialog.LOAD)
+        // Honoured on Windows and most Linux desktops; the macOS peer ignores it,
+        // which is why the title says what is wanted too.
+        dialog.setFilenameFilter { _, name -> extensions.any { name.lowercase().endsWith(it) } }
+        dialog.isVisible = true
+        val dir = dialog.directory
+        val file = dialog.file
+        if (dir == null || file == null) null else dir + file
+    }
+
+actual suspend fun pickMidiFileToOpen(): String? =
+    pickMedia("SMF Files (.mid, .midi, .smf)", listOf(".mid", ".midi", ".smf", ".midi2"))
+
+actual suspend fun pickAudioFileToOpen(): String? =
+    pickMedia("Audio Files (.wav, .flac, .ogg)", listOf(".wav", ".flac", ".ogg", ".mp3", ".aiff"))
 actual suspend fun pickProjectFileToSave(defaultName: String): String? =
     pick(FileDialog.SAVE, defaultName)
 

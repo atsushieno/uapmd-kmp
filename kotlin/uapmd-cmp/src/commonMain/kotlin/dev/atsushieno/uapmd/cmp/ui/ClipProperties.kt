@@ -23,7 +23,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import dev.atsushieno.uapmd.cmp.UapmdHost
-import dev.atsushieno.uapmd.cmp.pickMediaFileToOpen
+import dev.atsushieno.uapmd.cmp.pickForClip
 import kotlinx.coroutines.launch
 
 /**
@@ -117,7 +117,7 @@ fun ClipProperties(host: UapmdHost, trackIndex: Int, clipId: Int) {
                 )
                 Button(onClick = {
                     scope.launch {
-                        pickMediaFileToOpen()?.let { report(host.setClipFilepath(trackIndex, clipId, it), "file") }
+                        pickForClip(clip.clipType)?.let { report(host.setClipFilepath(trackIndex, clipId, it), "file") }
                     }
                 }) { Text("Change file…") }
             }

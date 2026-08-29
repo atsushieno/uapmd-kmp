@@ -37,7 +37,7 @@ import dev.atsushieno.uapmd.ClipData
 import dev.atsushieno.uapmd.TimeReference
 import dev.atsushieno.uapmd.TimeReferenceType
 import dev.atsushieno.uapmd.cmp.UapmdHost
-import dev.atsushieno.uapmd.cmp.pickMediaFileToOpen
+import dev.atsushieno.uapmd.cmp.pickForClip
 import kotlinx.coroutines.launch
 
 /*
@@ -250,7 +250,7 @@ private fun ClipRow(
             Button(
                 onClick = {
                     scope.launch {
-                        pickMediaFileToOpen()?.let {
+                        pickForClip(clip.clipType)?.let {
                             report(
                                 if (host.setClipFilepath(trackIndex, clip.clipId, it)) "File changed."
                                 else "Could not change the file."

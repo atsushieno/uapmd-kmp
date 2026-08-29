@@ -28,7 +28,8 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
 import dev.atsushieno.uapmd.ScanMode
 import dev.atsushieno.uapmd.cmp.UapmdHost
-import dev.atsushieno.uapmd.cmp.pickMediaFileToOpen
+import dev.atsushieno.uapmd.cmp.pickAudioFileToOpen
+import dev.atsushieno.uapmd.cmp.pickMidiFileToOpen
 import dev.atsushieno.uapmd.cmp.pickProjectFileToOpen
 import dev.atsushieno.uapmd.cmp.saveProjectToPlatform
 import androidx.compose.runtime.rememberCoroutineScope
@@ -161,15 +162,15 @@ fun Toolbar(
                 DropdownMenu(expanded = importOpen, onDismissRequest = { importOpen = false }) {
                     DropdownMenuItem(text = { Text("Add MIDI Clip from File… (track 0)") }, onClick = {
                         importOpen = false
-                        scope.launch { pickMediaFileToOpen()?.let { host.importMidiClip(0, it) } }
+                        scope.launch { pickMidiFileToOpen()?.let { host.importMidiClip(0, it) } }
                     })
                     DropdownMenuItem(text = { Text("Add Audio Clip from File… (track 0)") }, onClick = {
                         importOpen = false
-                        scope.launch { pickMediaFileToOpen()?.let { host.importAudioClip(0, it) } }
+                        scope.launch { pickAudioFileToOpen()?.let { host.importAudioClip(0, it) } }
                     })
                     DropdownMenuItem(text = { Text("Import MIDI Tracks (SMF)") }, onClick = {
                         importOpen = false
-                        scope.launch { pickMediaFileToOpen()?.let { host.importMidiTracks(it) } }
+                        scope.launch { pickMidiFileToOpen()?.let { host.importMidiTracks(it) } }
                     })
                     // Still needs a C entry point for the Demucs separation path.
                     DropdownMenuItem(text = { Text("Import Split Audio Tracks (Demucs)") }, enabled = false, onClick = {})

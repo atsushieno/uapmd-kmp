@@ -273,10 +273,13 @@ class WasmJsAppModel internal constructor(internal val handle: Int) : AppModel {
 
     // uapmd_clip_add_result_t: int32 @0, int32 @4, bool @8, char* @12 (size 16)
     override fun importMidiTracksFromFile(filepath: String, callback: (Boolean, String?, Int) -> Unit) {
-        // The wasm bridge marshals C callbacks through its own dispatcher table;
-        // this one is not registered there yet, so report the failure rather
-        // than silently doing nothing.
-        callback(false, "Multi-track SMF import is not wired up on this platform yet.", 0)
+        // void(bool, const char*, uint32_t, void*) -> four i32 args, no return.
+        val cbId = nextCallbackId()
+        pendingImportMidiTracksCallbacks[cbId] = callback
+        val fnPtr = makeCFunctionPtr(cbId, "uapmdDispatchImportMidiTracks", "viiii")
+        withCStringKt(filepath) { fp ->
+            wasmMod.uapmdAppImportMidiTracksFromFile(handle, fp, 0, fnPtr)
+        }
     }
 
     override fun createEmptyMidiClip(

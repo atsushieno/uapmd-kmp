@@ -7,7 +7,8 @@ actual suspend fun pickProjectFileToOpen(): String? = null
 actual suspend fun pickProjectFileToSave(defaultName: String): String? = null
 
 actual fun deliverSavedFile(path: String) = Unit
-actual suspend fun pickMediaFileToOpen(): String? = null
+actual suspend fun pickMidiFileToOpen(): String? = null
+actual suspend fun pickAudioFileToOpen(): String? = null
 
 actual fun startupImportPath(): String? = null
 

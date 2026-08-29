@@ -74,7 +74,9 @@ actual suspend fun pickProjectFileToSave(defaultName: String): String? =
 /** The Storage Access Framework already chose a real destination. */
 actual fun deliverSavedFile(path: String) = Unit
 
-actual suspend fun pickMediaFileToOpen(): String? = AndroidDocumentPicker.pickOpen(KIND_AUDIO)
+actual suspend fun pickMidiFileToOpen(): String? = AndroidDocumentPicker.pickOpen(KIND_MIDI)
+
+actual suspend fun pickAudioFileToOpen(): String? = AndroidDocumentPicker.pickOpen(KIND_AUDIO)
 
 // Set by MainActivity from launch-intent extras; see MainActivity.onCreate.
 internal var androidStartupImportPath: String? = null

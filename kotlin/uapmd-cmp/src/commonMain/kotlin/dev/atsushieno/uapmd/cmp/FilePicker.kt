@@ -14,7 +14,15 @@ expect suspend fun pickProjectFileToOpen(): String?
  * directory, it can only download a named file.
  */
 expect suspend fun pickProjectFileToSave(defaultName: String): String?
-expect suspend fun pickMediaFileToOpen(): String?
+/**
+ * Separate MIDI and audio choosers, as uapmd-app has them: `addSmfClipToTrack`
+ * offers "SMF Files" (`*.mid`, `*.midi`, `*.smf`) and the audio paths offer
+ * "Audio Files" (`*.wav`, `*.flac`, `*.ogg`). One combined "media" chooser stood
+ * in for both, which left Android's MIDI imports filtering on audio extensions
+ * only — an SMF could not be selected at all.
+ */
+expect suspend fun pickMidiFileToOpen(): String?
+expect suspend fun pickAudioFileToOpen(): String?
 
 /**
  * Hands a file the app has just written to the user.

@@ -67,7 +67,8 @@ import dev.atsushieno.uapmd.FreezeRuntimeState
 import dev.atsushieno.uapmd.ClipType
 import dev.atsushieno.uapmd.cmp.TempoMap
 import dev.atsushieno.uapmd.cmp.UapmdHost
-import dev.atsushieno.uapmd.cmp.pickMediaFileToOpen
+import dev.atsushieno.uapmd.cmp.pickAudioFileToOpen
+import dev.atsushieno.uapmd.cmp.pickMidiFileToOpen
 import kotlinx.coroutines.launch
 import kotlin.math.pow
 import kotlin.math.max
@@ -857,13 +858,13 @@ private fun ClipContextMenu(
             DropdownMenuItem(text = { Text("Create Audio Clip From File Here…") }, onClick = {
                 onDismiss()
                 scope.launch {
-                    pickMediaFileToOpen()?.let { host.importAudioClip(trackIndex, it, addAtSeconds) }
+                    pickAudioFileToOpen()?.let { host.importAudioClip(trackIndex, it, addAtSeconds) }
                 }
             })
             DropdownMenuItem(text = { Text("Import SMF Here…") }, onClick = {
                 onDismiss()
                 scope.launch {
-                    pickMediaFileToOpen()?.let { host.importMidiClip(trackIndex, it, addAtSeconds) }
+                    pickMidiFileToOpen()?.let { host.importMidiClip(trackIndex, it, addAtSeconds) }
                 }
             })
         }
@@ -900,18 +901,18 @@ private fun LaneAddMenu(
             })
             DropdownMenuItem(text = { Text("Create Audio Clip From File…") }, onClick = {
                 onDismiss()
-                scope.launch { pickMediaFileToOpen()?.let { host.importAudioClip(trackIndex, it, seconds) } }
+                scope.launch { pickAudioFileToOpen()?.let { host.importAudioClip(trackIndex, it, seconds) } }
             })
         }
         HorizontalDivider()
         DropdownMenuItem(text = { Text("Add a MIDI Clip from File…") }, onClick = {
             onDismiss()
-            scope.launch { pickMediaFileToOpen()?.let { host.importMidiClip(trackIndex, it, seconds) } }
+            scope.launch { pickMidiFileToOpen()?.let { host.importMidiClip(trackIndex, it, seconds) } }
         })
         if (!isMaster) {
             DropdownMenuItem(text = { Text("Add MIDI2 Clip from File…") }, onClick = {
                 onDismiss()
-                scope.launch { pickMediaFileToOpen()?.let { host.importMidiClip(trackIndex, it, seconds) } }
+                scope.launch { pickMidiFileToOpen()?.let { host.importMidiClip(trackIndex, it, seconds) } }
             })
             HorizontalDivider()
             DropdownMenuItem(text = { Text("Clear All") }, onClick = {
@@ -1198,13 +1199,13 @@ private fun TrackLegend(
                     })
                     DropdownMenuItem(text = { Text("Add a MIDI Clip from File…") }, onClick = {
                         clipsMenu = false
-                        scope.launch { pickMediaFileToOpen()?.let { host.importMidiClip(trackIndex, it) } }
+                        scope.launch { pickMidiFileToOpen()?.let { host.importMidiClip(trackIndex, it) } }
                     })
                     DropdownMenuItem(text = { Text("Add MIDI2 Clip from File…") }, onClick = {
                         clipsMenu = false
                         // .midi2 goes through the same importer; the engine
                         // picks the reader from the file itself.
-                        scope.launch { pickMediaFileToOpen()?.let { host.importMidiClip(trackIndex, it) } }
+                        scope.launch { pickMidiFileToOpen()?.let { host.importMidiClip(trackIndex, it) } }
                     })
                     DropdownMenuItem(text = { Text("Add Empty Audio Clip") }, onClick = {
                         clipsMenu = false
@@ -1214,7 +1215,7 @@ private fun TrackLegend(
                     })
                     DropdownMenuItem(text = { Text("Create Audio Clip From File…") }, onClick = {
                         clipsMenu = false
-                        scope.launch { pickMediaFileToOpen()?.let { host.importAudioClip(trackIndex, it) } }
+                        scope.launch { pickAudioFileToOpen()?.let { host.importAudioClip(trackIndex, it) } }
                     })
                     HorizontalDivider()
                     DropdownMenuItem(text = { Text("Clear All") }, onClick = {

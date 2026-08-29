@@ -997,6 +997,9 @@ external interface UapmdCApiModule : JsAny {
     fun uapmdAppRemoveUmpEventFromClip(app: Int, trackIndex: Int, clipId: Int, eventIndex: Int): Boolean
     @JsName("_uapmd_app_remove_clip_from_track")
     fun uapmdAppRemoveClipFromTrack(app: Int, trackIndex: Int, clipId: Int): Boolean
+    /** Callback: void(bool success, const char* error, uint32_t importedTrackCount, void* userData) */
+    @JsName("_uapmd_app_import_midi_tracks_from_file")
+    fun uapmdAppImportMidiTracksFromFile(app: Int, filepath: Int, userData: Int, callback: Int)
 
     @JsName("_uapmd_app_ensure_track_uses_editor_graph")
     fun uapmdAppEnsureTrackUsesEditorGraph(app: Int, trackIndex: Int): Boolean
@@ -1183,6 +1186,7 @@ internal val pendingRenderCallbacks         = mutableMapOf<Int, ((OfflineRenderP
 internal val pendingRenderCancelCallbacks   = mutableMapOf<Int, (() -> Boolean)?>()
 internal val pendingRequestStateCallbacks   = mutableMapOf<Int, (ByteArray?, String?) -> Unit>()
 internal val pendingLoadStateCallbacks      = mutableMapOf<Int, (String?) -> Unit>()
+internal val pendingImportMidiTracksCallbacks = mutableMapOf<Int, (Boolean, String?, Int) -> Unit>()
 
 @JsExport
 fun uapmdDispatchCreateInstance(cbId: Int, instanceId: Int, errorPtr: Int) {
@@ -1194,6 +1198,12 @@ fun uapmdDispatchCreateInstance(cbId: Int, instanceId: Int, errorPtr: Int) {
 fun uapmdDispatchAddPlugin(cbId: Int, instanceId: Int, trackIndex: Int, errorPtr: Int) {
     val error = if (errorPtr != 0) wasmMod.utf8ToString(errorPtr) else null
     pendingAddPluginCallbacks.remove(cbId)?.invoke(instanceId, trackIndex, error)
+}
+
+@JsExport
+fun uapmdDispatchImportMidiTracks(cbId: Int, success: Int, errorPtr: Int, importedTrackCount: Int) {
+    val error = if (errorPtr != 0) wasmMod.utf8ToString(errorPtr) else null
+    pendingImportMidiTracksCallbacks.remove(cbId)?.invoke(success != 0, error, importedTrackCount)
 }
 
 @JsExport

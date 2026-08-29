@@ -51,8 +51,11 @@ actual suspend fun saveProjectToPlatform(host: UapmdHost, defaultName: String): 
         saveProjectAsDocument(getAppModel(), name) { error -> cont.resume(error) }
     }
 
-actual suspend fun pickMediaFileToOpen(): String? =
-    pick("MIDI or audio file", listOf(".mid", ".midi", ".wav", ".flac", ".ogg", ".mp3", ".aiff"))
+actual suspend fun pickMidiFileToOpen(): String? =
+    pick("SMF Files", listOf(".mid", ".midi", ".smf", ".midi2"))
+
+actual suspend fun pickAudioFileToOpen(): String? =
+    pick("Audio Files", listOf(".wav", ".flac", ".ogg", ".mp3", ".aiff"))
 
 actual fun startupImportPath(): String? = null
 
