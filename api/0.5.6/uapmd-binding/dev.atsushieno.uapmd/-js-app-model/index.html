@@ -1,0 +1,1166 @@
+<!DOCTYPE html>
+<html class="no-js" lang="en">
+<head>
+    <meta name="viewport" content="width=device-width, initial-scale=1" charset="UTF-8">
+    <title>JsAppModel</title>
+    <link href="../../../images/logo-icon.svg" rel="icon" type="image/svg">
+        <script>var pathToRoot = "../../../";</script>
+    <script>document.documentElement.classList.replace("no-js", "js");</script>
+    <script>const storage = localStorage.getItem("dokka-dark-mode")
+      if (storage == null) {
+        const osDarkSchemePreferred = window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches
+        if (osDarkSchemePreferred === true) {
+          document.getElementsByTagName("html")[0].classList.add("theme-dark")
+        }
+      } else {
+        const savedDarkMode = JSON.parse(storage)
+        if (savedDarkMode === true) {
+          document.getElementsByTagName("html")[0].classList.add("theme-dark")
+        }
+      }
+    </script>
+<script type="text/javascript" src="../../../scripts/sourceset_dependencies.js" async="async"></script>
+<link href="../../../styles/style.css" rel="Stylesheet">
+<link href="../../../styles/main.css" rel="Stylesheet">
+<link href="../../../styles/prism.css" rel="Stylesheet">
+<link href="../../../styles/logo-styles.css" rel="Stylesheet">
+<link href="../../../ui-kit/ui-kit.min.css" rel="Stylesheet">
+<script type="text/javascript" src="../../../scripts/safe-local-storage_blocking.js"></script>
+<script type="text/javascript" src="../../../scripts/navigation-loader.js" async="async"></script>
+<script type="text/javascript" src="../../../scripts/platform-content-handler.js" async="async"></script>
+<script type="text/javascript" src="../../../scripts/main.js" defer="defer"></script>
+<script type="text/javascript" src="../../../scripts/prism.js" async="async"></script>
+<script type="text/javascript" src="../../../ui-kit/ui-kit.min.js" defer="defer"></script>
+</head>
+<body>
+<div class="root">
+    <header class="navigation theme-dark" id="navigation-wrapper" role="banner">
+            <a class="library-name--link" href="../../../index.html" tabindex="1">
+                    uapmd-binding
+            </a>
+        <button class="navigation-controls--btn navigation-controls--btn_toc ui-kit_mobile-only" id="toc-toggle"
+                type="button">Toggle table of contents
+        </button>
+        <div class="navigation-controls--break ui-kit_mobile-only"></div>
+        <div class="library-version" id="library-version">
+        </div>
+        <div class="navigation-controls">
+        <ul class="filter-section filter-section_loading" id="filter-section" aria-label="Target filter">
+                <button class="platform-tag platform-selector js-like" data-active="" aria-pressed="true"
+                        data-filter=":uapmd-binding/jsMain">JS</button>
+            <div class="dropdown filter-section--dropdown" data-role="dropdown" id="filter-section-dropdown">
+                <button class="button button_dropdown filter-section--dropdown-toggle" role="combobox"
+                        data-role="dropdown-toggle"
+                        aria-controls="platform-tags-listbox"
+                        aria-haspopup="listbox"
+                        aria-expanded="false"
+                        aria-label="Toggle source sets"
+                ></button>
+                <ul role="listbox" id="platform-tags-listbox" class="dropdown--list" data-role="dropdown-listbox" aria-label="Target filter">
+                    <div class="dropdown--header"><span>Target filter</span>
+                        <button class="button" data-role="dropdown-toggle" aria-label="Close target filter">
+                            <i class="ui-kit-icon ui-kit-icon_cross"></i>
+                        </button>
+                    </div>
+                        <li role="option" class="dropdown--option platform-selector-option js-like" tabindex="0">
+                            <label class="checkbox">
+                                <input type="checkbox" class="checkbox--input" id=":uapmd-binding/jsMain"
+                                       data-filter=":uapmd-binding/jsMain"/>
+                                <span class="checkbox--icon"></span>
+                                JS
+                            </label>
+                        </li>
+                </ul>
+                <div class="dropdown--overlay"></div>
+            </div>
+        </ul>
+            <button class="navigation-controls--btn navigation-controls--btn_theme" id="theme-toggle-button"
+                    type="button">Switch theme
+            </button>
+            <div class="navigation-controls--btn navigation-controls--btn_search" id="searchBar" role="button">Search in
+                API
+            </div>
+        </div>
+    </header>
+    <div id="container">
+        <nav id="leftColumn" class="sidebar" data-item-type="SECTION" data-item-config='{"defaultSize": 280, "minSize": 200, "maxSize": 400}'>
+            <a class="toc--skip-link" href="#main">Skip to content</a>
+            <div class="dropdown theme-dark_mobile" data-role="dropdown" id="toc-dropdown">
+                <ul role="listbox" id="toc-listbox" class="dropdown--list dropdown--list_toc-list"
+                    data-role="dropdown-listbox" aria-label="Table of contents">
+                    <div class="dropdown--header">
+                            <span>
+                                    uapmd-binding
+                            </span>
+                        <button class="button" data-role="dropdown-toggle" aria-label="Close table of contents">
+                            <i class="ui-kit-icon ui-kit-icon_cross"></i>
+                        </button>
+                    </div>
+                    <div class="sidebar--inner" id="sideMenu"></div>
+                </ul>
+                <div class="dropdown--overlay"></div>
+            </div>
+        </nav>
+        <div id="resizer" class="resizer" data-item-type="BAR"></div>
+        <div id="main" data-item-type="SECTION" role="main">
+<div class="main-content" data-page-type="classlike" id="content" pageIds="uapmd-binding::dev.atsushieno.uapmd/JsAppModel///PointingToDeclaration//-181751666">
+  <div class="breadcrumbs"><a href="../../../index.html">uapmd-binding</a><span class="delimiter">/</span><a href="../index.html">dev.atsushieno.uapmd</a><span class="delimiter">/</span><span class="current">JsAppModel</span></div>
+  <div class="cover ">
+    <h1 class="cover"><span>Js</span><wbr></wbr><span>App</span><wbr></wbr><span><span>Model</span></span></h1>
+    <div class="platform-hinted  with-platform-tabs" data-platform-hinted="data-platform-hinted">
+      <div class="platform-bookmarks-row" data-toggle-list="data-toggle-list"><button class="platform-bookmark" data-filterable-current=":uapmd-binding/jsMain" data-filterable-set=":uapmd-binding/jsMain" data-active="" data-toggle=":uapmd-binding/jsMain">JS</button></div>
+<div class="content sourceset-dependent-content" data-active="" data-togglable=":uapmd-binding/jsMain"><div class="symbol monospace"><span class="token keyword">class </span><a href="index.html">JsAppModel</a> : <span data-unresolved-link="dev.atsushieno.uapmd/AppModel///PointingToDeclaration/">AppModel</span></div></div>    </div>
+  </div>
+  <div class="tabbedcontent">
+    <div class="tabs-section" tabs-section="tabs-section"><button class="section-tab" data-active="" data-togglable="CONSTRUCTOR,TYPE,PROPERTY,FUNCTION">Members</button></div>
+    <div class="tabs-section-body">
+      <div data-togglable="PROPERTY">
+        <h2 class="tableheader">Properties</h2>
+        <div class="table"><a data-name="-891500248%2FProperties%2F-181751666" anchor-label="autoBufferSizeEnabled" id="-891500248%2FProperties%2F-181751666" data-filterable-set=":uapmd-binding/jsMain"></a>
+          <div class="table-row table-row_content" data-filterable-current=":uapmd-binding/jsMain" data-filterable-set=":uapmd-binding/jsMain">
+            <div class="main-subrow keyValue ">
+              <div class=""><span class="inline-flex">
+                  <div><a href="auto-buffer-size-enabled.html"><span>auto</span><wbr></wbr><span>Buffer</span><wbr></wbr><span>Size</span><wbr></wbr><span><span>Enabled</span></span></a></div>
+<span class="anchor-wrapper"><span class="anchor-icon" pointing-to="-891500248%2FProperties%2F-181751666"></span>
+                    <div class="copy-popup-wrapper "><span class="copy-popup-icon"></span><span>Link copied to clipboard</span></div>
+                  </span></span></div>
+              <div>
+                <div class="title">
+                  <div class="platform-hinted  with-platform-tabs" data-platform-hinted="data-platform-hinted">
+                    <div class="platform-bookmarks-row" data-toggle-list="data-toggle-list"><button class="platform-bookmark" data-filterable-current=":uapmd-binding/jsMain" data-filterable-set=":uapmd-binding/jsMain" data-active="" data-toggle=":uapmd-binding/jsMain">JS</button></div>
+<div class="content sourceset-dependent-content" data-active="" data-togglable=":uapmd-binding/jsMain"><div class="symbol monospace"><span class="token keyword">open </span><span class="token keyword">override </span><span class="token keyword">var </span><a href="auto-buffer-size-enabled.html">autoBufferSizeEnabled</a><span class="token operator">: </span><a href="https://kotlinlang.org/api/core/kotlin-stdlib/kotlin/-boolean/index.html">Boolean</a></div></div>                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+<a data-name="1614224238%2FProperties%2F-181751666" anchor-label="blocklist" id="1614224238%2FProperties%2F-181751666" data-filterable-set=":uapmd-binding/jsMain"></a>
+          <div class="table-row table-row_content" data-filterable-current=":uapmd-binding/jsMain" data-filterable-set=":uapmd-binding/jsMain">
+            <div class="main-subrow keyValue ">
+              <div class=""><span class="inline-flex">
+                  <div><a href="blocklist.html"><span><span>blocklist</span></span></a></div>
+<span class="anchor-wrapper"><span class="anchor-icon" pointing-to="1614224238%2FProperties%2F-181751666"></span>
+                    <div class="copy-popup-wrapper "><span class="copy-popup-icon"></span><span>Link copied to clipboard</span></div>
+                  </span></span></div>
+              <div>
+                <div class="title">
+                  <div class="platform-hinted  with-platform-tabs" data-platform-hinted="data-platform-hinted">
+                    <div class="platform-bookmarks-row" data-toggle-list="data-toggle-list"><button class="platform-bookmark" data-filterable-current=":uapmd-binding/jsMain" data-filterable-set=":uapmd-binding/jsMain" data-active="" data-toggle=":uapmd-binding/jsMain">JS</button></div>
+<div class="content sourceset-dependent-content" data-active="" data-togglable=":uapmd-binding/jsMain"><div class="symbol monospace"><span class="token keyword">open </span><span class="token keyword">override </span><span class="token keyword">val </span><a href="blocklist.html">blocklist</a><span class="token operator">: </span><a href="https://kotlinlang.org/api/core/kotlin-stdlib/kotlin.collections/-list/index.html">List</a><span class="token operator">&lt;</span><span data-unresolved-link="dev.atsushieno.uapmd/BlocklistEntry///PointingToDeclaration/">BlocklistEntry</span><span class="token operator">&gt;</span></div><div class="brief "><p class="paragraph">AppModel's own blocklist — the list the Plugin Selector shows. A standalone <code class="lang-kotlin">ScanTool</code> keeps a separate one. <code class="lang-kotlin">BlocklistEntry.timestamp</code> in uapmd has no counterpart in <code class="lang-kotlin">uapmd_blocklist_entry_t</code>, so it is not carried across.</p></div></div>                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+<a data-name="559300740%2FProperties%2F-181751666" anchor-label="historyState" id="559300740%2FProperties%2F-181751666" data-filterable-set=":uapmd-binding/jsMain"></a>
+          <div class="table-row table-row_content" data-filterable-current=":uapmd-binding/jsMain" data-filterable-set=":uapmd-binding/jsMain">
+            <div class="main-subrow keyValue ">
+              <div class=""><span class="inline-flex">
+                  <div><a href="history-state.html"><span>history</span><wbr></wbr><span><span>State</span></span></a></div>
+<span class="anchor-wrapper"><span class="anchor-icon" pointing-to="559300740%2FProperties%2F-181751666"></span>
+                    <div class="copy-popup-wrapper "><span class="copy-popup-icon"></span><span>Link copied to clipboard</span></div>
+                  </span></span></div>
+              <div>
+                <div class="title">
+                  <div class="platform-hinted  with-platform-tabs" data-platform-hinted="data-platform-hinted">
+                    <div class="platform-bookmarks-row" data-toggle-list="data-toggle-list"><button class="platform-bookmark" data-filterable-current=":uapmd-binding/jsMain" data-filterable-set=":uapmd-binding/jsMain" data-active="" data-toggle=":uapmd-binding/jsMain">JS</button></div>
+<div class="content sourceset-dependent-content" data-active="" data-togglable=":uapmd-binding/jsMain"><div class="symbol monospace"><span class="token keyword">open </span><span class="token keyword">override </span><span class="token keyword">val </span><a href="history-state.html">historyState</a><span class="token operator">: </span><span data-unresolved-link="dev.atsushieno.uapmd/UndoState///PointingToDeclaration/">UndoState</span></div><div class="brief "><p class="paragraph">Also reports <code class="lang-kotlin">busy</code> while an asynchronous plug-in mutation is still capturing state, so shortcuts cannot race the capture.</p></div></div>                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+<a data-name="1052350574%2FProperties%2F-181751666" anchor-label="isAudioEngineEnabled" id="1052350574%2FProperties%2F-181751666" data-filterable-set=":uapmd-binding/jsMain"></a>
+          <div class="table-row table-row_content" data-filterable-current=":uapmd-binding/jsMain" data-filterable-set=":uapmd-binding/jsMain">
+            <div class="main-subrow keyValue ">
+              <div class=""><span class="inline-flex">
+                  <div><a href="is-audio-engine-enabled.html"><span>is</span><wbr></wbr><span>Audio</span><wbr></wbr><span>Engine</span><wbr></wbr><span><span>Enabled</span></span></a></div>
+<span class="anchor-wrapper"><span class="anchor-icon" pointing-to="1052350574%2FProperties%2F-181751666"></span>
+                    <div class="copy-popup-wrapper "><span class="copy-popup-icon"></span><span>Link copied to clipboard</span></div>
+                  </span></span></div>
+              <div>
+                <div class="title">
+                  <div class="platform-hinted  with-platform-tabs" data-platform-hinted="data-platform-hinted">
+                    <div class="platform-bookmarks-row" data-toggle-list="data-toggle-list"><button class="platform-bookmark" data-filterable-current=":uapmd-binding/jsMain" data-filterable-set=":uapmd-binding/jsMain" data-active="" data-toggle=":uapmd-binding/jsMain">JS</button></div>
+<div class="content sourceset-dependent-content" data-active="" data-togglable=":uapmd-binding/jsMain"><div class="symbol monospace"><span class="token keyword">open </span><span class="token keyword">override </span><span class="token keyword">val </span><a href="is-audio-engine-enabled.html">isAudioEngineEnabled</a><span class="token operator">: </span><a href="https://kotlinlang.org/api/core/kotlin-stdlib/kotlin/-boolean/index.html">Boolean</a></div><div class="brief "><p class="paragraph">Turning this off is not a plain <code class="lang-kotlin">stopAudio()</code>: the model stops the transport, mutes the output, lets release/reverb tails drain inaudibly, then deactivates plugins on the main thread and resets processing state, so a restart cannot resume stale voices.</p></div></div>                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+<a data-name="-456463450%2FProperties%2F-181751666" anchor-label="isScanning" id="-456463450%2FProperties%2F-181751666" data-filterable-set=":uapmd-binding/jsMain"></a>
+          <div class="table-row table-row_content" data-filterable-current=":uapmd-binding/jsMain" data-filterable-set=":uapmd-binding/jsMain">
+            <div class="main-subrow keyValue ">
+              <div class=""><span class="inline-flex">
+                  <div><a href="is-scanning.html"><span>is</span><wbr></wbr><span><span>Scanning</span></span></a></div>
+<span class="anchor-wrapper"><span class="anchor-icon" pointing-to="-456463450%2FProperties%2F-181751666"></span>
+                    <div class="copy-popup-wrapper "><span class="copy-popup-icon"></span><span>Link copied to clipboard</span></div>
+                  </span></span></div>
+              <div>
+                <div class="title">
+                  <div class="platform-hinted  with-platform-tabs" data-platform-hinted="data-platform-hinted">
+                    <div class="platform-bookmarks-row" data-toggle-list="data-toggle-list"><button class="platform-bookmark" data-filterable-current=":uapmd-binding/jsMain" data-filterable-set=":uapmd-binding/jsMain" data-active="" data-toggle=":uapmd-binding/jsMain">JS</button></div>
+<div class="content sourceset-dependent-content" data-active="" data-togglable=":uapmd-binding/jsMain"><div class="symbol monospace"><span class="token keyword">open </span><span class="token keyword">override </span><span class="token keyword">val </span><a href="is-scanning.html">isScanning</a><span class="token operator">: </span><a href="https://kotlinlang.org/api/core/kotlin-stdlib/kotlin/-boolean/index.html">Boolean</a></div></div>                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+<a data-name="-457238313%2FProperties%2F-181751666" anchor-label="lastPluginScanError" id="-457238313%2FProperties%2F-181751666" data-filterable-set=":uapmd-binding/jsMain"></a>
+          <div class="table-row table-row_content" data-filterable-current=":uapmd-binding/jsMain" data-filterable-set=":uapmd-binding/jsMain">
+            <div class="main-subrow keyValue ">
+              <div class=""><span class="inline-flex">
+                  <div><a href="last-plugin-scan-error.html"><span>last</span><wbr></wbr><span>Plugin</span><wbr></wbr><span>Scan</span><wbr></wbr><span><span>Error</span></span></a></div>
+<span class="anchor-wrapper"><span class="anchor-icon" pointing-to="-457238313%2FProperties%2F-181751666"></span>
+                    <div class="copy-popup-wrapper "><span class="copy-popup-icon"></span><span>Link copied to clipboard</span></div>
+                  </span></span></div>
+              <div>
+                <div class="title">
+                  <div class="platform-hinted  with-platform-tabs" data-platform-hinted="data-platform-hinted">
+                    <div class="platform-bookmarks-row" data-toggle-list="data-toggle-list"><button class="platform-bookmark" data-filterable-current=":uapmd-binding/jsMain" data-filterable-set=":uapmd-binding/jsMain" data-active="" data-toggle=":uapmd-binding/jsMain">JS</button></div>
+<div class="content sourceset-dependent-content" data-active="" data-togglable=":uapmd-binding/jsMain"><div class="symbol monospace"><span class="token keyword">open </span><span class="token keyword">override </span><span class="token keyword">val </span><a href="last-plugin-scan-error.html">lastPluginScanError</a><span class="token operator">: </span><a href="https://kotlinlang.org/api/core/kotlin-stdlib/kotlin/-string/index.html">String</a><span class="token operator">?</span></div><div class="brief "><p class="paragraph">The last scanning error, or null.</p></div></div>                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+<a data-name="1628703517%2FProperties%2F-181751666" anchor-label="masterTempoPoints" id="1628703517%2FProperties%2F-181751666" data-filterable-set=":uapmd-binding/jsMain"></a>
+          <div class="table-row table-row_content" data-filterable-current=":uapmd-binding/jsMain" data-filterable-set=":uapmd-binding/jsMain">
+            <div class="main-subrow keyValue ">
+              <div class=""><span class="inline-flex">
+                  <div><a href="master-tempo-points.html"><span>master</span><wbr></wbr><span>Tempo</span><wbr></wbr><span><span>Points</span></span></a></div>
+<span class="anchor-wrapper"><span class="anchor-icon" pointing-to="1628703517%2FProperties%2F-181751666"></span>
+                    <div class="copy-popup-wrapper "><span class="copy-popup-icon"></span><span>Link copied to clipboard</span></div>
+                  </span></span></div>
+              <div>
+                <div class="title">
+                  <div class="platform-hinted  with-platform-tabs" data-platform-hinted="data-platform-hinted">
+                    <div class="platform-bookmarks-row" data-toggle-list="data-toggle-list"><button class="platform-bookmark" data-filterable-current=":uapmd-binding/jsMain" data-filterable-set=":uapmd-binding/jsMain" data-active="" data-toggle=":uapmd-binding/jsMain">JS</button></div>
+<div class="content sourceset-dependent-content" data-active="" data-togglable=":uapmd-binding/jsMain"><div class="symbol monospace"><span class="token keyword">open </span><span class="token keyword">override </span><span class="token keyword">val </span><a href="master-tempo-points.html">masterTempoPoints</a><span class="token operator">: </span><a href="https://kotlinlang.org/api/core/kotlin-stdlib/kotlin.collections/-list/index.html">List</a><span class="token operator">&lt;</span><span data-unresolved-link="dev.atsushieno.uapmd/TempoPoint///PointingToDeclaration/">TempoPoint</span><span class="token operator">&gt;</span></div></div>                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+<a data-name="-1155993743%2FProperties%2F-181751666" anchor-label="masterTimelineTrack" id="-1155993743%2FProperties%2F-181751666" data-filterable-set=":uapmd-binding/jsMain"></a>
+          <div class="table-row table-row_content" data-filterable-current=":uapmd-binding/jsMain" data-filterable-set=":uapmd-binding/jsMain">
+            <div class="main-subrow keyValue ">
+              <div class=""><span class="inline-flex">
+                  <div><a href="master-timeline-track.html"><span>master</span><wbr></wbr><span>Timeline</span><wbr></wbr><span><span>Track</span></span></a></div>
+<span class="anchor-wrapper"><span class="anchor-icon" pointing-to="-1155993743%2FProperties%2F-181751666"></span>
+                    <div class="copy-popup-wrapper "><span class="copy-popup-icon"></span><span>Link copied to clipboard</span></div>
+                  </span></span></div>
+              <div>
+                <div class="title">
+                  <div class="platform-hinted  with-platform-tabs" data-platform-hinted="data-platform-hinted">
+                    <div class="platform-bookmarks-row" data-toggle-list="data-toggle-list"><button class="platform-bookmark" data-filterable-current=":uapmd-binding/jsMain" data-filterable-set=":uapmd-binding/jsMain" data-active="" data-toggle=":uapmd-binding/jsMain">JS</button></div>
+<div class="content sourceset-dependent-content" data-active="" data-togglable=":uapmd-binding/jsMain"><div class="symbol monospace"><span class="token keyword">open </span><span class="token keyword">override </span><span class="token keyword">val </span><a href="master-timeline-track.html">masterTimelineTrack</a><span class="token operator">: </span><span data-unresolved-link="dev.atsushieno.uapmd/TimelineTrack///PointingToDeclaration/">TimelineTrack</span></div></div>                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+<a data-name="-406716979%2FProperties%2F-181751666" anchor-label="masterTimeSignaturePoints" id="-406716979%2FProperties%2F-181751666" data-filterable-set=":uapmd-binding/jsMain"></a>
+          <div class="table-row table-row_content" data-filterable-current=":uapmd-binding/jsMain" data-filterable-set=":uapmd-binding/jsMain">
+            <div class="main-subrow keyValue ">
+              <div class=""><span class="inline-flex">
+                  <div><a href="master-time-signature-points.html"><span>master</span><wbr></wbr><span>Time</span><wbr></wbr><span>Signature</span><wbr></wbr><span><span>Points</span></span></a></div>
+<span class="anchor-wrapper"><span class="anchor-icon" pointing-to="-406716979%2FProperties%2F-181751666"></span>
+                    <div class="copy-popup-wrapper "><span class="copy-popup-icon"></span><span>Link copied to clipboard</span></div>
+                  </span></span></div>
+              <div>
+                <div class="title">
+                  <div class="platform-hinted  with-platform-tabs" data-platform-hinted="data-platform-hinted">
+                    <div class="platform-bookmarks-row" data-toggle-list="data-toggle-list"><button class="platform-bookmark" data-filterable-current=":uapmd-binding/jsMain" data-filterable-set=":uapmd-binding/jsMain" data-active="" data-toggle=":uapmd-binding/jsMain">JS</button></div>
+<div class="content sourceset-dependent-content" data-active="" data-togglable=":uapmd-binding/jsMain"><div class="symbol monospace"><span class="token keyword">open </span><span class="token keyword">override </span><span class="token keyword">val </span><a href="master-time-signature-points.html">masterTimeSignaturePoints</a><span class="token operator">: </span><a href="https://kotlinlang.org/api/core/kotlin-stdlib/kotlin.collections/-list/index.html">List</a><span class="token operator">&lt;</span><span data-unresolved-link="dev.atsushieno.uapmd/TimeSignaturePoint///PointingToDeclaration/">TimeSignaturePoint</span><span class="token operator">&gt;</span></div></div>                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+<a data-name="2017463511%2FProperties%2F-181751666" anchor-label="sampleRate" id="2017463511%2FProperties%2F-181751666" data-filterable-set=":uapmd-binding/jsMain"></a>
+          <div class="table-row table-row_content" data-filterable-current=":uapmd-binding/jsMain" data-filterable-set=":uapmd-binding/jsMain">
+            <div class="main-subrow keyValue ">
+              <div class=""><span class="inline-flex">
+                  <div><a href="sample-rate.html"><span>sample</span><wbr></wbr><span><span>Rate</span></span></a></div>
+<span class="anchor-wrapper"><span class="anchor-icon" pointing-to="2017463511%2FProperties%2F-181751666"></span>
+                    <div class="copy-popup-wrapper "><span class="copy-popup-icon"></span><span>Link copied to clipboard</span></div>
+                  </span></span></div>
+              <div>
+                <div class="title">
+                  <div class="platform-hinted  with-platform-tabs" data-platform-hinted="data-platform-hinted">
+                    <div class="platform-bookmarks-row" data-toggle-list="data-toggle-list"><button class="platform-bookmark" data-filterable-current=":uapmd-binding/jsMain" data-filterable-set=":uapmd-binding/jsMain" data-active="" data-toggle=":uapmd-binding/jsMain">JS</button></div>
+<div class="content sourceset-dependent-content" data-active="" data-togglable=":uapmd-binding/jsMain"><div class="symbol monospace"><span class="token keyword">open </span><span class="token keyword">override </span><span class="token keyword">val </span><a href="sample-rate.html">sampleRate</a><span class="token operator">: </span><a href="https://kotlinlang.org/api/core/kotlin-stdlib/kotlin/-int/index.html">Int</a></div></div>                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+<a data-name="179804168%2FProperties%2F-181751666" anchor-label="sequencer" id="179804168%2FProperties%2F-181751666" data-filterable-set=":uapmd-binding/jsMain"></a>
+          <div class="table-row table-row_content" data-filterable-current=":uapmd-binding/jsMain" data-filterable-set=":uapmd-binding/jsMain">
+            <div class="main-subrow keyValue ">
+              <div class=""><span class="inline-flex">
+                  <div><a href="sequencer.html"><span><span>sequencer</span></span></a></div>
+<span class="anchor-wrapper"><span class="anchor-icon" pointing-to="179804168%2FProperties%2F-181751666"></span>
+                    <div class="copy-popup-wrapper "><span class="copy-popup-icon"></span><span>Link copied to clipboard</span></div>
+                  </span></span></div>
+              <div>
+                <div class="title">
+                  <div class="platform-hinted  with-platform-tabs" data-platform-hinted="data-platform-hinted">
+                    <div class="platform-bookmarks-row" data-toggle-list="data-toggle-list"><button class="platform-bookmark" data-filterable-current=":uapmd-binding/jsMain" data-filterable-set=":uapmd-binding/jsMain" data-active="" data-toggle=":uapmd-binding/jsMain">JS</button></div>
+<div class="content sourceset-dependent-content" data-active="" data-togglable=":uapmd-binding/jsMain"><div class="symbol monospace"><span class="token keyword">open </span><span class="token keyword">override </span><span class="token keyword">val </span><a href="sequencer.html">sequencer</a><span class="token operator">: </span><span data-unresolved-link="dev.atsushieno.uapmd/RealtimeSequencer///PointingToDeclaration/">RealtimeSequencer</span></div><div class="brief "><p class="paragraph">Owned by the model; do not close.</p></div></div>                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+<a data-name="-1450823114%2FProperties%2F-181751666" anchor-label="slowScanProgress" id="-1450823114%2FProperties%2F-181751666" data-filterable-set=":uapmd-binding/jsMain"></a>
+          <div class="table-row table-row_content" data-filterable-current=":uapmd-binding/jsMain" data-filterable-set=":uapmd-binding/jsMain">
+            <div class="main-subrow keyValue ">
+              <div class=""><span class="inline-flex">
+                  <div><a href="slow-scan-progress.html"><span>slow</span><wbr></wbr><span>Scan</span><wbr></wbr><span><span>Progress</span></span></a></div>
+<span class="anchor-wrapper"><span class="anchor-icon" pointing-to="-1450823114%2FProperties%2F-181751666"></span>
+                    <div class="copy-popup-wrapper "><span class="copy-popup-icon"></span><span>Link copied to clipboard</span></div>
+                  </span></span></div>
+              <div>
+                <div class="title">
+                  <div class="platform-hinted  with-platform-tabs" data-platform-hinted="data-platform-hinted">
+                    <div class="platform-bookmarks-row" data-toggle-list="data-toggle-list"><button class="platform-bookmark" data-filterable-current=":uapmd-binding/jsMain" data-filterable-set=":uapmd-binding/jsMain" data-active="" data-toggle=":uapmd-binding/jsMain">JS</button></div>
+<div class="content sourceset-dependent-content" data-active="" data-togglable=":uapmd-binding/jsMain"><div class="symbol monospace"><span class="token keyword">open </span><span class="token keyword">override </span><span class="token keyword">val </span><a href="slow-scan-progress.html">slowScanProgress</a><span class="token operator">: </span><span data-unresolved-link="dev.atsushieno.uapmd/SlowScanProgress///PointingToDeclaration/">SlowScanProgress</span></div><div class="brief "><p class="paragraph">Progress of the slow scan. <span data-unresolved-link="dev.atsushieno.uapmd/AppModel/isScanning/#/PointingToDeclaration/">isScanning</span> alone cannot tell a long scan from a stuck one, which is why uapmd-app's selector shows these.</p></div></div>                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+<a data-name="-2090704580%2FProperties%2F-181751666" anchor-label="timelineTrackCount" id="-2090704580%2FProperties%2F-181751666" data-filterable-set=":uapmd-binding/jsMain"></a>
+          <div class="table-row table-row_content" data-filterable-current=":uapmd-binding/jsMain" data-filterable-set=":uapmd-binding/jsMain">
+            <div class="main-subrow keyValue ">
+              <div class=""><span class="inline-flex">
+                  <div><a href="timeline-track-count.html"><span>timeline</span><wbr></wbr><span>Track</span><wbr></wbr><span><span>Count</span></span></a></div>
+<span class="anchor-wrapper"><span class="anchor-icon" pointing-to="-2090704580%2FProperties%2F-181751666"></span>
+                    <div class="copy-popup-wrapper "><span class="copy-popup-icon"></span><span>Link copied to clipboard</span></div>
+                  </span></span></div>
+              <div>
+                <div class="title">
+                  <div class="platform-hinted  with-platform-tabs" data-platform-hinted="data-platform-hinted">
+                    <div class="platform-bookmarks-row" data-toggle-list="data-toggle-list"><button class="platform-bookmark" data-filterable-current=":uapmd-binding/jsMain" data-filterable-set=":uapmd-binding/jsMain" data-active="" data-toggle=":uapmd-binding/jsMain">JS</button></div>
+<div class="content sourceset-dependent-content" data-active="" data-togglable=":uapmd-binding/jsMain"><div class="symbol monospace"><span class="token keyword">open </span><span class="token keyword">override </span><span class="token keyword">val </span><a href="timeline-track-count.html">timelineTrackCount</a><span class="token operator">: </span><a href="https://kotlinlang.org/api/core/kotlin-stdlib/kotlin/-u-int/index.html">UInt</a></div></div>                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+<a data-name="872685885%2FProperties%2F-181751666" anchor-label="trackCount" id="872685885%2FProperties%2F-181751666" data-filterable-set=":uapmd-binding/jsMain"></a>
+          <div class="table-row table-row_content" data-filterable-current=":uapmd-binding/jsMain" data-filterable-set=":uapmd-binding/jsMain">
+            <div class="main-subrow keyValue ">
+              <div class=""><span class="inline-flex">
+                  <div><a href="track-count.html"><span>track</span><wbr></wbr><span><span>Count</span></span></a></div>
+<span class="anchor-wrapper"><span class="anchor-icon" pointing-to="872685885%2FProperties%2F-181751666"></span>
+                    <div class="copy-popup-wrapper "><span class="copy-popup-icon"></span><span>Link copied to clipboard</span></div>
+                  </span></span></div>
+              <div>
+                <div class="title">
+                  <div class="platform-hinted  with-platform-tabs" data-platform-hinted="data-platform-hinted">
+                    <div class="platform-bookmarks-row" data-toggle-list="data-toggle-list"><button class="platform-bookmark" data-filterable-current=":uapmd-binding/jsMain" data-filterable-set=":uapmd-binding/jsMain" data-active="" data-toggle=":uapmd-binding/jsMain">JS</button></div>
+<div class="content sourceset-dependent-content" data-active="" data-togglable=":uapmd-binding/jsMain"><div class="symbol monospace"><span class="token keyword">open </span><span class="token keyword">override </span><span class="token keyword">val </span><a href="track-count.html">trackCount</a><span class="token operator">: </span><a href="https://kotlinlang.org/api/core/kotlin-stdlib/kotlin/-u-int/index.html">UInt</a></div></div>                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+<a data-name="689468592%2FProperties%2F-181751666" anchor-label="transport" id="689468592%2FProperties%2F-181751666" data-filterable-set=":uapmd-binding/jsMain"></a>
+          <div class="table-row table-row_content" data-filterable-current=":uapmd-binding/jsMain" data-filterable-set=":uapmd-binding/jsMain">
+            <div class="main-subrow keyValue ">
+              <div class=""><span class="inline-flex">
+                  <div><a href="transport.html"><span><span>transport</span></span></a></div>
+<span class="anchor-wrapper"><span class="anchor-icon" pointing-to="689468592%2FProperties%2F-181751666"></span>
+                    <div class="copy-popup-wrapper "><span class="copy-popup-icon"></span><span>Link copied to clipboard</span></div>
+                  </span></span></div>
+              <div>
+                <div class="title">
+                  <div class="platform-hinted  with-platform-tabs" data-platform-hinted="data-platform-hinted">
+                    <div class="platform-bookmarks-row" data-toggle-list="data-toggle-list"><button class="platform-bookmark" data-filterable-current=":uapmd-binding/jsMain" data-filterable-set=":uapmd-binding/jsMain" data-active="" data-toggle=":uapmd-binding/jsMain">JS</button></div>
+<div class="content sourceset-dependent-content" data-active="" data-togglable=":uapmd-binding/jsMain"><div class="symbol monospace"><span class="token keyword">open </span><span class="token keyword">override </span><span class="token keyword">val </span><a href="transport.html">transport</a><span class="token operator">: </span><span data-unresolved-link="dev.atsushieno.uapmd/TransportController///PointingToDeclaration/">TransportController</span></div></div>                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div data-togglable="FUNCTION">
+        <h2 class="tableheader">Functions</h2>
+        <div class="table"><a data-name="-953637008%2FFunctions%2F-181751666" anchor-label="addTrack" id="-953637008%2FFunctions%2F-181751666" data-filterable-set=":uapmd-binding/jsMain"></a>
+          <div class="table-row table-row_content" data-filterable-current=":uapmd-binding/jsMain" data-filterable-set=":uapmd-binding/jsMain">
+            <div class="main-subrow keyValue ">
+              <div class=""><span class="inline-flex">
+                  <div><a href="add-track.html"><span>add</span><wbr></wbr><span><span>Track</span></span></a></div>
+<span class="anchor-wrapper"><span class="anchor-icon" pointing-to="-953637008%2FFunctions%2F-181751666"></span>
+                    <div class="copy-popup-wrapper "><span class="copy-popup-icon"></span><span>Link copied to clipboard</span></div>
+                  </span></span></div>
+              <div>
+                <div class="title">
+                  <div class="platform-hinted  with-platform-tabs" data-platform-hinted="data-platform-hinted">
+                    <div class="platform-bookmarks-row" data-toggle-list="data-toggle-list"><button class="platform-bookmark" data-filterable-current=":uapmd-binding/jsMain" data-filterable-set=":uapmd-binding/jsMain" data-active="" data-toggle=":uapmd-binding/jsMain">JS</button></div>
+<div class="content sourceset-dependent-content" data-active="" data-togglable=":uapmd-binding/jsMain"><div class="symbol monospace"><span class="token keyword">open </span><span class="token keyword">override </span><span class="token keyword">fun </span><a href="add-track.html"><span class="token function">addTrack</span></a><span class="token punctuation">(</span><span class="parameters "><span class="parameter ">callback<span class="token operator">: </span><span class="token punctuation">(</span><a href="https://kotlinlang.org/api/core/kotlin-stdlib/kotlin/-int/index.html">Int</a><span class="token punctuation">, </span><a href="https://kotlinlang.org/api/core/kotlin-stdlib/kotlin/-string/index.html">String</a><span class="token operator">?</span><span class="token punctuation">)</span><span class="token operator"> -&gt; </span><a href="https://kotlinlang.org/api/core/kotlin-stdlib/kotlin/-unit/index.html">Unit</a></span></span><span class="token punctuation">)</span></div><div class="brief "><p class="paragraph">Asynchronous since uapmd 0.5.6: track mutations are undo engine operations.</p></div></div>                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+<a data-name="-1092877537%2FFunctions%2F-181751666" anchor-label="addUmpEventToClip" id="-1092877537%2FFunctions%2F-181751666" data-filterable-set=":uapmd-binding/jsMain"></a>
+          <div class="table-row table-row_content" data-filterable-current=":uapmd-binding/jsMain" data-filterable-set=":uapmd-binding/jsMain">
+            <div class="main-subrow keyValue ">
+              <div class=""><span class="inline-flex">
+                  <div><a href="add-ump-event-to-clip.html"><span>add</span><wbr></wbr><span>Ump</span><wbr></wbr><span>Event</span><wbr></wbr><span>To</span><wbr></wbr><span><span>Clip</span></span></a></div>
+<span class="anchor-wrapper"><span class="anchor-icon" pointing-to="-1092877537%2FFunctions%2F-181751666"></span>
+                    <div class="copy-popup-wrapper "><span class="copy-popup-icon"></span><span>Link copied to clipboard</span></div>
+                  </span></span></div>
+              <div>
+                <div class="title">
+                  <div class="platform-hinted  with-platform-tabs" data-platform-hinted="data-platform-hinted">
+                    <div class="platform-bookmarks-row" data-toggle-list="data-toggle-list"><button class="platform-bookmark" data-filterable-current=":uapmd-binding/jsMain" data-filterable-set=":uapmd-binding/jsMain" data-active="" data-toggle=":uapmd-binding/jsMain">JS</button></div>
+<div class="content sourceset-dependent-content" data-active="" data-togglable=":uapmd-binding/jsMain"><div class="symbol monospace"><span class="token keyword">open </span><span class="token keyword">override </span><span class="token keyword">fun </span><a href="add-ump-event-to-clip.html"><span class="token function">addUmpEventToClip</span></a><span class="token punctuation">(</span><span class="parameters "><span class="parameter ">trackIndex<span class="token operator">: </span><a href="https://kotlinlang.org/api/core/kotlin-stdlib/kotlin/-int/index.html">Int</a><span class="token punctuation">, </span></span><span class="parameter ">clipId<span class="token operator">: </span><a href="https://kotlinlang.org/api/core/kotlin-stdlib/kotlin/-int/index.html">Int</a><span class="token punctuation">, </span></span><span class="parameter ">tick<span class="token operator">: </span><a href="https://kotlinlang.org/api/core/kotlin-stdlib/kotlin/-long/index.html">Long</a><span class="token punctuation">, </span></span><span class="parameter ">words<span class="token operator">: </span><a href="https://kotlinlang.org/api/core/kotlin-stdlib/kotlin/-u-int-array/index.html">UIntArray</a></span></span><span class="token punctuation">)</span><span class="token operator">: </span><a href="https://kotlinlang.org/api/core/kotlin-stdlib/kotlin/-boolean/index.html">Boolean</a></div></div>                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+<a data-name="-2048848413%2FFunctions%2F-181751666" anchor-label="cancelPluginScanning" id="-2048848413%2FFunctions%2F-181751666" data-filterable-set=":uapmd-binding/jsMain"></a>
+          <div class="table-row table-row_content" data-filterable-current=":uapmd-binding/jsMain" data-filterable-set=":uapmd-binding/jsMain">
+            <div class="main-subrow keyValue ">
+              <div class=""><span class="inline-flex">
+                  <div><a href="cancel-plugin-scanning.html"><span>cancel</span><wbr></wbr><span>Plugin</span><wbr></wbr><span><span>Scanning</span></span></a></div>
+<span class="anchor-wrapper"><span class="anchor-icon" pointing-to="-2048848413%2FFunctions%2F-181751666"></span>
+                    <div class="copy-popup-wrapper "><span class="copy-popup-icon"></span><span>Link copied to clipboard</span></div>
+                  </span></span></div>
+              <div>
+                <div class="title">
+                  <div class="platform-hinted  with-platform-tabs" data-platform-hinted="data-platform-hinted">
+                    <div class="platform-bookmarks-row" data-toggle-list="data-toggle-list"><button class="platform-bookmark" data-filterable-current=":uapmd-binding/jsMain" data-filterable-set=":uapmd-binding/jsMain" data-active="" data-toggle=":uapmd-binding/jsMain">JS</button></div>
+<div class="content sourceset-dependent-content" data-active="" data-togglable=":uapmd-binding/jsMain"><div class="symbol monospace"><span class="token keyword">open </span><span class="token keyword">override </span><span class="token keyword">fun </span><a href="cancel-plugin-scanning.html"><span class="token function">cancelPluginScanning</span></a><span class="token punctuation">(</span><span class="token punctuation">)</span></div></div>                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+<a data-name="-620347914%2FFunctions%2F-181751666" anchor-label="clearPluginBlocklist" id="-620347914%2FFunctions%2F-181751666" data-filterable-set=":uapmd-binding/jsMain"></a>
+          <div class="table-row table-row_content" data-filterable-current=":uapmd-binding/jsMain" data-filterable-set=":uapmd-binding/jsMain">
+            <div class="main-subrow keyValue ">
+              <div class=""><span class="inline-flex">
+                  <div><a href="clear-plugin-blocklist.html"><span>clear</span><wbr></wbr><span>Plugin</span><wbr></wbr><span><span>Blocklist</span></span></a></div>
+<span class="anchor-wrapper"><span class="anchor-icon" pointing-to="-620347914%2FFunctions%2F-181751666"></span>
+                    <div class="copy-popup-wrapper "><span class="copy-popup-icon"></span><span>Link copied to clipboard</span></div>
+                  </span></span></div>
+              <div>
+                <div class="title">
+                  <div class="platform-hinted  with-platform-tabs" data-platform-hinted="data-platform-hinted">
+                    <div class="platform-bookmarks-row" data-toggle-list="data-toggle-list"><button class="platform-bookmark" data-filterable-current=":uapmd-binding/jsMain" data-filterable-set=":uapmd-binding/jsMain" data-active="" data-toggle=":uapmd-binding/jsMain">JS</button></div>
+<div class="content sourceset-dependent-content" data-active="" data-togglable=":uapmd-binding/jsMain"><div class="symbol monospace"><span class="token keyword">open </span><span class="token keyword">override </span><span class="token keyword">fun </span><a href="clear-plugin-blocklist.html"><span class="token function">clearPluginBlocklist</span></a><span class="token punctuation">(</span><span class="token punctuation">)</span></div></div>                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+<a data-name="-1572725462%2FFunctions%2F-181751666" anchor-label="connectTrackGraph" id="-1572725462%2FFunctions%2F-181751666" data-filterable-set=":uapmd-binding/jsMain"></a>
+          <div class="table-row table-row_content" data-filterable-current=":uapmd-binding/jsMain" data-filterable-set=":uapmd-binding/jsMain">
+            <div class="main-subrow keyValue ">
+              <div class=""><span class="inline-flex">
+                  <div><a href="connect-track-graph.html"><span>connect</span><wbr></wbr><span>Track</span><wbr></wbr><span><span>Graph</span></span></a></div>
+<span class="anchor-wrapper"><span class="anchor-icon" pointing-to="-1572725462%2FFunctions%2F-181751666"></span>
+                    <div class="copy-popup-wrapper "><span class="copy-popup-icon"></span><span>Link copied to clipboard</span></div>
+                  </span></span></div>
+              <div>
+                <div class="title">
+                  <div class="platform-hinted  with-platform-tabs" data-platform-hinted="data-platform-hinted">
+                    <div class="platform-bookmarks-row" data-toggle-list="data-toggle-list"><button class="platform-bookmark" data-filterable-current=":uapmd-binding/jsMain" data-filterable-set=":uapmd-binding/jsMain" data-active="" data-toggle=":uapmd-binding/jsMain">JS</button></div>
+<div class="content sourceset-dependent-content" data-active="" data-togglable=":uapmd-binding/jsMain"><div class="symbol monospace"><span class="token keyword">open </span><span class="token keyword">override </span><span class="token keyword">fun </span><a href="connect-track-graph.html"><span class="token function">connectTrackGraph</span></a><span class="token punctuation">(</span><span class="parameters "><span class="parameter ">trackIndex<span class="token operator">: </span><a href="https://kotlinlang.org/api/core/kotlin-stdlib/kotlin/-int/index.html">Int</a><span class="token punctuation">, </span></span><span class="parameter ">connection<span class="token operator">: </span><span data-unresolved-link="dev.atsushieno.uapmd/GraphConnection///PointingToDeclaration/">GraphConnection</span></span></span><span class="token punctuation">)</span><span class="token operator">: </span><span data-unresolved-link="dev.atsushieno.uapmd/OpResult///PointingToDeclaration/">OpResult</span></div></div>                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+<a data-name="-1995602672%2FFunctions%2F-181751666" anchor-label="createEmptyMidiClip" id="-1995602672%2FFunctions%2F-181751666" data-filterable-set=":uapmd-binding/jsMain"></a>
+          <div class="table-row table-row_content" data-filterable-current=":uapmd-binding/jsMain" data-filterable-set=":uapmd-binding/jsMain">
+            <div class="main-subrow keyValue ">
+              <div class=""><span class="inline-flex">
+                  <div><a href="create-empty-midi-clip.html"><span>create</span><wbr></wbr><span>Empty</span><wbr></wbr><span>Midi</span><wbr></wbr><span><span>Clip</span></span></a></div>
+<span class="anchor-wrapper"><span class="anchor-icon" pointing-to="-1995602672%2FFunctions%2F-181751666"></span>
+                    <div class="copy-popup-wrapper "><span class="copy-popup-icon"></span><span>Link copied to clipboard</span></div>
+                  </span></span></div>
+              <div>
+                <div class="title">
+                  <div class="platform-hinted  with-platform-tabs" data-platform-hinted="data-platform-hinted">
+                    <div class="platform-bookmarks-row" data-toggle-list="data-toggle-list"><button class="platform-bookmark" data-filterable-current=":uapmd-binding/jsMain" data-filterable-set=":uapmd-binding/jsMain" data-active="" data-toggle=":uapmd-binding/jsMain">JS</button></div>
+<div class="content sourceset-dependent-content" data-active="" data-togglable=":uapmd-binding/jsMain"><div class="symbol monospace"><span class="token keyword">open </span><span class="token keyword">override </span><span class="token keyword">fun </span><a href="create-empty-midi-clip.html"><span class="token function">createEmptyMidiClip</span></a><span class="token punctuation">(</span><span class="parameters "><span class="parameter ">trackIndex<span class="token operator">: </span><a href="https://kotlinlang.org/api/core/kotlin-stdlib/kotlin/-int/index.html">Int</a><span class="token punctuation">, </span></span><span class="parameter ">positionSamples<span class="token operator">: </span><a href="https://kotlinlang.org/api/core/kotlin-stdlib/kotlin/-long/index.html">Long</a><span class="token punctuation">, </span></span><span class="parameter ">tickResolution<span class="token operator">: </span><a href="https://kotlinlang.org/api/core/kotlin-stdlib/kotlin/-u-int/index.html">UInt</a><span class="token punctuation">, </span></span><span class="parameter ">bpm<span class="token operator">: </span><a href="https://kotlinlang.org/api/core/kotlin-stdlib/kotlin/-double/index.html">Double</a><span class="token operator"> = </span><span class="token constant">120.0</span></span></span><span class="token punctuation">)</span><span class="token operator">: </span><span data-unresolved-link="dev.atsushieno.uapmd/ClipAddResult///PointingToDeclaration/">ClipAddResult</span></div><div class="brief "><p class="paragraph">Creates an empty MIDI 2.0 clip; <span data-unresolved-link="dev.atsushieno.uapmd/AppModel/createEmptyMidiClip/#kotlin.Int#kotlin.Long#kotlin.UInt#kotlin.Double/PointingToCallableParameters(2)/">tickResolution</span> is ticks per quarter.</p></div></div>                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+<a data-name="-188877525%2FFunctions%2F-181751666" anchor-label="createPluginInstance" id="-188877525%2FFunctions%2F-181751666" data-filterable-set=":uapmd-binding/jsMain"></a>
+          <div class="table-row table-row_content" data-filterable-current=":uapmd-binding/jsMain" data-filterable-set=":uapmd-binding/jsMain">
+            <div class="main-subrow keyValue ">
+              <div class=""><span class="inline-flex">
+                  <div><a href="create-plugin-instance.html"><span>create</span><wbr></wbr><span>Plugin</span><wbr></wbr><span><span>Instance</span></span></a></div>
+<span class="anchor-wrapper"><span class="anchor-icon" pointing-to="-188877525%2FFunctions%2F-181751666"></span>
+                    <div class="copy-popup-wrapper "><span class="copy-popup-icon"></span><span>Link copied to clipboard</span></div>
+                  </span></span></div>
+              <div>
+                <div class="title">
+                  <div class="platform-hinted  with-platform-tabs" data-platform-hinted="data-platform-hinted">
+                    <div class="platform-bookmarks-row" data-toggle-list="data-toggle-list"><button class="platform-bookmark" data-filterable-current=":uapmd-binding/jsMain" data-filterable-set=":uapmd-binding/jsMain" data-active="" data-toggle=":uapmd-binding/jsMain">JS</button></div>
+<div class="content sourceset-dependent-content" data-active="" data-togglable=":uapmd-binding/jsMain"><div class="symbol monospace"><span class="token keyword">open </span><span class="token keyword">override </span><span class="token keyword">fun </span><a href="create-plugin-instance.html"><span class="token function">createPluginInstance</span></a><span class="token punctuation">(</span><span class="parameters "><span class="parameter ">format<span class="token operator">: </span><a href="https://kotlinlang.org/api/core/kotlin-stdlib/kotlin/-string/index.html">String</a><span class="token punctuation">, </span></span><span class="parameter ">pluginId<span class="token operator">: </span><a href="https://kotlinlang.org/api/core/kotlin-stdlib/kotlin/-string/index.html">String</a><span class="token punctuation">, </span></span><span class="parameter ">trackIndex<span class="token operator">: </span><a href="https://kotlinlang.org/api/core/kotlin-stdlib/kotlin/-int/index.html">Int</a><span class="token punctuation">, </span></span><span class="parameter ">config<span class="token operator">: </span><span data-unresolved-link="dev.atsushieno.uapmd/PluginInstanceConfig///PointingToDeclaration/">PluginInstanceConfig</span><span class="token operator"> = </span>PluginInstanceConfig()<span class="token punctuation">, </span></span><span class="parameter ">callback<span class="token operator">: </span><span class="token punctuation">(</span><span data-unresolved-link="dev.atsushieno.uapmd/PluginInstanceResult///PointingToDeclaration/">PluginInstanceResult</span><span class="token punctuation">)</span><span class="token operator"> -&gt; </span><a href="https://kotlinlang.org/api/core/kotlin-stdlib/kotlin/-unit/index.html">Unit</a></span></span><span class="token punctuation">)</span></div><div class="brief "><p class="paragraph">Instantiates <span data-unresolved-link="dev.atsushieno.uapmd/AppModel/createPluginInstance/#kotlin.String#kotlin.String#kotlin.Int#dev.atsushieno.uapmd.PluginInstanceConfig#kotlin.Function1[dev.atsushieno.uapmd.PluginInstanceResult,kotlin.Unit]/PointingToCallableParameters(1)/">pluginId</span> and attaches it to <span data-unresolved-link="dev.atsushieno.uapmd/AppModel/createPluginInstance/#kotlin.String#kotlin.String#kotlin.Int#dev.atsushieno.uapmd.PluginInstanceConfig#kotlin.Function1[dev.atsushieno.uapmd.PluginInstanceResult,kotlin.Unit]/PointingToCallableParameters(2)/">trackIndex</span>; a negative index creates a new track. The callback runs once, on the thread that finishes instantiation.</p></div></div>                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+<a data-name="-2121453671%2FFunctions%2F-181751666" anchor-label="disableUmpDevice" id="-2121453671%2FFunctions%2F-181751666" data-filterable-set=":uapmd-binding/jsMain"></a>
+          <div class="table-row table-row_content" data-filterable-current=":uapmd-binding/jsMain" data-filterable-set=":uapmd-binding/jsMain">
+            <div class="main-subrow keyValue ">
+              <div class=""><span class="inline-flex">
+                  <div><a href="disable-ump-device.html"><span>disable</span><wbr></wbr><span>Ump</span><wbr></wbr><span><span>Device</span></span></a></div>
+<span class="anchor-wrapper"><span class="anchor-icon" pointing-to="-2121453671%2FFunctions%2F-181751666"></span>
+                    <div class="copy-popup-wrapper "><span class="copy-popup-icon"></span><span>Link copied to clipboard</span></div>
+                  </span></span></div>
+              <div>
+                <div class="title">
+                  <div class="platform-hinted  with-platform-tabs" data-platform-hinted="data-platform-hinted">
+                    <div class="platform-bookmarks-row" data-toggle-list="data-toggle-list"><button class="platform-bookmark" data-filterable-current=":uapmd-binding/jsMain" data-filterable-set=":uapmd-binding/jsMain" data-active="" data-toggle=":uapmd-binding/jsMain">JS</button></div>
+<div class="content sourceset-dependent-content" data-active="" data-togglable=":uapmd-binding/jsMain"><div class="symbol monospace"><span class="token keyword">open </span><span class="token keyword">override </span><span class="token keyword">fun </span><a href="disable-ump-device.html"><span class="token function">disableUmpDevice</span></a><span class="token punctuation">(</span><span class="parameters "><span class="parameter ">instanceId<span class="token operator">: </span><a href="https://kotlinlang.org/api/core/kotlin-stdlib/kotlin/-int/index.html">Int</a></span></span><span class="token punctuation">)</span></div></div>                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+<a data-name="-496936932%2FFunctions%2F-181751666" anchor-label="disconnectTrackGraphConnection" id="-496936932%2FFunctions%2F-181751666" data-filterable-set=":uapmd-binding/jsMain"></a>
+          <div class="table-row table-row_content" data-filterable-current=":uapmd-binding/jsMain" data-filterable-set=":uapmd-binding/jsMain">
+            <div class="main-subrow keyValue ">
+              <div class=""><span class="inline-flex">
+                  <div><a href="disconnect-track-graph-connection.html"><span>disconnect</span><wbr></wbr><span>Track</span><wbr></wbr><span>Graph</span><wbr></wbr><span><span>Connection</span></span></a></div>
+<span class="anchor-wrapper"><span class="anchor-icon" pointing-to="-496936932%2FFunctions%2F-181751666"></span>
+                    <div class="copy-popup-wrapper "><span class="copy-popup-icon"></span><span>Link copied to clipboard</span></div>
+                  </span></span></div>
+              <div>
+                <div class="title">
+                  <div class="platform-hinted  with-platform-tabs" data-platform-hinted="data-platform-hinted">
+                    <div class="platform-bookmarks-row" data-toggle-list="data-toggle-list"><button class="platform-bookmark" data-filterable-current=":uapmd-binding/jsMain" data-filterable-set=":uapmd-binding/jsMain" data-active="" data-toggle=":uapmd-binding/jsMain">JS</button></div>
+<div class="content sourceset-dependent-content" data-active="" data-togglable=":uapmd-binding/jsMain"><div class="symbol monospace"><span class="token keyword">open </span><span class="token keyword">override </span><span class="token keyword">fun </span><a href="disconnect-track-graph-connection.html"><span class="token function">disconnectTrackGraphConnection</span></a><span class="token punctuation">(</span><span class="parameters "><span class="parameter ">trackIndex<span class="token operator">: </span><a href="https://kotlinlang.org/api/core/kotlin-stdlib/kotlin/-int/index.html">Int</a><span class="token punctuation">, </span></span><span class="parameter ">connectionId<span class="token operator">: </span><a href="https://kotlinlang.org/api/core/kotlin-stdlib/kotlin/-long/index.html">Long</a></span></span><span class="token punctuation">)</span><span class="token operator">: </span><span data-unresolved-link="dev.atsushieno.uapmd/OpResult///PointingToDeclaration/">OpResult</span></div></div>                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+<a data-name="35936785%2FFunctions%2F-181751666" anchor-label="enableUmpDevice" id="35936785%2FFunctions%2F-181751666" data-filterable-set=":uapmd-binding/jsMain"></a>
+          <div class="table-row table-row_content" data-filterable-current=":uapmd-binding/jsMain" data-filterable-set=":uapmd-binding/jsMain">
+            <div class="main-subrow keyValue ">
+              <div class=""><span class="inline-flex">
+                  <div><a href="enable-ump-device.html"><span>enable</span><wbr></wbr><span>Ump</span><wbr></wbr><span><span>Device</span></span></a></div>
+<span class="anchor-wrapper"><span class="anchor-icon" pointing-to="35936785%2FFunctions%2F-181751666"></span>
+                    <div class="copy-popup-wrapper "><span class="copy-popup-icon"></span><span>Link copied to clipboard</span></div>
+                  </span></span></div>
+              <div>
+                <div class="title">
+                  <div class="platform-hinted  with-platform-tabs" data-platform-hinted="data-platform-hinted">
+                    <div class="platform-bookmarks-row" data-toggle-list="data-toggle-list"><button class="platform-bookmark" data-filterable-current=":uapmd-binding/jsMain" data-filterable-set=":uapmd-binding/jsMain" data-active="" data-toggle=":uapmd-binding/jsMain">JS</button></div>
+<div class="content sourceset-dependent-content" data-active="" data-togglable=":uapmd-binding/jsMain"><div class="symbol monospace"><span class="token keyword">open </span><span class="token keyword">override </span><span class="token keyword">fun </span><a href="enable-ump-device.html"><span class="token function">enableUmpDevice</span></a><span class="token punctuation">(</span><span class="parameters "><span class="parameter ">instanceId<span class="token operator">: </span><a href="https://kotlinlang.org/api/core/kotlin-stdlib/kotlin/-int/index.html">Int</a><span class="token punctuation">, </span></span><span class="parameter ">deviceName<span class="token operator">: </span><a href="https://kotlinlang.org/api/core/kotlin-stdlib/kotlin/-string/index.html">String</a></span></span><span class="token punctuation">)</span></div><div class="brief "><p class="paragraph">Registers the instance as a virtual MIDI 2.0 device where the platform supports it.</p></div></div>                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+<a data-name="-1659984489%2FFunctions%2F-181751666" anchor-label="ensureTrackUsesEditorGraph" id="-1659984489%2FFunctions%2F-181751666" data-filterable-set=":uapmd-binding/jsMain"></a>
+          <div class="table-row table-row_content" data-filterable-current=":uapmd-binding/jsMain" data-filterable-set=":uapmd-binding/jsMain">
+            <div class="main-subrow keyValue ">
+              <div class=""><span class="inline-flex">
+                  <div><a href="ensure-track-uses-editor-graph.html"><span>ensure</span><wbr></wbr><span>Track</span><wbr></wbr><span>Uses</span><wbr></wbr><span>Editor</span><wbr></wbr><span><span>Graph</span></span></a></div>
+<span class="anchor-wrapper"><span class="anchor-icon" pointing-to="-1659984489%2FFunctions%2F-181751666"></span>
+                    <div class="copy-popup-wrapper "><span class="copy-popup-icon"></span><span>Link copied to clipboard</span></div>
+                  </span></span></div>
+              <div>
+                <div class="title">
+                  <div class="platform-hinted  with-platform-tabs" data-platform-hinted="data-platform-hinted">
+                    <div class="platform-bookmarks-row" data-toggle-list="data-toggle-list"><button class="platform-bookmark" data-filterable-current=":uapmd-binding/jsMain" data-filterable-set=":uapmd-binding/jsMain" data-active="" data-toggle=":uapmd-binding/jsMain">JS</button></div>
+<div class="content sourceset-dependent-content" data-active="" data-togglable=":uapmd-binding/jsMain"><div class="symbol monospace"><span class="token keyword">open </span><span class="token keyword">override </span><span class="token keyword">fun </span><a href="ensure-track-uses-editor-graph.html"><span class="token function">ensureTrackUsesEditorGraph</span></a><span class="token punctuation">(</span><span class="parameters "><span class="parameter ">trackIndex<span class="token operator">: </span><a href="https://kotlinlang.org/api/core/kotlin-stdlib/kotlin/-int/index.html">Int</a></span></span><span class="token punctuation">)</span><span class="token operator">: </span><a href="https://kotlinlang.org/api/core/kotlin-stdlib/kotlin/-boolean/index.html">Boolean</a></div><div class="brief "><p class="paragraph">Switches the track from the simple linear chain to the editable graph.</p></div></div>                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+<a data-name="-1011241829%2FFunctions%2F-181751666" anchor-label="generateScanReport" id="-1011241829%2FFunctions%2F-181751666" data-filterable-set=":uapmd-binding/jsMain"></a>
+          <div class="table-row table-row_content" data-filterable-current=":uapmd-binding/jsMain" data-filterable-set=":uapmd-binding/jsMain">
+            <div class="main-subrow keyValue ">
+              <div class=""><span class="inline-flex">
+                  <div><a href="generate-scan-report.html"><span>generate</span><wbr></wbr><span>Scan</span><wbr></wbr><span><span>Report</span></span></a></div>
+<span class="anchor-wrapper"><span class="anchor-icon" pointing-to="-1011241829%2FFunctions%2F-181751666"></span>
+                    <div class="copy-popup-wrapper "><span class="copy-popup-icon"></span><span>Link copied to clipboard</span></div>
+                  </span></span></div>
+              <div>
+                <div class="title">
+                  <div class="platform-hinted  with-platform-tabs" data-platform-hinted="data-platform-hinted">
+                    <div class="platform-bookmarks-row" data-toggle-list="data-toggle-list"><button class="platform-bookmark" data-filterable-current=":uapmd-binding/jsMain" data-filterable-set=":uapmd-binding/jsMain" data-active="" data-toggle=":uapmd-binding/jsMain">JS</button></div>
+<div class="content sourceset-dependent-content" data-active="" data-togglable=":uapmd-binding/jsMain"><div class="symbol monospace"><span class="token keyword">open </span><span class="token keyword">override </span><span class="token keyword">fun </span><a href="generate-scan-report.html"><span class="token function">generateScanReport</span></a><span class="token punctuation">(</span><span class="token punctuation">)</span><span class="token operator">: </span><a href="https://kotlinlang.org/api/core/kotlin-stdlib/kotlin/-string/index.html">String</a></div></div>                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+<a data-name="195474823%2FFunctions%2F-181751666" anchor-label="getClipAudioEvents" id="195474823%2FFunctions%2F-181751666" data-filterable-set=":uapmd-binding/jsMain"></a>
+          <div class="table-row table-row_content" data-filterable-current=":uapmd-binding/jsMain" data-filterable-set=":uapmd-binding/jsMain">
+            <div class="main-subrow keyValue ">
+              <div class=""><span class="inline-flex">
+                  <div><a href="get-clip-audio-events.html"><span>get</span><wbr></wbr><span>Clip</span><wbr></wbr><span>Audio</span><wbr></wbr><span><span>Events</span></span></a></div>
+<span class="anchor-wrapper"><span class="anchor-icon" pointing-to="195474823%2FFunctions%2F-181751666"></span>
+                    <div class="copy-popup-wrapper "><span class="copy-popup-icon"></span><span>Link copied to clipboard</span></div>
+                  </span></span></div>
+              <div>
+                <div class="title">
+                  <div class="platform-hinted  with-platform-tabs" data-platform-hinted="data-platform-hinted">
+                    <div class="platform-bookmarks-row" data-toggle-list="data-toggle-list"><button class="platform-bookmark" data-filterable-current=":uapmd-binding/jsMain" data-filterable-set=":uapmd-binding/jsMain" data-active="" data-toggle=":uapmd-binding/jsMain">JS</button></div>
+<div class="content sourceset-dependent-content" data-active="" data-togglable=":uapmd-binding/jsMain"><div class="symbol monospace"><span class="token keyword">open </span><span class="token keyword">override </span><span class="token keyword">fun </span><a href="get-clip-audio-events.html"><span class="token function">getClipAudioEvents</span></a><span class="token punctuation">(</span><span class="parameters "><span class="parameter ">trackIndex<span class="token operator">: </span><a href="https://kotlinlang.org/api/core/kotlin-stdlib/kotlin/-int/index.html">Int</a><span class="token punctuation">, </span></span><span class="parameter ">clipId<span class="token operator">: </span><a href="https://kotlinlang.org/api/core/kotlin-stdlib/kotlin/-int/index.html">Int</a></span></span><span class="token punctuation">)</span><span class="token operator">: </span><span data-unresolved-link="dev.atsushieno.uapmd/ClipAudioEventsResult///PointingToDeclaration/">ClipAudioEventsResult</span></div><div class="brief "><p class="paragraph">Reading counterpart to <code class="lang-kotlin">ProjectCommands.setClipMarkers/setClipAudioWarps</code>.</p></div></div>                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+<a data-name="-717060885%2FFunctions%2F-181751666" anchor-label="getInstanceGroup" id="-717060885%2FFunctions%2F-181751666" data-filterable-set=":uapmd-binding/jsMain"></a>
+          <div class="table-row table-row_content" data-filterable-current=":uapmd-binding/jsMain" data-filterable-set=":uapmd-binding/jsMain">
+            <div class="main-subrow keyValue ">
+              <div class=""><span class="inline-flex">
+                  <div><a href="get-instance-group.html"><span>get</span><wbr></wbr><span>Instance</span><wbr></wbr><span><span>Group</span></span></a></div>
+<span class="anchor-wrapper"><span class="anchor-icon" pointing-to="-717060885%2FFunctions%2F-181751666"></span>
+                    <div class="copy-popup-wrapper "><span class="copy-popup-icon"></span><span>Link copied to clipboard</span></div>
+                  </span></span></div>
+              <div>
+                <div class="title">
+                  <div class="platform-hinted  with-platform-tabs" data-platform-hinted="data-platform-hinted">
+                    <div class="platform-bookmarks-row" data-toggle-list="data-toggle-list"><button class="platform-bookmark" data-filterable-current=":uapmd-binding/jsMain" data-filterable-set=":uapmd-binding/jsMain" data-active="" data-toggle=":uapmd-binding/jsMain">JS</button></div>
+<div class="content sourceset-dependent-content" data-active="" data-togglable=":uapmd-binding/jsMain"><div class="symbol monospace"><span class="token keyword">open </span><span class="token keyword">override </span><span class="token keyword">fun </span><a href="get-instance-group.html"><span class="token function">getInstanceGroup</span></a><span class="token punctuation">(</span><span class="parameters "><span class="parameter ">instanceId<span class="token operator">: </span><a href="https://kotlinlang.org/api/core/kotlin-stdlib/kotlin/-int/index.html">Int</a></span></span><span class="token punctuation">)</span><span class="token operator">: </span><a href="https://kotlinlang.org/api/core/kotlin-stdlib/kotlin/-u-byte/index.html">UByte</a></div></div>                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+<a data-name="1410336808%2FFunctions%2F-181751666" anchor-label="getMidiClipUmpEvents" id="1410336808%2FFunctions%2F-181751666" data-filterable-set=":uapmd-binding/jsMain"></a>
+          <div class="table-row table-row_content" data-filterable-current=":uapmd-binding/jsMain" data-filterable-set=":uapmd-binding/jsMain">
+            <div class="main-subrow keyValue ">
+              <div class=""><span class="inline-flex">
+                  <div><a href="get-midi-clip-ump-events.html"><span>get</span><wbr></wbr><span>Midi</span><wbr></wbr><span>Clip</span><wbr></wbr><span>Ump</span><wbr></wbr><span><span>Events</span></span></a></div>
+<span class="anchor-wrapper"><span class="anchor-icon" pointing-to="1410336808%2FFunctions%2F-181751666"></span>
+                    <div class="copy-popup-wrapper "><span class="copy-popup-icon"></span><span>Link copied to clipboard</span></div>
+                  </span></span></div>
+              <div>
+                <div class="title">
+                  <div class="platform-hinted  with-platform-tabs" data-platform-hinted="data-platform-hinted">
+                    <div class="platform-bookmarks-row" data-toggle-list="data-toggle-list"><button class="platform-bookmark" data-filterable-current=":uapmd-binding/jsMain" data-filterable-set=":uapmd-binding/jsMain" data-active="" data-toggle=":uapmd-binding/jsMain">JS</button></div>
+<div class="content sourceset-dependent-content" data-active="" data-togglable=":uapmd-binding/jsMain"><div class="symbol monospace"><span class="token keyword">open </span><span class="token keyword">override </span><span class="token keyword">fun </span><a href="get-midi-clip-ump-events.html"><span class="token function">getMidiClipUmpEvents</span></a><span class="token punctuation">(</span><span class="parameters "><span class="parameter ">trackIndex<span class="token operator">: </span><a href="https://kotlinlang.org/api/core/kotlin-stdlib/kotlin/-int/index.html">Int</a><span class="token punctuation">, </span></span><span class="parameter ">clipId<span class="token operator">: </span><a href="https://kotlinlang.org/api/core/kotlin-stdlib/kotlin/-int/index.html">Int</a></span></span><span class="token punctuation">)</span><span class="token operator">: </span><span data-unresolved-link="dev.atsushieno.uapmd/UmpEventsResult///PointingToDeclaration/">UmpEventsResult</span></div></div>                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+<a data-name="-1535562649%2FFunctions%2F-181751666" anchor-label="getTimelineState" id="-1535562649%2FFunctions%2F-181751666" data-filterable-set=":uapmd-binding/jsMain"></a>
+          <div class="table-row table-row_content" data-filterable-current=":uapmd-binding/jsMain" data-filterable-set=":uapmd-binding/jsMain">
+            <div class="main-subrow keyValue ">
+              <div class=""><span class="inline-flex">
+                  <div><a href="get-timeline-state.html"><span>get</span><wbr></wbr><span>Timeline</span><wbr></wbr><span><span>State</span></span></a></div>
+<span class="anchor-wrapper"><span class="anchor-icon" pointing-to="-1535562649%2FFunctions%2F-181751666"></span>
+                    <div class="copy-popup-wrapper "><span class="copy-popup-icon"></span><span>Link copied to clipboard</span></div>
+                  </span></span></div>
+              <div>
+                <div class="title">
+                  <div class="platform-hinted  with-platform-tabs" data-platform-hinted="data-platform-hinted">
+                    <div class="platform-bookmarks-row" data-toggle-list="data-toggle-list"><button class="platform-bookmark" data-filterable-current=":uapmd-binding/jsMain" data-filterable-set=":uapmd-binding/jsMain" data-active="" data-toggle=":uapmd-binding/jsMain">JS</button></div>
+<div class="content sourceset-dependent-content" data-active="" data-togglable=":uapmd-binding/jsMain"><div class="symbol monospace"><span class="token keyword">open </span><span class="token keyword">override </span><span class="token keyword">fun </span><a href="get-timeline-state.html"><span class="token function">getTimelineState</span></a><span class="token punctuation">(</span><span class="token punctuation">)</span><span class="token operator">: </span><span data-unresolved-link="dev.atsushieno.uapmd/TimelineState///PointingToDeclaration/">TimelineState</span><span class="token operator">?</span></div></div>                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+<a data-name="1717211566%2FFunctions%2F-181751666" anchor-label="getTimelineTrack" id="1717211566%2FFunctions%2F-181751666" data-filterable-set=":uapmd-binding/jsMain"></a>
+          <div class="table-row table-row_content" data-filterable-current=":uapmd-binding/jsMain" data-filterable-set=":uapmd-binding/jsMain">
+            <div class="main-subrow keyValue ">
+              <div class=""><span class="inline-flex">
+                  <div><a href="get-timeline-track.html"><span>get</span><wbr></wbr><span>Timeline</span><wbr></wbr><span><span>Track</span></span></a></div>
+<span class="anchor-wrapper"><span class="anchor-icon" pointing-to="1717211566%2FFunctions%2F-181751666"></span>
+                    <div class="copy-popup-wrapper "><span class="copy-popup-icon"></span><span>Link copied to clipboard</span></div>
+                  </span></span></div>
+              <div>
+                <div class="title">
+                  <div class="platform-hinted  with-platform-tabs" data-platform-hinted="data-platform-hinted">
+                    <div class="platform-bookmarks-row" data-toggle-list="data-toggle-list"><button class="platform-bookmark" data-filterable-current=":uapmd-binding/jsMain" data-filterable-set=":uapmd-binding/jsMain" data-active="" data-toggle=":uapmd-binding/jsMain">JS</button></div>
+<div class="content sourceset-dependent-content" data-active="" data-togglable=":uapmd-binding/jsMain"><div class="symbol monospace"><span class="token keyword">open </span><span class="token keyword">override </span><span class="token keyword">fun </span><a href="get-timeline-track.html"><span class="token function">getTimelineTrack</span></a><span class="token punctuation">(</span><span class="parameters "><span class="parameter ">index<span class="token operator">: </span><a href="https://kotlinlang.org/api/core/kotlin-stdlib/kotlin/-u-int/index.html">UInt</a></span></span><span class="token punctuation">)</span><span class="token operator">: </span><span data-unresolved-link="dev.atsushieno.uapmd/TimelineTrack///PointingToDeclaration/">TimelineTrack</span></div></div>                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+<a data-name="1533758019%2FFunctions%2F-181751666" anchor-label="getTrackGraphConnections" id="1533758019%2FFunctions%2F-181751666" data-filterable-set=":uapmd-binding/jsMain"></a>
+          <div class="table-row table-row_content" data-filterable-current=":uapmd-binding/jsMain" data-filterable-set=":uapmd-binding/jsMain">
+            <div class="main-subrow keyValue ">
+              <div class=""><span class="inline-flex">
+                  <div><a href="get-track-graph-connections.html"><span>get</span><wbr></wbr><span>Track</span><wbr></wbr><span>Graph</span><wbr></wbr><span><span>Connections</span></span></a></div>
+<span class="anchor-wrapper"><span class="anchor-icon" pointing-to="1533758019%2FFunctions%2F-181751666"></span>
+                    <div class="copy-popup-wrapper "><span class="copy-popup-icon"></span><span>Link copied to clipboard</span></div>
+                  </span></span></div>
+              <div>
+                <div class="title">
+                  <div class="platform-hinted  with-platform-tabs" data-platform-hinted="data-platform-hinted">
+                    <div class="platform-bookmarks-row" data-toggle-list="data-toggle-list"><button class="platform-bookmark" data-filterable-current=":uapmd-binding/jsMain" data-filterable-set=":uapmd-binding/jsMain" data-active="" data-toggle=":uapmd-binding/jsMain">JS</button></div>
+<div class="content sourceset-dependent-content" data-active="" data-togglable=":uapmd-binding/jsMain"><div class="symbol monospace"><span class="token keyword">open </span><span class="token keyword">override </span><span class="token keyword">fun </span><a href="get-track-graph-connections.html"><span class="token function">getTrackGraphConnections</span></a><span class="token punctuation">(</span><span class="parameters "><span class="parameter ">trackIndex<span class="token operator">: </span><a href="https://kotlinlang.org/api/core/kotlin-stdlib/kotlin/-int/index.html">Int</a></span></span><span class="token punctuation">)</span><span class="token operator">: </span><span data-unresolved-link="dev.atsushieno.uapmd/GraphConnectionsResult///PointingToDeclaration/">GraphConnectionsResult</span></div></div>                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+<a data-name="-457428697%2FFunctions%2F-181751666" anchor-label="getTrackGraphNodes" id="-457428697%2FFunctions%2F-181751666" data-filterable-set=":uapmd-binding/jsMain"></a>
+          <div class="table-row table-row_content" data-filterable-current=":uapmd-binding/jsMain" data-filterable-set=":uapmd-binding/jsMain">
+            <div class="main-subrow keyValue ">
+              <div class=""><span class="inline-flex">
+                  <div><a href="get-track-graph-nodes.html"><span>get</span><wbr></wbr><span>Track</span><wbr></wbr><span>Graph</span><wbr></wbr><span><span>Nodes</span></span></a></div>
+<span class="anchor-wrapper"><span class="anchor-icon" pointing-to="-457428697%2FFunctions%2F-181751666"></span>
+                    <div class="copy-popup-wrapper "><span class="copy-popup-icon"></span><span>Link copied to clipboard</span></div>
+                  </span></span></div>
+              <div>
+                <div class="title">
+                  <div class="platform-hinted  with-platform-tabs" data-platform-hinted="data-platform-hinted">
+                    <div class="platform-bookmarks-row" data-toggle-list="data-toggle-list"><button class="platform-bookmark" data-filterable-current=":uapmd-binding/jsMain" data-filterable-set=":uapmd-binding/jsMain" data-active="" data-toggle=":uapmd-binding/jsMain">JS</button></div>
+<div class="content sourceset-dependent-content" data-active="" data-togglable=":uapmd-binding/jsMain"><div class="symbol monospace"><span class="token keyword">open </span><span class="token keyword">override </span><span class="token keyword">fun </span><a href="get-track-graph-nodes.html"><span class="token function">getTrackGraphNodes</span></a><span class="token punctuation">(</span><span class="parameters "><span class="parameter ">trackIndex<span class="token operator">: </span><a href="https://kotlinlang.org/api/core/kotlin-stdlib/kotlin/-int/index.html">Int</a></span></span><span class="token punctuation">)</span><span class="token operator">: </span><span data-unresolved-link="dev.atsushieno.uapmd/GraphNodesResult///PointingToDeclaration/">GraphNodesResult</span></div></div>                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+<a data-name="-1901139594%2FFunctions%2F-181751666" anchor-label="hidePluginUi" id="-1901139594%2FFunctions%2F-181751666" data-filterable-set=":uapmd-binding/jsMain"></a>
+          <div class="table-row table-row_content" data-filterable-current=":uapmd-binding/jsMain" data-filterable-set=":uapmd-binding/jsMain">
+            <div class="main-subrow keyValue ">
+              <div class=""><span class="inline-flex">
+                  <div><a href="hide-plugin-ui.html"><span>hide</span><wbr></wbr><span>Plugin</span><wbr></wbr><span><span>Ui</span></span></a></div>
+<span class="anchor-wrapper"><span class="anchor-icon" pointing-to="-1901139594%2FFunctions%2F-181751666"></span>
+                    <div class="copy-popup-wrapper "><span class="copy-popup-icon"></span><span>Link copied to clipboard</span></div>
+                  </span></span></div>
+              <div>
+                <div class="title">
+                  <div class="platform-hinted  with-platform-tabs" data-platform-hinted="data-platform-hinted">
+                    <div class="platform-bookmarks-row" data-toggle-list="data-toggle-list"><button class="platform-bookmark" data-filterable-current=":uapmd-binding/jsMain" data-filterable-set=":uapmd-binding/jsMain" data-active="" data-toggle=":uapmd-binding/jsMain">JS</button></div>
+<div class="content sourceset-dependent-content" data-active="" data-togglable=":uapmd-binding/jsMain"><div class="symbol monospace"><span class="token keyword">open </span><span class="token keyword">override </span><span class="token keyword">fun </span><a href="hide-plugin-ui.html"><span class="token function">hidePluginUi</span></a><span class="token punctuation">(</span><span class="parameters "><span class="parameter ">instanceId<span class="token operator">: </span><a href="https://kotlinlang.org/api/core/kotlin-stdlib/kotlin/-int/index.html">Int</a></span></span><span class="token punctuation">)</span></div></div>                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+<a data-name="-1286351367%2FFunctions%2F-181751666" anchor-label="importMidiTracksFromFile" id="-1286351367%2FFunctions%2F-181751666" data-filterable-set=":uapmd-binding/jsMain"></a>
+          <div class="table-row table-row_content" data-filterable-current=":uapmd-binding/jsMain" data-filterable-set=":uapmd-binding/jsMain">
+            <div class="main-subrow keyValue ">
+              <div class=""><span class="inline-flex">
+                  <div><a href="import-midi-tracks-from-file.html"><span>import</span><wbr></wbr><span>Midi</span><wbr></wbr><span>Tracks</span><wbr></wbr><span>From</span><wbr></wbr><span><span>File</span></span></a></div>
+<span class="anchor-wrapper"><span class="anchor-icon" pointing-to="-1286351367%2FFunctions%2F-181751666"></span>
+                    <div class="copy-popup-wrapper "><span class="copy-popup-icon"></span><span>Link copied to clipboard</span></div>
+                  </span></span></div>
+              <div>
+                <div class="title">
+                  <div class="platform-hinted  with-platform-tabs" data-platform-hinted="data-platform-hinted">
+                    <div class="platform-bookmarks-row" data-toggle-list="data-toggle-list"><button class="platform-bookmark" data-filterable-current=":uapmd-binding/jsMain" data-filterable-set=":uapmd-binding/jsMain" data-active="" data-toggle=":uapmd-binding/jsMain">JS</button></div>
+<div class="content sourceset-dependent-content" data-active="" data-togglable=":uapmd-binding/jsMain"><div class="symbol monospace"><span class="token keyword">open </span><span class="token keyword">override </span><span class="token keyword">fun </span><a href="import-midi-tracks-from-file.html"><span class="token function">importMidiTracksFromFile</span></a><span class="token punctuation">(</span><span class="parameters "><span class="parameter ">filepath<span class="token operator">: </span><a href="https://kotlinlang.org/api/core/kotlin-stdlib/kotlin/-string/index.html">String</a><span class="token punctuation">, </span></span><span class="parameter ">callback<span class="token operator">: </span><span class="token punctuation">(</span><a href="https://kotlinlang.org/api/core/kotlin-stdlib/kotlin/-boolean/index.html">Boolean</a><span class="token punctuation">, </span><a href="https://kotlinlang.org/api/core/kotlin-stdlib/kotlin/-string/index.html">String</a><span class="token operator">?</span><span class="token punctuation">, </span><a href="https://kotlinlang.org/api/core/kotlin-stdlib/kotlin/-int/index.html">Int</a><span class="token punctuation">)</span><span class="token operator"> -&gt; </span><a href="https://kotlinlang.org/api/core/kotlin-stdlib/kotlin/-unit/index.html">Unit</a></span></span><span class="token punctuation">)</span></div><div class="brief "><p class="paragraph">Imports a possibly multi-track SMF, one new track per SMF track. <span data-unresolved-link="dev.atsushieno.uapmd/AppModel/importMidiTracksFromFile/#kotlin.String#kotlin.Function3[kotlin.Boolean,kotlin.String?,kotlin.Int,kotlin.Unit]/PointingToCallableParameters(1)/">callback</span> receives success, an error when it failed, and how many tracks were created.</p></div></div>                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+<a data-name="1530655230%2FFunctions%2F-181751666" anchor-label="loadProject" id="1530655230%2FFunctions%2F-181751666" data-filterable-set=":uapmd-binding/jsMain"></a>
+          <div class="table-row table-row_content" data-filterable-current=":uapmd-binding/jsMain" data-filterable-set=":uapmd-binding/jsMain">
+            <div class="main-subrow keyValue ">
+              <div class=""><span class="inline-flex">
+                  <div><a href="load-project.html"><span>load</span><wbr></wbr><span><span>Project</span></span></a></div>
+<span class="anchor-wrapper"><span class="anchor-icon" pointing-to="1530655230%2FFunctions%2F-181751666"></span>
+                    <div class="copy-popup-wrapper "><span class="copy-popup-icon"></span><span>Link copied to clipboard</span></div>
+                  </span></span></div>
+              <div>
+                <div class="title">
+                  <div class="platform-hinted  with-platform-tabs" data-platform-hinted="data-platform-hinted">
+                    <div class="platform-bookmarks-row" data-toggle-list="data-toggle-list"><button class="platform-bookmark" data-filterable-current=":uapmd-binding/jsMain" data-filterable-set=":uapmd-binding/jsMain" data-active="" data-toggle=":uapmd-binding/jsMain">JS</button></div>
+<div class="content sourceset-dependent-content" data-active="" data-togglable=":uapmd-binding/jsMain"><div class="symbol monospace"><span class="token keyword">open </span><span class="token keyword">override </span><span class="token keyword">fun </span><a href="load-project.html"><span class="token function">loadProject</span></a><span class="token punctuation">(</span><span class="parameters "><span class="parameter ">filePath<span class="token operator">: </span><a href="https://kotlinlang.org/api/core/kotlin-stdlib/kotlin/-string/index.html">String</a></span></span><span class="token punctuation">)</span><span class="token operator">: </span><span data-unresolved-link="dev.atsushieno.uapmd/AppProjectResult///PointingToDeclaration/">AppProjectResult</span></div></div>                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+<a data-name="2111876919%2FFunctions%2F-181751666" anchor-label="loadProjectFromHandleToken" id="2111876919%2FFunctions%2F-181751666" data-filterable-set=":uapmd-binding/jsMain"></a>
+          <div class="table-row table-row_content" data-filterable-current=":uapmd-binding/jsMain" data-filterable-set=":uapmd-binding/jsMain">
+            <div class="main-subrow keyValue ">
+              <div class=""><span class="inline-flex">
+                  <div><a href="load-project-from-handle-token.html"><span>load</span><wbr></wbr><span>Project</span><wbr></wbr><span>From</span><wbr></wbr><span>Handle</span><wbr></wbr><span><span>Token</span></span></a></div>
+<span class="anchor-wrapper"><span class="anchor-icon" pointing-to="2111876919%2FFunctions%2F-181751666"></span>
+                    <div class="copy-popup-wrapper "><span class="copy-popup-icon"></span><span>Link copied to clipboard</span></div>
+                  </span></span></div>
+              <div>
+                <div class="title">
+                  <div class="platform-hinted  with-platform-tabs" data-platform-hinted="data-platform-hinted">
+                    <div class="platform-bookmarks-row" data-toggle-list="data-toggle-list"><button class="platform-bookmark" data-filterable-current=":uapmd-binding/jsMain" data-filterable-set=":uapmd-binding/jsMain" data-active="" data-toggle=":uapmd-binding/jsMain">JS</button></div>
+<div class="content sourceset-dependent-content" data-active="" data-togglable=":uapmd-binding/jsMain"><div class="symbol monospace"><span class="token keyword">open </span><span class="token keyword">override </span><span class="token keyword">fun </span><a href="load-project-from-handle-token.html"><span class="token function">loadProjectFromHandleToken</span></a><span class="token punctuation">(</span><span class="parameters "><span class="parameter ">token<span class="token operator">: </span><a href="https://kotlinlang.org/api/core/kotlin-stdlib/kotlin/-string/index.html">String</a></span></span><span class="token punctuation">)</span><span class="token operator">: </span><span data-unresolved-link="dev.atsushieno.uapmd/AppProjectResult///PointingToDeclaration/">AppProjectResult</span></div><div class="brief "><p class="paragraph">Android's document-picker path: resolves a content:// handle token.</p></div></div>                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+<a data-name="-338200455%2FFunctions%2F-181751666" anchor-label="notifyPersistentStorageReady" id="-338200455%2FFunctions%2F-181751666" data-filterable-set=":uapmd-binding/jsMain"></a>
+          <div class="table-row table-row_content" data-filterable-current=":uapmd-binding/jsMain" data-filterable-set=":uapmd-binding/jsMain">
+            <div class="main-subrow keyValue ">
+              <div class=""><span class="inline-flex">
+                  <div><a href="notify-persistent-storage-ready.html"><span>notify</span><wbr></wbr><span>Persistent</span><wbr></wbr><span>Storage</span><wbr></wbr><span><span>Ready</span></span></a></div>
+<span class="anchor-wrapper"><span class="anchor-icon" pointing-to="-338200455%2FFunctions%2F-181751666"></span>
+                    <div class="copy-popup-wrapper "><span class="copy-popup-icon"></span><span>Link copied to clipboard</span></div>
+                  </span></span></div>
+              <div>
+                <div class="title">
+                  <div class="platform-hinted  with-platform-tabs" data-platform-hinted="data-platform-hinted">
+                    <div class="platform-bookmarks-row" data-toggle-list="data-toggle-list"><button class="platform-bookmark" data-filterable-current=":uapmd-binding/jsMain" data-filterable-set=":uapmd-binding/jsMain" data-active="" data-toggle=":uapmd-binding/jsMain">JS</button></div>
+<div class="content sourceset-dependent-content" data-active="" data-togglable=":uapmd-binding/jsMain"><div class="symbol monospace"><span class="token keyword">open </span><span class="token keyword">override </span><span class="token keyword">fun </span><a href="notify-persistent-storage-ready.html"><span class="token function">notifyPersistentStorageReady</span></a><span class="token punctuation">(</span><span class="token punctuation">)</span></div></div>                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+<a data-name="-1641076589%2FFunctions%2F-181751666" anchor-label="notifyUiReady" id="-1641076589%2FFunctions%2F-181751666" data-filterable-set=":uapmd-binding/jsMain"></a>
+          <div class="table-row table-row_content" data-filterable-current=":uapmd-binding/jsMain" data-filterable-set=":uapmd-binding/jsMain">
+            <div class="main-subrow keyValue ">
+              <div class=""><span class="inline-flex">
+                  <div><a href="notify-ui-ready.html"><span>notify</span><wbr></wbr><span>Ui</span><wbr></wbr><span><span>Ready</span></span></a></div>
+<span class="anchor-wrapper"><span class="anchor-icon" pointing-to="-1641076589%2FFunctions%2F-181751666"></span>
+                    <div class="copy-popup-wrapper "><span class="copy-popup-icon"></span><span>Link copied to clipboard</span></div>
+                  </span></span></div>
+              <div>
+                <div class="title">
+                  <div class="platform-hinted  with-platform-tabs" data-platform-hinted="data-platform-hinted">
+                    <div class="platform-bookmarks-row" data-toggle-list="data-toggle-list"><button class="platform-bookmark" data-filterable-current=":uapmd-binding/jsMain" data-filterable-set=":uapmd-binding/jsMain" data-active="" data-toggle=":uapmd-binding/jsMain">JS</button></div>
+<div class="content sourceset-dependent-content" data-active="" data-togglable=":uapmd-binding/jsMain"><div class="symbol monospace"><span class="token keyword">open </span><span class="token keyword">override </span><span class="token keyword">fun </span><a href="notify-ui-ready.html"><span class="token function">notifyUiReady</span></a><span class="token punctuation">(</span><span class="token punctuation">)</span></div><div class="brief "><p class="paragraph">Startup lifecycle; uapmd-app calls both once the UI exists.</p></div></div>                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+<a data-name="-1903846876%2FFunctions%2F-181751666" anchor-label="performPluginScanning" id="-1903846876%2FFunctions%2F-181751666" data-filterable-set=":uapmd-binding/jsMain"></a>
+          <div class="table-row table-row_content" data-filterable-current=":uapmd-binding/jsMain" data-filterable-set=":uapmd-binding/jsMain">
+            <div class="main-subrow keyValue ">
+              <div class=""><span class="inline-flex">
+                  <div><a href="perform-plugin-scanning.html"><span>perform</span><wbr></wbr><span>Plugin</span><wbr></wbr><span><span>Scanning</span></span></a></div>
+<span class="anchor-wrapper"><span class="anchor-icon" pointing-to="-1903846876%2FFunctions%2F-181751666"></span>
+                    <div class="copy-popup-wrapper "><span class="copy-popup-icon"></span><span>Link copied to clipboard</span></div>
+                  </span></span></div>
+              <div>
+                <div class="title">
+                  <div class="platform-hinted  with-platform-tabs" data-platform-hinted="data-platform-hinted">
+                    <div class="platform-bookmarks-row" data-toggle-list="data-toggle-list"><button class="platform-bookmark" data-filterable-current=":uapmd-binding/jsMain" data-filterable-set=":uapmd-binding/jsMain" data-active="" data-toggle=":uapmd-binding/jsMain">JS</button></div>
+<div class="content sourceset-dependent-content" data-active="" data-togglable=":uapmd-binding/jsMain"><div class="symbol monospace"><span class="token keyword">open </span><span class="token keyword">override </span><span class="token keyword">fun </span><a href="perform-plugin-scanning.html"><span class="token function">performPluginScanning</span></a><span class="token punctuation">(</span><span class="parameters "><span class="parameter ">forceRescan<span class="token operator">: </span><a href="https://kotlinlang.org/api/core/kotlin-stdlib/kotlin/-boolean/index.html">Boolean</a><span class="token operator"> = </span><span class="token boolean">false</span><span class="token punctuation">, </span></span><span class="parameter ">mode<span class="token operator">: </span><span data-unresolved-link="dev.atsushieno.uapmd/ScanMode///PointingToDeclaration/">ScanMode</span><span class="token operator"> = </span>ScanMode.InProcess<span class="token punctuation">, </span></span><span class="parameter ">remoteTimeoutSeconds<span class="token operator">: </span><a href="https://kotlinlang.org/api/core/kotlin-stdlib/kotlin/-double/index.html">Double</a><span class="token operator"> = </span><span class="token constant">20.0</span><span class="token punctuation">, </span></span><span class="parameter ">requireFastScanning<span class="token operator">: </span><a href="https://kotlinlang.org/api/core/kotlin-stdlib/kotlin/-boolean/index.html">Boolean</a><span class="token operator"> = </span><span class="token boolean">false</span></span></span><span class="token punctuation">)</span></div><div class="brief "><p class="paragraph">Runs asynchronously; watch <span data-unresolved-link="dev.atsushieno.uapmd/AppModel/isScanning/#/PointingToDeclaration/">isScanning</span>. <span data-unresolved-link="dev.atsushieno.uapmd/ScanMode.Remote///PointingToDeclaration/{&amp;quot;org.jetbrains.dokka.links.EnumEntryDRIExtra&amp;quot;:{&amp;quot;key&amp;quot;:&amp;quot;org.jetbrains.dokka.links.EnumEntryDRIExtra&amp;quot;}}">ScanMode.Remote</span> launches a separate scanner process on desktop and is unavailable on WebAssembly.</p></div></div>                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+<a data-name="-1835539160%2FFunctions%2F-181751666" anchor-label="redo" id="-1835539160%2FFunctions%2F-181751666" data-filterable-set=":uapmd-binding/jsMain"></a>
+          <div class="table-row table-row_content" data-filterable-current=":uapmd-binding/jsMain" data-filterable-set=":uapmd-binding/jsMain">
+            <div class="main-subrow keyValue ">
+              <div class=""><span class="inline-flex">
+                  <div><a href="redo.html"><span><span>redo</span></span></a></div>
+<span class="anchor-wrapper"><span class="anchor-icon" pointing-to="-1835539160%2FFunctions%2F-181751666"></span>
+                    <div class="copy-popup-wrapper "><span class="copy-popup-icon"></span><span>Link copied to clipboard</span></div>
+                  </span></span></div>
+              <div>
+                <div class="title">
+                  <div class="platform-hinted  with-platform-tabs" data-platform-hinted="data-platform-hinted">
+                    <div class="platform-bookmarks-row" data-toggle-list="data-toggle-list"><button class="platform-bookmark" data-filterable-current=":uapmd-binding/jsMain" data-filterable-set=":uapmd-binding/jsMain" data-active="" data-toggle=":uapmd-binding/jsMain">JS</button></div>
+<div class="content sourceset-dependent-content" data-active="" data-togglable=":uapmd-binding/jsMain"><div class="symbol monospace"><span class="token keyword">open </span><span class="token keyword">override </span><span class="token keyword">fun </span><a href="redo.html"><span class="token function">redo</span></a><span class="token punctuation">(</span><span class="parameters "><span class="parameter ">callback<span class="token operator">: </span><span class="token punctuation">(</span><a href="https://kotlinlang.org/api/core/kotlin-stdlib/kotlin/-string/index.html">String</a><span class="token operator">?</span><span class="token punctuation">)</span><span class="token operator"> -&gt; </span><a href="https://kotlinlang.org/api/core/kotlin-stdlib/kotlin/-unit/index.html">Unit</a><span class="token operator">?</span><span class="token operator"> = </span>null</span></span><span class="token punctuation">)</span></div></div>                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+<a data-name="906485499%2FFunctions%2F-181751666" anchor-label="refreshMasterTempoMap" id="906485499%2FFunctions%2F-181751666" data-filterable-set=":uapmd-binding/jsMain"></a>
+          <div class="table-row table-row_content" data-filterable-current=":uapmd-binding/jsMain" data-filterable-set=":uapmd-binding/jsMain">
+            <div class="main-subrow keyValue ">
+              <div class=""><span class="inline-flex">
+                  <div><a href="refresh-master-tempo-map.html"><span>refresh</span><wbr></wbr><span>Master</span><wbr></wbr><span>Tempo</span><wbr></wbr><span><span>Map</span></span></a></div>
+<span class="anchor-wrapper"><span class="anchor-icon" pointing-to="906485499%2FFunctions%2F-181751666"></span>
+                    <div class="copy-popup-wrapper "><span class="copy-popup-icon"></span><span>Link copied to clipboard</span></div>
+                  </span></span></div>
+              <div>
+                <div class="title">
+                  <div class="platform-hinted  with-platform-tabs" data-platform-hinted="data-platform-hinted">
+                    <div class="platform-bookmarks-row" data-toggle-list="data-toggle-list"><button class="platform-bookmark" data-filterable-current=":uapmd-binding/jsMain" data-filterable-set=":uapmd-binding/jsMain" data-active="" data-toggle=":uapmd-binding/jsMain">JS</button></div>
+<div class="content sourceset-dependent-content" data-active="" data-togglable=":uapmd-binding/jsMain"><div class="symbol monospace"><span class="token keyword">open </span><span class="token keyword">override </span><span class="token keyword">fun </span><a href="refresh-master-tempo-map.html"><span class="token function">refreshMasterTempoMap</span></a><span class="token punctuation">(</span><span class="token punctuation">)</span><span class="token operator">: </span><a href="https://kotlinlang.org/api/core/kotlin-stdlib/kotlin/-double/index.html">Double</a></div><div class="brief "><p class="paragraph">Master-track tempo map. <code class="lang-kotlin">getTimelineState().tempo</code> is a single value and cannot describe a project whose tempo changes; a beats view needs these. Rebuild once with <span data-unresolved-link="dev.atsushieno.uapmd/AppModel/refreshMasterTempoMap/#/PointingToDeclaration/">refreshMasterTempoMap</span>, then read the lists — they stay valid until the next refresh.</p></div></div>                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+<a data-name="1842335372%2FFunctions%2F-181751666" anchor-label="removeAllTracks" id="1842335372%2FFunctions%2F-181751666" data-filterable-set=":uapmd-binding/jsMain"></a>
+          <div class="table-row table-row_content" data-filterable-current=":uapmd-binding/jsMain" data-filterable-set=":uapmd-binding/jsMain">
+            <div class="main-subrow keyValue ">
+              <div class=""><span class="inline-flex">
+                  <div><a href="remove-all-tracks.html"><span>remove</span><wbr></wbr><span>All</span><wbr></wbr><span><span>Tracks</span></span></a></div>
+<span class="anchor-wrapper"><span class="anchor-icon" pointing-to="1842335372%2FFunctions%2F-181751666"></span>
+                    <div class="copy-popup-wrapper "><span class="copy-popup-icon"></span><span>Link copied to clipboard</span></div>
+                  </span></span></div>
+              <div>
+                <div class="title">
+                  <div class="platform-hinted  with-platform-tabs" data-platform-hinted="data-platform-hinted">
+                    <div class="platform-bookmarks-row" data-toggle-list="data-toggle-list"><button class="platform-bookmark" data-filterable-current=":uapmd-binding/jsMain" data-filterable-set=":uapmd-binding/jsMain" data-active="" data-toggle=":uapmd-binding/jsMain">JS</button></div>
+<div class="content sourceset-dependent-content" data-active="" data-togglable=":uapmd-binding/jsMain"><div class="symbol monospace"><span class="token keyword">open </span><span class="token keyword">override </span><span class="token keyword">fun </span><a href="remove-all-tracks.html"><span class="token function">removeAllTracks</span></a><span class="token punctuation">(</span><span class="parameters "><span class="parameter ">callback<span class="token operator">: </span><span class="token punctuation">(</span><a href="https://kotlinlang.org/api/core/kotlin-stdlib/kotlin/-string/index.html">String</a><span class="token operator">?</span><span class="token punctuation">)</span><span class="token operator"> -&gt; </span><a href="https://kotlinlang.org/api/core/kotlin-stdlib/kotlin/-unit/index.html">Unit</a></span></span><span class="token punctuation">)</span></div></div>                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+<a data-name="1358283603%2FFunctions%2F-181751666" anchor-label="removeClipFromTrack" id="1358283603%2FFunctions%2F-181751666" data-filterable-set=":uapmd-binding/jsMain"></a>
+          <div class="table-row table-row_content" data-filterable-current=":uapmd-binding/jsMain" data-filterable-set=":uapmd-binding/jsMain">
+            <div class="main-subrow keyValue ">
+              <div class=""><span class="inline-flex">
+                  <div><a href="remove-clip-from-track.html"><span>remove</span><wbr></wbr><span>Clip</span><wbr></wbr><span>From</span><wbr></wbr><span><span>Track</span></span></a></div>
+<span class="anchor-wrapper"><span class="anchor-icon" pointing-to="1358283603%2FFunctions%2F-181751666"></span>
+                    <div class="copy-popup-wrapper "><span class="copy-popup-icon"></span><span>Link copied to clipboard</span></div>
+                  </span></span></div>
+              <div>
+                <div class="title">
+                  <div class="platform-hinted  with-platform-tabs" data-platform-hinted="data-platform-hinted">
+                    <div class="platform-bookmarks-row" data-toggle-list="data-toggle-list"><button class="platform-bookmark" data-filterable-current=":uapmd-binding/jsMain" data-filterable-set=":uapmd-binding/jsMain" data-active="" data-toggle=":uapmd-binding/jsMain">JS</button></div>
+<div class="content sourceset-dependent-content" data-active="" data-togglable=":uapmd-binding/jsMain"><div class="symbol monospace"><span class="token keyword">open </span><span class="token keyword">override </span><span class="token keyword">fun </span><a href="remove-clip-from-track.html"><span class="token function">removeClipFromTrack</span></a><span class="token punctuation">(</span><span class="parameters "><span class="parameter ">trackIndex<span class="token operator">: </span><a href="https://kotlinlang.org/api/core/kotlin-stdlib/kotlin/-int/index.html">Int</a><span class="token punctuation">, </span></span><span class="parameter ">clipId<span class="token operator">: </span><a href="https://kotlinlang.org/api/core/kotlin-stdlib/kotlin/-int/index.html">Int</a></span></span><span class="token punctuation">)</span><span class="token operator">: </span><a href="https://kotlinlang.org/api/core/kotlin-stdlib/kotlin/-boolean/index.html">Boolean</a></div></div>                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+<a data-name="1294455955%2FFunctions%2F-181751666" anchor-label="removePluginInstance" id="1294455955%2FFunctions%2F-181751666" data-filterable-set=":uapmd-binding/jsMain"></a>
+          <div class="table-row table-row_content" data-filterable-current=":uapmd-binding/jsMain" data-filterable-set=":uapmd-binding/jsMain">
+            <div class="main-subrow keyValue ">
+              <div class=""><span class="inline-flex">
+                  <div><a href="remove-plugin-instance.html"><span>remove</span><wbr></wbr><span>Plugin</span><wbr></wbr><span><span>Instance</span></span></a></div>
+<span class="anchor-wrapper"><span class="anchor-icon" pointing-to="1294455955%2FFunctions%2F-181751666"></span>
+                    <div class="copy-popup-wrapper "><span class="copy-popup-icon"></span><span>Link copied to clipboard</span></div>
+                  </span></span></div>
+              <div>
+                <div class="title">
+                  <div class="platform-hinted  with-platform-tabs" data-platform-hinted="data-platform-hinted">
+                    <div class="platform-bookmarks-row" data-toggle-list="data-toggle-list"><button class="platform-bookmark" data-filterable-current=":uapmd-binding/jsMain" data-filterable-set=":uapmd-binding/jsMain" data-active="" data-toggle=":uapmd-binding/jsMain">JS</button></div>
+<div class="content sourceset-dependent-content" data-active="" data-togglable=":uapmd-binding/jsMain"><div class="symbol monospace"><span class="token keyword">open </span><span class="token keyword">override </span><span class="token keyword">fun </span><a href="remove-plugin-instance.html"><span class="token function">removePluginInstance</span></a><span class="token punctuation">(</span><span class="parameters "><span class="parameter ">instanceId<span class="token operator">: </span><a href="https://kotlinlang.org/api/core/kotlin-stdlib/kotlin/-int/index.html">Int</a></span></span><span class="token punctuation">)</span></div></div>                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+<a data-name="-865100584%2FFunctions%2F-181751666" anchor-label="removeTrack" id="-865100584%2FFunctions%2F-181751666" data-filterable-set=":uapmd-binding/jsMain"></a>
+          <div class="table-row table-row_content" data-filterable-current=":uapmd-binding/jsMain" data-filterable-set=":uapmd-binding/jsMain">
+            <div class="main-subrow keyValue ">
+              <div class=""><span class="inline-flex">
+                  <div><a href="remove-track.html"><span>remove</span><wbr></wbr><span><span>Track</span></span></a></div>
+<span class="anchor-wrapper"><span class="anchor-icon" pointing-to="-865100584%2FFunctions%2F-181751666"></span>
+                    <div class="copy-popup-wrapper "><span class="copy-popup-icon"></span><span>Link copied to clipboard</span></div>
+                  </span></span></div>
+              <div>
+                <div class="title">
+                  <div class="platform-hinted  with-platform-tabs" data-platform-hinted="data-platform-hinted">
+                    <div class="platform-bookmarks-row" data-toggle-list="data-toggle-list"><button class="platform-bookmark" data-filterable-current=":uapmd-binding/jsMain" data-filterable-set=":uapmd-binding/jsMain" data-active="" data-toggle=":uapmd-binding/jsMain">JS</button></div>
+<div class="content sourceset-dependent-content" data-active="" data-togglable=":uapmd-binding/jsMain"><div class="symbol monospace"><span class="token keyword">open </span><span class="token keyword">override </span><span class="token keyword">fun </span><a href="remove-track.html"><span class="token function">removeTrack</span></a><span class="token punctuation">(</span><span class="parameters "><span class="parameter ">trackIndex<span class="token operator">: </span><a href="https://kotlinlang.org/api/core/kotlin-stdlib/kotlin/-int/index.html">Int</a><span class="token punctuation">, </span></span><span class="parameter ">callback<span class="token operator">: </span><span class="token punctuation">(</span><a href="https://kotlinlang.org/api/core/kotlin-stdlib/kotlin/-int/index.html">Int</a><span class="token punctuation">, </span><a href="https://kotlinlang.org/api/core/kotlin-stdlib/kotlin/-string/index.html">String</a><span class="token operator">?</span><span class="token punctuation">)</span><span class="token operator"> -&gt; </span><a href="https://kotlinlang.org/api/core/kotlin-stdlib/kotlin/-unit/index.html">Unit</a></span></span><span class="token punctuation">)</span></div></div>                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+<a data-name="-854790465%2FFunctions%2F-181751666" anchor-label="removeUmpEventFromClip" id="-854790465%2FFunctions%2F-181751666" data-filterable-set=":uapmd-binding/jsMain"></a>
+          <div class="table-row table-row_content" data-filterable-current=":uapmd-binding/jsMain" data-filterable-set=":uapmd-binding/jsMain">
+            <div class="main-subrow keyValue ">
+              <div class=""><span class="inline-flex">
+                  <div><a href="remove-ump-event-from-clip.html"><span>remove</span><wbr></wbr><span>Ump</span><wbr></wbr><span>Event</span><wbr></wbr><span>From</span><wbr></wbr><span><span>Clip</span></span></a></div>
+<span class="anchor-wrapper"><span class="anchor-icon" pointing-to="-854790465%2FFunctions%2F-181751666"></span>
+                    <div class="copy-popup-wrapper "><span class="copy-popup-icon"></span><span>Link copied to clipboard</span></div>
+                  </span></span></div>
+              <div>
+                <div class="title">
+                  <div class="platform-hinted  with-platform-tabs" data-platform-hinted="data-platform-hinted">
+                    <div class="platform-bookmarks-row" data-toggle-list="data-toggle-list"><button class="platform-bookmark" data-filterable-current=":uapmd-binding/jsMain" data-filterable-set=":uapmd-binding/jsMain" data-active="" data-toggle=":uapmd-binding/jsMain">JS</button></div>
+<div class="content sourceset-dependent-content" data-active="" data-togglable=":uapmd-binding/jsMain"><div class="symbol monospace"><span class="token keyword">open </span><span class="token keyword">override </span><span class="token keyword">fun </span><a href="remove-ump-event-from-clip.html"><span class="token function">removeUmpEventFromClip</span></a><span class="token punctuation">(</span><span class="parameters "><span class="parameter ">trackIndex<span class="token operator">: </span><a href="https://kotlinlang.org/api/core/kotlin-stdlib/kotlin/-int/index.html">Int</a><span class="token punctuation">, </span></span><span class="parameter ">clipId<span class="token operator">: </span><a href="https://kotlinlang.org/api/core/kotlin-stdlib/kotlin/-int/index.html">Int</a><span class="token punctuation">, </span></span><span class="parameter ">eventIndex<span class="token operator">: </span><a href="https://kotlinlang.org/api/core/kotlin-stdlib/kotlin/-int/index.html">Int</a></span></span><span class="token punctuation">)</span><span class="token operator">: </span><a href="https://kotlinlang.org/api/core/kotlin-stdlib/kotlin/-boolean/index.html">Boolean</a></div></div>                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+<a data-name="68163550%2FFunctions%2F-181751666" anchor-label="requestShowInstanceDetails" id="68163550%2FFunctions%2F-181751666" data-filterable-set=":uapmd-binding/jsMain"></a>
+          <div class="table-row table-row_content" data-filterable-current=":uapmd-binding/jsMain" data-filterable-set=":uapmd-binding/jsMain">
+            <div class="main-subrow keyValue ">
+              <div class=""><span class="inline-flex">
+                  <div><a href="request-show-instance-details.html"><span>request</span><wbr></wbr><span>Show</span><wbr></wbr><span>Instance</span><wbr></wbr><span><span>Details</span></span></a></div>
+<span class="anchor-wrapper"><span class="anchor-icon" pointing-to="68163550%2FFunctions%2F-181751666"></span>
+                    <div class="copy-popup-wrapper "><span class="copy-popup-icon"></span><span>Link copied to clipboard</span></div>
+                  </span></span></div>
+              <div>
+                <div class="title">
+                  <div class="platform-hinted  with-platform-tabs" data-platform-hinted="data-platform-hinted">
+                    <div class="platform-bookmarks-row" data-toggle-list="data-toggle-list"><button class="platform-bookmark" data-filterable-current=":uapmd-binding/jsMain" data-filterable-set=":uapmd-binding/jsMain" data-active="" data-toggle=":uapmd-binding/jsMain">JS</button></div>
+<div class="content sourceset-dependent-content" data-active="" data-togglable=":uapmd-binding/jsMain"><div class="symbol monospace"><span class="token keyword">open </span><span class="token keyword">override </span><span class="token keyword">fun </span><a href="request-show-instance-details.html"><span class="token function">requestShowInstanceDetails</span></a><span class="token punctuation">(</span><span class="parameters "><span class="parameter ">instanceId<span class="token operator">: </span><a href="https://kotlinlang.org/api/core/kotlin-stdlib/kotlin/-int/index.html">Int</a></span></span><span class="token punctuation">)</span></div></div>                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+<a data-name="-161171772%2FFunctions%2F-181751666" anchor-label="requestShowPluginUi" id="-161171772%2FFunctions%2F-181751666" data-filterable-set=":uapmd-binding/jsMain"></a>
+          <div class="table-row table-row_content" data-filterable-current=":uapmd-binding/jsMain" data-filterable-set=":uapmd-binding/jsMain">
+            <div class="main-subrow keyValue ">
+              <div class=""><span class="inline-flex">
+                  <div><a href="request-show-plugin-ui.html"><span>request</span><wbr></wbr><span>Show</span><wbr></wbr><span>Plugin</span><wbr></wbr><span><span>Ui</span></span></a></div>
+<span class="anchor-wrapper"><span class="anchor-icon" pointing-to="-161171772%2FFunctions%2F-181751666"></span>
+                    <div class="copy-popup-wrapper "><span class="copy-popup-icon"></span><span>Link copied to clipboard</span></div>
+                  </span></span></div>
+              <div>
+                <div class="title">
+                  <div class="platform-hinted  with-platform-tabs" data-platform-hinted="data-platform-hinted">
+                    <div class="platform-bookmarks-row" data-toggle-list="data-toggle-list"><button class="platform-bookmark" data-filterable-current=":uapmd-binding/jsMain" data-filterable-set=":uapmd-binding/jsMain" data-active="" data-toggle=":uapmd-binding/jsMain">JS</button></div>
+<div class="content sourceset-dependent-content" data-active="" data-togglable=":uapmd-binding/jsMain"><div class="symbol monospace"><span class="token keyword">open </span><span class="token keyword">override </span><span class="token keyword">fun </span><a href="request-show-plugin-ui.html"><span class="token function">requestShowPluginUi</span></a><span class="token punctuation">(</span><span class="parameters "><span class="parameter ">instanceId<span class="token operator">: </span><a href="https://kotlinlang.org/api/core/kotlin-stdlib/kotlin/-int/index.html">Int</a></span></span><span class="token punctuation">)</span></div></div>                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+<a data-name="-747957339%2FFunctions%2F-181751666" anchor-label="revertTrackToSimpleGraph" id="-747957339%2FFunctions%2F-181751666" data-filterable-set=":uapmd-binding/jsMain"></a>
+          <div class="table-row table-row_content" data-filterable-current=":uapmd-binding/jsMain" data-filterable-set=":uapmd-binding/jsMain">
+            <div class="main-subrow keyValue ">
+              <div class=""><span class="inline-flex">
+                  <div><a href="revert-track-to-simple-graph.html"><span>revert</span><wbr></wbr><span>Track</span><wbr></wbr><span>To</span><wbr></wbr><span>Simple</span><wbr></wbr><span><span>Graph</span></span></a></div>
+<span class="anchor-wrapper"><span class="anchor-icon" pointing-to="-747957339%2FFunctions%2F-181751666"></span>
+                    <div class="copy-popup-wrapper "><span class="copy-popup-icon"></span><span>Link copied to clipboard</span></div>
+                  </span></span></div>
+              <div>
+                <div class="title">
+                  <div class="platform-hinted  with-platform-tabs" data-platform-hinted="data-platform-hinted">
+                    <div class="platform-bookmarks-row" data-toggle-list="data-toggle-list"><button class="platform-bookmark" data-filterable-current=":uapmd-binding/jsMain" data-filterable-set=":uapmd-binding/jsMain" data-active="" data-toggle=":uapmd-binding/jsMain">JS</button></div>
+<div class="content sourceset-dependent-content" data-active="" data-togglable=":uapmd-binding/jsMain"><div class="symbol monospace"><span class="token keyword">open </span><span class="token keyword">override </span><span class="token keyword">fun </span><a href="revert-track-to-simple-graph.html"><span class="token function">revertTrackToSimpleGraph</span></a><span class="token punctuation">(</span><span class="parameters "><span class="parameter ">trackIndex<span class="token operator">: </span><a href="https://kotlinlang.org/api/core/kotlin-stdlib/kotlin/-int/index.html">Int</a></span></span><span class="token punctuation">)</span><span class="token operator">: </span><a href="https://kotlinlang.org/api/core/kotlin-stdlib/kotlin/-boolean/index.html">Boolean</a></div></div>                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+<a data-name="-490310247%2FFunctions%2F-181751666" anchor-label="saveProject" id="-490310247%2FFunctions%2F-181751666" data-filterable-set=":uapmd-binding/jsMain"></a>
+          <div class="table-row table-row_content" data-filterable-current=":uapmd-binding/jsMain" data-filterable-set=":uapmd-binding/jsMain">
+            <div class="main-subrow keyValue ">
+              <div class=""><span class="inline-flex">
+                  <div><a href="save-project.html"><span>save</span><wbr></wbr><span><span>Project</span></span></a></div>
+<span class="anchor-wrapper"><span class="anchor-icon" pointing-to="-490310247%2FFunctions%2F-181751666"></span>
+                    <div class="copy-popup-wrapper "><span class="copy-popup-icon"></span><span>Link copied to clipboard</span></div>
+                  </span></span></div>
+              <div>
+                <div class="title">
+                  <div class="platform-hinted  with-platform-tabs" data-platform-hinted="data-platform-hinted">
+                    <div class="platform-bookmarks-row" data-toggle-list="data-toggle-list"><button class="platform-bookmark" data-filterable-current=":uapmd-binding/jsMain" data-filterable-set=":uapmd-binding/jsMain" data-active="" data-toggle=":uapmd-binding/jsMain">JS</button></div>
+<div class="content sourceset-dependent-content" data-active="" data-togglable=":uapmd-binding/jsMain"><div class="symbol monospace"><span class="token keyword">open </span><span class="token keyword">override </span><span class="token keyword">fun </span><a href="save-project.html"><span class="token function">saveProject</span></a><span class="token punctuation">(</span><span class="parameters "><span class="parameter ">filePath<span class="token operator">: </span><a href="https://kotlinlang.org/api/core/kotlin-stdlib/kotlin/-string/index.html">String</a><span class="token punctuation">, </span></span><span class="parameter ">callback<span class="token operator">: </span><span class="token punctuation">(</span><span data-unresolved-link="dev.atsushieno.uapmd/AppProjectResult///PointingToDeclaration/">AppProjectResult</span><span class="token punctuation">)</span><span class="token operator"> -&gt; </span><a href="https://kotlinlang.org/api/core/kotlin-stdlib/kotlin/-unit/index.html">Unit</a></span></span><span class="token punctuation">)</span></div></div>                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+<a data-name="1452702018%2FFunctions%2F-181751666" anchor-label="saveProjectSync" id="1452702018%2FFunctions%2F-181751666" data-filterable-set=":uapmd-binding/jsMain"></a>
+          <div class="table-row table-row_content" data-filterable-current=":uapmd-binding/jsMain" data-filterable-set=":uapmd-binding/jsMain">
+            <div class="main-subrow keyValue ">
+              <div class=""><span class="inline-flex">
+                  <div><a href="save-project-sync.html"><span>save</span><wbr></wbr><span>Project</span><wbr></wbr><span><span>Sync</span></span></a></div>
+<span class="anchor-wrapper"><span class="anchor-icon" pointing-to="1452702018%2FFunctions%2F-181751666"></span>
+                    <div class="copy-popup-wrapper "><span class="copy-popup-icon"></span><span>Link copied to clipboard</span></div>
+                  </span></span></div>
+              <div>
+                <div class="title">
+                  <div class="platform-hinted  with-platform-tabs" data-platform-hinted="data-platform-hinted">
+                    <div class="platform-bookmarks-row" data-toggle-list="data-toggle-list"><button class="platform-bookmark" data-filterable-current=":uapmd-binding/jsMain" data-filterable-set=":uapmd-binding/jsMain" data-active="" data-toggle=":uapmd-binding/jsMain">JS</button></div>
+<div class="content sourceset-dependent-content" data-active="" data-togglable=":uapmd-binding/jsMain"><div class="symbol monospace"><span class="token keyword">open </span><span class="token keyword">override </span><span class="token keyword">fun </span><a href="save-project-sync.html"><span class="token function">saveProjectSync</span></a><span class="token punctuation">(</span><span class="parameters "><span class="parameter ">filePath<span class="token operator">: </span><a href="https://kotlinlang.org/api/core/kotlin-stdlib/kotlin/-string/index.html">String</a></span></span><span class="token punctuation">)</span><span class="token operator">: </span><span data-unresolved-link="dev.atsushieno.uapmd/AppProjectResult///PointingToDeclaration/">AppProjectResult</span></div></div>                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+<a data-name="1441308787%2FFunctions%2F-181751666" anchor-label="setAudioEngineEnabled" id="1441308787%2FFunctions%2F-181751666" data-filterable-set=":uapmd-binding/jsMain"></a>
+          <div class="table-row table-row_content" data-filterable-current=":uapmd-binding/jsMain" data-filterable-set=":uapmd-binding/jsMain">
+            <div class="main-subrow keyValue ">
+              <div class=""><span class="inline-flex">
+                  <div><a href="set-audio-engine-enabled.html"><span>set</span><wbr></wbr><span>Audio</span><wbr></wbr><span>Engine</span><wbr></wbr><span><span>Enabled</span></span></a></div>
+<span class="anchor-wrapper"><span class="anchor-icon" pointing-to="1441308787%2FFunctions%2F-181751666"></span>
+                    <div class="copy-popup-wrapper "><span class="copy-popup-icon"></span><span>Link copied to clipboard</span></div>
+                  </span></span></div>
+              <div>
+                <div class="title">
+                  <div class="platform-hinted  with-platform-tabs" data-platform-hinted="data-platform-hinted">
+                    <div class="platform-bookmarks-row" data-toggle-list="data-toggle-list"><button class="platform-bookmark" data-filterable-current=":uapmd-binding/jsMain" data-filterable-set=":uapmd-binding/jsMain" data-active="" data-toggle=":uapmd-binding/jsMain">JS</button></div>
+<div class="content sourceset-dependent-content" data-active="" data-togglable=":uapmd-binding/jsMain"><div class="symbol monospace"><span class="token keyword">open </span><span class="token keyword">override </span><span class="token keyword">fun </span><a href="set-audio-engine-enabled.html"><span class="token function">setAudioEngineEnabled</span></a><span class="token punctuation">(</span><span class="parameters "><span class="parameter ">enabled<span class="token operator">: </span><a href="https://kotlinlang.org/api/core/kotlin-stdlib/kotlin/-boolean/index.html">Boolean</a></span></span><span class="token punctuation">)</span></div></div>                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+<a data-name="-1298620477%2FFunctions%2F-181751666" anchor-label="setClipAudioEvents" id="-1298620477%2FFunctions%2F-181751666" data-filterable-set=":uapmd-binding/jsMain"></a>
+          <div class="table-row table-row_content" data-filterable-current=":uapmd-binding/jsMain" data-filterable-set=":uapmd-binding/jsMain">
+            <div class="main-subrow keyValue ">
+              <div class=""><span class="inline-flex">
+                  <div><a href="set-clip-audio-events.html"><span>set</span><wbr></wbr><span>Clip</span><wbr></wbr><span>Audio</span><wbr></wbr><span><span>Events</span></span></a></div>
+<span class="anchor-wrapper"><span class="anchor-icon" pointing-to="-1298620477%2FFunctions%2F-181751666"></span>
+                    <div class="copy-popup-wrapper "><span class="copy-popup-icon"></span><span>Link copied to clipboard</span></div>
+                  </span></span></div>
+              <div>
+                <div class="title">
+                  <div class="platform-hinted  with-platform-tabs" data-platform-hinted="data-platform-hinted">
+                    <div class="platform-bookmarks-row" data-toggle-list="data-toggle-list"><button class="platform-bookmark" data-filterable-current=":uapmd-binding/jsMain" data-filterable-set=":uapmd-binding/jsMain" data-active="" data-toggle=":uapmd-binding/jsMain">JS</button></div>
+<div class="content sourceset-dependent-content" data-active="" data-togglable=":uapmd-binding/jsMain"><div class="symbol monospace"><span class="token keyword">open </span><span class="token keyword">override </span><span class="token keyword">fun </span><a href="set-clip-audio-events.html"><span class="token function">setClipAudioEvents</span></a><span class="token punctuation">(</span><span class="parameters "><span class="parameter ">trackIndex<span class="token operator">: </span><a href="https://kotlinlang.org/api/core/kotlin-stdlib/kotlin/-int/index.html">Int</a><span class="token punctuation">, </span></span><span class="parameter ">clipId<span class="token operator">: </span><a href="https://kotlinlang.org/api/core/kotlin-stdlib/kotlin/-int/index.html">Int</a><span class="token punctuation">, </span></span><span class="parameter ">markers<span class="token operator">: </span><a href="https://kotlinlang.org/api/core/kotlin-stdlib/kotlin.collections/-list/index.html">List</a><span class="token operator">&lt;</span><span data-unresolved-link="dev.atsushieno.uapmd/ClipMarkerData///PointingToDeclaration/">ClipMarkerData</span><span class="token operator">&gt;</span><span class="token punctuation">, </span></span><span class="parameter ">warps<span class="token operator">: </span><a href="https://kotlinlang.org/api/core/kotlin-stdlib/kotlin.collections/-list/index.html">List</a><span class="token operator">&lt;</span><span data-unresolved-link="dev.atsushieno.uapmd/AudioWarpPointData///PointingToDeclaration/">AudioWarpPointData</span><span class="token operator">&gt;</span></span></span><span class="token punctuation">)</span><span class="token operator">: </span><span data-unresolved-link="dev.atsushieno.uapmd/OpResult///PointingToDeclaration/">OpResult</span></div></div>                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+<a data-name="-1526918376%2FFunctions%2F-181751666" anchor-label="setInstanceGroup" id="-1526918376%2FFunctions%2F-181751666" data-filterable-set=":uapmd-binding/jsMain"></a>
+          <div class="table-row table-row_content" data-filterable-current=":uapmd-binding/jsMain" data-filterable-set=":uapmd-binding/jsMain">
+            <div class="main-subrow keyValue ">
+              <div class=""><span class="inline-flex">
+                  <div><a href="set-instance-group.html"><span>set</span><wbr></wbr><span>Instance</span><wbr></wbr><span><span>Group</span></span></a></div>
+<span class="anchor-wrapper"><span class="anchor-icon" pointing-to="-1526918376%2FFunctions%2F-181751666"></span>
+                    <div class="copy-popup-wrapper "><span class="copy-popup-icon"></span><span>Link copied to clipboard</span></div>
+                  </span></span></div>
+              <div>
+                <div class="title">
+                  <div class="platform-hinted  with-platform-tabs" data-platform-hinted="data-platform-hinted">
+                    <div class="platform-bookmarks-row" data-toggle-list="data-toggle-list"><button class="platform-bookmark" data-filterable-current=":uapmd-binding/jsMain" data-filterable-set=":uapmd-binding/jsMain" data-active="" data-toggle=":uapmd-binding/jsMain">JS</button></div>
+<div class="content sourceset-dependent-content" data-active="" data-togglable=":uapmd-binding/jsMain"><div class="symbol monospace"><span class="token keyword">open </span><span class="token keyword">override </span><span class="token keyword">fun </span><a href="set-instance-group.html"><span class="token function">setInstanceGroup</span></a><span class="token punctuation">(</span><span class="parameters "><span class="parameter ">instanceId<span class="token operator">: </span><a href="https://kotlinlang.org/api/core/kotlin-stdlib/kotlin/-int/index.html">Int</a><span class="token punctuation">, </span></span><span class="parameter ">group<span class="token operator">: </span><a href="https://kotlinlang.org/api/core/kotlin-stdlib/kotlin/-u-byte/index.html">UByte</a></span></span><span class="token punctuation">)</span><span class="token operator">: </span><a href="https://kotlinlang.org/api/core/kotlin-stdlib/kotlin/-boolean/index.html">Boolean</a></div></div>                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+<a data-name="2072980085%2FFunctions%2F-181751666" anchor-label="toggleAudioEngine" id="2072980085%2FFunctions%2F-181751666" data-filterable-set=":uapmd-binding/jsMain"></a>
+          <div class="table-row table-row_content" data-filterable-current=":uapmd-binding/jsMain" data-filterable-set=":uapmd-binding/jsMain">
+            <div class="main-subrow keyValue ">
+              <div class=""><span class="inline-flex">
+                  <div><a href="toggle-audio-engine.html"><span>toggle</span><wbr></wbr><span>Audio</span><wbr></wbr><span><span>Engine</span></span></a></div>
+<span class="anchor-wrapper"><span class="anchor-icon" pointing-to="2072980085%2FFunctions%2F-181751666"></span>
+                    <div class="copy-popup-wrapper "><span class="copy-popup-icon"></span><span>Link copied to clipboard</span></div>
+                  </span></span></div>
+              <div>
+                <div class="title">
+                  <div class="platform-hinted  with-platform-tabs" data-platform-hinted="data-platform-hinted">
+                    <div class="platform-bookmarks-row" data-toggle-list="data-toggle-list"><button class="platform-bookmark" data-filterable-current=":uapmd-binding/jsMain" data-filterable-set=":uapmd-binding/jsMain" data-active="" data-toggle=":uapmd-binding/jsMain">JS</button></div>
+<div class="content sourceset-dependent-content" data-active="" data-togglable=":uapmd-binding/jsMain"><div class="symbol monospace"><span class="token keyword">open </span><span class="token keyword">override </span><span class="token keyword">fun </span><a href="toggle-audio-engine.html"><span class="token function">toggleAudioEngine</span></a><span class="token punctuation">(</span><span class="token punctuation">)</span></div></div>                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+<a data-name="1090792594%2FFunctions%2F-181751666" anchor-label="unblockPlugin" id="1090792594%2FFunctions%2F-181751666" data-filterable-set=":uapmd-binding/jsMain"></a>
+          <div class="table-row table-row_content" data-filterable-current=":uapmd-binding/jsMain" data-filterable-set=":uapmd-binding/jsMain">
+            <div class="main-subrow keyValue ">
+              <div class=""><span class="inline-flex">
+                  <div><a href="unblock-plugin.html"><span>unblock</span><wbr></wbr><span><span>Plugin</span></span></a></div>
+<span class="anchor-wrapper"><span class="anchor-icon" pointing-to="1090792594%2FFunctions%2F-181751666"></span>
+                    <div class="copy-popup-wrapper "><span class="copy-popup-icon"></span><span>Link copied to clipboard</span></div>
+                  </span></span></div>
+              <div>
+                <div class="title">
+                  <div class="platform-hinted  with-platform-tabs" data-platform-hinted="data-platform-hinted">
+                    <div class="platform-bookmarks-row" data-toggle-list="data-toggle-list"><button class="platform-bookmark" data-filterable-current=":uapmd-binding/jsMain" data-filterable-set=":uapmd-binding/jsMain" data-active="" data-toggle=":uapmd-binding/jsMain">JS</button></div>
+<div class="content sourceset-dependent-content" data-active="" data-togglable=":uapmd-binding/jsMain"><div class="symbol monospace"><span class="token keyword">open </span><span class="token keyword">override </span><span class="token keyword">fun </span><a href="unblock-plugin.html"><span class="token function">unblockPlugin</span></a><span class="token punctuation">(</span><span class="parameters "><span class="parameter ">entryId<span class="token operator">: </span><a href="https://kotlinlang.org/api/core/kotlin-stdlib/kotlin/-string/index.html">String</a></span></span><span class="token punctuation">)</span><span class="token operator">: </span><a href="https://kotlinlang.org/api/core/kotlin-stdlib/kotlin/-boolean/index.html">Boolean</a></div></div>                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+<a data-name="-514461810%2FFunctions%2F-181751666" anchor-label="undo" id="-514461810%2FFunctions%2F-181751666" data-filterable-set=":uapmd-binding/jsMain"></a>
+          <div class="table-row table-row_content" data-filterable-current=":uapmd-binding/jsMain" data-filterable-set=":uapmd-binding/jsMain">
+            <div class="main-subrow keyValue ">
+              <div class=""><span class="inline-flex">
+                  <div><a href="undo.html"><span><span>undo</span></span></a></div>
+<span class="anchor-wrapper"><span class="anchor-icon" pointing-to="-514461810%2FFunctions%2F-181751666"></span>
+                    <div class="copy-popup-wrapper "><span class="copy-popup-icon"></span><span>Link copied to clipboard</span></div>
+                  </span></span></div>
+              <div>
+                <div class="title">
+                  <div class="platform-hinted  with-platform-tabs" data-platform-hinted="data-platform-hinted">
+                    <div class="platform-bookmarks-row" data-toggle-list="data-toggle-list"><button class="platform-bookmark" data-filterable-current=":uapmd-binding/jsMain" data-filterable-set=":uapmd-binding/jsMain" data-active="" data-toggle=":uapmd-binding/jsMain">JS</button></div>
+<div class="content sourceset-dependent-content" data-active="" data-togglable=":uapmd-binding/jsMain"><div class="symbol monospace"><span class="token keyword">open </span><span class="token keyword">override </span><span class="token keyword">fun </span><a href="undo.html"><span class="token function">undo</span></a><span class="token punctuation">(</span><span class="parameters "><span class="parameter ">callback<span class="token operator">: </span><span class="token punctuation">(</span><a href="https://kotlinlang.org/api/core/kotlin-stdlib/kotlin/-string/index.html">String</a><span class="token operator">?</span><span class="token punctuation">)</span><span class="token operator"> -&gt; </span><a href="https://kotlinlang.org/api/core/kotlin-stdlib/kotlin/-unit/index.html">Unit</a><span class="token operator">?</span><span class="token operator"> = </span>null</span></span><span class="token punctuation">)</span></div></div>                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+<a data-name="-282883795%2FFunctions%2F-181751666" anchor-label="updateAudioDeviceSettings" id="-282883795%2FFunctions%2F-181751666" data-filterable-set=":uapmd-binding/jsMain"></a>
+          <div class="table-row table-row_content" data-filterable-current=":uapmd-binding/jsMain" data-filterable-set=":uapmd-binding/jsMain">
+            <div class="main-subrow keyValue ">
+              <div class=""><span class="inline-flex">
+                  <div><a href="update-audio-device-settings.html"><span>update</span><wbr></wbr><span>Audio</span><wbr></wbr><span>Device</span><wbr></wbr><span><span>Settings</span></span></a></div>
+<span class="anchor-wrapper"><span class="anchor-icon" pointing-to="-282883795%2FFunctions%2F-181751666"></span>
+                    <div class="copy-popup-wrapper "><span class="copy-popup-icon"></span><span>Link copied to clipboard</span></div>
+                  </span></span></div>
+              <div>
+                <div class="title">
+                  <div class="platform-hinted  with-platform-tabs" data-platform-hinted="data-platform-hinted">
+                    <div class="platform-bookmarks-row" data-toggle-list="data-toggle-list"><button class="platform-bookmark" data-filterable-current=":uapmd-binding/jsMain" data-filterable-set=":uapmd-binding/jsMain" data-active="" data-toggle=":uapmd-binding/jsMain">JS</button></div>
+<div class="content sourceset-dependent-content" data-active="" data-togglable=":uapmd-binding/jsMain"><div class="symbol monospace"><span class="token keyword">open </span><span class="token keyword">override </span><span class="token keyword">fun </span><a href="update-audio-device-settings.html"><span class="token function">updateAudioDeviceSettings</span></a><span class="token punctuation">(</span><span class="parameters "><span class="parameter ">sampleRate<span class="token operator">: </span><a href="https://kotlinlang.org/api/core/kotlin-stdlib/kotlin/-int/index.html">Int</a><span class="token punctuation">, </span></span><span class="parameter ">bufferSize<span class="token operator">: </span><a href="https://kotlinlang.org/api/core/kotlin-stdlib/kotlin/-u-int/index.html">UInt</a></span></span><span class="token punctuation">)</span></div></div>                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+    <div class="footer">
+        <div class="footer--container">
+            <a href="#content" id="go-to-top-link" class="footer--button footer--button_go-to-top"></a>
+            <div class="footer--content">
+                <div>
+                    <span>Generated by </span>
+                    <a class="footer--link footer--link_external" href="https://github.com/Kotlin/dokka">
+                        Dokka
+                    </a>
+                    <div>© 2026 Copyright</div>
+                </div>
+            </div>
+        </div>
+    </div>
+        </div>
+    </div>
+</div>
+</body>
+</html>
