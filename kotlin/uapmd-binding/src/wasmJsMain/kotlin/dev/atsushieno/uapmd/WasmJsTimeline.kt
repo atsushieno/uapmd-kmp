@@ -267,7 +267,36 @@ class WasmJsTimelineFacade internal constructor(
         return ClipAddResult(clipId, sourceNodeId, success, error)
     }
 
-    override fun getMidiClipNotes(trackIndex: Int, clipId: Int): List<MidiNoteData>? = null
+    override fun getMidiClipNotes(trackIndex: Int, clipId: Int): List<MidiNoteData>? {
+        val mod = wasmMod
+        // uapmd_midi_note_t (WASM32, sizeof=24 align=8, from emscripten clang):
+        //  +0  f64 start_seconds
+        //  +8  f64 duration_seconds
+        //  +16 f32 velocity
+        //  +20 u8  note
+        //  +21 [3 pad]
+        val STRUCT_SIZE = 24
+        val count = mod.uapmdTlGetClipMidiNotes(handle, trackIndex, clipId, 0, 0, 0, 0)
+        if (count < 0) return null
+        if (count == 0) return emptyList()
+        val buf = mod.malloc(count * STRUCT_SIZE)
+        return try {
+            // The clip can change between the count and the fill, and the C side
+            // clamps its writes to the capacity we pass, so trust the refreshed
+            // count rather than mapping entries it never wrote.
+            val filled = mod.uapmdTlGetClipMidiNotes(handle, trackIndex, clipId, buf, count, 0, 0)
+            if (filled < 0) null
+            else (0 until minOf(count, filled)).map { i ->
+                val p = buf + i * STRUCT_SIZE
+                MidiNoteData(
+                    mod.getValue(p, "double"),
+                    mod.getValue(p + 8, "double"),
+                    mod.getValue(p + 20, "i8").toInt() and 0xFF,
+                    mod.getValue(p + 16, "float").toFloat()
+                )
+            }
+        } finally { mod.free(buf) }
+    }
     override fun setTimelineChangedCallback(callback: (() -> Unit)?) {}
 
     // ─── Project history (uapmd 0.5.6) ──────────────────────────────────────

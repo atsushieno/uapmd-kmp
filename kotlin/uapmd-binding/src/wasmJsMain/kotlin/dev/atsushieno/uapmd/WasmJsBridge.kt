@@ -998,6 +998,15 @@ external interface UapmdCApiModule : JsAny {
     @JsName("_uapmd_app_remove_clip_from_track")
     fun uapmdAppRemoveClipFromTrack(app: Int, trackIndex: Int, clipId: Int): Boolean
     /** Callback: void(bool success, const char* error, uint32_t importedTrackCount, void* userData) */
+    /**
+     * Count-then-fill: call with out=0/max=0 for the count, then again with a
+     * buffer. uapmd_midi_note_t is 24 bytes (verified against emscripten clang):
+     * start_seconds f64 @0, duration_seconds f64 @8, velocity f32 @16, note u8 @20.
+     */
+    @JsName("_uapmd_tl_get_clip_midi_notes")
+    fun uapmdTlGetClipMidiNotes(tl: Int, trackIndex: Int, clipId: Int,
+                                outNotes: Int, maxNotes: Int,
+                                outMinNote: Int, outMaxNote: Int): Int
     @JsName("_uapmd_app_import_midi_tracks_from_file")
     fun uapmdAppImportMidiTracksFromFile(app: Int, filepath: Int, userData: Int, callback: Int)
 
