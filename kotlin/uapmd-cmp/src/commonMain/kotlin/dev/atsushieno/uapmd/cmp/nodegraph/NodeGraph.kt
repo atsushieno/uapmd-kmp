@@ -9,6 +9,9 @@ import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.geometry.Size
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.runtime.ReadOnlyComposable
+import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.StrokeCap
@@ -81,8 +84,8 @@ private const val GRID_STEP = 40f
 private fun nodeHeight(node: GraphNode) =
     TITLE_H + PAD + maxOf(node.inputs.size, node.outputs.size) * PIN_ROW_H + PAD
 
-private val TitleStyle = TextStyle(color = NgColors.titleText, fontSize = 11.sp)
-private val PinStyle = TextStyle(color = NgColors.bodyText, fontSize = 9.sp)
+private val TitleStyle = TextStyle(fontSize = 11.sp)
+private val PinStyle = TextStyle(fontSize = 9.sp)
 
 /** The width [node] needs for its title and for the widest input/output label pair. */
 private fun measureNodeWidth(node: GraphNode, measurer: TextMeasurer): Float {
@@ -109,24 +112,42 @@ private fun outputPinWorldPos(nodePos: Offset, index: Int, width: Float) =
 // Colours
 // ---------------------------------------------------------------------------
 
-private object NgColors {
-    val background = Color(0xFF1A1A1A)
-    val grid = Color(0xFF282828)
-    val nodeBg = Color(0xFF2C2C2C)
-    val nodeBorderNormal = Color(0xFF505050)
-    val nodeBorderSelected = Color(0xFF88AADD)
-    val titleDefault = Color(0xFF3A4A3A)
-    val titleEndpoint = Color(0xFF3A3A5A)
-    val titleText = Color(0xFFEEEEEE)
-    val bodyText = Color(0xFFBBBBBB)
-    val separator = Color(0xFF444444)
-    val pinAudio = Color(0xFF44AA88)
-    val pinEvent = Color(0xFFAA9944)
-    val pinOutline = Color(0xFF888888)
-    val linkAudio = Color(0xFF44AA88)
-    val linkEvent = Color(0xFFAA9944)
-    val linkDrag = Color(0xFFCCCCCC)
-}
+/**
+ * The graph editor paints on a Canvas, so its colours cannot come from Material's
+ * component defaults. Dark values are the previous constants unchanged; the light
+ * set keeps the same roles so the editor follows the toolbar's theme toggle
+ * instead of staying black behind a light chrome.
+ */
+private data class NgPalette(
+    val background: Color, val grid: Color, val nodeBg: Color,
+    val nodeBorderNormal: Color, val nodeBorderSelected: Color,
+    val titleDefault: Color, val titleEndpoint: Color,
+    val titleText: Color, val bodyText: Color, val separator: Color,
+    val pinAudio: Color, val pinEvent: Color, val pinOutline: Color,
+    val linkAudio: Color, val linkEvent: Color, val linkDrag: Color,
+)
+
+private val NgDark = NgPalette(
+    background = Color(0xFF1A1A1A), grid = Color(0xFF282828), nodeBg = Color(0xFF2C2C2C),
+    nodeBorderNormal = Color(0xFF505050), nodeBorderSelected = Color(0xFF88AADD),
+    titleDefault = Color(0xFF3A4A3A), titleEndpoint = Color(0xFF3A3A5A),
+    titleText = Color(0xFFEEEEEE), bodyText = Color(0xFFBBBBBB), separator = Color(0xFF444444),
+    pinAudio = Color(0xFF44AA88), pinEvent = Color(0xFFAA9944), pinOutline = Color(0xFF888888),
+    linkAudio = Color(0xFF44AA88), linkEvent = Color(0xFFAA9944), linkDrag = Color(0xFFCCCCCC),
+)
+
+private val NgLight = NgPalette(
+    background = Color(0xFFF2F2F5), grid = Color(0xFFDCDCE2), nodeBg = Color(0xFFFFFFFF),
+    nodeBorderNormal = Color(0xFFB0B0B8), nodeBorderSelected = Color(0xFF3A6EA5),
+    titleDefault = Color(0xFFD3E3D3), titleEndpoint = Color(0xFFD6D6EA),
+    titleText = Color(0xFF1E1E1E), bodyText = Color(0xFF44444C), separator = Color(0xFFC9C9D0),
+    pinAudio = Color(0xFF2E7D62), pinEvent = Color(0xFF8A6D1F), pinOutline = Color(0xFF6B6B73),
+    linkAudio = Color(0xFF2E7D62), linkEvent = Color(0xFF8A6D1F), linkDrag = Color(0xFF55555C),
+)
+
+private val ngPalette: NgPalette
+    @Composable @ReadOnlyComposable
+    get() = if (MaterialTheme.colorScheme.background.luminance() > 0.5f) NgLight else NgDark
 
 // ---------------------------------------------------------------------------
 // Internal state
@@ -171,6 +192,7 @@ fun NodeGraphEditor(
     onLinkCreated: (sourcePinId: Int, targetPinId: Int) -> Unit = { _, _ -> },
     onLinkDeleted: (linkId: Int) -> Unit = {}
 ) {
+    val c = ngPalette
     val state = remember { NodeGraphState() }
     val textMeasurer = rememberTextMeasurer()
 
@@ -254,8 +276,8 @@ fun NodeGraphEditor(
             }
     ) {
         // Background
-        drawRect(NgColors.background)
-        drawGrid(state)
+        drawRect(c.background)
+        drawGrid(state, c)
 
         // pin positions populated during node draw, used for link draw
         val pinWorldPositions = HashMap<Int, Offset>()
@@ -277,8 +299,8 @@ fun NodeGraphEditor(
                 val src = pinWorldPositions[link.sourcePinId] ?: continue
                 val dst = pinWorldPositions[link.targetPinId] ?: continue
                 val color = when (pinLookup[link.sourcePinId]?.second?.busType) {
-                    BusType.Event -> NgColors.linkEvent
-                    else -> NgColors.linkAudio
+                    BusType.Event -> c.linkEvent
+                    else -> c.linkAudio
                 }
                 drawLink(src, dst, color, LINK_WIDTH)
             }
@@ -286,14 +308,14 @@ fun NodeGraphEditor(
             // In-progress link drag
             val ld = state.linkDrag
             if (ld.active)
-                drawLine(NgColors.linkDrag, ld.sourceWorldPos, ld.currentWorldPos,
+                drawLine(c.linkDrag, ld.sourceWorldPos, ld.currentWorldPos,
                     LINK_WIDTH, cap = StrokeCap.Round)
 
             // Nodes
             for (node in nodes) {
                 val pos = nodePositions[node.id] ?: continue
                 drawNode(state, node, pos, nodeWidths[node.id] ?: NODE_W_MIN,
-                    pinWorldPositions, textMeasurer)
+                    pinWorldPositions, textMeasurer, c)
             }
         }
     }
@@ -303,7 +325,7 @@ fun NodeGraphEditor(
 // Drawing
 // ---------------------------------------------------------------------------
 
-private fun DrawScope.drawGrid(state: NodeGraphState) {
+private fun DrawScope.drawGrid(state: NodeGraphState, c: NgPalette) {
     val step = GRID_STEP * state.zoom
     val ox = ((state.pan.x % step) + step) % step
     val oy = ((state.pan.y % step) + step) % step
@@ -311,7 +333,7 @@ private fun DrawScope.drawGrid(state: NodeGraphState) {
     while (x < size.width) {
         var y = oy
         while (y < size.height) {
-            drawCircle(NgColors.grid, 1.5f, Offset(x, y))
+            drawCircle(c.grid, 1.5f, Offset(x, y))
             y += step
         }
         x += step
@@ -325,14 +347,15 @@ private fun DrawScope.drawNode(
     width: Float,
     pinWorldPositions: Map<Int, Offset>,
     measurer: TextMeasurer
-) {
+,
+    c: NgPalette) {
     val h = nodeHeight(node)
     val isEndpoint = node.inputs.isEmpty() || node.outputs.isEmpty()
     val isSelected = state.selectedNodeId == node.id
 
     // Node background
     drawRoundRect(
-        NgColors.nodeBg,
+        c.nodeBg,
         topLeft = pos, size = Size(width, h),
         cornerRadius = CornerRadius(CORNER_R)
     )
@@ -340,14 +363,14 @@ private fun DrawScope.drawNode(
     // Title bar (clipped to top strip)
     clipRect(pos.x, pos.y, pos.x + width, pos.y + TITLE_H) {
         drawRoundRect(
-            if (isEndpoint) NgColors.titleEndpoint else NgColors.titleDefault,
+            if (isEndpoint) c.titleEndpoint else c.titleDefault,
             topLeft = pos, size = Size(width, h),
             cornerRadius = CornerRadius(CORNER_R)
         )
     }
 
     // Separator
-    drawLine(NgColors.separator, Offset(pos.x, pos.y + TITLE_H), Offset(pos.x + width, pos.y + TITLE_H), 1f)
+    drawLine(c.separator, Offset(pos.x, pos.y + TITLE_H), Offset(pos.x + width, pos.y + TITLE_H), 1f)
 
     // Title text
     val titleLayout = measurer.measure(node.label, TitleStyle)
@@ -355,7 +378,7 @@ private fun DrawScope.drawNode(
 
     // Node border
     drawRoundRect(
-        if (isSelected) NgColors.nodeBorderSelected else NgColors.nodeBorderNormal,
+        if (isSelected) c.nodeBorderSelected else c.nodeBorderNormal,
         topLeft = pos, size = Size(width, h),
         cornerRadius = CornerRadius(CORNER_R),
         style = Stroke(width = if (isSelected) 2f else 1f)
@@ -364,9 +387,9 @@ private fun DrawScope.drawNode(
     // Input pins
     node.inputs.forEachIndexed { i, pin ->
         val pinPos = pinWorldPositions[pin.id] ?: inputPinWorldPos(pos, i)
-        val pinColor = if (pin.busType == BusType.Event) NgColors.pinEvent else NgColors.pinAudio
+        val pinColor = if (pin.busType == BusType.Event) c.pinEvent else c.pinAudio
         drawCircle(pinColor, PIN_R, pinPos)
-        drawCircle(NgColors.pinOutline, PIN_R, pinPos, style = Stroke(1f))
+        drawCircle(c.pinOutline, PIN_R, pinPos, style = Stroke(1f))
         val layout = measurer.measure(pin.label, PinStyle)
         drawText(layout, topLeft = Offset(pinPos.x + PIN_R + 4f, pinPos.y - layout.size.height / 2f))
     }
@@ -374,9 +397,9 @@ private fun DrawScope.drawNode(
     // Output pins
     node.outputs.forEachIndexed { i, pin ->
         val pinPos = pinWorldPositions[pin.id] ?: outputPinWorldPos(pos, i, width)
-        val pinColor = if (pin.busType == BusType.Event) NgColors.pinEvent else NgColors.pinAudio
+        val pinColor = if (pin.busType == BusType.Event) c.pinEvent else c.pinAudio
         drawCircle(pinColor, PIN_R, pinPos)
-        drawCircle(NgColors.pinOutline, PIN_R, pinPos, style = Stroke(1f))
+        drawCircle(c.pinOutline, PIN_R, pinPos, style = Stroke(1f))
         val layout = measurer.measure(pin.label, PinStyle)
         drawText(layout, topLeft = Offset(pinPos.x - PIN_R - 4f - layout.size.width, pinPos.y - layout.size.height / 2f))
     }
@@ -613,3 +636,4 @@ private fun segDist(p: Offset, a: Offset, b: Offset): Float {
     val t = ((p.x - a.x) * ab.x + (p.y - a.y) * ab.y).div(lenSq).coerceIn(0f, 1f)
     return (p - Offset(a.x + ab.x * t, a.y + ab.y * t)).getDistance()
 }
+

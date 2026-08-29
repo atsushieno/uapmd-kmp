@@ -55,8 +55,6 @@ import kotlinx.coroutines.launch
  * `ProjectCommands.setClipAnchor`, so an edit is a single undo step.
  */
 
-private val HeaderBg = Color(0xFF2A2A33)
-private val RowDivider = Color(0xFF3A3A44)
 
 private val AnchorWidth = 150.dp
 private val OriginWidth = 90.dp
@@ -94,6 +92,7 @@ private fun CommitField(
 
 @Composable
 fun SequenceEditor(host: UapmdHost, windows: FloatingWindowManager, trackIndex: Int) {
+    val c = editorPalette
     val clips = if (trackIndex == MasterTrackIndex) host.masterClips
     else host.trackClips.getOrNull(trackIndex).orEmpty()
     val sampleRate = (host.model.sampleRate.takeIf { it > 0 } ?: 48000).toDouble()
@@ -108,7 +107,7 @@ fun SequenceEditor(host: UapmdHost, windows: FloatingWindowManager, trackIndex: 
         )
         Spacer4()
         Column(Modifier.horizontalScroll(hScroll)) {
-            Row(Modifier.background(HeaderBg).padding(vertical = 4.dp)) {
+            Row(Modifier.background(c.tableHeaderBackground).padding(vertical = 4.dp)) {
                 HeaderCell("Anchor", AnchorWidth)
                 HeaderCell("Origin", OriginWidth)
                 HeaderCell("Position", PositionWidth)
@@ -126,7 +125,7 @@ fun SequenceEditor(host: UapmdHost, windows: FloatingWindowManager, trackIndex: 
                 }
                 clips.forEach { clip ->
                     ClipRow(host, windows, trackIndex, clip, clips, sampleRate) { status = it }
-                    HorizontalDivider(color = RowDivider)
+                    HorizontalDivider(color = c.tableRowDivider)
                 }
             }
         }

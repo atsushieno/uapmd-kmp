@@ -141,16 +141,6 @@ private val TrackHeightNarrow = 92.dp
 private val RulerHeight = 22.dp
 private val NavigatorHeight = 26.dp
 
-private val AudioClip = Color(0xFF4A3D75)
-private val MidiClip = Color(0xFF3D5A75)
-private val ClipBorder = Color(0xFF9A8FC7)
-private val NoteColor = Color(0xFFBFD8F0)
-private val Playhead = Color(0xFFE8C547)
-private val LaneBackground = Color(0xFF1E1E24)
-private val NavigatorBackground = Color(0xFF17171C)
-private val NavigatorWindow = Color(0x334F8FD0)
-private val MasterLaneBackground = Color(0xFF26262F)
-private val RangeFill = Color(0x552F6FA8)
 
 /** How close to a clip's right edge a drag counts as a resize. */
 private const val ResizeGripPx = 6f
@@ -193,10 +183,6 @@ private fun linearToDb(linear: Double): Double =
 
 private fun dbToLinear(db: Double): Double =
     if (db <= MinGainDb) 0.0 else kotlin.math.exp(db / 20.0 * kotlin.math.ln(10.0))
-private val MutedColor = Color(0xFFB32828)
-private val SoloColor = Color(0xFFD1850F)
-private val FrozenColor = Color(0xFF7FD4F0)
-private val RenderingColor = Color(0xFFD1850F)
 
 /**
  * The navigator's position control — a whole-song overview with the visible
@@ -223,6 +209,7 @@ private fun NavigatorBar(
     hScroll: androidx.compose.foundation.ScrollState,
     modifier: Modifier = Modifier
 ) {
+    val c = editorPalette
     val sampleRate = (host.model.sampleRate.takeIf { it > 0 } ?: 48000).toDouble()
     val scope = rememberCoroutineScope()
     val lanes = remember(host.masterClips, host.trackClips) {
@@ -255,7 +242,7 @@ private fun NavigatorBar(
     val zoom by rememberUpdatedState(onZoom)
 
     Box(
-        modifier.height(NavigatorHeight).background(NavigatorBackground)
+        modifier.height(NavigatorHeight).background(c.navigatorBackground)
             .pointerInput(Unit) {
                 detectTapGestures { offset -> scrollTo(offset.x / size.width.toFloat()) }
             }
@@ -323,7 +310,7 @@ private fun NavigatorBar(
                     val w = ((clip.durationSamples / sampleRate / contentSeconds).toFloat() * size.width)
                         .coerceAtLeast(1f)
                     drawRect(
-                        if (clip.clipType == ClipType.Midi) MidiClip else AudioClip,
+                        if (clip.clipType == ClipType.Midi) c.midiClip else c.audioClip,
                         Offset(x, row * laneHeight + 1f),
                         Size(w, (laneHeight - 2f).coerceAtLeast(1f))
                     )
@@ -334,14 +321,14 @@ private fun NavigatorBar(
             if (total > 0f && hScroll.viewportSize > 0) {
                 val x = hScroll.value / total * size.width
                 val w = (hScroll.viewportSize / total * size.width).coerceAtLeast(2f)
-                drawRect(NavigatorWindow, Offset(x, 0f), Size(w, size.height))
+                drawRect(c.navigatorWindow, Offset(x, 0f), Size(w, size.height))
                 drawRect(
-                    ClipBorder, Offset(x, 0f), Size(w, size.height),
+                    c.clipBorder, Offset(x, 0f), Size(w, size.height),
                     style = androidx.compose.ui.graphics.drawscope.Stroke(1f)
                 )
             }
             val px = (host.playheadSeconds / contentSeconds).toFloat() * size.width
-            drawLine(Playhead, Offset(px, 0f), Offset(px, size.height), 1.5f)
+            drawLine(c.playhead, Offset(px, 0f), Offset(px, size.height), 1.5f)
         }
     }
 }
@@ -555,6 +542,7 @@ private fun TrackLane(
     laneWidth: Dp,
     trackHeight: Dp
 ) {
+    val c = editorPalette
     val clips = host.trackClips.getOrNull(trackIndex).orEmpty()
     val sampleRate = (host.model.sampleRate.takeIf { it > 0 } ?: 48000).toDouble()
     var draggingClipId by remember { mutableStateOf<Int?>(null) }
@@ -585,7 +573,7 @@ private fun TrackLane(
 
     Box(
         Modifier.height(trackHeight).width(laneWidth)
-            .background(LaneBackground)
+            .background(c.laneBackground)
             .pointerInput(clips, pixelsPerSecond) {
                 fun openMenuAt(offset: Offset) {
                     val seconds = (offset.x / pixelsPerSecond).toDouble().coerceAtLeast(0.0)
@@ -699,27 +687,27 @@ private fun TrackLane(
                 val w = ((clip.durationSamples / sampleRate + stretch) * pixelsPerSecond)
                     .toFloat().coerceAtLeast(2f)
                 val isMidi = clip.clipType == ClipType.Midi
-                val base = if (isMidi) MidiClip else AudioClip
+                val base = if (isMidi) c.midiClip else c.audioClip
                 drawRect(
                     color = if (clip.muted) base.copy(alpha = 0.35f) else base,
                     topLeft = Offset(x, 4f),
                     size = Size(w, size.height - 8f)
                 )
                 drawRect(
-                    color = if (clip.clipId == draggingClipId) Playhead else ClipBorder,
+                    color = if (clip.clipId == draggingClipId) c.playhead else c.clipBorder,
                     topLeft = Offset(x, 4f),
                     size = Size(w, size.height - 8f),
                     style = androidx.compose.ui.graphics.drawscope.Stroke(if (clip.clipId == draggingClipId) 2f else 1f)
                 )
-                if (isMidi) drawMidiNotes(host, trackIndex, clip, x, w, pixelsPerSecond)
+                if (isMidi) drawMidiNotes(host, trackIndex, clip, x, w, pixelsPerSecond, c.note)
             }
             rangeAnchorSeconds?.let { anchor ->
                 val a = minOf(anchor, rangeCurrentSeconds).toFloat() * pixelsPerSecond
                 val b = maxOf(anchor, rangeCurrentSeconds).toFloat() * pixelsPerSecond
-                drawRect(RangeFill, Offset(a, 0f), Size(b - a, size.height))
+                drawRect(c.rangeFill, Offset(a, 0f), Size(b - a, size.height))
             }
             val px = (host.playheadSeconds * pixelsPerSecond).toFloat()
-            drawLine(Playhead, Offset(px, 0f), Offset(px, size.height), 2f)
+            drawLine(c.playhead, Offset(px, 0f), Offset(px, size.height), 2f)
         }
 
         LaneAddMenu(
@@ -968,7 +956,8 @@ private fun androidx.compose.ui.graphics.drawscope.DrawScope.drawMidiNotes(
     clipX: Float,
     clipW: Float,
     pixelsPerSecond: Float
-) {
+,
+    noteColor: Color) {
     val notes = host.midiNotes(trackIndex, clip.clipId)
     if (notes.isEmpty()) return
     val lo = notes.minOf { it.note }
@@ -981,7 +970,7 @@ private fun androidx.compose.ui.graphics.drawscope.DrawScope.drawMidiNotes(
         val nw = (n.durationSeconds * pixelsPerSecond).toFloat().coerceAtLeast(1.5f)
         if (nx > clipX + clipW) return@forEach
         val ny = top + usable * (1f - (n.note - lo).toFloat() / span) * 0.85f
-        drawRect(NoteColor, Offset(nx, ny), Size(nw, 2.5f))
+        drawRect(noteColor, Offset(nx, ny), Size(nw, 2.5f))
     }
 }
 
@@ -1162,6 +1151,7 @@ private fun TrackLegend(
     isNarrow: Boolean = false,
     trackHeight: Dp = TrackHeightWide
 ) {
+    val c = editorPalette
     val instances = host.trackInstances.getOrNull(trackIndex).orEmpty()
     var pluginMenu by remember { mutableStateOf(false) }
     var moreMenu by remember { mutableStateOf(false) }
@@ -1261,14 +1251,14 @@ private fun TrackLegend(
                     onClick = { host.setTrackMuted(trackIndex, !muted) },
                     contentPadding = TightPadding,
                     modifier = Modifier.size(IconButtonSize),
-                    colors = if (muted) ButtonDefaults.buttonColors(containerColor = MutedColor)
+                    colors = if (muted) ButtonDefaults.buttonColors(containerColor = c.muted)
                     else ButtonDefaults.buttonColors()
                 ) { Text("M", style = MaterialTheme.typography.labelSmall) }
                 Button(
                     onClick = { host.setTrackSolo(trackIndex, !solo, additive = additiveSolo) },
                     contentPadding = TightPadding,
                     modifier = Modifier.size(IconButtonSize),
-                    colors = if (solo) ButtonDefaults.buttonColors(containerColor = SoloColor)
+                    colors = if (solo) ButtonDefaults.buttonColors(containerColor = c.solo)
                     else ButtonDefaults.buttonColors()
                 ) { Text("S", style = MaterialTheme.typography.labelSmall) }
             }
@@ -1288,10 +1278,10 @@ private fun TrackLegend(
             ) { tint ->
                 FreezeIcon(
                     when (freezeState) {
-                        FreezeRuntimeState.Rendering -> RenderingColor
-                        FreezeRuntimeState.Frozen -> FrozenColor
-                        FreezeRuntimeState.Error -> MutedColor
-                        FreezeRuntimeState.Live -> if (frozen) FrozenColor else tint
+                        FreezeRuntimeState.Rendering -> c.rendering
+                        FreezeRuntimeState.Frozen -> c.frozen
+                        FreezeRuntimeState.Error -> c.muted
+                        FreezeRuntimeState.Live -> if (frozen) c.frozen else tint
                     }
                 )
             }
@@ -1492,6 +1482,7 @@ private fun MasterTrackLegend(host: UapmdHost, windows: FloatingWindowManager, t
 
 @Composable
 private fun MasterTrackLane(host: UapmdHost, pixelsPerSecond: Float, laneWidth: Dp, trackHeight: Dp) {
+    val c = editorPalette
     val sampleRate = (host.model.sampleRate.takeIf { it > 0 } ?: 48000).toDouble()
     val density = LocalDensity.current
     val scope = rememberCoroutineScope()
@@ -1499,7 +1490,7 @@ private fun MasterTrackLane(host: UapmdHost, pixelsPerSecond: Float, laneWidth: 
     var menuAnchor by remember { mutableStateOf(DpOffset.Zero) }
     var clickedSeconds by remember { mutableStateOf(0.0) }
     Box(
-        Modifier.height(trackHeight).width(laneWidth).background(MasterLaneBackground)
+        Modifier.height(trackHeight).width(laneWidth).background(c.masterLaneBackground)
             .pointerInput(host.masterClips, pixelsPerSecond) {
                 detectTapGestures(onDoubleTap = { offset ->
                     val seconds = (offset.x / pixelsPerSecond).toDouble().coerceAtLeast(0.0)
@@ -1524,12 +1515,12 @@ private fun MasterTrackLane(host: UapmdHost, pixelsPerSecond: Float, laneWidth: 
             host.masterClips.forEach { clip ->
                 val x = (clip.positionSamples / sampleRate * pixelsPerSecond).toFloat()
                 val w = (clip.durationSamples / sampleRate * pixelsPerSecond).toFloat().coerceAtLeast(2f)
-                drawRect(MidiClip, Offset(x, 4f), Size(w, size.height - 8f))
-                drawRect(ClipBorder, Offset(x, 4f), Size(w, size.height - 8f),
+                drawRect(c.midiClip, Offset(x, 4f), Size(w, size.height - 8f))
+                drawRect(c.clipBorder, Offset(x, 4f), Size(w, size.height - 8f),
                     style = androidx.compose.ui.graphics.drawscope.Stroke(1f))
             }
             val px = (host.playheadSeconds * pixelsPerSecond).toFloat()
-            drawLine(Playhead, Offset(px, 0f), Offset(px, size.height), 2f)
+            drawLine(c.playhead, Offset(px, 0f), Offset(px, size.height), 2f)
         }
     }
 }

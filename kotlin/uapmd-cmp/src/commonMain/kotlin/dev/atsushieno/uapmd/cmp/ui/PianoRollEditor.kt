@@ -44,19 +44,7 @@ import androidx.compose.ui.unit.dp
 import dev.atsushieno.uapmd.UmpEvent
 import dev.atsushieno.uapmd.cmp.UapmdHost
 
-private val KeyWhite = Color(0xFF2A2A32)
-private val KeyBlack = Color(0xFF1B1B20)
-private val GridLine = Color(0xFF3A3A45)
-private val NoteFill = Color(0xFF7FA9DE)
-private val NoteSelected = Color(0xFFE8C547)
 
-private val KeyPanelBg = Color(0xFF17171C)
-private val KeyColumnWhite = Color(0xFFE8E8E8)
-private val KeyColumnBlack = Color(0xFF1B1B20)
-private val KeyPreviewWhite = Color(0xFF9FD8B0)
-private val KeyPreviewBlack = Color(0xFF3F7A54)
-private val KeySeparator = Color(0xFF3A3A45)
-private val KeyLabel = Color(0xFF303030)
 
 private val SnapOptions = listOf("Free", "1/1", "1/2", "1/4", "1/8", "1/16", "1/32")
 private val BlackKeys = setOf(1, 3, 6, 8, 10)
@@ -108,6 +96,7 @@ fun PianoRollEditor(
     /** Starting scroll, for headless rendering; the user's drags take over after. */
     initialScrollTicks: Float = 0f
 ) {
+    val c = editorPalette
     var dpPerTick by remember { mutableStateOf(0.25f) }
     var rowHeightDp by remember { mutableStateOf(11f) }
     var snapIndex by remember { mutableStateOf(3) }
@@ -368,7 +357,7 @@ fun PianoRollEditor(
                             val midi = highest - r
                             val y = r * noteHeight
                             drawRect(
-                                if (BlackKeys.contains(((midi % 12) + 12) % 12)) KeyBlack else KeyWhite,
+                                if (BlackKeys.contains(((midi % 12) + 12) % 12)) c.rowBlack else c.rowWhite,
                                 Offset(0f, y), Size(size.width, noteHeight - 0.5f)
                             )
                         }
@@ -377,7 +366,7 @@ fun PianoRollEditor(
                             var t = 0L
                             while (t * pixelsPerTick < size.width) {
                                 val x = t * pixelsPerTick
-                                drawLine(GridLine, Offset(x, 0f), Offset(x, size.height), 1f)
+                                drawLine(c.gridLine, Offset(x, 0f), Offset(x, size.height), 1f)
                                 t += snap
                             }
                         }
@@ -391,7 +380,7 @@ fun PianoRollEditor(
                             val w = ((n.durationTicks - growLeft + growRight) * pixelsPerTick).coerceAtLeast(2f)
                             val y = (highest - (n.note + shiftPitch)) * noteHeight
                             drawRect(
-                                if (isSelected) NoteSelected else NoteFill.copy(alpha = 0.4f + 0.6f * n.velocity),
+                                if (isSelected) c.noteSelected else c.noteFill.copy(alpha = 0.4f + 0.6f * n.velocity),
                                 Offset(x, y + 1f), Size(w, noteHeight - 2f)
                             )
                         }
@@ -420,8 +409,9 @@ private fun PianoKeyColumn(
     onKeyDown: (Int) -> Unit,
     onKeyUp: (Int) -> Unit
 ) {
+    val c = editorPalette
     val measurer = rememberTextMeasurer()
-    val labelStyle = TextStyle(color = KeyLabel)
+    val labelStyle = TextStyle(color = c.keyLabel)
     // Shares the grid's vertical scroll state, so the keys cannot drift out of line
     // with the rows they name.
     Box(Modifier.width(KeyColumnWidth).fillMaxHeight().verticalScroll(vScroll)) {
@@ -440,7 +430,7 @@ private fun PianoKeyColumn(
                     })
                 }
         ) {
-            drawRect(KeyPanelBg, Offset.Zero, Size(size.width, size.height))
+            drawRect(c.keyPanelBackground, Offset.Zero, Size(size.width, size.height))
             val blackWidth = size.width * 0.62f
             for (r in 0 until NoteCount) {
                 val midi = highest - r
@@ -450,12 +440,12 @@ private fun PianoKeyColumn(
                 val preview = midi == previewNote
                 if (isBlack) {
                     drawRect(
-                        if (preview) KeyPreviewBlack else KeyColumnBlack,
+                        if (preview) c.keyPreviewBlack else c.keyBlack,
                         Offset(0f, y), Size(blackWidth, noteHeight - 0.5f)
                     )
                 } else {
                     drawRect(
-                        if (preview) KeyPreviewWhite else KeyColumnWhite,
+                        if (preview) c.keyPreviewWhite else c.keyWhite,
                         Offset(0f, y), Size(size.width, noteHeight - 0.5f)
                     )
                     if (((midi % 12) + 12) % 12 == 0 && noteHeight >= MinLabelRowPx) {
@@ -466,9 +456,9 @@ private fun PianoKeyColumn(
                         drawText(layout, topLeft = Offset(2f, y + (noteHeight - layout.size.height) / 2f))
                     }
                 }
-                drawLine(KeySeparator, Offset(0f, y + noteHeight - 0.5f), Offset(size.width, y + noteHeight - 0.5f), 1f)
+                drawLine(c.keySeparator, Offset(0f, y + noteHeight - 0.5f), Offset(size.width, y + noteHeight - 0.5f), 1f)
             }
-            drawLine(GridLine, Offset(size.width - 1f, 0f), Offset(size.width - 1f, size.height), 1f)
+            drawLine(c.gridLine, Offset(size.width - 1f, 0f), Offset(size.width - 1f, size.height), 1f)
         }
     }
 }
