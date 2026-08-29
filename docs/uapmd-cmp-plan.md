@@ -177,8 +177,30 @@ before reporting a UI change as working.
 | `:uapmd-cmp:renderUiSnapshot` | Renders a view off-screen to a PNG at device density. `-Duapmd.cmp.snapshotView=` picks `timeline` (default), `selector`, `graph`, `instance` or `pianoroll`; `-Duapmd.cmp.snapshotSize=WxH` and `-Duapmd.cmp.snapshotDensity=` set the frame. This is how a clipped legend, an unreadable label or a link that never draws gets caught. |
 | `:uapmd-cmp:runBootstrapProbe` | Drives AppModel headlessly - audio start/stop, tracks, plug-ins, clips, graph, tempo map, piano-roll edits - and fails on the first broken check. |
 | Serving the wasm build | The dev server injects COOP/COEP itself, so the service-worker path in `index.html` never runs there and a dev-server load proves nothing about a static deploy. To exercise what users get, build `:uapmd-cmp:wasmJsBrowserDistribution` and serve `build/dist/wasmJs/productionExecutable` with COOP/COEP headers of your own; the two builds have already differed in practice. |
+| `:uapmd-cmp:runPianoRollScrollProbe` | Scrolls the piano roll with the wheel through `ImageComposeScene` and compares renders. One notch versus twelve: a viewport that moves once and stops renders them the same. |
 | `:uapmd-cmp:runScanPollProbe` | Times what the UI poll costs while a plug-in scan runs, reporting first/median/p95/max per call. Use it before adding anything to the poll. |
 | `:uapmd-cmp:runKeyboardDragProbe` | Drags a pointer across the on-screen keyboard through `ImageComposeScene` and reports the notes produced, for touch and for mouse separately. |
+
+**"Scrolling" means the scroll machinery, not drag-to-pan.** A viewport the wheel,
+a trackpad and a scrollbar can move - `horizontalScroll`/`verticalScroll` over content
+sized to the whole document - is what an editor means by scrolling, and it is what
+uapmd-app's roll has (a scrolled child with `hScroll`/`vScrollPx`). Panning by
+dragging the canvas is not a substitute: in an editor a drag belongs to the notes,
+and inside a floating window it fights the window's own gestures. Sizing the content
+also removes the scroll arithmetic - pointer coordinates arrive in content space, so
+hit testing needs no offsets.
+
+**Every preview note-on needs its note-off.** The synth holds a note until it is
+released, so auditioning on click without releasing leaves notes sounding and
+eventually jams every voice. Audition on press, release on lift
+(`detectTapGestures(onPress = { … tryAwaitRelease(); … })`).
+
+**Never key a `pointerInput` on state the gesture itself writes.** Compose restarts
+the detector when a key changes, so the first delta lands and the gesture is then
+cancelled: the view jumps once and stops following the pointer. This has now caused
+three separate "it does not work" reports - the timeline navigator's zoom, and the
+piano roll's vertical and horizontal scrolling. Read the value inside the handler
+instead, and take callbacks through `rememberUpdatedState`.
 
 A harness must not set up the state the feature under test is supposed to establish. The graph
 snapshot used to call `ensureTrackUsesEditorGraph()` itself, which hid the fact that opening the

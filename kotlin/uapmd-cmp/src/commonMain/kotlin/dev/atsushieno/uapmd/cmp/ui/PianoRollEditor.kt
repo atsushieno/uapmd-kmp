@@ -1,6 +1,13 @@
 package dev.atsushieno.uapmd.cmp.ui
 
 import androidx.compose.foundation.Canvas
+import androidx.compose.foundation.ScrollState
+import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.size
+import androidx.compose.ui.unit.Dp
 import androidx.compose.foundation.gestures.detectDragGestures
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.Arrangement
@@ -58,6 +65,7 @@ private val KeyColumnWidth = 44.dp
 
 /** The grid runs the whole MIDI range, top row first, as uapmd-app's does. */
 private const val TopNote = 127
+private const val NoteCount = 128
 
 /** uapmd-app inserts a quarter note at ~100/127 (`PianoRollEditor.cpp:1141`). */
 private const val DefaultNoteVelocity = 0.787f
@@ -93,13 +101,24 @@ private const val MinLabelRowPx = 14f
  * a lossy seconds↔ticks conversion on every edit.
  */
 @Composable
-fun PianoRollEditor(host: UapmdHost, trackIndex: Int, clipId: Int) {
+fun PianoRollEditor(
+    host: UapmdHost,
+    trackIndex: Int,
+    clipId: Int,
+    /** Starting scroll, for headless rendering; the user's drags take over after. */
+    initialScrollTicks: Float = 0f
+) {
     var dpPerTick by remember { mutableStateOf(0.25f) }
     var rowHeightDp by remember { mutableStateOf(11f) }
     var snapIndex by remember { mutableStateOf(3) }
     var snapMenu by remember { mutableStateOf(false) }
     var selected by remember { mutableStateOf<UmpNote?>(null) }
-    var scrollNote by remember { mutableStateOf(0f) }
+    // Real scroll state, not a hand-rolled pan offset. This is what makes the wheel,
+    // a trackpad and a scrollbar work at all, and it keeps the key column locked to
+    // the grid because both read the same vertical state. Panning by dragging the
+    // canvas is not scrolling: in an editor a drag belongs to the notes.
+    val hScroll = rememberScrollState()
+    val vScroll = rememberScrollState()
     var revision by remember { mutableStateOf(0) }
     var status by remember { mutableStateOf<String?>(null) }
     var dragTicks by remember { mutableStateOf(0L) }
@@ -124,14 +143,21 @@ fun PianoRollEditor(host: UapmdHost, trackIndex: Int, clipId: Int) {
     // affects grid spacing, not the data.
     val ticksPerQuarter = 480L
 
+    /** Content width in ticks: the clip's own span, plus a bar to add notes past it. */
+    val contentTicks = remember(notes, ticksPerQuarter) {
+        ((notes.maxOfOrNull { it.endTick } ?: 0L) + ticksPerQuarter * 4).coerceAtLeast(ticksPerQuarter * 8).toFloat()
+    }
+
     // The grid spans all 128 notes so a note can be dragged anywhere, but opening at
     // note 127 would show empty air above the music. Scroll to the clip's own range
     // once, then leave the view where the user puts it.
     var scrolledToContent by remember(clipId) { mutableStateOf(false) }
-    LaunchedEffect(notes, clipId) {
+    LaunchedEffect(notes, clipId, noteHeight) {
         if (!scrolledToContent && notes.isNotEmpty()) {
             val top = notes.maxOf { it.note }
-            scrollNote = -((highest - top - 2).coerceAtLeast(0)).toFloat()
+            vScroll.scrollTo((((highest - top - 2).coerceAtLeast(0)) * noteHeight).toInt())
+            if (initialScrollTicks > 0f)
+                hScroll.scrollTo((initialScrollTicks * pixelsPerTick).toInt())
             scrolledToContent = true
         }
     }
@@ -150,9 +176,20 @@ fun PianoRollEditor(host: UapmdHost, trackIndex: Int, clipId: Int) {
         revision++
     }
 
-    fun previewPitch(note: Int) {
+    /**
+     * Auditions a pitch. Every note-on here has to be matched by a note-off: the
+     * synth holds the note until it gets one, so previewing without releasing leaves
+     * notes sounding forever and eventually jams every voice.
+     */
+    fun previewOn(note: Int) {
         host.trackInstances.getOrNull(trackIndex)?.firstOrNull()?.let { inst ->
             host.model.sequencer.engine.sendNoteOn(inst.instanceId, note)
+        }
+    }
+
+    fun previewOff(note: Int) {
+        host.trackInstances.getOrNull(trackIndex)?.firstOrNull()?.let { inst ->
+            host.model.sequencer.engine.sendNoteOff(inst.instanceId, note)
         }
     }
 
@@ -228,122 +265,136 @@ fun PianoRollEditor(host: UapmdHost, trackIndex: Int, clipId: Int) {
         )
         status?.let { Text(it, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.error) }
 
+        // The grid is a scrollable viewport over content sized to the whole clip and
+        // all 128 notes, rather than a screen-sized canvas drawn at an offset. That
+        // is what gives the wheel, the trackpad and a scrollbar something to move,
+        // and it leaves pointer coordinates in content space so hit testing needs no
+        // scroll arithmetic at all.
+        val contentWidth = with(LocalDensity.current) {
+            ((contentTicks * pixelsPerTick).coerceAtLeast(1f)).toDp()
+        }
+        val contentHeight = with(LocalDensity.current) { (NoteCount * noteHeight).toDp() }
+
         Row(Modifier.fillMaxSize()) {
             PianoKeyColumn(
                 noteHeight = noteHeight,
-                scrollNote = scrollNote,
+                contentHeight = contentHeight,
+                vScroll = vScroll,
                 highest = highest,
                 previewNote = previewNote,
-                onKeyPressed = { previewNote = it; previewPitch(it) }
+                onKeyDown = { previewNote = it; previewOn(it) },
+                onKeyUp = { previewOff(it); previewNote = null }
             )
-            Box(Modifier.fillMaxSize()
-                .pointerInput(notes, pixelsPerTick, noteHeight, scrollNote) {
-                    detectDragGestures(
-                        onDragStart = { offset ->
-                            val hit = noteAtPoint(notes, offset, pixelsPerTick, noteHeight, highest, scrollNote)
-                            selected = hit
-                            dragTicks = 0L
-                            dragPitch = 0
-                            dragMode = if (hit == null) DragMode.None else {
-                                // Edge zones, as uapmd-app sizes them: 8px, but never
-                                // more than 30% of the note, so a short note still has
-                                // a middle you can grab to move it (:1045).
-                                val width = (hit.durationTicks * pixelsPerTick).coerceAtLeast(2f)
-                                val edge = minOf(ResizeEdgePx, width * 0.3f)
-                                val x0 = hit.startTick * pixelsPerTick
-                                when {
-                                    offset.x >= x0 + width - edge -> DragMode.ResizeRight
-                                    offset.x <= x0 + edge -> DragMode.ResizeLeft
-                                    else -> DragMode.Move
+            Box(Modifier.fillMaxSize().horizontalScroll(hScroll).verticalScroll(vScroll)) {
+                Box(Modifier.size(contentWidth, contentHeight)
+                    .pointerInput(notes, pixelsPerTick, noteHeight) {
+                        detectDragGestures(
+                            onDragStart = { offset ->
+                                val hit = noteAtPoint(notes, offset, pixelsPerTick, noteHeight, highest)
+                                selected = hit
+                                dragTicks = 0L
+                                dragPitch = 0
+                                dragMode = if (hit == null) DragMode.None else {
+                                    // Edge zones, as uapmd-app sizes them: 8px, but
+                                    // never more than 30% of the note, so a short note
+                                    // still has a middle you can grab to move it (:1045).
+                                    val width = (hit.durationTicks * pixelsPerTick).coerceAtLeast(2f)
+                                    val edge = minOf(ResizeEdgePx, width * 0.3f)
+                                    val x0 = hit.startTick * pixelsPerTick
+                                    when {
+                                        offset.x >= x0 + width - edge -> DragMode.ResizeRight
+                                        offset.x <= x0 + edge -> DragMode.ResizeLeft
+                                        else -> DragMode.Move
+                                    }
+                                }
+                            },
+                            onDragEnd = {
+                                selected?.let { commitDrag(it) }
+                                dragTicks = 0L
+                                dragPitch = 0
+                                dragMode = DragMode.None
+                            }
+                        ) { change, delta ->
+                            val note = selected
+                            if (note == null || dragMode == DragMode.None) return@detectDragGestures
+                            // Only consumed when it is a note edit, so a drag that
+                            // grabbed nothing still reaches the scroll containers.
+                            change.consume()
+                            dragTicks += (delta.x / pixelsPerTick).toLong()
+                            if (dragMode == DragMode.Move)
+                                dragPitch = -((change.position.y - (highest - note.note) * noteHeight)
+                                    / noteHeight).toInt()
+                        }
+                    }
+                    .pointerInput(notes, pixelsPerTick, noteHeight) {
+                        detectTapGestures(
+                            onPress = { offset ->
+                                // Audition on press and release on lift, so a preview
+                                // cannot leave a note sounding.
+                                val hit = noteAtPoint(notes, offset, pixelsPerTick, noteHeight, highest)
+                                if (hit != null) {
+                                    previewOn(hit.note)
+                                    tryAwaitRelease()
+                                    previewOff(hit.note)
+                                }
+                            },
+                            onTap = { offset ->
+                                selected = noteAtPoint(notes, offset, pixelsPerTick, noteHeight, highest)
+                            },
+                            onDoubleTap = { offset ->
+                                val hit = noteAtPoint(notes, offset, pixelsPerTick, noteHeight, highest)
+                                if (hit != null) {
+                                    apply(removed = setOf(hit.onIndex, hit.offIndex), what = "delete")
+                                    selected = null
+                                } else {
+                                    val snap = snapTicks(snapIndex, ticksPerQuarter)
+                                    val raw = (offset.x / pixelsPerTick).toLong().coerceAtLeast(0L)
+                                    val startTick = if (snap > 0) ((raw + snap / 2) / snap) * snap else raw
+                                    val pitch = (highest - (offset.y / noteHeight).toInt()).coerceIn(0, 127)
+                                    apply(
+                                        added = midi2NotePair(
+                                            group = 0, channel = 0, note = pitch,
+                                            velocity = DefaultNoteVelocity,
+                                            startTick = startTick, durationTicks = ticksPerQuarter
+                                        ),
+                                        what = "insert"
+                                    )
                                 }
                             }
-                        },
-                        onDragEnd = {
-                            selected?.let { commitDrag(it) }
-                            dragTicks = 0L
-                            dragPitch = 0
-                            dragMode = DragMode.None
+                        )
+                    }) {
+                    Canvas(Modifier.fillMaxSize()) {
+                        for (r in 0 until NoteCount) {
+                            val midi = highest - r
+                            val y = r * noteHeight
+                            drawRect(
+                                if (BlackKeys.contains(((midi % 12) + 12) % 12)) KeyBlack else KeyWhite,
+                                Offset(0f, y), Size(size.width, noteHeight - 0.5f)
+                            )
                         }
-                    ) { change, delta ->
-                        change.consume()
-                        val note = selected
-                        if (note != null && dragMode != DragMode.None) {
-                            dragTicks += (delta.x / pixelsPerTick).toLong()
-                            // Only a move changes pitch; a resize keeps the note's row.
-                            if (dragMode == DragMode.Move)
-                                dragPitch = -((change.position.y - (highest - note.note - scrollNote) * noteHeight)
-                                    / noteHeight).toInt()
-                        } else {
-                            scrollNote = (scrollNote - delta.y / noteHeight).coerceIn(-127f, 0f)
-                        }
-                    }
-                }
-                .pointerInput(notes, pixelsPerTick, noteHeight, scrollNote) {
-                    detectTapGestures(
-                        onTap = { offset ->
-                            val hit = noteAtPoint(notes, offset, pixelsPerTick, noteHeight, highest, scrollNote)
-                            selected = hit
-                            hit?.let { previewPitch(it.note) }
-                        },
-                        onDoubleTap = { offset ->
-                            val hit = noteAtPoint(notes, offset, pixelsPerTick, noteHeight, highest, scrollNote)
-                            if (hit != null) {
-                                apply(removed = setOf(hit.onIndex, hit.offIndex), what = "delete")
-                                selected = null
-                            } else {
-                                val snap = snapTicks(snapIndex, ticksPerQuarter)
-                                val raw = (offset.x / pixelsPerTick).toLong().coerceAtLeast(0L)
-                                val startTick = if (snap > 0) ((raw + snap / 2) / snap) * snap else raw
-                                val row = ((offset.y / noteHeight) - scrollNote).toInt()
-                                val pitch = (highest - row).coerceIn(0, 127)
-                                apply(
-                                    added = midi2NotePair(
-                                        group = 0, channel = 0, note = pitch,
-                                        // uapmd-app's default: a quarter note at ~100/127.
-                                        velocity = DefaultNoteVelocity,
-                                        startTick = startTick, durationTicks = ticksPerQuarter
-                                    ),
-                                    what = "insert"
-                                )
+                        val snap = snapTicks(snapIndex, ticksPerQuarter)
+                        if (snap > 0 && snap * pixelsPerTick >= 3f) {
+                            var t = 0L
+                            while (t * pixelsPerTick < size.width) {
+                                val x = t * pixelsPerTick
+                                drawLine(GridLine, Offset(x, 0f), Offset(x, size.height), 1f)
+                                t += snap
                             }
                         }
-                    )
-                }) {
-                Canvas(Modifier.fillMaxSize()) {
-                    val firstRow = (-scrollNote).toInt().coerceAtLeast(0)
-                    val rows = (size.height / noteHeight).toInt() + 2
-                    for (r in firstRow until (firstRow + rows)) {
-                        val midi = highest - r
-                        if (midi < 0) break
-                        val y = r * noteHeight + scrollNote * noteHeight
-                        drawRect(
-                            if (BlackKeys.contains(((midi % 12) + 12) % 12)) KeyBlack else KeyWhite,
-                            Offset(0f, y), Size(size.width, noteHeight - 0.5f)
-                        )
-                    }
-                    val snap = snapTicks(snapIndex, ticksPerQuarter)
-                    if (snap > 0 && snap * pixelsPerTick >= 3f) {
-                        var t = 0L
-                        while (t * pixelsPerTick < size.width) {
-                            val x = t * pixelsPerTick
-                            drawLine(GridLine, Offset(x, 0f), Offset(x, size.height), 1f)
-                            t += snap
+                        notes.forEach { n ->
+                            val isSelected = n == selected
+                            val shiftTicks = if (isSelected && dragMode == DragMode.Move) dragTicks else 0L
+                            val shiftPitch = if (isSelected && dragMode == DragMode.Move) dragPitch else 0
+                            val growLeft = if (isSelected && dragMode == DragMode.ResizeLeft) dragTicks else 0L
+                            val growRight = if (isSelected && dragMode == DragMode.ResizeRight) dragTicks else 0L
+                            val x = (n.startTick + shiftTicks + growLeft) * pixelsPerTick
+                            val w = ((n.durationTicks - growLeft + growRight) * pixelsPerTick).coerceAtLeast(2f)
+                            val y = (highest - (n.note + shiftPitch)) * noteHeight
+                            drawRect(
+                                if (isSelected) NoteSelected else NoteFill.copy(alpha = 0.4f + 0.6f * n.velocity),
+                                Offset(x, y + 1f), Size(w, noteHeight - 2f)
+                            )
                         }
-                    }
-                    notes.forEach { n ->
-                        val isSelected = n == selected
-                        val shiftTicks = if (isSelected && dragMode == DragMode.Move) dragTicks else 0L
-                        val shiftPitch = if (isSelected && dragMode == DragMode.Move) dragPitch else 0
-                        val growLeft = if (isSelected && dragMode == DragMode.ResizeLeft) dragTicks else 0L
-                        val growRight = if (isSelected && dragMode == DragMode.ResizeRight) dragTicks else 0L
-                        val x = (n.startTick + shiftTicks + growLeft) * pixelsPerTick
-                        val w = ((n.durationTicks - growLeft + growRight) * pixelsPerTick).coerceAtLeast(2f)
-                        val y = (highest - (n.note + shiftPitch)) * noteHeight + scrollNote * noteHeight
-                        if (y + noteHeight < 0 || y > size.height) return@forEach
-                        drawRect(
-                            if (isSelected) NoteSelected else NoteFill.copy(alpha = 0.4f + 0.6f * n.velocity),
-                            Offset(x, y + 1f), Size(w, noteHeight - 2f)
-                        )
                     }
                 }
             }
@@ -362,57 +413,63 @@ private enum class DragMode { None, Move, ResizeLeft, ResizeRight }
 @Composable
 private fun PianoKeyColumn(
     noteHeight: Float,
-    scrollNote: Float,
+    contentHeight: Dp,
+    vScroll: ScrollState,
     highest: Int,
     previewNote: Int?,
-    onKeyPressed: (Int) -> Unit
+    onKeyDown: (Int) -> Unit,
+    onKeyUp: (Int) -> Unit
 ) {
     val measurer = rememberTextMeasurer()
     val labelStyle = TextStyle(color = KeyLabel)
-    Canvas(
-        Modifier.width(KeyColumnWidth).fillMaxHeight()
-            .pointerInput(noteHeight, scrollNote, highest) {
-                detectTapGestures { offset ->
-                    val row = ((offset.y / noteHeight) - scrollNote).toInt()
-                    val pitch = highest - row
-                    if (pitch in 0..127) onKeyPressed(pitch)
+    // Shares the grid's vertical scroll state, so the keys cannot drift out of line
+    // with the rows they name.
+    Box(Modifier.width(KeyColumnWidth).fillMaxHeight().verticalScroll(vScroll)) {
+        Canvas(
+            Modifier.width(KeyColumnWidth).height(contentHeight)
+                .pointerInput(noteHeight, highest) {
+                    detectTapGestures(onPress = { offset ->
+                        val pitch = highest - (offset.y / noteHeight).toInt()
+                        if (pitch in 0..127) {
+                            onKeyDown(pitch)
+                            // Held for as long as the key is held, then released:
+                            // a preview that never sends note-off jams the synth.
+                            tryAwaitRelease()
+                            onKeyUp(pitch)
+                        }
+                    })
                 }
-            }
-    ) {
-        drawRect(KeyPanelBg, Offset.Zero, Size(size.width, size.height))
-        val blackWidth = size.width * 0.62f
-        val firstRow = (-scrollNote).toInt().coerceAtLeast(0)
-        val rows = (size.height / noteHeight).toInt() + 2
-        for (r in firstRow until (firstRow + rows)) {
-            val midi = highest - r
-            if (midi < 0) break
-            val y = r * noteHeight + scrollNote * noteHeight
-            val isBlack = BlackKeys.contains(((midi % 12) + 12) % 12)
-            val preview = midi == previewNote
-            if (isBlack) {
-                drawRect(
-                    if (preview) KeyPreviewBlack else KeyColumnBlack,
-                    Offset(0f, y), Size(blackWidth, noteHeight - 0.5f)
-                )
-            } else {
-                drawRect(
-                    if (preview) KeyPreviewWhite else KeyColumnWhite,
-                    Offset(0f, y), Size(size.width, noteHeight - 0.5f)
-                )
-                // Octave label on every C, as uapmd-app labels them. Sized from the
-                // row rather than fixed: a fixed sp label is taller than the row at
-                // any usual zoom and spills over its neighbours.
-                if (((midi % 12) + 12) % 12 == 0 && noteHeight >= MinLabelRowPx) {
-                    val layout = measurer.measure(
-                        noteName(midi),
-                        labelStyle.copy(fontSize = (noteHeight * 0.62f).toSp())
+        ) {
+            drawRect(KeyPanelBg, Offset.Zero, Size(size.width, size.height))
+            val blackWidth = size.width * 0.62f
+            for (r in 0 until NoteCount) {
+                val midi = highest - r
+                if (midi < 0) break
+                val y = r * noteHeight
+                val isBlack = BlackKeys.contains(((midi % 12) + 12) % 12)
+                val preview = midi == previewNote
+                if (isBlack) {
+                    drawRect(
+                        if (preview) KeyPreviewBlack else KeyColumnBlack,
+                        Offset(0f, y), Size(blackWidth, noteHeight - 0.5f)
                     )
-                    drawText(layout, topLeft = Offset(2f, y + (noteHeight - layout.size.height) / 2f))
+                } else {
+                    drawRect(
+                        if (preview) KeyPreviewWhite else KeyColumnWhite,
+                        Offset(0f, y), Size(size.width, noteHeight - 0.5f)
+                    )
+                    if (((midi % 12) + 12) % 12 == 0 && noteHeight >= MinLabelRowPx) {
+                        val layout = measurer.measure(
+                            noteName(midi),
+                            labelStyle.copy(fontSize = (noteHeight * 0.62f).toSp())
+                        )
+                        drawText(layout, topLeft = Offset(2f, y + (noteHeight - layout.size.height) / 2f))
+                    }
                 }
+                drawLine(KeySeparator, Offset(0f, y + noteHeight - 0.5f), Offset(size.width, y + noteHeight - 0.5f), 1f)
             }
-            drawLine(KeySeparator, Offset(0f, y + noteHeight - 0.5f), Offset(size.width, y + noteHeight - 0.5f), 1f)
+            drawLine(GridLine, Offset(size.width - 1f, 0f), Offset(size.width - 1f, size.height), 1f)
         }
-        drawLine(GridLine, Offset(size.width - 1f, 0f), Offset(size.width - 1f, size.height), 1f)
     }
 }
 
@@ -425,16 +482,16 @@ private fun noteName(midi: Int) = "${NoteNames[((midi % 12) + 12) % 12]}${midi /
 private fun snapTicks(snapIndex: Int, ticksPerQuarter: Long): Long =
     if (snapIndex == 0) 0L else (ticksPerQuarter * 4) / (1L shl (snapIndex - 1))
 
+/** [offset] is in content coordinates, which is what the scrolled canvas reports. */
 private fun noteAtPoint(
     notes: List<UmpNote>,
     offset: Offset,
     pixelsPerTick: Float,
     noteHeight: Float,
-    highest: Int,
-    scrollNote: Float
+    highest: Int
 ): UmpNote? = notes.firstOrNull { n ->
     val x = n.startTick * pixelsPerTick
     val w = (n.durationTicks * pixelsPerTick).coerceAtLeast(2f)
-    val y = (highest - n.note) * noteHeight + scrollNote * noteHeight
+    val y = (highest - n.note) * noteHeight
     offset.x in x..(x + w) && offset.y in y..(y + noteHeight)
 }

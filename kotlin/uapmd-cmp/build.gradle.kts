@@ -152,7 +152,8 @@ tasks.register<JavaExec>("renderUiSnapshot") {
     )
     jvmArgs("-Djava.awt.headless=true")
     listOf(
-        "uapmd.cmp.snapshot", "uapmd.cmp.snapshotSize", "uapmd.cmp.snapshotDensity", "uapmd.cmp.snapshotView"
+        "uapmd.cmp.snapshot", "uapmd.cmp.snapshotSize", "uapmd.cmp.snapshotDensity", "uapmd.cmp.snapshotView",
+        "uapmd.cmp.rollScrollTicks"
     ).forEach { key -> System.getProperty(key)?.let { systemProperty(key, it) } }
 }
 
@@ -165,6 +166,18 @@ tasks.register<JavaExec>("runKeyboardDragProbe") {
         tasks.named("jvmJar"),
         kotlin.targets.getByName("jvm").compilations.getByName("main").runtimeDependencyFiles
     )
+}
+
+tasks.register<JavaExec>("runPianoRollScrollProbe") {
+    group = "verification"
+    description = "Drags the piano roll headlessly and checks the view actually scrolls."
+    dependsOn("jvmJar")
+    mainClass.set("dev.atsushieno.uapmd.cmp.PianoRollScrollProbeMainKt")
+    classpath = objects.fileCollection().from(
+        tasks.named("jvmJar"),
+        kotlin.targets.getByName("jvm").compilations.getByName("main").runtimeDependencyFiles
+    )
+    listOf("uapmd.probe.midi").forEach { key -> System.getProperty(key)?.let { systemProperty(key, it) } }
 }
 
 tasks.register<JavaExec>("runScanPollProbe") {

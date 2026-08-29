@@ -109,7 +109,11 @@ fun main() {
                     when (view) {
                         "selector" -> PluginSelector(host)
                         "graph" -> TrackGraphEditor(host, graphTrack)
-                        "pianoroll" -> PianoRollEditor(host, 0, pianoRollClip)
+                        "pianoroll" -> PianoRollEditor(
+                            host, 0, pianoRollClip,
+                            initialScrollTicks =
+                                System.getProperty("uapmd.cmp.rollScrollTicks")?.toFloatOrNull() ?: 0f
+                        )
                         "instance" -> host.trackInstances.flatten().firstOrNull()
                             ?.let { InstanceDetails(host, it) }
                             ?: Timeline(host, rememberFloatingWindowManager())
