@@ -4,6 +4,11 @@ import dev.atsushieno.uapmd.AppModel
 import dev.atsushieno.uapmd.cleanupAppModel
 
 /** uapmd-app's web_main.cpp starts with the engine disabled; browsers also need a user gesture. */
+/** WebCLAP has no fast-scannable list; every bundle is fetched. */
+actual val platformNeedsAudioEngineForScan: Boolean = true
+
+actual val platformNeedsSlowScan: Boolean = true
+
 actual val platformSupportsRemoteScanner: Boolean = false
 
 actual val platformStartsWithAudioEngineEnabled: Boolean = false

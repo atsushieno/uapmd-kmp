@@ -222,7 +222,12 @@ class UapmdHost private constructor(val model: AppModel) {
         mode: ScanMode = if (platformSupportsRemoteScanner) ScanMode.Remote else ScanMode.InProcess,
         remoteTimeoutSeconds: Double = 20.0
     ) {
-        offUiThread { model.performPluginScanning(forceRescan, mode, remoteTimeoutSeconds) }
+        offUiThread {
+            model.performPluginScanning(
+                forceRescan, mode, remoteTimeoutSeconds,
+                requireFastScanning = !platformNeedsSlowScan
+            )
+        }
         refresh()
     }
 
@@ -1043,6 +1048,32 @@ class UapmdHost private constructor(val model: AppModel) {
  * code inside the app, so one bad plug-in takes the whole app down mid-scan — which
  * is why uapmd-app defaults to the remote scanner wherever it exists.
  */
+/**
+ * Whether this platform's formats need the slow, bundle-by-bundle scan at all.
+ *
+ * AAP does not: `PluginScanningAAP::getAllFastScannablePlugins` returns every
+ * installed plug-in from the package manager, and its `startSlowPluginScan` is a
+ * no-op that reports completion immediately. Desktop formats and WebCLAP do - a
+ * VST3/AU/LV2/CLAP bundle has to be opened to be described, and WebCLAP's fast list
+ * is empty by construction.
+ *
+ * The fast list is collected either way (`PluginScanTool.cpp:306`), so this only
+ * decides whether to ask for work that would find nothing.
+ */
+/**
+ * Whether scanning needs the audio engine running first.
+ *
+ * On the web it does, and not incidentally: WebCLAP bundles are fetched and
+ * inspected by the AudioWorklet, and the bridge that carries the request only has a
+ * transport once `WebAudioWorkletIODevice::start()` has created the worklet node.
+ * Scanning with the engine off queues a request nothing will ever deliver, and the
+ * scan then sits at 0 bundles - uncancellable, because cancellation is only checked
+ * between bundles.
+ */
+expect val platformNeedsAudioEngineForScan: Boolean
+
+expect val platformNeedsSlowScan: Boolean
+
 expect val platformSupportsRemoteScanner: Boolean
 
 expect val platformStartsWithAudioEngineEnabled: Boolean

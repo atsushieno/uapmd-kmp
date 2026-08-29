@@ -235,6 +235,31 @@ Measured cost of the UI poll during a real 164-bundle remote scan
 reports medians rather than maxima - judging this on a handful of samples points at
 the wrong thing.
 
+### 2.9 WebCLAP scanning needs the audio worklet, and a truthful main-thread check
+
+Two things have to hold before a plug-in scan finds anything in a browser.
+
+**The audio engine must be running.** WebCLAP bundles are fetched and inspected by
+the AudioWorklet; the bridge that carries a scan request only has a transport once
+`WebAudioWorkletIODevice::start()` has created the worklet node. Scanning with the
+engine off queues a request nothing delivers, and the scan then sits at 0 bundles -
+uncancellable, because `shouldCancel` is only polled between bundles. The engine
+cannot simply be started at load either: browsers require a user gesture. So the
+selector disables Scan and says why while the engine is off.
+
+**`EventLoop::runningOnMainThread()` must tell the truth.** `EventLoopEmscripten`
+returned `true` unconditionally, and `AppModel::performPluginScanning` runs the scan
+on a `std::thread` - a Web Worker, with its own JS scope, no `document`, no worklet
+node and its own copy of `Module`. `runTaskOnMainThread()` therefore ran the bridge
+code *inside the worker*, which built a second, unreachable bridge with `node: null`
+and queued the request into it forever, while the main-thread bridge sat idle. Fixed
+upstream: the check is now `emscripten_is_main_browser_thread()`, and a task enqueued
+from a worker is proxied with `emscripten_async_run_in_main_runtime_thread`.
+
+Note for future debugging: the worklet's fetches do **not** appear in the page's
+network log, because a worker issues them. `performance.getEntriesByType('resource')`
+does show them, and an empty page-level log means nothing here.
+
 ## 3 · Window model
 
 ### 3.1 Floating, in-scene windows

@@ -34,6 +34,11 @@ private val resolvedRemoteScanner: String? by lazy {
     }
 }
 
+/** VST3, AU, LV2 and CLAP bundles must be opened to be described. */
+actual val platformNeedsAudioEngineForScan: Boolean = false
+
+actual val platformNeedsSlowScan: Boolean = true
+
 actual val platformSupportsRemoteScanner: Boolean
     get() = resolvedRemoteScanner != null
 

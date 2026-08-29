@@ -34,6 +34,7 @@ import dev.atsushieno.uapmd.CatalogEntry
 import dev.atsushieno.uapmd.PluginInstanceConfig
 import dev.atsushieno.uapmd.ScanMode
 import dev.atsushieno.uapmd.cmp.UapmdHost
+import dev.atsushieno.uapmd.cmp.platformNeedsAudioEngineForScan
 import dev.atsushieno.uapmd.cmp.platformSupportsRemoteScanner
 
 private enum class SortColumn { Format, Name, Vendor, Id }
@@ -82,10 +83,14 @@ fun PluginSelector(host: UapmdHost) {
         if (ascending) sorted else sorted.reversed()
     }
 
+    val blockedByAudioEngine = platformNeedsAudioEngineForScan && !host.isAudioEngineEnabled
+
     Column(Modifier.fillMaxWidth()) {
         // ── Scan controls ────────────────────────────────────────────────────
         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-            Button(onClick = {
+            Button(
+                enabled = host.isScanning || !blockedByAudioEngine,
+                onClick = {
                 if (host.isScanning) host.cancelScan()
                 else host.scanPlugins(
                     forceRescan = forceRescan,
@@ -93,6 +98,7 @@ fun PluginSelector(host: UapmdHost) {
                     remoteTimeoutSeconds = remoteTimeoutSeconds.toDoubleOrNull()?.coerceAtLeast(0.0) ?: 20.0
                 )
             }) { Text(if (host.isScanning) "Cancel" else "Scan Plugins") }
+
 
             // Settings are fixed for the duration of a scan, as uapmd-app disables
             // them while one runs.
@@ -119,6 +125,14 @@ fun PluginSelector(host: UapmdHost) {
                     modifier = Modifier.width(110.dp)
                 )
             }
+        }
+        if (blockedByAudioEngine) {
+            Text(
+                "Turn the audio engine on to scan: plug-ins are fetched and inspected " +
+                    "by the audio worklet, which does not exist until then.",
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.error
+            )
         }
         // Scan progress, as uapmd-app's selector reports it (PluginSelector.cpp:163-177).
         // A slow scan walks every bundle on the machine, so a bare "Scanning…" is

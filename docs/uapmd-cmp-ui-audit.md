@@ -20,7 +20,6 @@ rather than silently absent. They belong in `uapmd-binding-missing-api.md` §2 a
 | Feature | uapmd-app | Notes |
 |---|---|---|
 | Piano roll: per-note automation, NRPN picker | piano roll | deliberately deferred |
-| No plug-ins found on web | Plugin Selector | The WebCLAP scanner enumerates a hardcoded list of remote bundle URLs (`PluginFormatWebCLAP.cpp:43`, webclap.github.io / plinken.org) and fetches them through a browser-side bridge. In uapmd-cmp no request is ever attempted — the network log is empty during a scan — so the bridge that `postWclapRpc` talks to is not being set up by our page. uapmd-app's web build loads `wclap.mjs` and the WCLAP host; ours copies those assets but never initialises them |
 | Rendering to a file on web | Project ▸ Render To File | The output path and the delivery are wired, but the render itself never finishes: the button stays on "Rendering…" with no progress and no file, on an empty project, for as long as it was left. Untested beyond that — it is the render, not the file handling |
 | Loading a packed project on the Kotlin/JS target | `jsMain`'s `prepareProjectLoad` is still the pass-through that wasmJs used to be, so a `.uapmdz` would reach the engine as a ZIP. Dormant — uapmd-cmp builds wasmJs, not js — but it is the same defect, and `jsMain` has no archive helper bound yet |
 | File pickers on iOS | — | `pickProjectFileToOpen` / `pickMediaFileToOpen` return null on iOS; uapmd has `DocumentProviderIOS.mm`, so this is binding work, not new C API |
