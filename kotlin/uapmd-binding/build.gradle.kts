@@ -128,6 +128,107 @@ android {
 //   cmake-build-debug/c-api/libuapmd-c-api.dylib  (macOS)
 //   cmake-build-debug/c-api/libuapmd-c-api.so     (Linux)
 
+// ─── uapmd submodule patches ──────────────────────────────────────────────────
+//
+// uapmd-cmp needs a few embedder hooks that upstream does not have yet. They live
+// in external/uapmd, which is a pinned submodule, so a fresh checkout — CI's, in
+// particular — has none of them and would compile the unpatched sources. Every
+// native build therefore tries to apply patches/uapmd/*.patch first.
+//
+// This step is deliberately **best-effort and never fatal**. It runs on every build,
+// including every incremental one, and the states it meets are messy by nature: the
+// patch already applied, applied to some files and not others, or applied and then
+// edited further while working on the hook itself. Refusing to build in those cases
+// would block ordinary work for no benefit — and it is not needed to keep anyone
+// safe, because sources that really lack the hooks fail to compile a few seconds
+// later, at the call site, with a far clearer message than a patch-tool error.
+//
+// `--3way` does the heavy lifting: it merges rather than demanding exact context, so
+// a partially applied patch completes instead of being rejected.
+val uapmdSubmoduleDir = repoRoot.resolve("external/uapmd")
+val uapmdPatchDir     = repoRoot.resolve("patches/uapmd")
+
+fun runGitInSubmodule(vararg args: String): Pair<Int, String> {
+    val process = ProcessBuilder(listOf("git") + args)
+        .directory(uapmdSubmoduleDir)
+        .redirectErrorStream(true)
+        .start()
+    val output = process.inputStream.bufferedReader().readText()
+    return process.waitFor() to output
+}
+
+tasks.register("applyUapmdPatches") {
+    group       = "build"
+    description = "Applies patches/uapmd/*.patch to the external/uapmd submodule (best-effort)"
+
+    val patches = uapmdPatchDir.listFiles { f: File -> f.name.endsWith(".patch") }
+        ?.sortedBy { it.name }
+        .orEmpty()
+    inputs.files(patches)
+
+    doLast {
+        if (patches.isEmpty())
+            return@doLast
+
+        patches.forEach { patch ->
+            // Split per file and treat each independently. A patch is routinely half
+            // applied — one file edited further, another untouched — and applying it
+            // whole would reject the lot because of the parts already in place.
+            val perFile = patch.readText()
+                .split(Regex("(?m)^(?=diff --git )"))
+                .filter { it.startsWith("diff --git ") }
+            if (perFile.isEmpty()) {
+                logger.warn("uapmd patches: ${patch.name} contains no file diffs; skipping")
+                return@forEach
+            }
+
+            perFile.forEach { fileDiff ->
+                val target = Regex("""^diff --git a/(\S+)""").find(fileDiff)?.groupValues?.get(1)
+                    ?: "(unknown)"
+                val fragment = File.createTempFile("uapmd-patch-", ".diff")
+                try {
+                    fragment.writeText(fileDiff)
+                    val fragmentPath = fragment.absolutePath
+
+                    if (runGitInSubmodule("apply", "--reverse", "--check", fragmentPath).first == 0) {
+                        logger.info("uapmd patches: $target already patched")
+                        return@forEach
+                    }
+                    if (runGitInSubmodule("apply", "--3way", fragmentPath).first == 0) {
+                        // --3way stages what it merges. A build has no business
+                        // leaving things staged in the submodule, so unstage exactly
+                        // the file we touched and leave the working tree alone.
+                        runGitInSubmodule("reset", "--quiet", "--", target)
+                        logger.lifecycle("uapmd patches: patched $target")
+                        return@forEach
+                    }
+                    // Never fatal, and never destructive: the file is left exactly as
+                    // the developer has it. Sources that genuinely lack the hooks fail
+                    // to compile moments later at the call site, which says far more
+                    // than a patch-tool error would.
+                    //
+                    // A file that already differs from HEAD is almost always the hook
+                    // being worked on — patch applied and then edited further — which
+                    // is normal and not worth shouting about. A file identical to HEAD
+                    // that still refuses the patch is the case worth seeing: the
+                    // submodule has moved and the patch is stale.
+                    val locallyModified = runGitInSubmodule("diff", "--quiet", "HEAD", "--", target).first != 0
+                    if (locallyModified)
+                        logger.lifecycle("uapmd patches: $target is locally modified; leaving it as it is")
+                    else
+                        logger.warn(
+                            "uapmd patches: $target does not take the patch and is unmodified — " +
+                                "external/uapmd has probably moved. Refresh it with:\n" +
+                                "    git -C external/uapmd diff > ${patch.absolutePath}"
+                        )
+                } finally {
+                    fragment.delete()
+                }
+            }
+        }
+    }
+}
+
 val os           = org.gradle.internal.os.OperatingSystem.current()
 val cmakeBuildDir = repoRoot.resolve("cmake-build-debug")
 val cApiDylibDir  = File(cmakeBuildDir, "c-api")
@@ -135,6 +236,7 @@ val cApiDylibDir  = File(cmakeBuildDir, "c-api")
 tasks.register("buildUapmdCApiDesktop") {
     group       = "build"
     description = "Builds libuapmd-c-api shared library for JVM desktop via cmake"
+    dependsOn("applyUapmdPatches")
 
     inputs.dir(repoRoot.resolve("c-api"))
     outputs.file(File(cApiDylibDir, when {
@@ -212,6 +314,10 @@ tasks.register<Copy>("copyUapmdDylibToJneResources") {
 
 // Wire: compileKotlinJvm depends on the shared library being staged in resources
 afterEvaluate {
+    // AGP generates the CMake tasks, so they can only be wired once they exist.
+    tasks.matching { it.name.startsWith("buildCMake") || it.name.startsWith("externalNativeBuild") }
+        .configureEach { dependsOn("applyUapmdPatches") }
+
     tasks.findByName("compileKotlinJvm")?.dependsOn("copyUapmdDylibToJneResources")
     tasks.findByName("jvmProcessResources")?.dependsOn("copyUapmdDylibToJneResources")
     // AGP does not allow local .aar file dependencies when bundling a library AAR.
@@ -236,6 +342,7 @@ val wasmBuildDir  = layout.buildDirectory.dir("uapmd-c-api-wasm")
 val wclapOverrideDir = repoRoot.resolve("external/uapmd/source/tools/wclap-host/web-overrides")
 
 tasks.register("buildUapmdCApiWasm") {
+    dependsOn("applyUapmdPatches")
     group       = "build"
     description = "Builds uapmd-c-api.js + uapmd-c-api.wasm via Emscripten"
 

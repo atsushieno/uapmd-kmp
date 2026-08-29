@@ -282,6 +282,35 @@ Note for future debugging: the worklet's fetches do **not** appear in the page's
 network log, because a worker issues them. `performance.getEntriesByType('resource')`
 does show them, and an empty page-level log means nothing here.
 
+### 2.10 Changes to `external/uapmd` ship as patches, applied by the build
+
+uapmd-cmp needs a few embedder hooks upstream does not have yet
+(`setRemoteScannerExecutable`, the Emscripten main-thread check). They live in a
+pinned submodule, so a fresh checkout - CI's especially - has none of them and would
+compile unpatched sources. They are kept in `patches/uapmd/*.patch`, and every
+native build depends on `:uapmd-binding:applyUapmdPatches`: the desktop and wasm C
+API builds directly, and AGP's CMake tasks through an `afterEvaluate` match. CI runs
+everything through Gradle, so nothing extra is needed there.
+
+The rule that shapes the design: **the patch step must never stop a build.** It runs
+on every incremental build and meets messy states by nature - already applied, half
+applied, or applied and then edited further while working on the hook. So:
+
+- each file in a patch is handled **independently**, because a half-applied patch
+  would otherwise be rejected whole;
+- `--3way` merges rather than demanding exact context, and the file it stages is
+  unstaged again, since a build has no business leaving things staged;
+- a file that will not take the patch is **left exactly as it is** - never reverted.
+  An early version ran `git checkout --merge -- .` to clean up and destroyed the
+  patched state of all three files;
+- failure is not fatal. Sources that genuinely lack the hooks fail to compile
+  seconds later at the call site, which says far more than a patch-tool error. A
+  locally modified file is reported at lifecycle level; only a file that is
+  *unmodified* and still refuses the patch warns, because that means the submodule
+  moved and the patch is stale.
+
+Refresh a patch with `git -C external/uapmd diff > patches/uapmd/<name>.patch`.
+
 ## 3 · Window model
 
 ### 3.1 Floating, in-scene windows

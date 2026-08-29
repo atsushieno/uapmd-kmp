@@ -1,0 +1,125 @@
+diff --git a/source/remidy/src/EventLoop.cpp b/source/remidy/src/EventLoop.cpp
+index e6afdc8f..e46458df 100644
+--- a/source/remidy/src/EventLoop.cpp
++++ b/source/remidy/src/EventLoop.cpp
+@@ -6,6 +6,7 @@
+ #include <android/looper.h>
+ #elif defined(__EMSCRIPTEN__)
+ #include <emscripten/emscripten.h>
++#include <emscripten/threading.h>
+ #elif (defined(__linux__) || defined(__unix__)) && !defined(__EMSCRIPTEN__)
+ #include "EventLoopLinux.hpp"
+ #else
+@@ -61,7 +62,14 @@ namespace remidy {
+         }
+ 
+         bool runningOnMainThreadImpl() override {
+-            return true;
++            // Answering "yes" unconditionally is not harmless here. A pthread is a
++            // Web Worker with its own JS scope: no document, no AudioWorklet node,
++            // and its own copy of Module. Claiming a worker is the main thread makes
++            // runTaskOnMainThread() run the task *there*, so anything that touches
++            // the DOM or the worklet bridge quietly builds a second, unreachable one
++            // and waits forever for a reply that can never arrive. Plug-in scanning
++            // runs on a std::thread, which is exactly that case.
++            return emscripten_is_main_browser_thread();
+         }
+ 
+         void enqueueTaskOnMainThreadImpl(std::function<void()>&& func) override {
+@@ -69,7 +77,14 @@ namespace remidy {
+                 std::lock_guard<std::mutex> lock(queueMutex_);
+                 taskQueue_.emplace(std::move(func));
+             }
+-            emscripten_async_call(&EventLoopEmscripten::drainTasksThunk, this, 0);
++            if (emscripten_is_main_browser_thread()) {
++                emscripten_async_call(&EventLoopEmscripten::drainTasksThunk, this, 0);
++                return;
++            }
++            // From a worker the drain has to be proxied, or it would run back on the
++            // worker and defeat the point of enqueueing it.
++            emscripten_async_run_in_main_runtime_thread(
++                EM_FUNC_SIG_VI, reinterpret_cast<void*>(&EventLoopEmscripten::drainTasksThunk), this);
+         }
+ 
+         void startImpl() override {
+diff --git a/source/uapmd-plugin-hosting/include/uapmd-plugin-hosting/detail/scanner/RemoteScannerServer.hpp b/source/uapmd-plugin-hosting/include/uapmd-plugin-hosting/detail/scanner/RemoteScannerServer.hpp
+index 70eaebd8..cb119be8 100644
+--- a/source/uapmd-plugin-hosting/include/uapmd-plugin-hosting/detail/scanner/RemoteScannerServer.hpp
++++ b/source/uapmd-plugin-hosting/include/uapmd-plugin-hosting/detail/scanner/RemoteScannerServer.hpp
+@@ -1,6 +1,7 @@
+ #pragma once
+ 
+ #include <cstdint>
++#include <filesystem>
+ #include <string>
+ 
+ namespace uapmd_plugin_hosting {
+@@ -15,5 +16,18 @@ struct RemoteScannerServerOptions {
+ // Returns 0 on success, non-zero on error.
+ int runRemoteScannerServer(const RemoteScannerServerOptions& options);
+ 
++// Overrides the executable the remote scanner launches for its child process.
++//
++// By default the host relaunches *itself* with `--scan-only --ipc-client ...`,
++// which works for uapmd-app because its own main() dispatches those arguments.
++// An embedder whose process cannot serve that role — a JVM or browser host, where
++// the executable is the runtime launcher rather than the app — has no way to scan
++// out of process at all without this. Point it at a standalone scanner that
++// understands the same arguments, such as `uapmd-scan`.
++//
++// Pass an empty path to restore the default.
++void setRemoteScannerExecutable(std::filesystem::path path);
++std::filesystem::path remoteScannerExecutable();
++
+ }
+ 
+diff --git a/source/uapmd-plugin-hosting/src/ipc/RemoteScanSessionManager.cpp b/source/uapmd-plugin-hosting/src/ipc/RemoteScanSessionManager.cpp
+index 5adeb1b0..0f7df4d6 100644
+--- a/source/uapmd-plugin-hosting/src/ipc/RemoteScanSessionManager.cpp
++++ b/source/uapmd-plugin-hosting/src/ipc/RemoteScanSessionManager.cpp
+@@ -1,6 +1,10 @@
+ #include "RemoteScanSessionManager.hpp"
++#include <uapmd-plugin-hosting/detail/scanner/RemoteScannerServer.hpp>
+ #include "../scanner/ScanConstants.hpp"
+ 
++#include <filesystem>
++#include <mutex>
++
+ #if UAPMD_PLUGIN_HOSTING_REMOTE_SCAN_SUPPORTED
+ 
+ #include <algorithm>
+@@ -322,7 +326,9 @@ void RemoteScanSessionManager::runScan(PluginScanTool& tool,
+             return;
+         }
+ 
+-        auto exePathString = cpplocate::getExecutablePath();
++        auto exePathString = remoteScannerExecutable().string();
++        if (exePathString.empty())
++            exePathString = cpplocate::getExecutablePath();
+         if (exePathString.empty()) {
+             tool.notifyScanError("Unable to determine executable path for remote scanning.", observer);
+             return;
+@@ -536,3 +542,23 @@ void RemoteScanSessionManager::runScan(PluginScanTool& tool,
+ } // namespace uapmd_plugin_hosting
+ 
+ #endif // UAPMD_PLUGIN_HOSTING_REMOTE_SCAN_SUPPORTED
++
++// Outside the guard on purpose: the override is part of the public API on every
++// platform, so an embedder can set it unconditionally. Where remote scanning is not
++// supported it is simply never read.
++namespace uapmd_plugin_hosting {
++namespace {
++std::mutex g_remote_scanner_executable_mutex;
++std::filesystem::path g_remote_scanner_executable;
++}
++
++void setRemoteScannerExecutable(std::filesystem::path path) {
++    std::lock_guard lock(g_remote_scanner_executable_mutex);
++    g_remote_scanner_executable = std::move(path);
++}
++
++std::filesystem::path remoteScannerExecutable() {
++    std::lock_guard lock(g_remote_scanner_executable_mutex);
++    return g_remote_scanner_executable;
++}
++}
