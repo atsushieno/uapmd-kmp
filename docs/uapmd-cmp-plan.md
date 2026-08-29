@@ -269,14 +269,16 @@ uncancellable, because `shouldCancel` is only polled between bundles. The engine
 cannot simply be started at load either: browsers require a user gesture. So the
 selector disables Scan and says why while the engine is off.
 
-**`EventLoop::runningOnMainThread()` must tell the truth.** `EventLoopEmscripten`
-returned `true` unconditionally, and `AppModel::performPluginScanning` runs the scan
-on a `std::thread` - a Web Worker, with its own JS scope, no `document`, no worklet
-node and its own copy of `Module`. `runTaskOnMainThread()` therefore ran the bridge
-code *inside the worker*, which built a second, unreachable bridge with `node: null`
-and queued the request into it forever, while the main-thread bridge sat idle. Fixed
-upstream: the check is now `emscripten_is_main_browser_thread()`, and a task enqueued
-from a worker is proxied with `emscripten_async_run_in_main_runtime_thread`.
+**`EventLoop::runningOnMainThread()` must tell the truth.**
+`AppModel::performPluginScanning` runs the scan on a `std::thread` - a Web Worker,
+with its own JS scope, no `document`, no worklet node and its own copy of `Module`.
+A check that answers `true` unconditionally makes `runTaskOnMainThread()` run the
+bridge code *inside the worker*, which builds a second, unreachable bridge with
+`node: null` and queues the request into it forever while the main-thread bridge sits
+idle. `EventLoopEmscripten` must therefore use `emscripten_is_main_browser_thread()`
+and proxy a task enqueued from a worker with
+`emscripten_async_run_in_main_runtime_thread`; carried by
+`patches/uapmd/0001-uapmd-cmp-embedder-hooks.patch`.
 
 Note for future debugging: the worklet's fetches do **not** appear in the page's
 network log, because a worker issues them. `performance.getEntriesByType('resource')`
@@ -300,24 +302,22 @@ applied, or applied and then edited further while working on the hook. So:
   would otherwise be rejected whole;
 - the apply order is **plain, then `--3way`, then `--ignore-whitespace`**, and that
   order is load-bearing. Git for Windows checks out with `core.autocrlf=true`, and
-  `--3way` refuses a CRLF working tree outright while a plain apply takes it happily.
-  Trying `--3way` first broke every Windows CI build: all three files were reported
-  as refusing the patch, and the job then failed fourteen minutes later at
-  `'setRemoteScannerExecutable': is not a member`. `--3way` is still needed, but only
-  for what it is uniquely good at - completing a half-applied patch. The file it
-  stages is unstaged again, since a build has no business leaving things staged;
+  `--3way` refuses a CRLF working tree outright while a plain apply takes it. With
+  `--3way` first, Windows builds report every file as refusing the patch and then
+  fail at the call site minutes later. `--3way` is still needed, but only for what it
+  is uniquely good at - completing a half-applied patch. The file it stages is
+  unstaged again, since a build has no business leaving things staged;
 - a file that will not take the patch is **left exactly as it is** - never reverted.
-  An early version ran `git checkout --merge -- .` to clean up and destroyed the
-  patched state of all three files;
+  Any cleanup that touches the working tree (`git checkout --merge -- .` and the
+  like) destroys patched state and must not be used;
 - failure is not fatal. Sources that genuinely lack the hooks fail to compile
   seconds later at the call site, which says far more than a patch-tool error. A
   locally modified file is reported at lifecycle level; only a file that is
   *unmodified* and still refuses the patch warns, because that means the submodule
   moved and the patch is stale.
 
-The warning carries git's own output, because a CI failure that does not say *why*
-the patch was refused costs a round trip to find out - which is exactly what the
-first Windows failure cost.
+The warning carries git's own output: a CI failure that does not say *why* the patch
+was refused costs a round trip to find out.
 
 Refresh a patch with `git -C external/uapmd diff > patches/uapmd/<name>.patch`. To
 check a change against a Windows-style checkout without one, convert the target
@@ -480,26 +480,38 @@ nodes and nothing else. A `Plugin` endpoint naming a built-in node - the track's
 connection with "A plug-in graph endpoint no longer exists". uapmd-app's graph editor draws pins
 for those nodes too and hits the same refusal, so neither app can wire them.
 
-### 6.4 `coop-coep-sw.js` rejects any null-body-status response
+### 6.4 A freeze render's held notes become audible when the render ends
 
-`withIsolationHeaders` (`tools/uapmd-app/web/coop-coep-sw.js`) rebuilds every same-origin response
-as `new Response(response.body, { status, statusText, headers })`. That constructor throws
-`TypeError: Response with null body status cannot have body` for statuses 204, 205 and 304, and
-the throw happens inside the `.then()` handed to `event.respondWith()`, so the browser reports
-"A ServiceWorker intercepted the request and encountered an unexpected error" for the page or
-script that was being fetched. Verified in a browser: 204, 205 and 304 throw, while 200, 206, 301,
-404 and 500 construct fine.
+`uapmd-engine/src/sequencer/SequencerEngine.cpp`, `finishOfflineTrackRender`
 
-The guard is to pass those statuses through untouched - they carry no body to re-wrap and no
-document to isolate:
+The render drives the same plugin instances that feed live output, and is inaudible only because
+the render exclusion suspends audio callbacks. Teardown calls `stopProcessing`, `loadStateSync`,
+`startProcessing` and `resetProcessingState`, but never silences the instances, so a render that
+ends between a note-on and its note-off - which is every cancelled one - leaves those voices held
+and they sound as soon as callbacks resume. Symptom: starting playback during a freeze plays the
+freezing track's ongoing note. Playback is not the source; ending the render is.
 
-```js
-if (response.status === 204 || response.status === 205 || response.status === 304)
-    return response;
-```
+`Stop`, `Pause` and `Jump` all call `requestAllNotesOff()` here; ending a render does not.
 
-Now carried as `patches/uapmd/0002-coop-coep-sw-null-body-status.patch`, applied by
-`applyUapmdPatches` like the other submodule changes. It moved from "yours to commit" to
-blocking once the site went to GitHub Pages: a static host answers conditional requests with
-304 on every revisit, so without the guard the demo would load once and fail on reload.
-uapmd-app serves the same file and takes the same path.
+Silencing needs both available mechanisms, and neither alone is sufficient: `requestStopFlush()`
+emits note-offs only for notes tracked in `active_notes_`
+(`uapmd-graph/src/node-graph/AudioPluginNodeImpl.hpp:36-39`), so it misses anything the render
+sent by a path that bypassed that tracking, while `sendAllNotesOff()` emits CC 120 directly but
+cannot stop held voices in formats without an All Sound Off event. Adding both at teardown did not
+resolve the symptom, so which path the render's events actually take is still unknown and is the
+next thing to establish.
+
+### 6.5 A queued freeze track can be stranded by a playback request
+
+`uapmd-engine/src/sequencer/FrozenTrackManager.cpp`, `requestPlaybackAfterBusyTrackRestored`
+
+The function marks `render_deferred_until_transport_quiet` only on tracks whose state is
+`Rendering`. A queued track sits in `RuntimeState::Live`, so it is skipped, and the following
+`queued_renders_.clear()` drops it from the queue. It then belongs to neither the queue nor the
+deferred set, and `transportBecameQuiet()` revisits only the deferred set, so the track keeps
+`FreezePolicy::On` and never renders. Symptom: freezing several tracks leaves exactly one stalled
+after playback is started and stopped - the rendering one recovers, a queued one does not.
+
+Unconfirmed, and reproducing it needs real plugins: without them a render finishes in about a
+second so nothing ever queues, and a clip long enough to queue trips `kMaximumFrozenTrackBytes`
+and lands in `Error` instead.

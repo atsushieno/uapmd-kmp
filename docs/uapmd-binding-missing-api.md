@@ -66,6 +66,7 @@ first. All predate 0.5.6 — they were simply never needed by a KMP app before.
 | `PluginInstanceLifecycleListener` add/remove | same | 0.5.6 delta not covered by `13dac10` |
 | `restoreNodeId` parameter on `addPluginToTrack()` | same | 0.5.6 delta not covered by `13dac10` |
 | Demucs source-separation import | `tools/uapmd-app-model` | the Import ▸ Split Audio Tracks path |
+| `FrozenTrackManager::errorMessageForTrack` | `uapmd-engine/…/FrozenTrackManager.hpp` | showing why a freeze failed; the runtime state alone says only that it did |
 
 Deliberately **not** wanted, for the record: `setEngineActive` / `setOutputMuted` /
 `resetProcessingState` / `outputAnalyser`. They are internals of a sequence
