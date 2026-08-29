@@ -131,17 +131,27 @@ jobs:
   build-wasm:
     name: 'build Wasm (Emscripten / macOS)'
     runs-on: macos-15
+    env:
+      # Pinned deliberately. The binding depends on Emscripten ABI details that
+      # were verified against this exact release (sret handling and struct
+      # layouts dumped from its bundled clang), so a floating `latest` could
+      # change them under us and surface as a baffling wasm-only failure.
+      # Bump this consciously, and re-check the layouts when you do.
+      EMSDK_VERSION: '4.0.22'
     steps:
     - name: checkout
       uses: actions/checkout@v4
       with:
         submodules: recursive
 
+    - name: brew install
+      run: brew install ninja
+
     - name: restore emsdk cache
       uses: actions/cache@v4
       with:
         path: external/uapmd/source/tools/uapmd-app/web/.emsdk
-        key: emsdk-${{ runner.os }}-${{ hashFiles('external/uapmd/build-wasm.sh') }}
+        key: emsdk-${{ runner.os }}-${{ env.EMSDK_VERSION }}
         restore-keys: emsdk-${{ runner.os }}-
 
     - name: restore CPM package cache
@@ -160,8 +170,8 @@ jobs:
           git -C "${EMSDK_DIR}" pull --ff-only || true
         fi
         cd "${EMSDK_DIR}"
-        ./emsdk install latest
-        ./emsdk activate latest
+        ./emsdk install "${EMSDK_VERSION}"
+        ./emsdk activate "${EMSDK_VERSION}"
         # Export the emscripten bin directory to subsequent steps
         echo "$(pwd)/upstream/emscripten" >> $GITHUB_PATH
 
@@ -177,7 +187,7 @@ jobs:
     - name: build Wasm
       working-directory: kotlin
       shell: bash
-      run: ./gradlew buildUapmdCApiWasm compileKotlinJs compileKotlinWasmJs
+      run: ./gradlew buildUapmdCApiWasm compileKotlinJs compileKotlinWasmJs :uapmd-cmp:wasmJsBrowserDistribution
 
     - name: upload build failure logs
       if: failure()
@@ -186,14 +196,28 @@ jobs:
         name: test-failure-logs-wasm
         path: kotlin/**/build/reports/
 
+    - name: package Wasm bundle
+      if: success()
+      run: |
+        set -euo pipefail
+        STAGE="${RUNNER_TEMP}/wasm-dist"
+        rm -rf "${STAGE}"
+        mkdir -p "${STAGE}/c-api"
+        # The deployable web app, plus the raw C API pair: webpack renames the
+        # module to a content hash inside the bundle, so keep an unhashed copy
+        # for debugging ABI problems against the binding.
+        cp -R kotlin/uapmd-cmp/build/dist/wasmJs/productionExecutable "${STAGE}/web"
+        cp kotlin/uapmd-binding/build/uapmd-c-api-web/uapmd-c-api.js "${STAGE}/c-api/"
+        cp kotlin/uapmd-binding/build/uapmd-c-api-web/uapmd-c-api.wasm "${STAGE}/c-api/"
+        (cd "${STAGE}" && zip -qr "${GITHUB_WORKSPACE}/uapmd-kmp-wasm.zip" .)
+
     - name: upload Wasm artifacts
       if: success()
       uses: actions/upload-artifact@v4
       with:
         name: uapmd-kmp-wasm
-        path: |
-          kotlin/uapmd-binding/build/uapmd-c-api-web/uapmd-c-api.js
-          kotlin/uapmd-binding/build/uapmd-c-api-web/uapmd-c-api.wasm
+        path: uapmd-kmp-wasm.zip
+        if-no-files-found: error
 
   release:
     if: github.event_name == 'workflow_dispatch'
