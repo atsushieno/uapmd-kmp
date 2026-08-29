@@ -43,6 +43,23 @@ class JsSequencerEngine internal constructor(
         FreezePolicy.fromNative(jsMod._uapmd_engine_track_freeze_policy(handle, trackIndex) as Int)
     override fun trackFreezeState(trackIndex: Int) =
         FreezeRuntimeState.fromNative(jsMod._uapmd_engine_track_freeze_state(handle, trackIndex) as Int)
+
+    // Same 40-byte layout as the wasm path; getValue reads through the module heap.
+    override fun trackFreezeRenderProgress(trackIndex: Int): OfflineRenderProgress? {
+        val out = jsMod._malloc(40) as Int
+        return try {
+            if (jsMod._uapmd_engine_track_freeze_render_progress(handle, trackIndex, out) != true) null
+            else {
+                fun f64(o: Int) = jsMod.getValue(out + o, "double") as Double
+                fun i64(o: Int): Long {
+                    val lo = (jsMod.getValue(out + o, "i32") as Int).toLong() and 0xFFFFFFFFL
+                    val hi = (jsMod.getValue(out + o + 4, "i32") as Int).toLong()
+                    return hi * 4294967296L + lo
+                }
+                OfflineRenderProgress(f64(0), f64(8), f64(16), i64(24), i64(32))
+            }
+        } finally { jsMod._free(out) }
+    }
     override fun isTrackBusy(trackIndex: Int) =
         jsMod._uapmd_engine_is_track_busy(handle, trackIndex) as Boolean
 

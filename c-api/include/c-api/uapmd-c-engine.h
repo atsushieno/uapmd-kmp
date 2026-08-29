@@ -404,6 +404,15 @@ typedef struct uapmd_offline_render_progress {
 } uapmd_offline_render_progress_t;
 
 typedef void (*uapmd_render_progress_cb_t)(const uapmd_offline_render_progress_t* progress, void* user_data);
+
+/* Render progress for a track whose freeze render is running.
+ * Returns false when the track is not currently rendering, in which case
+ * out_progress is untouched. Mirrors FrozenTrackManager::renderProgressForTrack,
+ * which returns an optional for exactly this reason. */
+UAPMD_C_EXPORT bool uapmd_engine_track_freeze_render_progress(uapmd_sequencer_engine_t engine,
+                                                              int32_t track_index,
+                                                              uapmd_offline_render_progress_t* out_progress);
+
 typedef bool (*uapmd_render_should_cancel_cb_t)(void* user_data);
 
 typedef struct uapmd_offline_render_result {

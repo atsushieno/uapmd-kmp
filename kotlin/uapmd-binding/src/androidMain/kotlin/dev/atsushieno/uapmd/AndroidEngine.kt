@@ -29,6 +29,13 @@ class AndroidSequencerEngine internal constructor(
         FreezePolicy.fromNative(JniBridge.uapmdEngineTrackFreezePolicy(handle, trackIndex))
     override fun trackFreezeState(trackIndex: Int) =
         FreezeRuntimeState.fromNative(JniBridge.uapmdEngineTrackFreezeState(handle, trackIndex))
+
+    // Flattened to [progress, renderedSeconds, totalSeconds, renderedFrames,
+    // totalFrames], or null when the track is not rendering.
+    override fun trackFreezeRenderProgress(trackIndex: Int): OfflineRenderProgress? {
+        val a = JniBridge.uapmdEngineTrackFreezeRenderProgress(handle, trackIndex) ?: return null
+        return OfflineRenderProgress(a[0], a[1], a[2], a[3].toLong(), a[4].toLong())
+    }
     override fun isTrackBusy(trackIndex: Int) = JniBridge.uapmdEngineIsTrackBusy(handle, trackIndex)
 
     override val masterTrack: SequencerTrack

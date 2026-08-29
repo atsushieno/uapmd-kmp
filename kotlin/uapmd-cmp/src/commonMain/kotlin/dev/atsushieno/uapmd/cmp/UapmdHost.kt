@@ -28,6 +28,7 @@ import dev.atsushieno.uapmd.TimeReference
 import dev.atsushieno.uapmd.TimeReferenceType
 import dev.atsushieno.uapmd.TimelinePosition
 import dev.atsushieno.uapmd.FreezePolicy
+import dev.atsushieno.uapmd.OfflineRenderProgress
 import dev.atsushieno.uapmd.FreezeRuntimeState
 import dev.atsushieno.uapmd.createAudioFileReader
 import dev.atsushieno.uapmd.createSilentAudioFileReader
@@ -829,17 +830,35 @@ class UapmdHost private constructor(val model: AppModel) {
     fun trackSolo(trackIndex: Int) = engineTrackAt(trackIndex)?.solo ?: false
     fun trackBypassed(trackIndex: Int) = engineTrackAt(trackIndex)?.bypassed ?: false
 
+    /*
+     * Freeze state is mirrored into Compose state by the poll, like every other
+     * engine value the UI shows.
+     *
+     * Reading the engine directly from a composable does not work: nothing about
+     * a native read is observable, so a freeze that starts, progresses and
+     * finishes never triggers recomposition. The symptom is that the freeze
+     * button appears dead and the state only appears later, when some unrelated
+     * edit — moving a clip — invalidates the composition for its own reasons.
+     */
+    var trackFreezePolicies by mutableStateOf<List<FreezePolicy>>(emptyList())
+        private set
+    var trackFreezeStates by mutableStateOf<List<FreezeRuntimeState>>(emptyList())
+        private set
+    var trackBusyFlags by mutableStateOf<List<Boolean>>(emptyList())
+        private set
+
+    /** Track number (1-based) and progress of the running freeze render, if any. */
+    var freezeRender by mutableStateOf<Pair<Int, OfflineRenderProgress>?>(null)
+        private set
+
     /** What uapmd-app's freeze button renders: the policy, and whether it is busy. */
     fun trackFreezePolicy(trackIndex: Int) =
-        runCatching { model.sequencer.engine.trackFreezePolicy(trackIndex) }
-            .getOrDefault(FreezePolicy.Off)
+        trackFreezePolicies.getOrNull(trackIndex) ?: FreezePolicy.Off
 
     fun trackFreezeState(trackIndex: Int) =
-        runCatching { model.sequencer.engine.trackFreezeState(trackIndex) }
-            .getOrDefault(FreezeRuntimeState.Live)
+        trackFreezeStates.getOrNull(trackIndex) ?: FreezeRuntimeState.Live
 
-    fun isTrackBusy(trackIndex: Int) =
-        runCatching { model.sequencer.engine.isTrackBusy(trackIndex) }.getOrDefault(false)
+    fun isTrackBusy(trackIndex: Int) = trackBusyFlags.getOrNull(trackIndex) ?: false
 
     fun setPluginBypassed(instanceId: Int, bypassed: Boolean) =
         commands.setPluginBypassed(instanceId, bypassed).also { refresh() }
@@ -964,6 +983,23 @@ class UapmdHost private constructor(val model: AppModel) {
         val engine = model.sequencer.engine
         val count = minOf(engine.trackCount.toInt(), model.timelineTrackCount.toInt())
         trackCount = count
+
+        // Freeze: policy, runtime state, busy flag and the one running render.
+        // Every tick, not only structural ones — progress is what makes the wait
+        // legible, and it moves far faster than the structural cadence.
+        trackFreezePolicies = (0 until count).map {
+            runCatching { engine.trackFreezePolicy(it) }.getOrDefault(FreezePolicy.Off)
+        }
+        trackFreezeStates = (0 until count).map {
+            runCatching { engine.trackFreezeState(it) }.getOrDefault(FreezeRuntimeState.Live)
+        }
+        trackBusyFlags = (0 until count).map {
+            runCatching { engine.isTrackBusy(it) }.getOrDefault(false)
+        }
+        // Only one track renders at a time, so stop at the first that reports.
+        freezeRender = (0 until count).firstNotNullOfOrNull { i ->
+            runCatching { engine.trackFreezeRenderProgress(i) }.getOrNull()?.let { (i + 1) to it }
+        }
 
         if (structural) trackInstances = (0 until count).map { ti ->
             runCatching {

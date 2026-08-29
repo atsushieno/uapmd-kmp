@@ -43,6 +43,28 @@ class WasmJsSequencerEngine internal constructor(
         FreezePolicy.fromNative(wasmMod.uapmdEngineTrackFreezePolicy(handle, trackIndex))
     override fun trackFreezeState(trackIndex: Int) =
         FreezeRuntimeState.fromNative(wasmMod.uapmdEngineTrackFreezeState(handle, trackIndex))
+
+    // uapmd_offline_render_progress_t: f64 @0/@8/@16, i64 @24/@32 (sizeof 40).
+    override fun trackFreezeRenderProgress(trackIndex: Int): OfflineRenderProgress? {
+        val mod = wasmMod
+        val out = mod.malloc(40)
+        return try {
+            if (!mod.uapmdEngineTrackFreezeRenderProgress(handle, trackIndex, out)) null
+            else {
+                fun i64(o: Int): Long {
+                    val lo = mod.getValue(out + o, "i32").toInt().toLong() and 0xFFFFFFFFL
+                    val hi = mod.getValue(out + o + 4, "i32").toInt().toLong()
+                    return hi * 4294967296L + lo
+                }
+                OfflineRenderProgress(
+                    mod.getValue(out, "double"),
+                    mod.getValue(out + 8, "double"),
+                    mod.getValue(out + 16, "double"),
+                    i64(24), i64(32)
+                )
+            }
+        } finally { mod.free(out) }
+    }
     override fun isTrackBusy(trackIndex: Int) = wasmMod.uapmdEngineIsTrackBusy(handle, trackIndex)
 
     override val masterTrack: SequencerTrack

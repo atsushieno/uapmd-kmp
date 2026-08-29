@@ -388,6 +388,9 @@ external interface UapmdCApiModule : JsAny {
     fun uapmdEngineTrackFreezePolicy(engine: Int, trackIndex: Int): Int
     @JsName("_uapmd_engine_track_freeze_state")
     fun uapmdEngineTrackFreezeState(engine: Int, trackIndex: Int): Int
+    /** out is uapmd_offline_render_progress_t: sizeof=40 align=8 (emscripten clang). */
+    @JsName("_uapmd_engine_track_freeze_render_progress")
+    fun uapmdEngineTrackFreezeRenderProgress(engine: Int, trackIndex: Int, out: Int): Boolean
     @JsName("_uapmd_engine_is_track_busy")
     fun uapmdEngineIsTrackBusy(engine: Int, trackIndex: Int): Boolean
     @JsName("_uapmd_tt_channel_count")

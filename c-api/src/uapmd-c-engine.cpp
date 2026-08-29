@@ -89,6 +89,20 @@ uapmd_freeze_runtime_state_t uapmd_engine_track_freeze_state(uapmd_sequencer_eng
     }
 }
 
+bool uapmd_engine_track_freeze_render_progress(uapmd_sequencer_engine_t engine,
+                                               int32_t track_index,
+                                               uapmd_offline_render_progress_t* out_progress) {
+    if (!engine || !out_progress) return false;
+    const auto progress = E(engine)->frozenTrackManager().renderProgressForTrack(track_index);
+    if (!progress) return false;
+    out_progress->progress         = progress->progress;
+    out_progress->rendered_seconds = progress->renderedSeconds;
+    out_progress->total_seconds    = progress->totalSeconds;
+    out_progress->rendered_frames  = progress->renderedFrames;
+    out_progress->total_frames     = progress->totalFrames;
+    return true;
+}
+
 bool uapmd_engine_is_track_busy(uapmd_sequencer_engine_t engine, int32_t track_index) {
     if (!engine) return false;
     return E(engine)->frozenTrackManager().isTrackBusy(track_index);

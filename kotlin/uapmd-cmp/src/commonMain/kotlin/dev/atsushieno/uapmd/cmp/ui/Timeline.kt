@@ -210,8 +210,12 @@ private fun NavigatorBar(
     modifier: Modifier = Modifier
 ) {
     val c = editorPalette
+    val density = LocalDensity.current
     val sampleRate = (host.model.sampleRate.takeIf { it > 0 } ?: 48000).toDouble()
     val scope = rememberCoroutineScope()
+    // Mirrored Compose state, so a render that starts or advances recomposes this
+    // bar on its own rather than waiting for an unrelated edit.
+    val freezeRender = host.freezeRender
     val lanes = remember(host.masterClips, host.trackClips) {
         listOf(host.masterClips) + host.trackClips
     }
@@ -329,6 +333,31 @@ private fun NavigatorBar(
             }
             val px = (host.playheadSeconds / contentSeconds).toFloat() * size.width
             drawLine(c.playhead, Offset(px, 0f), Offset(px, size.height), 1.5f)
+
+            // Freeze render progress, where uapmd-app puts it: a thin bar along
+            // the bottom of the navigator (TimelineNavigator.cpp:105), so the
+            // wait for a freeze to finish is visible without opening anything.
+            freezeRender?.let { (_, progress) ->
+                val barHeight = 3f * density.density
+                val top = size.height - barHeight
+                drawRect(c.freezeProgressTrack, Offset(0f, top), Size(size.width, barHeight))
+                drawRect(
+                    c.freezeProgressFill, Offset(0f, top),
+                    Size((progress.progress.coerceIn(0.0, 1.0)).toFloat() * size.width, barHeight)
+                )
+            }
+        }
+
+        // uapmd-app shows the same numbers in its hover tooltip; a canvas has no
+        // tooltip here, so the label sits beside the bar while a render runs.
+        freezeRender?.let { (trackNumber, progress) ->
+            Text(
+                "Freezing track $trackNumber: ${(progress.progress * 100).toInt()}%" +
+                    " (${fixed(progress.renderedSeconds, 2)}s / ${fixed(progress.totalSeconds, 2)}s)",
+                style = MaterialTheme.typography.labelSmall,
+                color = c.freezeProgressFill,
+                modifier = Modifier.align(Alignment.CenterStart).padding(start = 6.dp)
+            )
         }
     }
 }
@@ -1268,20 +1297,39 @@ private fun TrackLegend(
         // button labelled with the first instance's name (or "Add Plugin" when
         // the track is empty), then the More menu.
         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(3.dp)) {
+            // Mirrors TimelineEditor.cpp's freeze switch. The policy and the
+            // runtime state are separate: FrozenTrackManager defers a render
+            // while the transport is not quiet, leaving policy On with state
+            // Live — the "queued" case, which reads as not-yet-frozen and must
+            // still offer cancellation. Turning the policy off is therefore
+            // driven by `policy == On || state == Rendering`, not by Frozen.
             val frozen = host.trackFreezePolicy(trackIndex) == FreezePolicy.On
             val freezeState = host.trackFreezeState(trackIndex)
+            val rendering = freezeState == FreezeRuntimeState.Rendering
+            val queued = frozen && freezeState == FreezeRuntimeState.Live
+            val nextPolicyOn = !(rendering || frozen)
             LegendIconButton(
-                if (frozen) "Track freezing: On (click to unfreeze)"
-                else "Track freezing: Off (click to render and freeze)",
-                enabled = !trackBusy,
-                onClick = { host.setTrackFreezePolicyEnabled(trackIndex, !frozen) }
+                when {
+                    rendering -> "Track freezing: rendering (click to cancel)"
+                    queued -> "Track freezing: queued (click to cancel)"
+                    freezeState == FreezeRuntimeState.Error -> "Track freezing failed (click to turn off)"
+                    frozen -> "Track freezing: On (click to unfreeze)"
+                    else -> "Track freezing: Off (click to render and freeze)"
+                },
+                // uapmd-app leaves this button live while the track is busy —
+                // being busy *is* the state you cancel from. Only the other
+                // track controls are disabled.
+                enabled = true,
+                onClick = { host.setTrackFreezePolicyEnabled(trackIndex, nextPolicyOn) }
             ) { tint ->
                 FreezeIcon(
                     when (freezeState) {
                         FreezeRuntimeState.Rendering -> c.rendering
                         FreezeRuntimeState.Frozen -> c.frozen
                         FreezeRuntimeState.Error -> c.muted
-                        FreezeRuntimeState.Live -> if (frozen) c.frozen else tint
+                        // Queued: policy on, render deferred until the transport
+                        // is quiet. uapmd-app tints this differently from Frozen.
+                        FreezeRuntimeState.Live -> if (frozen) c.rendering else tint
                     }
                 )
             }

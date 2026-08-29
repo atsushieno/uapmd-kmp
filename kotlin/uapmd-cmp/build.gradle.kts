@@ -192,6 +192,17 @@ tasks.register<JavaExec>("runScanPollProbe") {
     )
 }
 
+tasks.register<JavaExec>("runFreezeProbe") {
+    group = "verification"
+    description = "Reads back what the freeze command does: policy, runtime state, render progress."
+    dependsOn("jvmJar")
+    mainClass.set("dev.atsushieno.uapmd.cmp.FreezeProbeMainKt")
+    forwardScannerExecutable()
+    classpath(files(tasks.named("jvmJar")), jvmMainCompilation.runtimeDependencyFiles)
+    jvmArgs("-Dapple.awt.application.name=uapmd-cmp", "-Xdock:name=uapmd-cmp")
+    System.getProperty("uapmd.probe.smf")?.let { systemProperty("uapmd.probe.smf", it) }
+}
+
 tasks.register<JavaExec>("runClipMoveProbe") {
     group = "verification"
     description = "Headless repro attempt for a crash when moving a MIDI2 clip on a track."

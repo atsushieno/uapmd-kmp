@@ -1442,6 +1442,23 @@ JNIEXPORT jint JNICALL Java_dev_atsushieno_uapmd_JniBridge_uapmdEngineTrackFreez
         uapmd_engine_track_freeze_state(j2p<uapmd_sequencer_engine_t>(engine), trackIndex));
 }
 
+JNIEXPORT jdoubleArray JNICALL Java_dev_atsushieno_uapmd_JniBridge_uapmdEngineTrackFreezeRenderProgress(
+        JNIEnv* env, jclass, jlong engine, jint trackIndex) {
+    uapmd_offline_render_progress_t p{};
+    if (!uapmd_engine_track_freeze_render_progress(
+            j2p<uapmd_sequencer_engine_t>(engine), trackIndex, &p))
+        return nullptr;
+    // Frame counts ride along as doubles: a render long enough to lose integer
+    // precision here would be some 285 million years at 48 kHz.
+    jdouble values[5]{p.progress, p.rendered_seconds, p.total_seconds,
+                      static_cast<jdouble>(p.rendered_frames),
+                      static_cast<jdouble>(p.total_frames)};
+    auto array = env->NewDoubleArray(5);
+    if (!array) return nullptr;
+    env->SetDoubleArrayRegion(array, 0, 5, values);
+    return array;
+}
+
 JNIEXPORT jboolean JNICALL Java_dev_atsushieno_uapmd_JniBridge_uapmdEngineIsTrackBusy(
         JNIEnv*, jclass, jlong engine, jint trackIndex) {
     return uapmd_engine_is_track_busy(j2p<uapmd_sequencer_engine_t>(engine), trackIndex);

@@ -56,6 +56,9 @@ data class EditorPalette(
     val meterBar: Color,
     val tableHeaderBackground: Color,
     val tableRowDivider: Color,
+    // freeze render progress, as uapmd-app tints it
+    val freezeProgressTrack: Color,
+    val freezeProgressFill: Color,
 )
 
 private val DarkEditorPalette = EditorPalette(
@@ -89,6 +92,8 @@ private val DarkEditorPalette = EditorPalette(
     meterBar             = Color(0xFF6FCF97),
     tableHeaderBackground = Color(0xFF2A2A33),
     tableRowDivider      = Color(0xFF3A3A44),
+    freezeProgressTrack  = Color(0xE6234A5C),
+    freezeProgressFill   = Color(0xFF5AD2FF),
 )
 
 /**
@@ -127,6 +132,8 @@ private val LightEditorPalette = EditorPalette(
     meterBar             = Color(0xFF2E9E68),
     tableHeaderBackground = Color(0xFFE4E4EC),
     tableRowDivider      = Color(0xFFC9C9D4),
+    freezeProgressTrack  = Color(0xE6BFDCE8),
+    freezeProgressFill   = Color(0xFF1673A0),
 )
 
 /**

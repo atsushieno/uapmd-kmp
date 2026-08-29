@@ -368,6 +368,8 @@ object JniBridge {
     @JvmStatic external fun uapmdAppImportMidiTracksFromFile(app: Long, filepath: String, cb: Any)
     @JvmStatic external fun uapmdEngineTrackFreezePolicy(engine: Long, trackIndex: Int): Int
     @JvmStatic external fun uapmdEngineTrackFreezeState(engine: Long, trackIndex: Int): Int
+    /** [progress, renderedSeconds, totalSeconds, renderedFrames, totalFrames], or null when idle. */
+    @JvmStatic external fun uapmdEngineTrackFreezeRenderProgress(engine: Long, trackIndex: Int): DoubleArray?
     @JvmStatic external fun uapmdEngineIsTrackBusy(engine: Long, trackIndex: Int): Boolean
     @JvmStatic external fun uapmdTtChannelCount(tt: Long): Int
     @JvmStatic external fun uapmdAudioFileReaderCreate(path: String): Long

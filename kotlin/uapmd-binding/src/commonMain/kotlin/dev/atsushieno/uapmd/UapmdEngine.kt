@@ -14,6 +14,12 @@ interface SequencerEngine {
     fun trackFreezePolicy(trackIndex: Int): FreezePolicy
     /** `FrozenTrackManager::runtimeStateForTrack` — what the engine is doing. */
     fun trackFreezeState(trackIndex: Int): FreezeRuntimeState
+    /**
+     * Progress of the track's freeze render, or null when it is not rendering.
+     * `FrozenTrackManager::renderProgressForTrack` returns an optional for the
+     * same reason: only one track renders at a time, and only while Rendering.
+     */
+    fun trackFreezeRenderProgress(trackIndex: Int): OfflineRenderProgress?
     /** True while a freeze render is in flight; the legend disables the track's controls. */
     fun isTrackBusy(trackIndex: Int): Boolean
     fun addEmptyTrack(): Int

@@ -31,6 +31,13 @@ class NativeSequencerEngine internal constructor(
         FreezePolicy.fromNative(uapmd_engine_track_freeze_policy(handle, trackIndex).toInt())
     override fun trackFreezeState(trackIndex: Int) =
         FreezeRuntimeState.fromNative(uapmd_engine_track_freeze_state(handle, trackIndex).toInt())
+
+    override fun trackFreezeRenderProgress(trackIndex: Int): OfflineRenderProgress? = memScoped {
+        val out = alloc<uapmd_offline_render_progress_t>()
+        if (!uapmd_engine_track_freeze_render_progress(handle, trackIndex, out.ptr)) return@memScoped null
+        OfflineRenderProgress(out.progress, out.rendered_seconds, out.total_seconds,
+            out.rendered_frames, out.total_frames)
+    }
     override fun isTrackBusy(trackIndex: Int) = uapmd_engine_is_track_busy(handle, trackIndex)
 
     override val masterTrack: SequencerTrack
