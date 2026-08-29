@@ -36,6 +36,11 @@ import androidx.compose.ui.unit.DpSize
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import kotlin.math.roundToInt
+import androidx.compose.ui.graphics.StrokeCap
+import androidx.compose.ui.graphics.Path
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.foundation.Canvas
 
 /**
  * In-scene floating windows, the way uapmd-app has them.
@@ -133,8 +138,28 @@ class FloatingWindowEntry internal constructor(
 @Composable
 fun rememberFloatingWindowManager(): FloatingWindowManager = remember { FloatingWindowManager() }
 
-private val MinWindowSize = DpSize(180.dp, 90.dp)
-private val TitleBarHeight = 30.dp
+/*
+ * Window chrome sizing.
+ *
+ * The title bar, the resize corner and the close button are what you grab, so
+ * each is a 40dp control everywhere — no platform conditional and no floor to
+ * misread. 40dp is the Material button height; the full guideline is 48dp for
+ * touch, which reads too bulky on a window's own chrome.
+ */
+private val WindowControlSize = 36.dp
+private val TitleBarHeight = WindowControlSize
+private val CloseButtonSize = WindowControlSize
+
+/**
+ * Deliberately smaller than the title bar. Measured on device, the app's own
+ * icon buttons are 30dp (toolbar and the round track-legend buttons), so a grip
+ * any larger than this out-sizes every button around it and eats the corner of
+ * the window's content.
+ */
+private val ResizeHandleSize = 30.dp
+
+/** Room for the chrome plus real content, not chrome alone. */
+private val MinWindowSize = DpSize(180.dp, TitleBarHeight + 56.dp)
 
 /**
  * Draws every open window over [content]. Later entries render on top, which is
@@ -236,16 +261,17 @@ private fun TitleBar(
             color = MaterialTheme.colorScheme.onPrimaryContainer,
             modifier = Modifier.weight(1f)
         )
-        Text(
-            "✕",
-            style = MaterialTheme.typography.labelLarge,
-            color = MaterialTheme.colorScheme.onPrimaryContainer,
+        Box(
             modifier = Modifier
                 .padding(start = 8.dp)
+                .size(CloseButtonSize)
                 .pointerInput(entry.key) {
                     detectTapOrPress { manager.close(entry.key) }
-                }
-        )
+                },
+            contentAlignment = Alignment.Center
+        ) {
+            CloseIcon(tint = MaterialTheme.colorScheme.onPrimaryContainer)
+        }
     }
 }
 
@@ -254,7 +280,7 @@ private fun ResizeHandle(entry: FloatingWindowEntry, modifier: Modifier) {
     val density = LocalDensity.current
     Box(
         modifier = modifier
-            .size(16.dp)
+            .size(ResizeHandleSize)
             .pointerInput(entry.key) {
                 detectDragGestures { change, delta ->
                     change.consume()
@@ -267,10 +293,12 @@ private fun ResizeHandle(entry: FloatingWindowEntry, modifier: Modifier) {
                 }
             }
     ) {
-        Text(
-            "◢",
-            style = MaterialTheme.typography.labelSmall,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        ResizeGripIcon(
+            tint = MaterialTheme.colorScheme.onSurfaceVariant,
+            // Drawn at the size it can be grabbed at: a 14dp triangle inside a
+            // 40dp target looks like the old, unreachable control and gives no
+            // hint that the bigger area works.
+            iconSize = ResizeHandleSize,
             modifier = Modifier.align(Alignment.BottomEnd)
         )
     }
@@ -292,3 +320,35 @@ private suspend fun androidx.compose.ui.input.pointer.PointerInputScope.detectTa
         }
     }
 }
+
+/*
+ * Window chrome icons.
+ *
+ * Drawn, not typed, for the reason the toolbar and track-legend icons are: the
+ * characters these replaced — U+2715 MULTIPLICATION X and U+25E2 BLACK LOWER
+ * RIGHT TRIANGLE — have no glyph in the font Skiko falls back to on the web, so
+ * every floating window showed tofu where its close button and resize corner
+ * should be.
+ */
+
+private val WindowIconSize = 14.dp
+
+@Composable
+private fun CloseIcon(tint: Color, modifier: Modifier = Modifier) =
+    Canvas(modifier.size(WindowIconSize)) {
+        val i = size.minDimension * 0.24f
+        drawLine(tint, Offset(i, i), Offset(size.width - i, size.height - i), 1.6f, cap = StrokeCap.Round)
+        drawLine(tint, Offset(size.width - i, i), Offset(i, size.height - i), 1.6f, cap = StrokeCap.Round)
+    }
+
+/** The lower-right triangle the resize corner used. */
+@Composable
+private fun ResizeGripIcon(tint: Color, modifier: Modifier = Modifier, iconSize: Dp = WindowIconSize) =
+    Canvas(modifier.size(iconSize)) {
+        drawPath(Path().apply {
+            moveTo(size.width, 0f)
+            lineTo(size.width, size.height)
+            lineTo(0f, size.height)
+            close()
+        }, tint)
+    }

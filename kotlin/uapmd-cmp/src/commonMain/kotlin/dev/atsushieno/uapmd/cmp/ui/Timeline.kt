@@ -1208,7 +1208,7 @@ private fun TrackLegend(
                         clipsMenu = false
                         // uapmd-app creates an empty audio clip the user then
                         // points at a file; the same two steps, explicitly.
-                        emptyAudioNotice = "Create the clip from a file, then use Clip Properties ▸ Change file."
+                        emptyAudioNotice = "Create the clip from a file, then use Clip Properties, Change file."
                     })
                     DropdownMenuItem(text = { Text("Create Audio Clip From File…") }, onClick = {
                         clipsMenu = false

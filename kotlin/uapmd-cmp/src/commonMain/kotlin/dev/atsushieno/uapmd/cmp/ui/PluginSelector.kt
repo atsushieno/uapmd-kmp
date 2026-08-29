@@ -36,6 +36,10 @@ import dev.atsushieno.uapmd.ScanMode
 import dev.atsushieno.uapmd.cmp.UapmdHost
 import dev.atsushieno.uapmd.cmp.platformNeedsAudioEngineForScan
 import dev.atsushieno.uapmd.cmp.platformSupportsRemoteScanner
+import androidx.compose.ui.graphics.Path
+import androidx.compose.ui.graphics.Color
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.Canvas
 
 private enum class SortColumn { Format, Name, Vendor, Id }
 
@@ -296,7 +300,7 @@ private fun BlockedBundles(host: UapmdHost) {
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(6.dp)
     ) {
-        Text(if (expanded) "▾" else "▸", style = MaterialTheme.typography.labelSmall)
+        DisclosureIcon(expanded, MaterialTheme.colorScheme.onSurface)
         Text(
             "${entries.size} Blocked bundle${if (entries.size == 1) "" else "s"}",
             style = MaterialTheme.typography.labelMedium
@@ -349,3 +353,24 @@ private fun HeaderCell(
         fontWeight = FontWeight.Bold
     )
 }
+
+/**
+ * Disclosure triangle. Drawn rather than typed: U+25BE/U+25B8 have no glyph in
+ * the web build's fallback font and rendered as tofu there.
+ */
+@Composable
+private fun DisclosureIcon(expanded: Boolean, tint: Color) =
+    Canvas(Modifier.size(9.dp)) {
+        drawPath(Path().apply {
+            if (expanded) {
+                moveTo(0f, size.height * 0.2f)
+                lineTo(size.width, size.height * 0.2f)
+                lineTo(size.width / 2f, size.height * 0.85f)
+            } else {
+                moveTo(size.width * 0.2f, 0f)
+                lineTo(size.width * 0.85f, size.height / 2f)
+                lineTo(size.width * 0.2f, size.height)
+            }
+            close()
+        }, tint)
+    }

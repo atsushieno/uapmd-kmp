@@ -1,6 +1,6 @@
 [versions]
 agp = "9.1.1"
-android-compileSdk = "36"
+android-compileSdk = "37"
 android-minSdk = "31"
 android-targetSdk = "36"
 libcxx-provider = "29.0.14206865"
