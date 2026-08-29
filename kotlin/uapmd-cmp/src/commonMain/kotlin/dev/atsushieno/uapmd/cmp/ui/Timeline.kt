@@ -1446,7 +1446,7 @@ private fun MasterTrackLegend(host: UapmdHost, windows: FloatingWindowManager, t
                     contentPadding = TightPadding
                 ) {
                     Text(
-                        instances.firstOrNull()?.let { "⋮ ${it.displayName}" } ?: "Add Master Plugin",
+                        instances.firstOrNull()?.let { it.displayName } ?: "Add Master Plugin",
                         style = MaterialTheme.typography.labelSmall
                     )
                 }

@@ -24,7 +24,14 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.foundation.Canvas
+import androidx.compose.ui.graphics.drawscope.clipRect
+import androidx.compose.foundation.layout.size
+import androidx.compose.material3.LocalContentColor
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.unit.dp
 import dev.atsushieno.uapmd.ScanMode
 import dev.atsushieno.uapmd.cmp.UapmdHost
@@ -120,7 +127,7 @@ fun Toolbar(
             }
 
             Button(onClick = { host.playOrStop() }, enabled = host.isAudioEngineEnabled, contentPadding = Compact) {
-                Text(if (host.isPlaying) "■" else "▶")
+                if (host.isPlaying) StopIcon(LocalContentColor.current) else PlayIcon(LocalContentColor.current)
             }
             Button(
                 onClick = { recordStatus = host.toggleRecording() },
@@ -129,12 +136,12 @@ fun Toolbar(
                 colors = ButtonDefaults.buttonColors(
                     containerColor = if (host.isRecording) RecordActive else MaterialTheme.colorScheme.primary
                 )
-            ) { Text("●") }
+            ) { RecordIcon(LocalContentColor.current) }
             Button(
                 onClick = { host.pauseOrResume() },
                 enabled = host.isAudioEngineEnabled && host.isPlaying,
                 contentPadding = Compact
-            ) { Text(if (host.isPaused) "▶" else "❚❚") }
+            ) { if (host.isPaused) PlayIcon(LocalContentColor.current) else PauseIcon(LocalContentColor.current) }
 
             Box {
                 Button(onClick = { scaleMenu = true }, contentPadding = Compact) { Text("×$uiScale") }
@@ -144,7 +151,7 @@ fun Toolbar(
                     }
                 }
             }
-            Button(onClick = onToggleTheme, contentPadding = Compact) { Text(if (darkTheme) "◐" else "◑") }
+            Button(onClick = onToggleTheme, contentPadding = Compact) { ThemeIcon(LocalContentColor.current, darkTheme) }
         }
 
         // Row 2: content actions and the level meters.
@@ -214,3 +221,54 @@ fun Toolbar(
 
 /** Tight padding keeps two rows of controls usable on a phone screen. */
 private val Compact = androidx.compose.foundation.layout.PaddingValues(horizontal = 10.dp, vertical = 4.dp)
+
+/*
+ * Transport icons.
+ *
+ * Drawn rather than typed, for the same reason the track-legend icons are: we
+ * ship no icon font, and the Unicode substitutes that were here (U+25B6 play,
+ * U+25A0 stop, U+25CF record, U+275A pause, U+25D0/D1 theme) have no glyph in
+ * the font Skiko falls back to on the web, so the whole transport row rendered
+ * as tofu boxes in the browser. Paths cost nothing and look the same on all
+ * five targets.
+ */
+
+private val TransportIconSize = 13.dp
+
+@Composable
+private fun PlayIcon(tint: Color) = Canvas(Modifier.size(TransportIconSize)) {
+    drawPath(Path().apply {
+        moveTo(size.width * 0.16f, 0f)
+        lineTo(size.width * 0.94f, size.height / 2f)
+        lineTo(size.width * 0.16f, size.height)
+        close()
+    }, tint)
+}
+
+@Composable
+private fun StopIcon(tint: Color) = Canvas(Modifier.size(TransportIconSize)) {
+    val inset = size.minDimension * 0.1f
+    drawRect(tint, Offset(inset, inset), Size(size.width - inset * 2, size.height - inset * 2))
+}
+
+@Composable
+private fun RecordIcon(tint: Color) = Canvas(Modifier.size(TransportIconSize)) {
+    drawCircle(tint, size.minDimension * 0.42f, Offset(size.width / 2f, size.height / 2f))
+}
+
+@Composable
+private fun PauseIcon(tint: Color) = Canvas(Modifier.size(TransportIconSize)) {
+    val barWidth = size.width * 0.28f
+    drawRect(tint, Offset(size.width * 0.1f, 0f), Size(barWidth, size.height))
+    drawRect(tint, Offset(size.width * 0.62f, 0f), Size(barWidth, size.height))
+}
+
+/** The half-filled circle the theme toggle used: outline plus a filled half. */
+@Composable
+private fun ThemeIcon(tint: Color, dark: Boolean) = Canvas(Modifier.size(TransportIconSize)) {
+    val c = Offset(size.width / 2f, size.height / 2f)
+    val r = size.minDimension * 0.45f
+    drawCircle(tint, r, c, style = androidx.compose.ui.graphics.drawscope.Stroke(1.4f))
+    val left = if (dark) c.x - r else c.x
+    clipRect(left, c.y - r, left + r, c.y + r) { drawCircle(tint, r, c) }
+}
