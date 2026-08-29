@@ -17,6 +17,7 @@ import androidx.compose.material3.Checkbox
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.HorizontalDivider
+import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
@@ -33,6 +34,7 @@ import dev.atsushieno.uapmd.CatalogEntry
 import dev.atsushieno.uapmd.PluginInstanceConfig
 import dev.atsushieno.uapmd.ScanMode
 import dev.atsushieno.uapmd.cmp.UapmdHost
+import dev.atsushieno.uapmd.cmp.platformSupportsRemoteScanner
 
 private enum class SortColumn { Format, Name, Vendor, Id }
 
@@ -47,8 +49,13 @@ fun PluginSelector(host: UapmdHost) {
     var sortBy by remember { mutableStateOf(SortColumn.Name) }
     var ascending by remember { mutableStateOf(true) }
     var selected by remember { mutableStateOf<CatalogEntry?>(null) }
-    var forceRescan by remember { mutableStateOf(false) }
-    var remoteScanner by remember { mutableStateOf(false) }
+    // uapmd-app's defaults (`PluginSelector.hpp:39-42`): force a rescan, and scan in
+    // a separate process wherever that exists. The remote scanner is not a nicety —
+    // an in-process scan runs every plug-in's entry code inside the app, so a single
+    // bad plug-in takes the app down partway through the scan.
+    var forceRescan by remember { mutableStateOf(true) }
+    var remoteScanner by remember { mutableStateOf(platformSupportsRemoteScanner) }
+    var remoteTimeoutSeconds by remember { mutableStateOf("20") }
 
     var deviceName by remember { mutableStateOf("") }
     var apiName by remember { mutableStateOf("default") }
@@ -80,18 +87,78 @@ fun PluginSelector(host: UapmdHost) {
         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
             Button(onClick = {
                 if (host.isScanning) host.cancelScan()
-                else host.scanPlugins(forceRescan, if (remoteScanner) ScanMode.Remote else ScanMode.InProcess)
+                else host.scanPlugins(
+                    forceRescan = forceRescan,
+                    mode = if (remoteScanner) ScanMode.Remote else ScanMode.InProcess,
+                    remoteTimeoutSeconds = remoteTimeoutSeconds.toDoubleOrNull()?.coerceAtLeast(0.0) ?: 20.0
+                )
             }) { Text(if (host.isScanning) "Cancel" else "Scan Plugins") }
 
-            Checkbox(checked = forceRescan, onCheckedChange = { forceRescan = it })
+            // Settings are fixed for the duration of a scan, as uapmd-app disables
+            // them while one runs.
+            Checkbox(
+                checked = forceRescan,
+                onCheckedChange = { forceRescan = it },
+                enabled = !host.isScanning
+            )
             Text("Force Rescan", style = MaterialTheme.typography.bodySmall)
-            Checkbox(checked = remoteScanner, onCheckedChange = { remoteScanner = it })
-            Text("Remote scanner", style = MaterialTheme.typography.bodySmall)
+
+            if (platformSupportsRemoteScanner) {
+                Checkbox(
+                    checked = remoteScanner,
+                    onCheckedChange = { remoteScanner = it },
+                    enabled = !host.isScanning
+                )
+                Text("Remote scanner", style = MaterialTheme.typography.bodySmall)
+                OutlinedTextField(
+                    value = remoteTimeoutSeconds,
+                    onValueChange = { remoteTimeoutSeconds = it },
+                    label = { Text("Timeout (s)") },
+                    singleLine = true,
+                    enabled = remoteScanner && !host.isScanning,
+                    modifier = Modifier.width(110.dp)
+                )
+            }
         }
+        // Scan progress, as uapmd-app's selector reports it (PluginSelector.cpp:163-177).
+        // A slow scan walks every bundle on the machine, so a bare "Scanning…" is
+        // indistinguishable from a scan that has stalled.
+        val progress = host.scanProgress
         Text(
-            if (host.isScanning) "Scanning…" else "${entries.size} of ${host.catalog.size} plugins",
+            when {
+                !host.isScanning && !progress.running ->
+                    "${entries.size} of ${host.catalog.size} plugins"
+                progress.totalBundles > 0u ->
+                    "Scanning… ${progress.processedBundles} / ${progress.totalBundles} bundles"
+                progress.processedBundles > 0u ->
+                    "Scanning… ${progress.processedBundles} bundle(s) processed"
+                else -> "Scanning…"
+            },
             style = MaterialTheme.typography.bodySmall
         )
+        if (progress.running && progress.totalBundles > 0u) {
+            LinearProgressIndicator(
+                progress = {
+                    (progress.processedBundles.toFloat() / progress.totalBundles.toFloat())
+                        .coerceIn(0f, 1f)
+                },
+                modifier = Modifier.fillMaxWidth()
+            )
+        }
+        if (progress.currentBundle.isNotEmpty()) {
+            Text(
+                "Current bundle: ${progress.currentBundle}",
+                style = MaterialTheme.typography.labelSmall,
+                maxLines = 1
+            )
+        }
+        host.scanError?.let {
+            Text(
+                "Last scanning error: $it",
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.error
+            )
+        }
 
         OutlinedTextField(
             value = filter,

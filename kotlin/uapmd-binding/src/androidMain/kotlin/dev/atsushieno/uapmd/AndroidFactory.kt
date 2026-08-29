@@ -57,3 +57,6 @@ class AndroidPreparedProject internal constructor(private val handle: Long) : Pr
 
 actual fun prepareProjectLoad(filePath: String): PreparedProject =
     AndroidPreparedProject(JniBridge.uapmdPrepareProjectLoad(filePath))
+
+/** Remote scanning needs a launchable process; this platform has none. */
+actual fun setRemoteScannerExecutable(path: String?) = Unit

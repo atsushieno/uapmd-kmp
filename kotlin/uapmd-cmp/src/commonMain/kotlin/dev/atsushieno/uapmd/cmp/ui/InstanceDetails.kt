@@ -30,6 +30,7 @@ import dev.atsushieno.uapmd.cmp.TrackInstance
 import androidx.compose.runtime.rememberCoroutineScope
 import dev.atsushieno.uapmd.cmp.UapmdHost
 import dev.atsushieno.uapmd.cmp.pickProjectFileToOpen
+import dev.atsushieno.uapmd.cmp.deliverSavedFile
 import dev.atsushieno.uapmd.cmp.pickProjectFileToSave
 import kotlinx.coroutines.launch
 
@@ -83,8 +84,9 @@ fun InstanceDetails(host: UapmdHost, inst: TrackInstance) {
         Row(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalAlignment = Alignment.CenterVertically) {
             Button(onClick = {
                 scope.launch {
-                    pickProjectFileToSave()?.let { path ->
+                    pickProjectFileToSave("plugin-state.bin")?.let { path ->
                         stateStatus = host.savePluginState(inst.instanceId, path)
+                        deliverSavedFile(path)
                     }
                 }
             }) { Text("Save State") }

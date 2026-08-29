@@ -30,7 +30,7 @@ import dev.atsushieno.uapmd.ScanMode
 import dev.atsushieno.uapmd.cmp.UapmdHost
 import dev.atsushieno.uapmd.cmp.pickMediaFileToOpen
 import dev.atsushieno.uapmd.cmp.pickProjectFileToOpen
-import dev.atsushieno.uapmd.cmp.pickProjectFileToSave
+import dev.atsushieno.uapmd.cmp.saveProjectToPlatform
 import androidx.compose.runtime.rememberCoroutineScope
 import kotlinx.coroutines.launch
 
@@ -185,7 +185,7 @@ fun Toolbar(
                     })
                     DropdownMenuItem(text = { Text("Save Project") }, onClick = {
                         projectOpen = false
-                        scope.launch { pickProjectFileToSave()?.let { host.saveProject(it) } }
+                        scope.launch { saveProjectToPlatform(host, "project.uapmdz") }
                     })
                     HorizontalDivider()
                     DropdownMenuItem(text = { Text("Render To File") }, onClick = {

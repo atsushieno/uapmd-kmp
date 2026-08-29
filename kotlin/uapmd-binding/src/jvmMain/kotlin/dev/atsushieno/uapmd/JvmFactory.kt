@@ -65,3 +65,5 @@ class JvmPreparedProject internal constructor(private val handle: com.sun.jna.Po
 
 actual fun prepareProjectLoad(filePath: String): PreparedProject =
     JvmPreparedProject(lib.uapmd_prepare_project_load(filePath) ?: error("uapmd_prepare_project_load failed"))
+
+actual fun setRemoteScannerExecutable(path: String?) = lib.uapmd_set_remote_scanner_executable(path)

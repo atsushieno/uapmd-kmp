@@ -52,6 +52,15 @@ interface AppModel {
         requireFastScanning: Boolean = false
     )
     fun cancelPluginScanning()
+
+    /**
+     * Progress of the slow scan. [isScanning] alone cannot tell a long scan from a
+     * stuck one, which is why uapmd-app's selector shows these.
+     */
+    val slowScanProgress: SlowScanProgress
+
+    /** The last scanning error, or null. */
+    val lastPluginScanError: String?
     fun generateScanReport(): String
     fun clearPluginBlocklist()
 

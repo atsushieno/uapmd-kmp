@@ -293,6 +293,31 @@ JNI_FN(void, uapmdAppPerformPluginScanning)(JNIEnv*, jclass, jlong app, jboolean
                                         remoteTimeoutSeconds, requireFastScanning);
 }
 
+JNI_FN(jobjectArray, uapmdAppSlowScanProgress)(JNIEnv* env, jclass, jlong app) {
+    auto p = uapmd_app_slow_scan_progress(AM(app));
+    jint counts[3] = {
+        p.running ? 1 : 0,
+        static_cast<jint>(p.processed_bundles),
+        static_cast<jint>(p.total_bundles)
+    };
+    jintArray countArr = env->NewIntArray(3);
+    env->SetIntArrayRegion(countArr, 0, 3, counts);
+
+    jclass objectClass = env->FindClass("java/lang/Object");
+    jobjectArray result = env->NewObjectArray(2, objectClass, nullptr);
+    env->SetObjectArrayElement(result, 0, countArr);
+    env->SetObjectArrayElement(result, 1,
+                               env->NewStringUTF(p.current_bundle ? p.current_bundle : ""));
+    return result;
+}
+
+JNI_FN(jstring, uapmdAppLastPluginScanError)(JNIEnv* env, jclass, jlong app) {
+    size_t needed = uapmd_app_last_plugin_scan_error(AM(app), nullptr, 0);
+    std::vector<char> buf(needed + 1, 0);
+    uapmd_app_last_plugin_scan_error(AM(app), buf.data(), buf.size());
+    return env->NewStringUTF(buf.data());
+}
+
 JNI_FN(void, uapmdAppCancelPluginScanning)(JNIEnv*, jclass, jlong app) {
     uapmd_app_cancel_plugin_scanning(AM(app));
 }

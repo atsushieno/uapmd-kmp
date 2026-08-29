@@ -64,3 +64,6 @@ class NativePreparedProject internal constructor(private val handle: uapmd_prepa
 
 actual fun prepareProjectLoad(filePath: String): PreparedProject =
     NativePreparedProject(uapmd_prepare_project_load(filePath) ?: error("uapmd_prepare_project_load failed"))
+
+/** Remote scanning needs a launchable process; this platform has none. */
+actual fun setRemoteScannerExecutable(path: String?) = Unit

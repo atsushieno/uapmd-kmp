@@ -7,6 +7,7 @@
 #include <uapmd-plugin-hosting/uapmd-plugin-hosting.hpp>
 #include <cstring>
 #include <deque>
+#include <filesystem>
 #include <future>
 #include <string>
 #include <vector>
@@ -66,6 +67,54 @@ uapmd_transport_controller_t uapmd_app_transport(uapmd_app_model_t app) {
 
 uapmd_document_provider_t uapmd_app_document_provider(uapmd_app_model_t app) {
     return reinterpret_cast<uapmd_document_provider_t>(AM(app)->documentProvider());
+}
+
+/*
+ * The error string must outlive the callback, which fires after this returns; the
+ * caller only borrows it for the duration of the call, as everywhere else here.
+ */
+void uapmd_app_save_project_to_document(uapmd_app_model_t app,
+                                          const uapmd_document_handle_t* handle,
+                                          void* user_data,
+                                          uapmd_write_callback_t callback) {
+    uapmd::DocumentHandle h;
+    if (handle) {
+        h.id = handle->id ? handle->id : "";
+        h.display_name = handle->display_name ? handle->display_name : "";
+        h.mime_type = handle->mime_type ? handle->mime_type : "";
+    }
+    AM(app)->saveProjectToDocument(
+        std::move(h),
+        [user_data, callback](uapmd::DocumentIOResult result) {
+            if (!callback)
+                return;
+            thread_local std::string error;
+            error = result.error;
+            uapmd_document_io_result_t c{ result.success, error.empty() ? nullptr : error.c_str() };
+            callback(c, user_data);
+        });
+}
+
+void uapmd_set_remote_scanner_executable(const char* path) {
+    uapmd_plugin_hosting::setRemoteScannerExecutable(path && *path ? std::filesystem::path(path)
+                                                                   : std::filesystem::path{});
+}
+
+static thread_local std::string tl_current_bundle;
+
+uapmd_slow_scan_progress_t uapmd_app_slow_scan_progress(uapmd_app_model_t app) {
+    auto state = AM(app)->slowScanProgress();
+    tl_current_bundle = state.currentBundle;
+    return {
+        state.running,
+        state.processedBundles,
+        state.totalBundles,
+        tl_current_bundle.c_str()
+    };
+}
+
+size_t uapmd_app_last_plugin_scan_error(uapmd_app_model_t app, char* buf, size_t buf_size) {
+    return copy_string(AM(app)->lastPluginScanError(), buf, buf_size);
 }
 
 int32_t uapmd_app_sample_rate(uapmd_app_model_t app) { return AM(app)->sampleRate(); }

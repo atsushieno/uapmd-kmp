@@ -38,6 +38,23 @@ class WasmJsAppModel internal constructor(internal val handle: Int) : AppModel {
 
     override fun cancelPluginScanning() = wasmMod.uapmdAppCancelPluginScanning(handle)
 
+    // uapmd_slow_scan_progress_t: running@0 processed@4 total@8 currentBundle@12, size 16.
+    override val slowScanProgress: SlowScanProgress
+        get() = withWasmStruct(16) { out ->
+            val mod = wasmMod
+            mod.uapmdAppSlowScanProgress(out, handle)
+            SlowScanProgress(
+                running = mod.getValue(out, "i8").toInt() != 0,
+                processedBundles = mod.getValue(out + 4, "i32").toInt().toUInt(),
+                totalBundles = mod.getValue(out + 8, "i32").toInt().toUInt(),
+                currentBundle = wasmStrAt(out + 12)
+            )
+        }
+
+    override val lastPluginScanError: String?
+        get() = readString(handle) { h, buf, size -> uapmdAppLastPluginScanError(h, buf, size) }
+            .ifEmpty { null }
+
     override fun generateScanReport(): String =
         readString(handle) { h, buf, size -> uapmdAppGenerateScanReport(h, buf, size) }
 

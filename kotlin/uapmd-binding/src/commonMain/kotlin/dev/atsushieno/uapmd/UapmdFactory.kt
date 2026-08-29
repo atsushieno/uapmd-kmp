@@ -35,3 +35,15 @@ expect fun cleanupAppModel()
 
 /** Unpacks a `.uapmdz` archive (or passes a `.uapmd` through) before loading. */
 expect fun prepareProjectLoad(filePath: String): PreparedProject
+
+/**
+ * Points remote plug-in scanning at a standalone scanner executable.
+ *
+ * Remote scanning relaunches the host's own executable with `--scan-only
+ * --ipc-client …`. On a JVM that executable is `java`, which connects to nothing, so
+ * out-of-process scanning fails outright unless it is told what to launch. uapmd's
+ * `uapmd-scan` understands the same arguments.
+ *
+ * Pass null or an empty string to restore the default.
+ */
+expect fun setRemoteScannerExecutable(path: String?)

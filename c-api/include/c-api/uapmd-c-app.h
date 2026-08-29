@@ -34,6 +34,22 @@ UAPMD_C_EXPORT void uapmd_app_cleanup(void);
 UAPMD_C_EXPORT uapmd_realtime_sequencer_t uapmd_app_sequencer(uapmd_app_model_t app);
 UAPMD_C_EXPORT uapmd_transport_controller_t uapmd_app_transport(uapmd_app_model_t app);
 UAPMD_C_EXPORT uapmd_document_provider_t uapmd_app_document_provider(uapmd_app_model_t app);
+
+/*
+ * Saves the current project into a document handle obtained from
+ * `uapmd_document_provider_pick_save`.
+ *
+ * This is the flow uapmd-app uses (`MainWindow::handleSaveProject`), and the only
+ * one that works where there is no writable path: it stages the project to a temp
+ * directory, packs the whole tree into a `.uapmdz` archive, and writes the archive
+ * through the provider. Saving to a plain path cannot stand in for it, because a
+ * project is a directory — a `.uapmd` document plus its graphs and extensions — not
+ * a single file.
+ */
+UAPMD_C_EXPORT void uapmd_app_save_project_to_document(uapmd_app_model_t app,
+                                                          const uapmd_document_handle_t* handle,
+                                                          void* user_data,
+                                                          uapmd_write_callback_t callback);
 UAPMD_C_EXPORT int32_t uapmd_app_sample_rate(uapmd_app_model_t app);
 UAPMD_C_EXPORT uint32_t uapmd_app_track_count(uapmd_app_model_t app);
 
@@ -65,6 +81,45 @@ UAPMD_C_EXPORT void uapmd_app_perform_plugin_scanning(uapmd_app_model_t app,
                                                         bool require_fast_scanning);
 UAPMD_C_EXPORT void uapmd_app_cancel_plugin_scanning(uapmd_app_model_t app);
 UAPMD_C_EXPORT size_t uapmd_app_generate_scan_report(uapmd_app_model_t app, char* buf, size_t buf_size);
+
+/*
+ * Progress of the slow scan, mirroring `AppModel::SlowScanProgressState`.
+ *
+ * A slow scan walks every bundle on the machine and can take minutes; without this
+ * a caller can only see that `is_scanning` is true, which is indistinguishable from
+ * a scan that has hung. uapmd-app's selector shows the counts and the bundle it is
+ * on for exactly that reason (`PluginSelector.cpp:163-177`).
+ *
+ * `current_bundle` points at storage owned by the app model's snapshot and is valid
+ * until the next call on the same thread.
+ */
+typedef struct uapmd_slow_scan_progress {
+    bool running;
+    uint32_t processed_bundles;
+    uint32_t total_bundles;
+    const char* current_bundle;
+} uapmd_slow_scan_progress_t;
+
+UAPMD_C_EXPORT uapmd_slow_scan_progress_t uapmd_app_slow_scan_progress(uapmd_app_model_t app);
+
+/*
+ * Points remote scanning at a standalone scanner executable.
+ *
+ * Remote scanning relaunches the host's own executable with `--scan-only
+ * --ipc-client ...`. That works for a native app whose main() dispatches those
+ * arguments, but not for an embedder whose executable is a runtime launcher — a JVM
+ * app relaunches `java`, which connects to nothing, and the scan fails with
+ * "Remote scanner failed to connect". Setting this to a binary that understands the
+ * same arguments (uapmd's own `uapmd-scan`) makes out-of-process scanning work
+ * there, which matters because an in-process scan runs every plug-in's entry code
+ * inside the app: one bad plug-in and the app dies partway through.
+ *
+ * Pass NULL or an empty string to restore the default.
+ */
+UAPMD_C_EXPORT void uapmd_set_remote_scanner_executable(const char* path);
+
+/** The last scanning error, or an empty string. uapmd-app shows this in red. */
+UAPMD_C_EXPORT size_t uapmd_app_last_plugin_scan_error(uapmd_app_model_t app, char* buf, size_t buf_size);
 UAPMD_C_EXPORT void uapmd_app_clear_plugin_blocklist(uapmd_app_model_t app);
 
 /*

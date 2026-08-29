@@ -53,6 +53,22 @@ class JsAppModel internal constructor(internal val handle: Int) : AppModel {
         )
     }
 
+    override val slowScanProgress: SlowScanProgress
+        get() = withWasmMem(16) { out ->
+            jsMod._uapmd_app_slow_scan_progress(out, handle)
+            SlowScanProgress(
+                running = (jsMod.getValue(out, "i8") as Int) != 0,
+                processedBundles = (jsMod.getValue(out + 4, "i32") as Int).toUInt(),
+                totalBundles = (jsMod.getValue(out + 8, "i32") as Int).toUInt(),
+                currentBundle = jsStrAt(out + 12)
+            )
+        }
+
+    override val lastPluginScanError: String?
+        get() = readJsString(handle) { h, buf, size ->
+            jsMod._uapmd_app_last_plugin_scan_error(h, buf, size) as Int
+        }.ifEmpty { null }
+
     override fun cancelPluginScanning() {
         jsMod._uapmd_app_cancel_plugin_scanning(handle)
     }

@@ -67,3 +67,6 @@ private class PassThroughPreparedProject(override val path: String) : PreparedPr
 }
 
 actual fun prepareProjectLoad(filePath: String): PreparedProject = PassThroughPreparedProject(filePath)
+
+/** Remote scanning needs a launchable process; this platform has none. */
+actual fun setRemoteScannerExecutable(path: String?) = Unit

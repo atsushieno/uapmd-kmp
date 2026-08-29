@@ -36,6 +36,7 @@ import dev.atsushieno.uapmd.OfflineRenderSettings
 import dev.atsushieno.uapmd.PluginInstanceConfig
 import dev.atsushieno.uapmd.PluginInstanceResult
 import dev.atsushieno.uapmd.ScanMode
+import dev.atsushieno.uapmd.SlowScanProgress
 import dev.atsushieno.uapmd.TimelineState
 import dev.atsushieno.uapmd.UndoState
 import dev.atsushieno.uapmd.getAppModel
@@ -167,6 +168,17 @@ class UapmdHost private constructor(val model: AppModel) {
     var isScanning by mutableStateOf(false)
         private set
 
+    /** Previous poll's scanning flag, so a scan's completion can be noticed. */
+    private var wasScanning = false
+
+    /** Progress of the running slow scan, as uapmd-app's selector shows it. */
+    var scanProgress by mutableStateOf(SlowScanProgress())
+        private set
+
+    /** The last scanning error, surfaced rather than swallowed. */
+    var scanError by mutableStateOf<String?>(null)
+        private set
+
     /**
      * Drops the scan blocklist. A plug-in that crashed a previous scan stays out
      * of the catalog, which is indistinguishable from "not installed" when a
@@ -200,8 +212,17 @@ class UapmdHost private constructor(val model: AppModel) {
     fun unblockPlugin(entryId: String) =
         runCatching { model.unblockPlugin(entryId) }.getOrDefault(false).also { refreshBlocklist() }
 
-    fun scanPlugins(forceRescan: Boolean = false, mode: ScanMode = ScanMode.InProcess) {
-        offUiThread { model.performPluginScanning(forceRescan, mode) }
+    /**
+     * [mode] defaults to whatever the platform can do: scanning in a separate
+     * process keeps a crashing plug-in from taking the app with it, which an
+     * in-process scan cannot, so it is the desktop default as it is in uapmd-app.
+     */
+    fun scanPlugins(
+        forceRescan: Boolean = true,
+        mode: ScanMode = if (platformSupportsRemoteScanner) ScanMode.Remote else ScanMode.InProcess,
+        remoteTimeoutSeconds: Double = 20.0
+    ) {
+        offUiThread { model.performPluginScanning(forceRescan, mode, remoteTimeoutSeconds) }
         refresh()
     }
 
@@ -926,6 +947,8 @@ class UapmdHost private constructor(val model: AppModel) {
     fun refresh(structural: Boolean = true) {
         isAudioEngineEnabled = model.isAudioEngineEnabled
         isScanning = model.isScanning
+        scanProgress = runCatching { model.slowScanProgress }.getOrDefault(SlowScanProgress())
+        scanError = runCatching { model.lastPluginScanError }.getOrNull()
         val t = model.transport
         isPlaying = t.isPlaying
         isPaused = t.isPaused
@@ -964,6 +987,12 @@ class UapmdHost private constructor(val model: AppModel) {
         inputSpectrum = runCatching { engine.getInputSpectrum(24) }.getOrDefault(inputSpectrum)
         outputSpectrum = runCatching { engine.getOutputSpectrum(24) }.getOrDefault(outputSpectrum)
 
+        // A finished scan is the moment the catalog changed, so refresh on the
+        // falling edge of `isScanning`. Refreshing only while the catalog is empty
+        // — which is what this used to do — meant a rescan never reached the list:
+        // press Scan, watch nothing happen, conclude scanning is broken.
+        if (wasScanning && !isScanning) refreshCatalog()
+        wasScanning = isScanning
         if (catalog.isEmpty() && !isScanning) refreshCatalog()
     }
 
@@ -1005,6 +1034,17 @@ class UapmdHost private constructor(val model: AppModel) {
  * off, matching uapmd-app's `web_main.cpp` (browsers also require a user gesture
  * before audio can begin).
  */
+/**
+ * Whether this platform can scan plug-ins in a separate process.
+ *
+ * Desktop only, matching uapmd-app's `kRemoteScannerSupported`
+ * (`PluginSelector.cpp:15`): Android, iOS and the browser have no way to launch a
+ * scanner process. It matters because an in-process scan runs every plug-in's entry
+ * code inside the app, so one bad plug-in takes the whole app down mid-scan — which
+ * is why uapmd-app defaults to the remote scanner wherever it exists.
+ */
+expect val platformSupportsRemoteScanner: Boolean
+
 expect val platformStartsWithAudioEngineEnabled: Boolean
 
 /**

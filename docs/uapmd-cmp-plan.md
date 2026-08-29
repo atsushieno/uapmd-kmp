@@ -176,11 +176,64 @@ before reporting a UI change as working.
 |---|---|
 | `:uapmd-cmp:renderUiSnapshot` | Renders a view off-screen to a PNG at device density. `-Duapmd.cmp.snapshotView=` picks `timeline` (default), `selector`, `graph`, `instance` or `pianoroll`; `-Duapmd.cmp.snapshotSize=WxH` and `-Duapmd.cmp.snapshotDensity=` set the frame. This is how a clipped legend, an unreadable label or a link that never draws gets caught. |
 | `:uapmd-cmp:runBootstrapProbe` | Drives AppModel headlessly - audio start/stop, tracks, plug-ins, clips, graph, tempo map, piano-roll edits - and fails on the first broken check. |
+| Serving the wasm build | The dev server injects COOP/COEP itself, so the service-worker path in `index.html` never runs there and a dev-server load proves nothing about a static deploy. To exercise what users get, build `:uapmd-cmp:wasmJsBrowserDistribution` and serve `build/dist/wasmJs/productionExecutable` with COOP/COEP headers of your own; the two builds have already differed in practice. |
+| `:uapmd-cmp:runScanPollProbe` | Times what the UI poll costs while a plug-in scan runs, reporting first/median/p95/max per call. Use it before adding anything to the poll. |
 | `:uapmd-cmp:runKeyboardDragProbe` | Drags a pointer across the on-screen keyboard through `ImageComposeScene` and reports the notes produced, for touch and for mouse separately. |
 
 A harness must not set up the state the feature under test is supposed to establish. The graph
 snapshot used to call `ensureTrackUsesEditorGraph()` itself, which hid the fact that opening the
 editor did not - the window opened on the simple chain and drew every node unconnected.
+
+### 2.7 The startup scan is fast-only; the catalog arrives later
+
+`AppModel::maybeStartInitialPluginScan` runs with `requireFastScanning = true`
+(`AppModel.cpp:430`), so on a cold cache it legitimately finds **nothing** and the
+selector opens empty. The full sweep is the slow scan the "Scan Plugins" button
+runs, which on this machine takes a while and finds ~287 entries where the fast scan
+found 0. Two consequences worth keeping in mind:
+
+- An empty selector on first run is not a scanning failure, and `isScanning` alone
+  cannot distinguish a long scan from a stuck one - which is why the progress counts
+  and `lastPluginScanError` are bound and shown, as uapmd-app shows them.
+- The catalog must be re-read when a scan *finishes*. Reading it only while it is
+  empty means a rescan never reaches the list, so pressing Scan appears to do
+  nothing whether or not the scan worked.
+
+### 2.8 Scan out of process wherever the platform allows it
+
+An in-process scan runs every plug-in's entry code inside the app, so one bad
+plug-in takes the app down partway through - which is why uapmd-app defaults
+`useRemoteScanner_` and `forceRescan_` to **true** (`PluginSelector.hpp:39-42`) and
+offers the remote scanner everywhere `kRemoteScannerSupported` holds: desktop only,
+never Android, iOS or the browser.
+
+uapmd-cmp cannot use it the way uapmd-app does. Remote scanning relaunches the
+host's own executable with `--scan-only --ipc-client …`; on the JVM that executable
+is `java`, which serves no scanner, so the scan dies with "Remote scanner failed to
+connect". uapmd's standalone `uapmd-scan` already understands those arguments
+(`tools/uapmd-scan/main.cpp:74`), so the missing piece was a way to point the
+launcher at it - added upstream as `setRemoteScannerExecutable`
+(`RemoteScannerServer.hpp`), exposed as `uapmd_set_remote_scanner_executable`.
+
+The desktop app resolves the binary from `-Duapmd.cmp.scannerExe`,
+`UAPMD_SCAN_EXECUTABLE`, or beside the native library, and reports
+`platformSupportsRemoteScanner` only when it found one. **A build that ships no
+scanner must not default to remote**: a scan that runs in process and risks a crash
+still beats one that cannot start.
+
+Two consequences of getting this wrong, both seen in practice. With no scanner found
+the app silently scans in process, where formats that must instantiate on the UI
+thread block it - the window freezes mid-scan and coroutines pile up suspended - and
+a single bad plug-in kills the app outright. So the Gradle build forwards the built
+`uapmd-scan` path to the desktop app and to every probe that scans; without that
+forwarding the flag is false and the default silently degrades.
+
+Measured cost of the UI poll during a real 164-bundle remote scan
+(`:uapmd-cmp:runScanPollProbe`, 167 samples): `slowScanProgress` median 157µs / p95
+570µs, `lastPluginScanError` median 16µs, a full 287-entry catalog read median 2.5ms
+/ p95 6.4ms. First calls cost 11-13ms on JNA layout setup, which is why the probe
+reports medians rather than maxima - judging this on a handful of samples points at
+the wrong thing.
 
 ## 3 · Window model
 
@@ -337,3 +390,24 @@ nodes and nothing else. A `Plugin` endpoint naming a built-in node - the track's
 `builtin:track_gain`, say - resolves to -1, and `TimelineFacadeMixer.cpp:376` then rejects the
 connection with "A plug-in graph endpoint no longer exists". uapmd-app's graph editor draws pins
 for those nodes too and hits the same refusal, so neither app can wire them.
+
+### 6.4 `coop-coep-sw.js` rejects any null-body-status response
+
+`withIsolationHeaders` (`tools/uapmd-app/web/coop-coep-sw.js`) rebuilds every same-origin response
+as `new Response(response.body, { status, statusText, headers })`. That constructor throws
+`TypeError: Response with null body status cannot have body` for statuses 204, 205 and 304, and
+the throw happens inside the `.then()` handed to `event.respondWith()`, so the browser reports
+"A ServiceWorker intercepted the request and encountered an unexpected error" for the page or
+script that was being fetched. Verified in a browser: 204, 205 and 304 throw, while 200, 206, 301,
+404 and 500 construct fine.
+
+The guard is to pass those statuses through untouched - they carry no body to re-wrap and no
+document to isolate:
+
+```js
+if (response.status === 204 || response.status === 205 || response.status === 304)
+    return response;
+```
+
+Not fixed here because `external/uapmd` commits are yours; uapmd-app serves the same file and
+takes the same path.

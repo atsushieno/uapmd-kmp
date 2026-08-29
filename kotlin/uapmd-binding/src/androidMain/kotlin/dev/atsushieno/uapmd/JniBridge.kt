@@ -633,6 +633,9 @@ object JniBridge {
 
     @JvmStatic external fun uapmdAppPerformPluginScanning(app: Long, forceRescan: Boolean, request: Int, remoteTimeoutSeconds: Double, requireFastScanning: Boolean)
     @JvmStatic external fun uapmdAppCancelPluginScanning(app: Long)
+    /** Returns Object[]{ int[3]{running, processed, total}, String currentBundle }. */
+    @JvmStatic external fun uapmdAppSlowScanProgress(app: Long): Array<Any>?
+    @JvmStatic external fun uapmdAppLastPluginScanError(app: Long): String?
     @JvmStatic external fun uapmdAppGenerateScanReport(app: Long): String
     @JvmStatic external fun uapmdAppClearPluginBlocklist(app: Long)
     @JvmStatic external fun uapmdAppBlocklistCount(app: Long): Int

@@ -59,6 +59,32 @@ external interface UapmdCApiModule : JsAny {
     fun uapmdPluginHostReloadCatalogFromCache(handle: Int)
     @JsName("_uapmd_plugin_host_save_catalog")
     fun uapmdPluginHostSaveCatalog(handle: Int, pathPtr: Int)
+    /* ── Document provider (uapmd-c-file.h) ──────────────────────────────── */
+    @JsName("_uapmd_app_document_provider")
+    fun uapmdAppDocumentProvider(app: Int): Int
+    /** Callback: void(uapmd_document_pick_result_t result, void* user_data) */
+    @JsName("_uapmd_document_provider_pick_open")
+    fun uapmdDocumentProviderPickOpen(
+        provider: Int, filters: Int, filterCount: Int, allowMultiple: Boolean,
+        userData: Int, callback: Int
+    )
+    /** Callback: void(uapmd_document_pick_result_t result, void* user_data) */
+    @JsName("_uapmd_document_provider_pick_save")
+    fun uapmdDocumentProviderPickSave(
+        provider: Int, defaultName: Int, filters: Int, filterCount: Int,
+        userData: Int, callback: Int
+    )
+    /** Callback: void(uapmd_document_io_result_t result, const char* path, void* user_data) */
+    @JsName("_uapmd_document_provider_resolve_to_path")
+    fun uapmdDocumentProviderResolveToPath(provider: Int, handle: Int, userData: Int, callback: Int)
+    /** Callback: void(uapmd_document_io_result_t result, void* user_data) */
+    @JsName("_uapmd_app_save_project_to_document")
+    fun uapmdAppSaveProjectToDocument(app: Int, handle: Int, userData: Int, callback: Int)
+    @JsName("_uapmd_document_provider_tick")
+    fun uapmdDocumentProviderTick(provider: Int)
+    @JsName("_uapmd_document_pick_result_free")
+    fun uapmdDocumentPickResultFree(result: Int)
+
     /** Callback: void(int instanceId, const char* error) */
     @JsName("_uapmd_plugin_host_create_instance")
     fun uapmdPluginHostCreateInstance(
@@ -886,6 +912,10 @@ external interface UapmdCApiModule : JsAny {
 
     @JsName("_uapmd_app_perform_plugin_scanning")
     fun uapmdAppPerformPluginScanning(app: Int, forceRescan: Boolean, request: Int, remoteTimeoutSeconds: Double, requireFastScanning: Boolean)
+    @JsName("_uapmd_app_slow_scan_progress")
+    fun uapmdAppSlowScanProgress(out: Int, app: Int)
+    @JsName("_uapmd_app_last_plugin_scan_error")
+    fun uapmdAppLastPluginScanError(app: Int, buf: Int, bufSize: Int): Int
     @JsName("_uapmd_app_cancel_plugin_scanning")
     fun uapmdAppCancelPluginScanning(app: Int)
     @JsName("_uapmd_app_generate_scan_report")
@@ -1312,6 +1342,208 @@ fun uapmdDispatchInstanceCreated(cbId: Int, resultPtr: Int) {
             error = if (errPtr != 0) mod.utf8ToString(errPtr) else null
         )
     )
+}
+
+/*
+ * Document picking, in two hops. `pick_open` reports handles; a handle is not a
+ * path, so `resolve_to_path` turns the chosen one into something the engine can
+ * open — which for the Emscripten provider is the file it has already copied into
+ * MEMFS. Both are async, so each hop is its own C callback.
+ *
+ * Layouts, verified with emcc -fdump-record-layouts-complete on wasm32:
+ *   uapmd_document_pick_result_t  success@0 count@4 handles@8 error@12,  size 16
+ *   uapmd_document_handle_t       id@0 displayName@4 mimeType@8,         size 12
+ *   uapmd_document_io_result_t    success@0 error@4,                     size 8
+ */
+private val pendingDocumentPicks = mutableMapOf<Int, (String?) -> Unit>()
+
+/** Kept alive until the pick completes; the provider calls back long after the call returns. */
+internal fun registerDocumentPick(callback: (String?) -> Unit): Pair<Int, Int> {
+    val cbId = nextCallbackId()
+    pendingDocumentPicks[cbId] = callback
+    return cbId to makeCFunctionPtr(cbId, "uapmdDispatchDocumentPick", "vii")
+}
+
+@JsExport
+fun uapmdDispatchDocumentPick(cbId: Int, resultPtr: Int) {
+    val mod = wasmMod
+    val callback = pendingDocumentPicks.remove(cbId) ?: return
+    val success = mod.getValue(resultPtr, "i8").toInt() != 0
+    val count = mod.getValue(resultPtr + 4, "i32").toInt()
+    val handles = mod.getValue(resultPtr + 8, "i32").toInt()
+    if (!success || count == 0 || handles == 0) {
+        // A cancelled pick is a success with no handles, and is not an error.
+        mod.uapmdDocumentPickResultFree(resultPtr)
+        callback(null)
+        return
+    }
+    // Resolve the first handle to a real path, then free the result: the handle's
+    // strings belong to it, and the provider has copied them by the time it returns.
+    val provider = documentProviderHandle
+    if (provider == 0) {
+        mod.uapmdDocumentPickResultFree(resultPtr)
+        callback(null)
+        return
+    }
+    val pathCbId = nextCallbackId()
+    pendingDocumentPaths[pathCbId] = callback
+    val ptr = makeCFunctionPtr(pathCbId, "uapmdDispatchDocumentPath", "viii")
+    mod.uapmdDocumentProviderResolveToPath(provider, handles, pathCbId, ptr)
+    mod.uapmdDocumentPickResultFree(resultPtr)
+}
+
+private val pendingDocumentPaths = mutableMapOf<Int, (String?) -> Unit>()
+
+@JsExport
+fun uapmdDispatchDocumentPath(cbId: Int, resultPtr: Int, pathPtr: Int) {
+    val mod = wasmMod
+    val callback = pendingDocumentPaths.remove(cbId) ?: return
+    val success = mod.getValue(resultPtr, "i8").toInt() != 0
+    callback(if (success && pathPtr != 0) mod.utf8ToString(pathPtr).takeIf { it.isNotEmpty() } else null)
+}
+
+/** The app's own provider, looked up once. */
+internal var documentProviderHandle: Int = 0
+
+/**
+ * Opens the browser's file picker through uapmd's Emscripten document provider,
+ * which creates a hidden `<input type=file>`, copies the chosen file into MEMFS and
+ * hands back a path the engine can open (`DocumentProviderEmscripten.cpp:93`).
+ *
+ * [extensions] are matched the way the provider builds its `accept` string, e.g.
+ * ".uapmd". Returns null when the user cancels.
+ */
+fun pickDocumentToOpen(
+    app: AppModel,
+    label: String,
+    extensions: List<String>,
+    callback: (String?) -> Unit
+) {
+    val mod = wasmMod
+    if (documentProviderHandle == 0)
+        documentProviderHandle = mod.uapmdAppDocumentProvider((app as WasmJsAppModel).handle)
+    if (documentProviderHandle == 0) {
+        callback(null)
+        return
+    }
+
+    // uapmd_document_filter_t: label@0 mimeTypes@4 mimeCount@8 extensions@12 extCount@16.
+    val labelPtr = allocCString(label)
+    val extPtrs = extensions.map { allocCString(it) }
+    val extArray = mod.malloc(extPtrs.size * 4)
+    extPtrs.forEachIndexed { i, p -> mod.setValue(extArray + i * 4, p.toDouble(), "i32") }
+    val filter = mod.malloc(20)
+    mod.setValue(filter, labelPtr.toDouble(), "i32")
+    mod.setValue(filter + 4, 0.0, "i32")
+    mod.setValue(filter + 8, 0.0, "i32")
+    mod.setValue(filter + 12, extArray.toDouble(), "i32")
+    mod.setValue(filter + 16, extPtrs.size.toDouble(), "i32")
+
+    val (_, cbPtr) = registerDocumentPick { path ->
+        // Freed here rather than after the call: the provider reads the filters
+        // while the picker is open, which outlives pick_open returning.
+        mod.free(filter)
+        mod.free(extArray)
+        extPtrs.forEach { mod.free(it) }
+        mod.free(labelPtr)
+        callback(path)
+    }
+    mod.uapmdDocumentProviderPickOpen(documentProviderHandle, filter, 1, false, 0, cbPtr)
+}
+
+/** Drives pending picks; the provider completes them from its own tick. */
+fun tickDocumentProvider() {
+    if (documentProviderHandle != 0) wasmMod.uapmdDocumentProviderTick(documentProviderHandle)
+}
+
+private val pendingDocumentWrites = mutableMapOf<Int, (String?) -> Unit>()
+
+/** Reports null on success, or the engine's message on failure. */
+@JsExport
+fun uapmdDispatchDocumentWrite(cbId: Int, resultPtr: Int) {
+    val mod = wasmMod
+    val callback = pendingDocumentWrites.remove(cbId) ?: return
+    val success = mod.getValue(resultPtr, "i8").toInt() != 0
+    val errPtr = mod.getValue(resultPtr + 4, "i32").toInt()
+    val error = if (errPtr != 0) mod.utf8ToString(errPtr) else null
+    callback(if (success) null else (error ?: "The project could not be saved."))
+}
+
+/**
+ * Saves the project the way uapmd-app does (`MainWindow::handleSaveProject`): ask
+ * the provider for a save handle, then hand it to the app model, which packs the
+ * project tree into a `.uapmdz` and writes it through the provider — a download, in
+ * a browser. Writing to a path cannot replace this: a saved project is a directory,
+ * so a single-file write would deliver only its manifest.
+ *
+ * [onDone] receives null on success, or a message. A cancelled pick reports null and
+ * saves nothing.
+ */
+fun saveProjectAsDocument(app: AppModel, defaultName: String, onDone: (String?) -> Unit) {
+    val mod = wasmMod
+    if (documentProviderHandle == 0)
+        documentProviderHandle = mod.uapmdAppDocumentProvider((app as WasmJsAppModel).handle)
+    if (documentProviderHandle == 0) {
+        onDone("No document provider is available.")
+        return
+    }
+
+    val labelPtr = allocCString("uapmd project archive")
+    val extPtr = allocCString(".uapmdz")
+    val extArray = mod.malloc(4)
+    mod.setValue(extArray, extPtr.toDouble(), "i32")
+    val filter = mod.malloc(20)
+    mod.setValue(filter, labelPtr.toDouble(), "i32")
+    mod.setValue(filter + 4, 0.0, "i32")
+    mod.setValue(filter + 8, 0.0, "i32")
+    mod.setValue(filter + 12, extArray.toDouble(), "i32")
+    mod.setValue(filter + 16, 1.0, "i32")
+    val namePtr = allocCString(defaultName)
+
+    fun release() {
+        mod.free(filter); mod.free(extArray); mod.free(extPtr)
+        mod.free(labelPtr); mod.free(namePtr)
+    }
+
+    val cbId = nextCallbackId()
+    pendingSavePicks[cbId] = { handlePtr ->
+        if (handlePtr == 0) {
+            release()
+            onDone(null)                      // cancelled
+        } else {
+            val writeId = nextCallbackId()
+            pendingDocumentWrites[writeId] = { error ->
+                release()
+                onDone(error)
+            }
+            val writeCb = makeCFunctionPtr(writeId, "uapmdDispatchDocumentWrite", "vii")
+            mod.uapmdAppSaveProjectToDocument((app as WasmJsAppModel).handle, handlePtr, writeId, writeCb)
+        }
+    }
+    val pickCb = makeCFunctionPtr(cbId, "uapmdDispatchSavePick", "vii")
+    mod.uapmdDocumentProviderPickSave(documentProviderHandle, namePtr, filter, 1, 0, pickCb)
+}
+
+private val pendingSavePicks = mutableMapOf<Int, (Int) -> Unit>()
+
+/** Hands the first handle's address on, so the save can use it without copying. */
+@JsExport
+fun uapmdDispatchSavePick(cbId: Int, resultPtr: Int) {
+    val mod = wasmMod
+    val callback = pendingSavePicks.remove(cbId) ?: return
+    val success = mod.getValue(resultPtr, "i8").toInt() != 0
+    val count = mod.getValue(resultPtr + 4, "i32").toInt()
+    val handles = mod.getValue(resultPtr + 8, "i32").toInt()
+    callback(if (success && count > 0) handles else 0)
+    mod.uapmdDocumentPickResultFree(resultPtr)
+}
+
+private fun allocCString(s: String): Int {
+    val mod = wasmMod
+    val size = mod.lengthBytesUTF8(s) + 1
+    val ptr = mod.malloc(size)
+    mod.stringToUTF8(s, ptr, size)
+    return ptr
 }
 
 /** uapmd_app_project_result_t by value = a pointer. wasm32: bool @0, char* @4. */

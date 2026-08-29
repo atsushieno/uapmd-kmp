@@ -4,6 +4,8 @@ import dev.atsushieno.uapmd.AppModel
 import dev.atsushieno.uapmd.cleanupAppModel
 
 /** uapmd-app's web_main.cpp starts with the engine disabled; browsers also need a user gesture. */
+actual val platformSupportsRemoteScanner: Boolean = false
+
 actual val platformStartsWithAudioEngineEnabled: Boolean = false
 
 /**

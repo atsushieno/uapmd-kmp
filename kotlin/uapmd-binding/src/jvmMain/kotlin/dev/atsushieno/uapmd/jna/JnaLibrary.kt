@@ -584,6 +584,16 @@ open class UapmdGraphEndpoint : Structure {
 /* Each struct carries its own @FieldOrder — an annotation applies to the class
  * that immediately follows it, so a struct inserted in between silently steals
  * the previous one's field names and JNA then rejects it at runtime. */
+@FieldOrder("running", "processed_bundles", "total_bundles", "current_bundle")
+open class UapmdSlowScanProgress : Structure() {
+    @JvmField var running: Byte = 0
+    @JvmField var processed_bundles: Int = 0
+    @JvmField var total_bundles: Int = 0
+    @JvmField var current_bundle: String? = null
+
+    class ByVal : UapmdSlowScanProgress(), Structure.ByValue
+}
+
 @FieldOrder("name", "role", "enabled", "channel_layout_name", "channel_count")
 open class UapmdGraphAudioBus : Structure {
     constructor() : super()
@@ -1392,6 +1402,9 @@ interface UapmdLibrary : Library {
     fun uapmd_transport_record(tc: Pointer?)
 
     fun uapmd_app_perform_plugin_scanning(app: Pointer?, forceRescan: Boolean, request: Int, remoteTimeoutSeconds: Double, requireFastScanning: Boolean)
+    fun uapmd_app_slow_scan_progress(app: Pointer?): UapmdSlowScanProgress.ByVal
+    fun uapmd_set_remote_scanner_executable(path: String?)
+    fun uapmd_app_last_plugin_scan_error(app: Pointer?, buf: ByteArray?, bufSize: Long): Long
     fun uapmd_app_cancel_plugin_scanning(app: Pointer?)
     fun uapmd_app_generate_scan_report(app: Pointer?, buf: ByteArray?, bufSize: Long): Long
     fun uapmd_app_clear_plugin_blocklist(app: Pointer?)

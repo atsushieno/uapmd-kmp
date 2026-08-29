@@ -7,8 +7,38 @@ package dev.atsushieno.uapmd.cmp
  * Returns null when the user cancels, or when the platform has no picker yet.
  */
 expect suspend fun pickProjectFileToOpen(): String?
-expect suspend fun pickProjectFileToSave(): String?
+
+/**
+ * A destination to write to. [defaultName] seeds the name the platform offers,
+ * which on the web is the only say the user gets: a browser cannot choose a
+ * directory, it can only download a named file.
+ */
+expect suspend fun pickProjectFileToSave(defaultName: String): String?
 expect suspend fun pickMediaFileToOpen(): String?
+
+/**
+ * Hands a file the app has just written to the user.
+ *
+ * On every platform with a real filesystem the picker already chose where the file
+ * goes, so this does nothing. The browser has no such destination: a save writes
+ * into the in-memory filesystem first and only reaches the user as a download, so
+ * the web build needs telling once the bytes are actually there. Call it after any
+ * successful write to a path that came from [pickProjectFileToSave].
+ */
+expect fun deliverSavedFile(path: String)
+
+/**
+ * Saves the current project wherever the platform puts files, and reports an error
+ * message or null (saved, or the user cancelled).
+ *
+ * This is a whole operation rather than "pick a path, then write to it" because a
+ * saved project is a *directory* — the `.uapmd` document plus its graphs and
+ * extensions — and only some platforms can be handed a directory to write into.
+ * uapmd-app packs the tree into a `.uapmdz` and writes it through the document
+ * provider (`MainWindow::handleSaveProject`), which is the only route that works in
+ * a browser, where the file reaches the user as a download.
+ */
+expect suspend fun saveProjectToPlatform(host: UapmdHost, defaultName: String): String?
 
 /**
  * Optional file to import at startup, for development and screenshots.

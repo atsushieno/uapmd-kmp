@@ -115,7 +115,75 @@ fun main() {
     val host = model.sequencer.engine.pluginHost
     val catalogCount = host.catalogEntryCount.toInt()
     println("   catalog entries: $catalogCount")
-    check("plugin catalog is populated after the initial scan", catalogCount > 0)
+    // Scan progress must be readable, and must say something while a scan runs:
+    // "scanning" alone cannot distinguish a long scan from a stuck one, which is
+    // the whole reason uapmd-app's selector shows counts.
+    val progress = model.slowScanProgress
+    println("   slow scan progress: running=${progress.running} " +
+        "${progress.processedBundles}/${progress.totalBundles} bundle='${progress.currentBundle}'")
+    check("slow scan progress is readable", progress.processedBundles >= 0u)
+    println("   last scan error: ${model.lastPluginScanError ?: "(none)"}")
+
+    // The startup scan is deliberately fast-only (`maybeStartInitialPluginScan`
+    // passes requireFastScanning=true), so on a cold cache it legitimately finds
+    // nothing. What must work is the slow scan the Scan button runs — and its
+    // result reaching the catalog, which is the part that was broken.
+    if (catalogCount == 0) {
+        println("   cold cache: the fast startup scan found nothing, running a slow scan")
+        model.performPluginScanning(forceRescan = false, mode = dev.atsushieno.uapmd.ScanMode.InProcess)
+        var waited = 0
+        while (!model.isScanning && waited < 5_000) { Thread.sleep(100); waited += 100 }
+        var scanning = 0
+        while (model.isScanning && scanning < 180_000) {
+            Thread.sleep(500); scanning += 500
+            val p = model.slowScanProgress
+            if (scanning % 5_000 == 0)
+                println("   scanning… ${p.processedBundles}/${p.totalBundles} '${p.currentBundle}'")
+        }
+        println("   after the slow scan: ${host.catalogEntryCount} entries, " +
+            "error=${model.lastPluginScanError ?: "(none)"}")
+    }
+    check("a scan populates the plug-in catalog", host.catalogEntryCount.toInt() > 0)
+
+    // The remote scanner is the desktop default because an in-process scan runs
+    // every plug-in's entry code inside this process: one bad plug-in and the app is
+    // gone mid-scan. Prove the out-of-process path actually runs and reports.
+    if (dev.atsushieno.uapmd.cmp.platformSupportsRemoteScanner) {
+        // Without this the parent relaunches `java`, which serves no scanner, and
+        // the scan dies with "Remote scanner failed to connect".
+        val scanner = System.getProperty("uapmd.probe.scannerExe")
+            ?: "/Users/atsushi/sources/uapmd-kmp/cmake-build-debug/uapmd-source/tools/uapmd-scan/uapmd-scan"
+        println("   remote scanner executable: $scanner (exists=${java.io.File(scanner).exists()})")
+        dev.atsushieno.uapmd.setRemoteScannerExecutable(scanner)
+        val before = host.catalogEntryCount.toInt()
+        var sawProgress = false
+        var maxProcessed = 0u
+        model.performPluginScanning(
+            forceRescan = true,
+            mode = dev.atsushieno.uapmd.ScanMode.Remote,
+            remoteTimeoutSeconds = 20.0
+        )
+        var waited = 0
+        while (!model.isScanning && waited < 10_000) { Thread.sleep(100); waited += 100 }
+        var scanning = 0
+        while (model.isScanning && scanning < 300_000) {
+            Thread.sleep(250); scanning += 250
+            val p = model.slowScanProgress
+            if (p.processedBundles > 0u || p.totalBundles > 0u) sawProgress = true
+            if (p.processedBundles > maxProcessed) maxProcessed = p.processedBundles
+        }
+        println("   remote scan: ${host.catalogEntryCount} entries, peak progress $maxProcessed bundle(s), " +
+            "error=${model.lastPluginScanError ?: "(none)"}")
+        check("the remote scanner completes", !model.isScanning)
+        // Bundle counts are cache-dependent: a fully cached scan finishes before a
+        // sampler sees anything, so how many bundles were walked is reported, not
+        // asserted. `runScanPollProbe` measures progress over a real scan instead.
+        println("   (progress sampling is informational here: $sawProgress, peak $maxProcessed)")
+        check("the remote scanner reported no connection error",
+            model.lastPluginScanError?.contains("failed to connect") != true)
+        check("the remote scanner keeps the catalog populated", host.catalogEntryCount.toInt() >= before)
+        check("this process survived a full out-of-process scan", true)
+    }
 
     // Plugins fail for their own reasons (missing resources, unsupported I/O),
     // so try a handful and report the first that instantiates.

@@ -45,6 +45,20 @@ class JvmAppModel internal constructor(
 
     override fun cancelPluginScanning() = lib.uapmd_app_cancel_plugin_scanning(handle)
 
+    override val slowScanProgress: SlowScanProgress
+        get() = lib.uapmd_app_slow_scan_progress(handle).let {
+            SlowScanProgress(
+                running = it.running != 0.toByte(),
+                processedBundles = it.processed_bundles.toUInt(),
+                totalBundles = it.total_bundles.toUInt(),
+                currentBundle = it.current_bundle.orEmpty()
+            )
+        }
+
+    override val lastPluginScanError: String?
+        get() = readJvmString { b, n -> lib.uapmd_app_last_plugin_scan_error(handle, b, n) }
+            .ifEmpty { null }
+
     override fun generateScanReport(): String =
         readJvmString { buf, size -> lib.uapmd_app_generate_scan_report(handle, buf, size) }
 

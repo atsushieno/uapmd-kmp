@@ -6,9 +6,9 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 
 /** AWT FileDialog gives a native chooser on macOS and Windows without extra deps. */
-private suspend fun pick(mode: Int): String? = withContext(Dispatchers.Main) {
+private suspend fun pick(mode: Int, name: String = "*.uapmd"): String? = withContext(Dispatchers.Main) {
     val dialog = FileDialog(null as Frame?, "uapmd project", mode)
-    dialog.file = "*.uapmd"
+    dialog.file = name
     dialog.isVisible = true
     val dir = dialog.directory
     val file = dialog.file
@@ -24,7 +24,11 @@ actual suspend fun pickMediaFileToOpen(): String? = withContext(Dispatchers.Main
     val file = dialog.file
     if (dir == null || file == null) null else dir + file
 }
-actual suspend fun pickProjectFileToSave(): String? = pick(FileDialog.SAVE)
+actual suspend fun pickProjectFileToSave(defaultName: String): String? =
+    pick(FileDialog.SAVE, defaultName)
+
+/** The dialog already chose a real destination. */
+actual fun deliverSavedFile(path: String) = Unit
 
 actual fun startupImportPath(): String? = System.getProperty("uapmd.cmp.importMidi")
 
@@ -65,3 +69,10 @@ actual fun startupSuppressPolling(): Boolean = System.getProperty("uapmd.cmp.noP
 actual fun startupRenderPath(): String? = System.getProperty("uapmd.cmp.renderTo")
 
 actual fun startupBufferSize(): Int = System.getProperty("uapmd.cmp.bufferSize")?.toIntOrNull() ?: 0
+
+/** A real filesystem: the picker chose the destination, so write straight to it. */
+actual suspend fun saveProjectToPlatform(host: UapmdHost, defaultName: String): String? {
+    val path = pickProjectFileToSave(defaultName) ?: return null
+    host.saveProject(path)
+    return host.lastProjectResult?.takeIf { !it.success }?.error
+}

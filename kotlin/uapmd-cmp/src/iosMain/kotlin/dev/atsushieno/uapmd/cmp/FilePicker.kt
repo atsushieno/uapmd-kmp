@@ -4,7 +4,9 @@ package dev.atsushieno.uapmd.cmp
 // (composeApp's DocumentPicker is the reference), iOS UIDocumentPicker, and web
 // the File System Access API plus uapmd's browser document provider.
 actual suspend fun pickProjectFileToOpen(): String? = null
-actual suspend fun pickProjectFileToSave(): String? = null
+actual suspend fun pickProjectFileToSave(defaultName: String): String? = null
+
+actual fun deliverSavedFile(path: String) = Unit
 actual suspend fun pickMediaFileToOpen(): String? = null
 
 actual fun startupImportPath(): String? = null
@@ -36,3 +38,10 @@ actual fun startupSuppressPolling(): Boolean = false
 actual fun startupRenderPath(): String? = null
 
 actual fun startupBufferSize(): Int = 0
+
+/** A real filesystem: the picker chose the destination, so write straight to it. */
+actual suspend fun saveProjectToPlatform(host: UapmdHost, defaultName: String): String? {
+    val path = pickProjectFileToSave(defaultName) ?: return null
+    host.saveProject(path)
+    return host.lastProjectResult?.takeIf { !it.success }?.error
+}

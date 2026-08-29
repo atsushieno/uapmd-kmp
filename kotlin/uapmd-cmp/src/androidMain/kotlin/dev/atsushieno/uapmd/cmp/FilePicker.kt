@@ -68,8 +68,11 @@ internal object AndroidDocumentPicker {
 
 actual suspend fun pickProjectFileToOpen(): String? = AndroidDocumentPicker.pickOpen(KIND_PROJECT)
 
-actual suspend fun pickProjectFileToSave(): String? =
-    AndroidDocumentPicker.pickSave(KIND_PROJECT, "project.uapmd")
+actual suspend fun pickProjectFileToSave(defaultName: String): String? =
+    AndroidDocumentPicker.pickSave(KIND_PROJECT, defaultName)
+
+/** The Storage Access Framework already chose a real destination. */
+actual fun deliverSavedFile(path: String) = Unit
 
 actual suspend fun pickMediaFileToOpen(): String? = AndroidDocumentPicker.pickOpen(KIND_AUDIO)
 
@@ -153,3 +156,10 @@ actual fun startupSuppressPolling(): Boolean = androidStartupNoPoll
 actual fun startupRenderPath(): String? = androidStartupRenderPath
 
 actual fun startupBufferSize(): Int = androidStartupBufferSize
+
+/** A real filesystem: the picker chose the destination, so write straight to it. */
+actual suspend fun saveProjectToPlatform(host: UapmdHost, defaultName: String): String? {
+    val path = pickProjectFileToSave(defaultName) ?: return null
+    host.saveProject(path)
+    return host.lastProjectResult?.takeIf { !it.success }?.error
+}

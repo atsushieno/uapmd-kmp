@@ -76,6 +76,21 @@ class AndroidAppModel internal constructor(internal val handle: Long) : AppModel
     )
 
     override fun cancelPluginScanning() = JniBridge.uapmdAppCancelPluginScanning(handle)
+
+    override val slowScanProgress: SlowScanProgress
+        get() {
+            val packed = JniBridge.uapmdAppSlowScanProgress(handle) ?: return SlowScanProgress()
+            val counts = packed[0] as IntArray
+            return SlowScanProgress(
+                running = counts[0] != 0,
+                processedBundles = counts[1].toUInt(),
+                totalBundles = counts[2].toUInt(),
+                currentBundle = (packed.getOrNull(1) as? String).orEmpty()
+            )
+        }
+
+    override val lastPluginScanError: String?
+        get() = JniBridge.uapmdAppLastPluginScanError(handle)?.ifEmpty { null }
     override fun generateScanReport(): String = JniBridge.uapmdAppGenerateScanReport(handle)
     override fun clearPluginBlocklist() = JniBridge.uapmdAppClearPluginBlocklist(handle)
 

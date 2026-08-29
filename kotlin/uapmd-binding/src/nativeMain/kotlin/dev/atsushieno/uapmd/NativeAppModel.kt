@@ -45,6 +45,20 @@ class NativeAppModel internal constructor(
 
     override fun cancelPluginScanning() = uapmd_app_cancel_plugin_scanning(handle)
 
+    override val slowScanProgress: SlowScanProgress
+        get() = uapmd_app_slow_scan_progress(handle).useContents {
+            SlowScanProgress(
+                running = running,
+                processedBundles = processed_bundles,
+                totalBundles = total_bundles,
+                currentBundle = current_bundle?.toKString().orEmpty()
+            )
+        }
+
+    override val lastPluginScanError: String?
+        get() = readCString { buf, size -> uapmd_app_last_plugin_scan_error(handle, buf, size) }
+            .ifEmpty { null }
+
     override fun generateScanReport(): String =
         readCString { buf, size -> uapmd_app_generate_scan_report(handle, buf, size) }
 

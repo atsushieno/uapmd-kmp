@@ -174,6 +174,21 @@ data class ClipData(
     val anchorOffsetSamples: Long = 0L
 )
 
+/**
+ * Progress of a slow plug-in scan, mirroring `AppModel::SlowScanProgressState`.
+ *
+ * A slow scan walks every bundle on the machine and can run for minutes, so
+ * "scanning" on its own cannot tell a long scan from a stuck one. uapmd-app's
+ * selector shows these counts and the bundle in hand throughout
+ * (`PluginSelector.cpp:163-177`).
+ */
+data class SlowScanProgress(
+    val running: Boolean = false,
+    val processedBundles: UInt = 0u,
+    val totalBundles: UInt = 0u,
+    val currentBundle: String = ""
+)
+
 enum class ScanMode { InProcess, Remote }
 
 enum class InstancingState { Created, Preparing, Ready, Error, Terminating, Terminated;

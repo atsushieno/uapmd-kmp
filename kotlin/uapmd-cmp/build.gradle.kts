@@ -97,6 +97,24 @@ dependencies {
     debugImplementation(libs.compose.uiTooling)
 }
 
+// Where the out-of-process plug-in scanner lives.
+//
+// Remote scanning relaunches the host executable with `--scan-only --ipc-client`,
+// which on the JVM is `java` and serves no scanner, so uapmd is told to launch
+// uapmd's own `uapmd-scan` instead. Without this the app falls back to scanning
+// in process, where a single bad plug-in takes the whole app down mid-scan.
+val uapmdScanExecutable: File = rootProject.projectDir.parentFile
+    .resolve("cmake-build-debug/uapmd-source/tools/uapmd-scan/uapmd-scan")
+
+/** Forwards the scanner path (and anything else asked for) to a forked JVM. */
+fun JavaExec.forwardScannerExecutable() {
+    val explicit = System.getProperty("uapmd.cmp.scannerExe")
+    when {
+        explicit != null -> systemProperty("uapmd.cmp.scannerExe", explicit)
+        uapmdScanExecutable.isFile -> systemProperty("uapmd.cmp.scannerExe", uapmdScanExecutable.absolutePath)
+    }
+}
+
 compose.desktop {
     application {
         mainClass = "dev.atsushieno.uapmd.cmp.MainKt"
@@ -107,7 +125,10 @@ compose.desktop {
             System.getProperty("uapmd.cmp.importMidi")?.let { "-Duapmd.cmp.importMidi=$it" },
             System.getProperty("uapmd.cmp.instantiate")?.let { "-Duapmd.cmp.instantiate=$it" },
             System.getProperty("uapmd.cmp.windowSize")?.let { "-Duapmd.cmp.windowSize=$it" },
-            System.getProperty("uapmd.cmp.addTracks")?.let { "-Duapmd.cmp.addTracks=$it" }
+            System.getProperty("uapmd.cmp.addTracks")?.let { "-Duapmd.cmp.addTracks=$it" },
+            (System.getProperty("uapmd.cmp.scannerExe")
+                ?: uapmdScanExecutable.takeIf { it.isFile }?.absolutePath)
+                ?.let { "-Duapmd.cmp.scannerExe=$it" }
         )
 
         nativeDistributions {
@@ -146,11 +167,24 @@ tasks.register<JavaExec>("runKeyboardDragProbe") {
     )
 }
 
+tasks.register<JavaExec>("runScanPollProbe") {
+    group = "verification"
+    description = "Times what the UI poll costs while a plug-in scan runs."
+    dependsOn("jvmJar")
+    mainClass.set("dev.atsushieno.uapmd.cmp.ScanPollProbeMainKt")
+    forwardScannerExecutable()
+    classpath = objects.fileCollection().from(
+        tasks.named("jvmJar"),
+        kotlin.targets.getByName("jvm").compilations.getByName("main").runtimeDependencyFiles
+    )
+}
+
 tasks.register<JavaExec>("runBootstrapProbe") {
     group = "verification"
     description = "Headless check that the AppModel bootstrap starts, cleanly stops, and restarts audio."
     dependsOn("jvmJar")
     mainClass.set("dev.atsushieno.uapmd.cmp.BootstrapProbeMainKt")
+    forwardScannerExecutable()
     classpath(
         files(tasks.named("jvmJar")),
         jvmMainCompilation.runtimeDependencyFiles

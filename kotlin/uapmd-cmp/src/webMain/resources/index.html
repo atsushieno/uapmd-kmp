@@ -20,15 +20,18 @@
 <script>
     const isolationMessage = document.getElementById('isolation-message');
 
-    function loadComposeApp() {
+    // The bundle is named after the Gradle module, so uapmd-cmp emits
+    // uapmd-cmp.js. This file began as a copy of composeApp's, which loaded
+    // composeApp.js — a file that does not exist in this module's output.
+    function loadApp() {
         const script = document.createElement('script');
         script.type = 'application/javascript';
-        script.src = 'composeApp.js';
+        script.src = 'uapmd-cmp.js';
         document.body.appendChild(script);
     }
 
     if (crossOriginIsolated) {
-        loadComposeApp();
+        loadApp();
     } else if ('serviceWorker' in navigator) {
         isolationMessage.textContent = 'Preparing WebAssembly runtime...';
         navigator.serviceWorker.register('./coop-coep-sw.js').then(() => {
@@ -36,7 +39,7 @@
                 sessionStorage.setItem('uapmd-coop-coep-reloaded', 'true');
                 window.location.reload();
             } else if (crossOriginIsolated) {
-                loadComposeApp();
+                loadApp();
             } else {
                 isolationMessage.textContent =
                     'This browser context is not cross-origin isolated. SharedArrayBuffer is required for uapmd Wasm audio.';
