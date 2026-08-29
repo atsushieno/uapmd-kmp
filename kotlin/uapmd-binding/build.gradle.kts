@@ -348,16 +348,20 @@ afterEvaluate {
 
 // ─── Build uapmd-c-api Emscripten Wasm module ─────────────────────────────────
 //
-// Produces:
-//   external/uapmd/build-wasm/uapmd-c-api.js
-//   external/uapmd/build-wasm/uapmd-c-api.wasm
+// Produces, in this module's own build directory:
+//   uapmd-binding/build/uapmd-c-api-web/uapmd-c-api.js
+//   uapmd-binding/build/uapmd-c-api-web/uapmd-c-api.wasm
+// plus the WebCLAP runtime assets (wclap.mjs, uapmd-wclap-host.wasm, es6/).
 //
 // Prerequisites: emcmake/emcc in PATH (Emscripten SDK activated).
 // The output files are bundled as resources in the jsMain and wasmJsMain
 // source sets so the KMP binding can load the module at runtime.
 
 val wasmSrcDir    = project.file("src/webMain/cpp")
-val wasmOutputDir = repoRoot.resolve("build-wasm")
+// Outputs live under build/ so that `gradle clean` reclaims them and git never
+// sees them. They used to land in a build-wasm/ directory at the repo root,
+// which survived clean and showed up untracked in every `git status`.
+val wasmOutputDir = layout.buildDirectory.dir("uapmd-c-api-web").get().asFile
 val wasmBuildDir  = layout.buildDirectory.dir("uapmd-c-api-wasm")
 val wclapOverrideDir = repoRoot.resolve("external/uapmd/source/tools/wclap-host/web-overrides")
 

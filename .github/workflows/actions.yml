@@ -129,8 +129,6 @@ jobs:
         path: kotlin/composeApp/build/outputs/apk/debug/*.apk
 
   build-wasm:
-    # we need consistent libremidi API across all platforms (when `winmidi_virtual` goes `main`)
-    if: false
     name: 'build Wasm (Emscripten / macOS)'
     runs-on: macos-15
     steps:
@@ -194,8 +192,8 @@ jobs:
       with:
         name: uapmd-kmp-wasm
         path: |
-          build-wasm/uapmd-c-api.js
-          build-wasm/uapmd-c-api.wasm
+          kotlin/uapmd-binding/build/uapmd-c-api-web/uapmd-c-api.js
+          kotlin/uapmd-binding/build/uapmd-c-api-web/uapmd-c-api.wasm
 
   release:
     if: github.event_name == 'workflow_dispatch'

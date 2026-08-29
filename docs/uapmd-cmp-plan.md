@@ -141,7 +141,7 @@ Two conditions on this, so it does not quietly become the "two models" problem:
   narrow seam, not a parallel model.
 - It is expected to be temporary. AppModel's shutdown worker spawns a plain `std::thread` with no
   Emscripten guard, and our wasm build already runs with pthreads (the emitted
-  `build-wasm/uapmd-c-api.js` carries the `ENVIRONMENT_IS_PTHREAD` / `em-pthread` worker
+  `uapmd-c-api.js` carries the `ENVIRONMENT_IS_PTHREAD` / `em-pthread` worker
   machinery), so it should work once compiled. Upstream expects it to: uapmd-app's own
   `web_main.cpp:293` calls `setAudioEngineEnabled` on the web build.
 

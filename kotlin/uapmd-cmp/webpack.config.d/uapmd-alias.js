@@ -2,15 +2,15 @@
 // uapmd-c-api glue, and the WebCLAP runtime assets that go with them.
 //
 // The paths are relative to the *generated* config, which Kotlin writes to
-// kotlin/build/wasm/packages/<package>/, so uapmd-binding's processed resource is
-// four levels up and the repo's build-wasm/ is five. Without this, the wasmJs
+// kotlin/build/wasm/packages/<package>/, so everything under uapmd-binding/build/
+// is four levels up and external/uapmd/ is five. Without this, the wasmJs
 // webpack build fails with "Can't resolve 'uapmd-c-api'".
 //
 // composeApp carries the same file; both entry points import the same three
 // modules, and this copy is what keeps uapmd-cmp working once composeApp goes.
 const path = require('path');
 const fs = require('fs');
-const buildWasmDir = path.resolve(__dirname, '../../../../../build-wasm');
+const buildWasmDir = path.resolve(__dirname, '../../../../uapmd-binding/build/uapmd-c-api-web');
 const uapmdWebDir = path.resolve(__dirname, '../../../../../external/uapmd/source/tools/uapmd-app/web');
 
 config.resolve = config.resolve || {};
@@ -20,8 +20,8 @@ config.resolve.alias['uapmd-wasm-adapter'] = path.resolve(
     '../../../../uapmd-binding/build/processedResources/wasmJs/main/uapmd-wasm-adapter.mjs'
 );
 config.resolve.alias['uapmd-c-api'] = path.resolve(
-    __dirname,
-    '../../../../../build-wasm/uapmd-c-api.js'
+    buildWasmDir,
+    'uapmd-c-api.js'
 );
 config.resolve.alias['uapmd-c-api.wasm'] = path.resolve(
     buildWasmDir,
