@@ -6,6 +6,7 @@
 #include <uapmd-midi-service/uapmd-midi-service.hpp>
 #include <uapmd-plugin-hosting/uapmd-plugin-hosting.hpp>
 #include <cstring>
+#include <deque>
 #include <future>
 #include <string>
 #include <vector>
@@ -101,6 +102,87 @@ void uapmd_app_cancel_plugin_scanning(uapmd_app_model_t app) { AM(app)->cancelPl
 size_t uapmd_app_generate_scan_report(uapmd_app_model_t app, char* buf, size_t buf_size) {
     auto report = AM(app)->generateScanReport();
     return copy_string(report, buf, buf_size);
+}
+
+/*
+ * The blocklist strings are owned by uapmd, so a snapshot is cached here and the
+ * returned pointers stay valid until the next call on the same model - the same
+ * lifetime rule the other list accessors in this file use.
+ */
+namespace {
+std::vector<uapmd_plugin_hosting::BlocklistEntry> s_blocklist_snapshot;
+std::mutex s_blocklist_mutex;
+}
+
+namespace {
+uapmd_app::AppModel::MasterTrackSnapshot s_master_snapshot;
+std::mutex s_master_snapshot_mutex;
+}
+
+double uapmd_app_refresh_master_tempo_map(uapmd_app_model_t app) {
+    if (!app) return 0.0;
+    std::lock_guard lock(s_master_snapshot_mutex);
+    s_master_snapshot = AM(app)->buildMasterTrackSnapshot();
+    return s_master_snapshot.maxTimeSeconds;
+}
+
+uint32_t uapmd_app_master_tempo_point_count(uapmd_app_model_t) {
+    std::lock_guard lock(s_master_snapshot_mutex);
+    return static_cast<uint32_t>(s_master_snapshot.tempoPoints.size());
+}
+
+bool uapmd_app_get_master_tempo_point(uapmd_app_model_t, uint32_t index, uapmd_tempo_point_t* out) {
+    if (!out) return false;
+    std::lock_guard lock(s_master_snapshot_mutex);
+    if (index >= s_master_snapshot.tempoPoints.size()) return false;
+    const auto& p = s_master_snapshot.tempoPoints[index];
+    out->time_seconds = p.timeSeconds;
+    out->tick_position = p.tickPosition;
+    out->bpm = p.bpm;
+    return true;
+}
+
+uint32_t uapmd_app_master_time_signature_count(uapmd_app_model_t) {
+    std::lock_guard lock(s_master_snapshot_mutex);
+    return static_cast<uint32_t>(s_master_snapshot.timeSignaturePoints.size());
+}
+
+bool uapmd_app_get_master_time_signature(uapmd_app_model_t, uint32_t index,
+                                         uapmd_time_signature_point_t* out) {
+    if (!out) return false;
+    std::lock_guard lock(s_master_snapshot_mutex);
+    if (index >= s_master_snapshot.timeSignaturePoints.size()) return false;
+    const auto& p = s_master_snapshot.timeSignaturePoints[index];
+    out->time_seconds = p.timeSeconds;
+    out->tick_position = p.tickPosition;
+    out->numerator = p.signature.numerator;
+    out->denominator = p.signature.denominator;
+    return true;
+}
+
+uint32_t uapmd_app_blocklist_count(uapmd_app_model_t app) {
+    if (!app) return 0;
+    std::lock_guard lock(s_blocklist_mutex);
+    s_blocklist_snapshot = AM(app)->pluginBlocklist();
+    return static_cast<uint32_t>(s_blocklist_snapshot.size());
+}
+
+bool uapmd_app_get_blocklist_entry(uapmd_app_model_t app, uint32_t index,
+                                   uapmd_blocklist_entry_t* out) {
+    if (!app || !out) return false;
+    std::lock_guard lock(s_blocklist_mutex);
+    if (index >= s_blocklist_snapshot.size()) return false;
+    const auto& e = s_blocklist_snapshot[index];
+    out->id = e.id.c_str();
+    out->format = e.format.c_str();
+    out->plugin_id = e.pluginId.c_str();
+    out->reason = e.reason.c_str();
+    return true;
+}
+
+bool uapmd_app_unblock_plugin(uapmd_app_model_t app, const char* entry_id) {
+    if (!app || !entry_id) return false;
+    return AM(app)->unblockPluginFromBlocklist(entry_id);
 }
 
 void uapmd_app_clear_plugin_blocklist(uapmd_app_model_t app) { AM(app)->clearPluginBlocklist(); }
@@ -254,6 +336,21 @@ uapmd_clip_add_result_t uapmd_app_add_clip_to_track(uapmd_app_model_t app,
     return to_c_clip_result(r);
 }
 
+void uapmd_app_import_midi_tracks_from_file(uapmd_app_model_t app,
+                                            const char* filepath,
+                                            void* user_data,
+                                            uapmd_midi_tracks_import_cb_t callback) {
+    if (!app || !callback) return;
+    AM(app)->importMidiTracksFromFile(
+        filepath ? filepath : "",
+        [callback, user_data](uapmd_app::AppModel::MidiTracksImportResult result) {
+            callback(result.success,
+                     result.error.empty() ? nullptr : result.error.c_str(),
+                     static_cast<uint32_t>(result.importedTracks.size()),
+                     user_data);
+        });
+}
+
 uapmd_clip_add_result_t uapmd_app_add_midi_clip_to_track(uapmd_app_model_t app,
                                                            int32_t track_index,
                                                            uapmd_timeline_position_t position,
@@ -391,9 +488,18 @@ void uapmd_app_request_show_instance_details(uapmd_app_model_t app, int32_t inst
  *  Track graph editing (DAG)
  * ═══════════════════════════════════════════════════════════════════════════ */
 
+/*
+ * Endpoint node ids are returned as pointers, so their storage has to outlive the
+ * call. A deque, not a vector: the connection array holds pointers into these
+ * strings, and a vector would invalidate every one of them when it grew.
+ */
+static thread_local std::deque<std::string> tl_endpoint_node_ids;
+
 static uapmd_graph_endpoint_t to_c_endpoint(const uapmd_graph::AudioPluginGraphEndpoint& e) {
+    tl_endpoint_node_ids.push_back(e.node_id);
     return {
         static_cast<uapmd_graph_endpoint_type_t>(e.type),
+        tl_endpoint_node_ids.back().c_str(),
         e.instance_id,
         e.bus_index
     };
@@ -402,6 +508,7 @@ static uapmd_graph_endpoint_t to_c_endpoint(const uapmd_graph::AudioPluginGraphE
 static uapmd_graph::AudioPluginGraphEndpoint to_cpp_endpoint(const uapmd_graph_endpoint_t& e) {
     uapmd_graph::AudioPluginGraphEndpoint r;
     r.type = static_cast<uapmd_graph::AudioPluginGraphEndpointType>(e.type);
+    r.node_id = e.node_id ? e.node_id : "";
     r.instance_id = e.instance_id;
     r.bus_index = e.bus_index;
     return r;
@@ -427,6 +534,7 @@ uapmd_graph_connections_result_t uapmd_app_get_track_graph_connections(uapmd_app
     tl_conn_error.clear();
     bool ok = AM(app)->getTrackGraphConnections(track_index, conns, tl_conn_error);
     tl_connections.clear();
+    tl_endpoint_node_ids.clear();
     tl_connections.reserve(conns.size());
     for (auto& c : conns)
         tl_connections.push_back({c.id, static_cast<uapmd_graph_bus_type_t>(c.bus_type),
@@ -436,6 +544,123 @@ uapmd_graph_connections_result_t uapmd_app_get_track_graph_connections(uapmd_app
         tl_conn_error.empty() ? nullptr : tl_conn_error.c_str(),
         static_cast<uint32_t>(tl_connections.size()),
         tl_connections.data()
+    };
+}
+
+/*
+ * The nodes of a track's graph.
+ *
+ * This mirrors the C++ surface — `AudioGraphNode` plus the `remidy::PluginAudioBuses`
+ * facade it exposes — and applies no presentation policy of its own. uapmd-app's
+ * graph editor draws a pin only for *enabled* audio buses and at most one event pin
+ * per direction (PluginGraphEditor.cpp:353-450); that belongs to the editor, so
+ * every bus is reported here with its `enabled` flag and the caller decides.
+ */
+static thread_local std::vector<uapmd_graph_node_t> tl_graph_nodes;
+static thread_local std::vector<uapmd_graph_audio_bus_t> tl_graph_buses;
+static thread_local std::deque<std::string> tl_graph_node_strings;
+static thread_local std::string tl_graph_nodes_error;
+
+static const char* keep_node_string(const std::string& s) {
+    tl_graph_node_strings.push_back(s);
+    return tl_graph_node_strings.back().c_str();
+}
+
+static void append_bus(remidy::AudioBusConfiguration* bus) {
+    if (!bus) {
+        tl_graph_buses.push_back({ "", UAPMD_AUDIO_BUS_ROLE_MAIN, false, "", 0 });
+        return;
+    }
+    auto& definition = const_cast<remidy::AudioBusDefinition&>(bus->definition());
+    auto& layout = bus->channelLayout();
+    tl_graph_buses.push_back({
+        keep_node_string(definition.name()),
+        static_cast<uapmd_audio_bus_role_t>(bus->role()),
+        bus->enabled(),
+        keep_node_string(layout.name()),
+        layout.channels()
+    });
+}
+
+uapmd_graph_nodes_result_t uapmd_app_get_track_graph_nodes(uapmd_app_model_t app, int32_t track_index) {
+    tl_graph_nodes.clear();
+    tl_graph_buses.clear();
+    tl_graph_node_strings.clear();
+    tl_graph_nodes_error.clear();
+
+    auto& sequencer = AM(app)->sequencer();
+    auto* engine = sequencer.engine();
+    uapmd::SequencerTrack* track = nullptr;
+    if (!engine) {
+        tl_graph_nodes_error = "the audio engine is not running";
+    } else if (track_index == uapmd::kMasterTrackIndex) {
+        track = engine->masterTrack();
+    } else {
+        auto tracks = engine->tracks();
+        if (track_index < 0 || track_index >= static_cast<int32_t>(tracks.size()))
+            tl_graph_nodes_error = "no such track";
+        else
+            track = tracks[static_cast<size_t>(track_index)];
+    }
+    if (!track) {
+        if (tl_graph_nodes_error.empty())
+            tl_graph_nodes_error = "no such track";
+        return { false, tl_graph_nodes_error.c_str(), 0, nullptr, 0, nullptr, 0, 0, 0, 0 };
+    }
+
+    auto& graph = track->graph();
+    auto* layoutExtension = graph.getExtension<uapmd_graph::AudioBusesLayoutExtension>();
+    auto layout = layoutExtension ? layoutExtension->busesLayout() : uapmd_graph::AudioGraphBusesLayout{};
+
+    for (const auto& [key, node] : graph.nodes()) {
+        if (!node)
+            continue;
+        auto* pluginNode = dynamic_cast<uapmd_graph::AudioPluginNode*>(node);
+        auto* buses = node->audioBuses();
+
+        const auto busOffset = static_cast<uint32_t>(tl_graph_buses.size());
+        uint32_t audioIn = 0, audioOut = 0;
+        if (buses) {
+            for (auto* b : buses->audioInputBuses()) {
+                append_bus(b);
+                ++audioIn;
+            }
+            for (auto* b : buses->audioOutputBuses()) {
+                append_bus(b);
+                ++audioOut;
+            }
+        }
+
+        tl_graph_nodes.push_back({
+            keep_node_string(node->nodeId()),
+            keep_node_string(node->nodeType()),
+            keep_node_string(node->displayName()),
+            pluginNode ? pluginNode->instanceId() : -1,
+            node->bypassed(),
+            node->latencyInSamples(),
+            node->tailLengthInSeconds(),
+            buses != nullptr,
+            buses ? buses->hasEventInputs() : false,
+            buses ? buses->hasEventOutputs() : false,
+            busOffset,
+            audioIn,
+            audioOut,
+            buses ? buses->mainInputBusIndex() : -1,
+            buses ? buses->mainOutputBusIndex() : -1
+        });
+    }
+
+    return {
+        true,
+        nullptr,
+        static_cast<uint32_t>(tl_graph_nodes.size()),
+        tl_graph_nodes.data(),
+        static_cast<uint32_t>(tl_graph_buses.size()),
+        tl_graph_buses.data(),
+        layout.audio_input_bus_count,
+        layout.audio_output_bus_count,
+        layout.event_input_bus_count,
+        layout.event_output_bus_count
     };
 }
 

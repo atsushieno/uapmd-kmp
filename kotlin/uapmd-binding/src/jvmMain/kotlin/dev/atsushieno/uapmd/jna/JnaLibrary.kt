@@ -322,6 +322,21 @@ open class UapmdAudioFileProperties : Structure() {
     @JvmField var sample_rate: Int = 0
 }
 
+@FieldOrder("time_seconds", "tick_position", "bpm")
+open class UapmdTempoPoint : Structure() {
+    @JvmField var time_seconds: Double = 0.0
+    @JvmField var tick_position: Long = 0L
+    @JvmField var bpm: Double = 0.0
+}
+
+@FieldOrder("time_seconds", "tick_position", "numerator", "denominator")
+open class UapmdTimeSignaturePoint : Structure() {
+    @JvmField var time_seconds: Double = 0.0
+    @JvmField var tick_position: Long = 0L
+    @JvmField var numerator: Byte = 4
+    @JvmField var denominator: Byte = 4
+}
+
 @FieldOrder("id", "format", "plugin_id", "reason")
 open class UapmdBlocklistEntry : Structure() {
     @JvmField var id: String? = null
@@ -451,7 +466,11 @@ open class UapmdTimeReference : Structure() {
 }
 
 @FieldOrder("marker_id", "clip_position_offset", "reference_type", "reference_clip_id", "reference_marker_id", "name")
-open class UapmdClipMarker : Structure() {
+open class UapmdClipMarker : Structure {
+    constructor() : super()
+    /** Reads one element of a C array in place. */
+    constructor(p: Pointer) : super(p) { read() }
+
     @JvmField var marker_id: String? = null
     @JvmField var clip_position_offset: Double = 0.0
     @JvmField var reference_type: Int = 0
@@ -461,7 +480,10 @@ open class UapmdClipMarker : Structure() {
 }
 
 @FieldOrder("clip_position_offset", "speed_ratio", "reference_type", "reference_clip_id", "reference_marker_id")
-open class UapmdAudioWarpPoint : Structure() {
+open class UapmdAudioWarpPoint : Structure {
+    constructor() : super()
+    constructor(p: Pointer) : super(p) { read() }
+
     @JvmField var clip_position_offset: Double = 0.0
     @JvmField var speed_ratio: Double = 1.0
     @JvmField var reference_type: Int = 0
@@ -502,6 +524,180 @@ interface TrackMutationCb : Callback {
     fun invoke(trackIndex: Int, error: String?, userData: Pointer?)
 }
 
+@FieldOrder("api_name", "device_name", "manufacturer", "version", "state_file")
+open class UapmdPluginInstanceConfig : Structure() {
+    @JvmField var api_name: String? = null
+    @JvmField var device_name: String? = null
+    @JvmField var manufacturer: String? = null
+    @JvmField var version: String? = null
+    @JvmField var state_file: String? = null
+}
+
+@FieldOrder("instance_id", "plugin_name", "error")
+open class UapmdPluginInstanceResult : Structure() {
+    @JvmField var instance_id: Int = 0
+    @JvmField var plugin_name: String? = null
+    @JvmField var error: String? = null
+
+    class ByVal : UapmdPluginInstanceResult(), Structure.ByValue
+}
+
+@FieldOrder("success", "error")
+open class UapmdAppProjectResult : Structure() {
+    @JvmField var success: Byte = 0
+    @JvmField var error: String? = null
+
+    class ByVal : UapmdAppProjectResult(), Structure.ByValue
+}
+
+@FieldOrder("tick", "word_count", "words")
+open class UapmdUmpEvent : Structure {
+    constructor() : super()
+    /** Reads one element of a C array in place; Structure.useMemory is protected. */
+    constructor(p: Pointer) : super(p) { read() }
+
+    @JvmField var tick: Long = 0
+    @JvmField var word_count: Int = 0
+    @JvmField var words: Pointer? = null
+}
+
+@FieldOrder("success", "error", "event_count", "events")
+open class UapmdUmpEventsResult : Structure() {
+    @JvmField var success: Byte = 0
+    @JvmField var error: String? = null
+    @JvmField var event_count: Int = 0
+    @JvmField var events: Pointer? = null
+
+    class ByVal : UapmdUmpEventsResult(), Structure.ByValue
+}
+
+@FieldOrder("type", "node_id", "instance_id", "bus_index")
+open class UapmdGraphEndpoint : Structure {
+    constructor() : super()
+    constructor(p: Pointer) : super(p) { read() }
+    @JvmField var type: Int = 0
+    @JvmField var node_id: String? = null
+    @JvmField var instance_id: Int = 0
+    @JvmField var bus_index: Int = 0
+}
+
+/* Each struct carries its own @FieldOrder — an annotation applies to the class
+ * that immediately follows it, so a struct inserted in between silently steals
+ * the previous one's field names and JNA then rejects it at runtime. */
+@FieldOrder("name", "role", "enabled", "channel_layout_name", "channel_count")
+open class UapmdGraphAudioBus : Structure {
+    constructor() : super()
+    constructor(p: Pointer) : super(p) { read() }
+    @JvmField var name: String? = null
+    @JvmField var role: Int = 0
+    @JvmField var enabled: Byte = 0
+    @JvmField var channel_layout_name: String? = null
+    @JvmField var channel_count: Int = 0
+}
+
+@FieldOrder(
+    "node_id", "node_type", "display_name", "instance_id", "bypassed",
+    "latency_in_samples", "tail_length_in_seconds", "has_audio_buses",
+    "has_event_inputs", "has_event_outputs", "audio_bus_offset",
+    "audio_input_bus_count", "audio_output_bus_count",
+    "main_input_bus_index", "main_output_bus_index"
+)
+open class UapmdGraphNode : Structure {
+    constructor() : super()
+    constructor(p: Pointer) : super(p) { read() }
+    @JvmField var node_id: String? = null
+    @JvmField var node_type: String? = null
+    @JvmField var display_name: String? = null
+    @JvmField var instance_id: Int = 0
+    @JvmField var bypassed: Byte = 0
+    @JvmField var latency_in_samples: Int = 0
+    @JvmField var tail_length_in_seconds: Double = 0.0
+    @JvmField var has_audio_buses: Byte = 0
+    @JvmField var has_event_inputs: Byte = 0
+    @JvmField var has_event_outputs: Byte = 0
+    @JvmField var audio_bus_offset: Int = 0
+    @JvmField var audio_input_bus_count: Int = 0
+    @JvmField var audio_output_bus_count: Int = 0
+    @JvmField var main_input_bus_index: Int = 0
+    @JvmField var main_output_bus_index: Int = 0
+}
+
+@FieldOrder(
+    "success", "error", "count", "nodes", "audio_bus_count", "audio_buses",
+    "graph_audio_input_bus_count", "graph_audio_output_bus_count",
+    "graph_event_input_bus_count", "graph_event_output_bus_count"
+)
+open class UapmdGraphNodesResult : Structure() {
+    @JvmField var success: Byte = 0
+    @JvmField var error: String? = null
+    @JvmField var count: Int = 0
+    @JvmField var nodes: Pointer? = null
+    @JvmField var audio_bus_count: Int = 0
+    @JvmField var audio_buses: Pointer? = null
+    @JvmField var graph_audio_input_bus_count: Int = 0
+    @JvmField var graph_audio_output_bus_count: Int = 0
+    @JvmField var graph_event_input_bus_count: Int = 0
+    @JvmField var graph_event_output_bus_count: Int = 0
+
+    class ByVal : UapmdGraphNodesResult(), Structure.ByValue
+}
+
+@FieldOrder("id", "bus_type", "source", "target")
+open class UapmdGraphConnection : Structure {
+    constructor() : super()
+    constructor(p: Pointer) : super(p) { read() }
+    @JvmField var id: Long = 0
+    @JvmField var bus_type: Int = 0
+    @JvmField var source: UapmdGraphEndpoint = UapmdGraphEndpoint()
+    @JvmField var target: UapmdGraphEndpoint = UapmdGraphEndpoint()
+}
+
+@FieldOrder("success", "error", "count", "connections")
+open class UapmdGraphConnectionsResult : Structure() {
+    @JvmField var success: Byte = 0
+    @JvmField var error: String? = null
+    @JvmField var count: Int = 0
+    @JvmField var connections: Pointer? = null
+
+    class ByVal : UapmdGraphConnectionsResult(), Structure.ByValue
+}
+
+@FieldOrder("success", "error", "marker_count", "markers", "audio_warp_count", "audio_warps")
+open class UapmdClipAudioEventsResult : Structure() {
+    @JvmField var success: Byte = 0
+    @JvmField var error: String? = null
+    @JvmField var marker_count: Int = 0
+    @JvmField var markers: Pointer? = null
+    @JvmField var audio_warp_count: Int = 0
+    @JvmField var audio_warps: Pointer? = null
+
+    class ByVal : UapmdClipAudioEventsResult(), Structure.ByValue
+}
+
+@FieldOrder("success", "error")
+open class UapmdOpResult : Structure() {
+    @JvmField var success: Byte = 0
+    @JvmField var error: String? = null
+
+    class ByVal : UapmdOpResult(), Structure.ByValue
+}
+
+interface ProjectSaveCb : Callback {
+    fun invoke(result: UapmdAppProjectResult.ByVal, userData: Pointer?)
+}
+
+interface InstanceCreatedCb : Callback {
+    fun invoke(result: UapmdPluginInstanceResult.ByVal, userData: Pointer?)
+}
+
+interface TrackClearCb : Callback {
+    fun invoke(error: String?, userData: Pointer?)
+}
+
+interface HistoryMutationCb : Callback {
+    fun invoke(error: String?, userData: Pointer?)
+}
+
 interface TrackFragmentCb : Callback {
     fun invoke(fragment: Pointer?, error: String?, userData: Pointer?)
 }
@@ -527,7 +723,16 @@ interface UapmdLibrary : Library {
 
     // ── AudioFileReader ──────────────────────────────────────────────────────
 
+    interface MidiTracksImportCb : com.sun.jna.Callback {
+        fun invoke(success: Boolean, error: String?, importedTrackCount: Int, userData: Pointer?)
+    }
+    fun uapmd_app_import_midi_tracks_from_file(app: Pointer, filepath: String, userData: Pointer?, cb: MidiTracksImportCb)
+    fun uapmd_engine_track_freeze_policy(engine: Pointer, trackIndex: Int): Int
+    fun uapmd_engine_track_freeze_state(engine: Pointer, trackIndex: Int): Int
+    fun uapmd_engine_is_track_busy(engine: Pointer, trackIndex: Int): Boolean
+    fun uapmd_tt_channel_count(tt: Pointer): Int
     fun uapmd_audio_file_reader_create(filepath: String): Pointer?
+    fun uapmd_audio_file_reader_create_silent(numFrames: Long, numChannels: Int, sampleRate: Int): Pointer?
     fun uapmd_audio_file_reader_destroy(reader: Pointer?)
     fun uapmd_audio_file_reader_get_properties(reader: Pointer?, out: UapmdAudioFileProperties): Boolean
     fun uapmd_audio_file_reader_read_frames(
@@ -819,6 +1024,14 @@ interface UapmdLibrary : Library {
     fun uapmd_track_latency_in_samples(track: Pointer?): Int
     fun uapmd_track_render_lead_in_samples(track: Pointer?): Int
     fun uapmd_track_tail_length_in_seconds(track: Pointer?): Double
+    fun uapmd_engine_midi_recorder(engine: Pointer?): Pointer?
+    fun uapmd_midi_recorder_start(rec: Pointer?, trackReferenceId: String?, clipId: Int, startSample: Long): Boolean
+    fun uapmd_midi_recorder_stop(rec: Pointer?)
+    fun uapmd_midi_recorder_cancel(rec: Pointer?)
+    fun uapmd_midi_recorder_is_recording(rec: Pointer?): Boolean
+    fun uapmd_track_get_gain(track: Pointer?): Double
+    fun uapmd_track_get_muted(track: Pointer?): Boolean
+    fun uapmd_track_get_solo(track: Pointer?): Boolean
     fun uapmd_track_get_bypassed(track: Pointer?): Boolean
     fun uapmd_track_get_frozen(track: Pointer?): Boolean
     fun uapmd_track_set_bypassed(track: Pointer?, value: Boolean)
@@ -1144,4 +1357,94 @@ interface UapmdLibrary : Library {
     fun uapmd_addin_manager_last_error(mgr: Pointer?, buf: ByteArray?, bufSize: Long): Long
     fun uapmd_addin_supports_dynamic_loading(): Boolean
     fun uapmd_addin_state_name(state: Int): String?
+
+    // ══ AppModel / TransportController ══════════════════════════════════════
+
+    fun uapmd_app_instantiate()
+    fun uapmd_app_instance(): Pointer?
+    fun uapmd_app_cleanup()
+
+    fun uapmd_app_sequencer(app: Pointer?): Pointer?
+    fun uapmd_app_transport(app: Pointer?): Pointer?
+    fun uapmd_app_sample_rate(app: Pointer?): Int
+    fun uapmd_app_track_count(app: Pointer?): Int
+
+    fun uapmd_app_is_scanning(app: Pointer?): Boolean
+    fun uapmd_app_is_audio_engine_enabled(app: Pointer?): Boolean
+    fun uapmd_app_set_audio_engine_enabled(app: Pointer?, enabled: Boolean)
+    fun uapmd_app_toggle_audio_engine(app: Pointer?)
+    fun uapmd_app_update_audio_device_settings(app: Pointer?, sampleRate: Int, bufferSize: Int)
+    fun uapmd_app_set_auto_buffer_size_enabled(app: Pointer?, enabled: Boolean)
+    fun uapmd_app_auto_buffer_size_enabled(app: Pointer?): Boolean
+
+    fun uapmd_app_notify_ui_ready(app: Pointer?)
+    fun uapmd_app_notify_persistent_storage_ready(app: Pointer?)
+
+    fun uapmd_transport_is_playing(tc: Pointer?): Boolean
+    fun uapmd_transport_is_paused(tc: Pointer?): Boolean
+    fun uapmd_transport_is_recording(tc: Pointer?): Boolean
+    fun uapmd_transport_get_volume(tc: Pointer?): Float
+    fun uapmd_transport_set_volume(tc: Pointer?, volume: Float)
+    fun uapmd_transport_play(tc: Pointer?)
+    fun uapmd_transport_stop(tc: Pointer?)
+    fun uapmd_transport_pause(tc: Pointer?)
+    fun uapmd_transport_resume(tc: Pointer?)
+    fun uapmd_transport_record(tc: Pointer?)
+
+    fun uapmd_app_perform_plugin_scanning(app: Pointer?, forceRescan: Boolean, request: Int, remoteTimeoutSeconds: Double, requireFastScanning: Boolean)
+    fun uapmd_app_cancel_plugin_scanning(app: Pointer?)
+    fun uapmd_app_generate_scan_report(app: Pointer?, buf: ByteArray?, bufSize: Long): Long
+    fun uapmd_app_clear_plugin_blocklist(app: Pointer?)
+    fun uapmd_app_blocklist_count(app: Pointer?): Int
+    fun uapmd_app_refresh_master_tempo_map(app: Pointer?): Double
+    fun uapmd_app_master_tempo_point_count(app: Pointer?): Int
+    fun uapmd_app_get_master_tempo_point(app: Pointer?, index: Int, out: UapmdTempoPoint): Boolean
+    fun uapmd_app_master_time_signature_count(app: Pointer?): Int
+    fun uapmd_app_get_master_time_signature(app: Pointer?, index: Int, out: UapmdTimeSignaturePoint): Boolean
+    fun uapmd_app_get_blocklist_entry(app: Pointer?, index: Int, out: UapmdBlocklistEntry): Boolean
+    fun uapmd_app_unblock_plugin(app: Pointer?, entryId: String): Boolean
+
+    fun uapmd_app_add_track(app: Pointer?, userData: Pointer?, callback: TrackMutationCb?)
+    fun uapmd_app_remove_track(app: Pointer?, trackIndex: Int, userData: Pointer?, callback: TrackMutationCb?)
+    fun uapmd_app_remove_all_tracks(app: Pointer?, userData: Pointer?, callback: TrackClearCb?)
+
+    fun uapmd_app_timeline_track_count(app: Pointer?): Int
+    fun uapmd_app_get_timeline_track(app: Pointer?, index: Int): Pointer?
+    fun uapmd_app_master_timeline_track(app: Pointer?): Pointer?
+    fun uapmd_app_get_timeline_state(app: Pointer?, out: UapmdTimelineState): Boolean
+
+    fun uapmd_app_get_history_state(app: Pointer?, out: UapmdUndoState): Boolean
+    fun uapmd_app_undo(app: Pointer?, userData: Pointer?, callback: HistoryMutationCb?)
+    fun uapmd_app_redo(app: Pointer?, userData: Pointer?, callback: HistoryMutationCb?)
+
+    fun uapmd_app_create_plugin_instance(app: Pointer?, format: String?, pluginId: String?, trackIndex: Int, config: UapmdPluginInstanceConfig?, userData: Pointer?, callback: InstanceCreatedCb?)
+    fun uapmd_app_remove_plugin_instance(app: Pointer?, instanceId: Int)
+    fun uapmd_app_get_instance_group(app: Pointer?, instanceId: Int): Byte
+    fun uapmd_app_set_instance_group(app: Pointer?, instanceId: Int, group: Byte): Boolean
+    fun uapmd_app_enable_ump_device(app: Pointer?, instanceId: Int, deviceName: String?)
+    fun uapmd_app_disable_ump_device(app: Pointer?, instanceId: Int)
+    fun uapmd_app_request_show_instance_details(app: Pointer?, instanceId: Int)
+    fun uapmd_app_request_show_plugin_ui(app: Pointer?, instanceId: Int)
+    fun uapmd_app_hide_plugin_ui(app: Pointer?, instanceId: Int)
+
+    fun uapmd_app_load_project(app: Pointer?, filePath: String?): UapmdAppProjectResult.ByVal
+    fun uapmd_app_save_project_sync(app: Pointer?, filePath: String?): UapmdAppProjectResult.ByVal
+    fun uapmd_app_save_project(app: Pointer?, filePath: String?, userData: Pointer?, callback: ProjectSaveCb?)
+    fun uapmd_app_load_project_from_handle_token(app: Pointer?, token: String?): UapmdAppProjectResult.ByVal
+
+    fun uapmd_app_get_midi_clip_ump_events(app: Pointer?, trackIndex: Int, clipId: Int): UapmdUmpEventsResult.ByVal
+    fun uapmd_app_add_ump_event_to_clip(app: Pointer?, trackIndex: Int, clipId: Int, tick: Long, words: IntArray?, wordCount: Int): Boolean
+    fun uapmd_app_remove_ump_event_from_clip(app: Pointer?, trackIndex: Int, clipId: Int, eventIndex: Int): Boolean
+    fun uapmd_app_remove_clip_from_track(app: Pointer?, trackIndex: Int, clipId: Int): Boolean
+    fun uapmd_app_create_empty_midi_clip(app: Pointer?, trackIndex: Int, positionSamples: Long, tickResolution: Int, bpm: Double): UapmdClipAddResult.ByVal
+
+    fun uapmd_app_ensure_track_uses_editor_graph(app: Pointer?, trackIndex: Int): Boolean
+    fun uapmd_app_revert_track_to_simple_graph(app: Pointer?, trackIndex: Int): Boolean
+    fun uapmd_app_get_track_graph_connections(app: Pointer?, trackIndex: Int): UapmdGraphConnectionsResult.ByVal
+    fun uapmd_app_get_track_graph_nodes(app: Pointer?, trackIndex: Int): UapmdGraphNodesResult.ByVal
+    fun uapmd_app_connect_track_graph(app: Pointer?, trackIndex: Int, connection: UapmdGraphConnection?): UapmdOpResult.ByVal
+    fun uapmd_app_disconnect_track_graph_connection(app: Pointer?, trackIndex: Int, connectionId: Long): UapmdOpResult.ByVal
+
+    fun uapmd_app_get_clip_audio_events(app: Pointer?, trackIndex: Int, clipId: Int): UapmdClipAudioEventsResult.ByVal
+    fun uapmd_app_set_clip_audio_events(app: Pointer?, trackIndex: Int, clipId: Int, markers: UapmdClipMarker?, markerCount: Int, warps: UapmdAudioWarpPoint?, warpCount: Int): UapmdOpResult.ByVal
 }

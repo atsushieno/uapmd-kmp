@@ -18,6 +18,8 @@ object JniBridge {
     @JvmStatic external fun uapmdDocumentProviderTick(h: Long)
     /** cb: (success: Boolean, path: String?, error: String?) -> Unit */
     @JvmStatic external fun uapmdDocumentProviderPickOpenPath(h: Long, kind: Int, cb: Any)
+    /** cb.onResult(success: Boolean, path: String?, error: String?) */
+    @JvmStatic external fun uapmdDocumentProviderPickSavePath(h: Long, kind: Int, defaultName: String, cb: Any)
     @JvmStatic external fun uapmdPrepareProjectLoad(filePath: String): Long
     @JvmStatic external fun uapmdPreparedProjectSuccess(h: Long): Boolean
     @JvmStatic external fun uapmdPreparedProjectPath(h: Long): String
@@ -257,6 +259,14 @@ object JniBridge {
     @JvmStatic external fun uapmdTrackLatencyInSamples(h: Long): Int
     @JvmStatic external fun uapmdTrackRenderLeadInSamples(h: Long): Int
     @JvmStatic external fun uapmdTrackTailLengthInSeconds(h: Long): Double
+    @JvmStatic external fun uapmdEngineMidiRecorder(engine: Long): Long
+    @JvmStatic external fun uapmdMidiRecorderStart(rec: Long, trackReferenceId: String, clipId: Int, startSample: Long): Boolean
+    @JvmStatic external fun uapmdMidiRecorderStop(rec: Long)
+    @JvmStatic external fun uapmdMidiRecorderCancel(rec: Long)
+    @JvmStatic external fun uapmdMidiRecorderIsRecording(rec: Long): Boolean
+    @JvmStatic external fun uapmdTrackGetGain(h: Long): Double
+    @JvmStatic external fun uapmdTrackGetMuted(h: Long): Boolean
+    @JvmStatic external fun uapmdTrackGetSolo(h: Long): Boolean
     @JvmStatic external fun uapmdTrackGetBypassed(h: Long): Boolean
     @JvmStatic external fun uapmdTrackGetFrozen(h: Long): Boolean
     @JvmStatic external fun uapmdTrackSetBypassed(h: Long, v: Boolean)
@@ -354,7 +364,14 @@ object JniBridge {
 
     // ─── AudioFileReader ──────────────────────────────────────────────────────
 
+    /** cb.invoke(success: Boolean, error: String?, importedTrackCount: Int) */
+    @JvmStatic external fun uapmdAppImportMidiTracksFromFile(app: Long, filepath: String, cb: Any)
+    @JvmStatic external fun uapmdEngineTrackFreezePolicy(engine: Long, trackIndex: Int): Int
+    @JvmStatic external fun uapmdEngineTrackFreezeState(engine: Long, trackIndex: Int): Int
+    @JvmStatic external fun uapmdEngineIsTrackBusy(engine: Long, trackIndex: Int): Boolean
+    @JvmStatic external fun uapmdTtChannelCount(tt: Long): Int
     @JvmStatic external fun uapmdAudioFileReaderCreate(path: String): Long
+    @JvmStatic external fun uapmdAudioFileReaderCreateSilent(numFrames: Long, numChannels: Int, sampleRate: Int): Long
     @JvmStatic external fun uapmdAudioFileReaderDestroy(h: Long)
     /** Returns long[3]{numFrames, numChannels, sampleRate} or null */
     @JvmStatic external fun uapmdAudioFileReaderGetProperties(h: Long): LongArray?
@@ -580,4 +597,117 @@ object JniBridge {
     @JvmStatic external fun uapmdAddinManagerGetAddin(h: Long, index: Int, outStrings: Array<String?>): IntArray?
     @JvmStatic external fun uapmdAddinManagerLastError(h: Long): String
     @JvmStatic external fun uapmdAddinSupportsDynamicLoading(): Boolean
+
+    // ── AppModel / TransportController ──────────────────────────────────────
+
+    @JvmStatic external fun uapmdAppInstantiate()
+    @JvmStatic external fun uapmdAppInstance(): Long
+    @JvmStatic external fun uapmdAppCleanup()
+
+    @JvmStatic external fun uapmdAppSequencer(app: Long): Long
+    @JvmStatic external fun uapmdAppTransport(app: Long): Long
+    @JvmStatic external fun uapmdAppSampleRate(app: Long): Int
+    @JvmStatic external fun uapmdAppTrackCount(app: Long): Int
+
+    @JvmStatic external fun uapmdAppIsScanning(app: Long): Boolean
+    @JvmStatic external fun uapmdAppIsAudioEngineEnabled(app: Long): Boolean
+    @JvmStatic external fun uapmdAppSetAudioEngineEnabled(app: Long, enabled: Boolean)
+    @JvmStatic external fun uapmdAppToggleAudioEngine(app: Long)
+    @JvmStatic external fun uapmdAppUpdateAudioDeviceSettings(app: Long, sampleRate: Int, bufferSize: Int)
+    @JvmStatic external fun uapmdAppSetAutoBufferSizeEnabled(app: Long, enabled: Boolean)
+    @JvmStatic external fun uapmdAppAutoBufferSizeEnabled(app: Long): Boolean
+
+    @JvmStatic external fun uapmdAppNotifyUiReady(app: Long)
+    @JvmStatic external fun uapmdAppNotifyPersistentStorageReady(app: Long)
+
+    @JvmStatic external fun uapmdTransportIsPlaying(tc: Long): Boolean
+    @JvmStatic external fun uapmdTransportIsPaused(tc: Long): Boolean
+    @JvmStatic external fun uapmdTransportIsRecording(tc: Long): Boolean
+    @JvmStatic external fun uapmdTransportGetVolume(tc: Long): Float
+    @JvmStatic external fun uapmdTransportSetVolume(tc: Long, volume: Float)
+    @JvmStatic external fun uapmdTransportPlay(tc: Long)
+    @JvmStatic external fun uapmdTransportStop(tc: Long)
+    @JvmStatic external fun uapmdTransportPause(tc: Long)
+    @JvmStatic external fun uapmdTransportResume(tc: Long)
+    @JvmStatic external fun uapmdTransportRecord(tc: Long)
+
+    @JvmStatic external fun uapmdAppPerformPluginScanning(app: Long, forceRescan: Boolean, request: Int, remoteTimeoutSeconds: Double, requireFastScanning: Boolean)
+    @JvmStatic external fun uapmdAppCancelPluginScanning(app: Long)
+    @JvmStatic external fun uapmdAppGenerateScanReport(app: Long): String
+    @JvmStatic external fun uapmdAppClearPluginBlocklist(app: Long)
+    @JvmStatic external fun uapmdAppBlocklistCount(app: Long): Int
+    @JvmStatic external fun uapmdAppRefreshMasterTempoMap(app: Long): Double
+    /** Packed [seconds, tick, bpm] per point. */
+    @JvmStatic external fun uapmdAppGetMasterTempoPoints(app: Long): DoubleArray?
+    /** Packed [seconds, tick, numerator, denominator] per point. */
+    @JvmStatic external fun uapmdAppGetMasterTimeSignatures(app: Long): DoubleArray?
+    /** Returns [id, format, pluginId, reason] or null. */
+    @JvmStatic external fun uapmdAppGetBlocklistEntry(app: Long, index: Int): Array<String>?
+    @JvmStatic external fun uapmdAppUnblockPlugin(app: Long, entryId: String): Boolean
+
+    /** cb: (trackIndex: Int, error: String?) -> Unit */
+    @JvmStatic external fun uapmdAppAddTrack(app: Long, cb: Any)
+    /** cb: (trackIndex: Int, error: String?) -> Unit */
+    @JvmStatic external fun uapmdAppRemoveTrack(app: Long, trackIndex: Int, cb: Any)
+    /** cb: (error: String?) -> Unit */
+    @JvmStatic external fun uapmdAppRemoveAllTracks(app: Long, cb: Any)
+
+    @JvmStatic external fun uapmdAppTimelineTrackCount(app: Long): Int
+    @JvmStatic external fun uapmdAppGetTimelineTrack(app: Long, index: Int): Long
+    @JvmStatic external fun uapmdAppMasterTimelineTrack(app: Long): Long
+    @JvmStatic external fun uapmdAppGetTimelineState(app: Long): DoubleArray?
+
+    @JvmStatic external fun uapmdAppGetHistoryState(app: Long): Array<Any>?
+    /** cb: (error: String?) -> Unit */
+    @JvmStatic external fun uapmdAppUndo(app: Long, cb: Any?)
+    /** cb: (error: String?) -> Unit */
+    @JvmStatic external fun uapmdAppRedo(app: Long, cb: Any?)
+
+    /** cb: (instanceId: Int, pluginName: String?, error: String?) -> Unit */
+    @JvmStatic external fun uapmdAppCreatePluginInstance(
+        app: Long, format: String, pluginId: String, trackIndex: Int,
+        apiName: String, deviceName: String, manufacturer: String, version: String, stateFile: String,
+        cb: Any
+    )
+    @JvmStatic external fun uapmdAppRemovePluginInstance(app: Long, instanceId: Int)
+    @JvmStatic external fun uapmdAppGetInstanceGroup(app: Long, instanceId: Int): Int
+    @JvmStatic external fun uapmdAppSetInstanceGroup(app: Long, instanceId: Int, group: Int): Boolean
+    @JvmStatic external fun uapmdAppEnableUmpDevice(app: Long, instanceId: Int, deviceName: String)
+    @JvmStatic external fun uapmdAppDisableUmpDevice(app: Long, instanceId: Int)
+    @JvmStatic external fun uapmdAppRequestShowInstanceDetails(app: Long, instanceId: Int)
+    @JvmStatic external fun uapmdAppRequestShowPluginUi(app: Long, instanceId: Int)
+    @JvmStatic external fun uapmdAppHidePluginUi(app: Long, instanceId: Int)
+
+    @JvmStatic external fun uapmdAppLoadProject(app: Long, filePath: String): Array<Any>?
+    @JvmStatic external fun uapmdAppSaveProjectSync(app: Long, filePath: String): Array<Any>?
+    /** cb: (success: Boolean, error: String?) -> Unit */
+    @JvmStatic external fun uapmdAppSaveProject(app: Long, filePath: String, cb: Any)
+    @JvmStatic external fun uapmdAppLoadProjectFromHandleToken(app: Long, token: String): Array<Any>?
+
+    /** Object[]{ long[1] success, String? error, long[] ticks, int[][] words } */
+    @JvmStatic external fun uapmdAppGetMidiClipUmpEvents(app: Long, trackIndex: Int, clipId: Int): Array<Any>?
+    @JvmStatic external fun uapmdAppAddUmpEventToClip(app: Long, trackIndex: Int, clipId: Int, tick: Long, words: IntArray): Boolean
+    @JvmStatic external fun uapmdAppRemoveUmpEventFromClip(app: Long, trackIndex: Int, clipId: Int, eventIndex: Int): Boolean
+    @JvmStatic external fun uapmdAppRemoveClipFromTrack(app: Long, trackIndex: Int, clipId: Int): Boolean
+    /** Object[]{ long[3] clipId/sourceNodeId/success, String? error } */
+    @JvmStatic external fun uapmdAppCreateEmptyMidiClip(app: Long, trackIndex: Int, positionSamples: Long, tickResolution: Int, bpm: Double): Array<Any>?
+
+    @JvmStatic external fun uapmdAppEnsureTrackUsesEditorGraph(app: Long, trackIndex: Int): Boolean
+    @JvmStatic external fun uapmdAppRevertTrackToSimpleGraph(app: Long, trackIndex: Int): Boolean
+    /** Object[]{ long[1] success, String? error, long[] ids, int[] flat(7 per connection) } */
+    @JvmStatic external fun uapmdAppGetTrackGraphConnections(app: Long, trackIndex: Int): Array<Any>?
+    @JvmStatic external fun uapmdAppGetTrackGraphNodes(app: Long, trackIndex: Int): Array<Any>?
+    @JvmStatic external fun uapmdAppConnectTrackGraph(
+        app: Long, trackIndex: Int, id: Long, busType: Int,
+        srcType: Int, srcNodeId: String, srcInstance: Int, srcBus: Int,
+        tgtType: Int, tgtNodeId: String, tgtInstance: Int, tgtBus: Int
+    ): Array<Any>?
+    @JvmStatic external fun uapmdAppDisconnectTrackGraphConnection(app: Long, trackIndex: Int, connectionId: Long): Array<Any>?
+
+    @JvmStatic external fun uapmdAppGetClipAudioEvents(app: Long, trackIndex: Int, clipId: Int): Array<Any>?
+    @JvmStatic external fun uapmdAppSetClipAudioEvents(
+        app: Long, trackIndex: Int, clipId: Int,
+        markerStrings: Array<String>, markerOffsets: DoubleArray, markerRefTypes: IntArray,
+        warpNums: DoubleArray, warpRefTypes: IntArray, warpStrings: Array<String>
+    ): Array<Any>?
 }

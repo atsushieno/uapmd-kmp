@@ -39,6 +39,13 @@ class JsSequencerEngine internal constructor(
     override fun getTrack(index: UInt): SequencerTrack =
         JsSequencerTrack(jsMod._uapmd_engine_get_track(handle, index.toInt()) as Int)
 
+    override fun trackFreezePolicy(trackIndex: Int) =
+        FreezePolicy.fromNative(jsMod._uapmd_engine_track_freeze_policy(handle, trackIndex) as Int)
+    override fun trackFreezeState(trackIndex: Int) =
+        FreezeRuntimeState.fromNative(jsMod._uapmd_engine_track_freeze_state(handle, trackIndex) as Int)
+    override fun isTrackBusy(trackIndex: Int) =
+        jsMod._uapmd_engine_is_track_busy(handle, trackIndex) as Boolean
+
     override val masterTrack: SequencerTrack
         get() = JsSequencerTrack(jsMod._uapmd_engine_master_track(handle) as Int)
 
@@ -117,6 +124,9 @@ class JsSequencerEngine internal constructor(
     override fun getInputSpectrum(numBars: Int): FloatArray  = FloatArray(numBars)
     override fun getOutputSpectrum(numBars: Int): FloatArray = FloatArray(numBars)
 
+    override val midiRecorder: MidiRecorder?
+        get() = (jsMod._uapmd_engine_midi_recorder(handle) as Int).takeIf { it != 0 }?.let { JsMidiRecorder(it) }
+
     override val timeline: TimelineFacade
         get() = JsTimelineFacade(jsMod._uapmd_engine_timeline(handle) as Int)
 
@@ -138,6 +148,10 @@ class JsSequencerTrack internal constructor(
     override val latencyInSamples: UInt   get() = (jsMod._uapmd_track_latency_in_samples(handle) as Int).toUInt()
     override val renderLeadInSamples: UInt get() = (jsMod._uapmd_track_render_lead_in_samples(handle) as Int).toUInt()
     override val tailLengthInSeconds: Double get() = jsMod._uapmd_track_tail_length_in_seconds(handle) as Double
+
+    override val gain: Double get() = jsMod._uapmd_track_get_gain(handle) as Double
+    override val muted: Boolean get() = jsMod._uapmd_track_get_muted(handle) as Boolean
+    override val solo: Boolean get() = jsMod._uapmd_track_get_solo(handle) as Boolean
 
     override var bypassed: Boolean
         get() = jsMod._uapmd_track_get_bypassed(handle) as Boolean
@@ -233,3 +247,13 @@ class JsAudioIODevice internal constructor(private val handle: Int) : AudioIODev
 // ─── JsMidiIODevice ───────────────────────────────────────────────────────────
 
 class JsMidiIODevice internal constructor(internal val handle: Int) : MidiIODevice
+
+class JsMidiRecorder internal constructor(private val handle: Int) : MidiRecorder {
+    override val isRecording: Boolean get() = jsMod._uapmd_midi_recorder_is_recording(handle) as Boolean
+    override fun start(trackReferenceId: String, clipId: Int, startSample: Long): Boolean =
+        withJsCString(trackReferenceId) { t ->
+            jsMod._uapmd_midi_recorder_start(handle, t, clipId, js("BigInt")(startSample.toString())) as Boolean
+        }
+    override fun stop() { jsMod._uapmd_midi_recorder_stop(handle) }
+    override fun cancel() { jsMod._uapmd_midi_recorder_cancel(handle) }
+}

@@ -38,6 +38,13 @@ actual fun getMidiIODevice(driverName: String): MidiIODevice =
 actual fun createAudioFileReader(filepath: String): AudioFileReader =
     withJsCString(filepath) { ptr -> JsAudioFileReader(jsMod._uapmd_audio_file_reader_create(ptr) as Int) }
 
+actual fun createSilentAudioFileReader(numFrames: Long, numChannels: Int, sampleRate: Int): AudioFileReader =
+    JsAudioFileReader(
+        jsMod._uapmd_audio_file_reader_create_silent(
+            js("BigInt")(numFrames.toString()), numChannels, sampleRate
+        ) as Int
+    )
+
 actual fun createScanTool(): ScanTool =
     JsScanTool(jsMod._uapmd_scan_tool_create() as Int)
 
@@ -52,3 +59,11 @@ actual fun createPluginInstancing(scanTool: ScanTool, format: String, pluginId: 
             ) as Int
         )
     }
+
+private class PassThroughPreparedProject(override val path: String) : PreparedProject {
+    override val success = true
+    override val error = ""
+    override fun close() = Unit
+}
+
+actual fun prepareProjectLoad(filePath: String): PreparedProject = PassThroughPreparedProject(filePath)

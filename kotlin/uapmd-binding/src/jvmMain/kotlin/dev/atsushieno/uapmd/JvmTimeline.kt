@@ -56,17 +56,7 @@ class JvmTimelineFacade internal constructor(
     override fun getState(): TimelineState? {
         val out = UapmdTimelineState()
         if (!lib.uapmd_tl_get_state(handle, out)) return null
-        return TimelineState(
-            playheadPosition = out.playhead_position.toKotlin(),
-            isPlaying = out.is_playing != 0.toByte(),
-            loopEnabled = out.loop_enabled != 0.toByte(),
-            loopStart = out.loop_start.toKotlin(),
-            loopEnd = out.loop_end.toKotlin(),
-            tempo = out.tempo,
-            timeSignatureNumerator = out.time_signature_numerator,
-            timeSignatureDenominator = out.time_signature_denominator,
-            sampleRate = out.sample_rate
-        )
+        return out.toKotlin()
     }
 
     override fun setTempo(tempo: Double) = lib.uapmd_tl_set_tempo(handle, tempo)
@@ -219,6 +209,8 @@ class JvmTimelineFacade internal constructor(
 class JvmTimelineTrack internal constructor(
     private val handle: Pointer
 ) : TimelineTrack {
+    override val channelCount: Int get() = lib.uapmd_tt_channel_count(handle).toInt()
+
     override fun getClips(): List<ClipData> {
         val cm = lib.uapmd_tt_clip_manager(handle) ?: return emptyList()
         val count = lib.uapmd_cm_clip_count(cm).toInt()
@@ -237,8 +229,25 @@ class JvmTimelineTrack internal constructor(
                 muted               = c.muted != 0.toByte(),
                 name                = c.name ?: "",
                 filepath            = c.filepath ?: "",
-                clipType            = ClipType.fromNative(c.clip_type)
+                clipType            = ClipType.fromNative(c.clip_type),
+                referenceId         = c.reference_id ?: "",
+                anchorReferenceId   = c.anchor_reference_id ?: "",
+                anchorOrigin        = AnchorOrigin.fromNative(c.anchor_origin),
+                anchorOffsetSamples = c.anchor_offset.samples
             )
         }
     }
 }
+
+
+internal fun UapmdTimelineState.toKotlin(): TimelineState = TimelineState(
+    playheadPosition = playhead_position.toKotlin(),
+    isPlaying = is_playing != 0.toByte(),
+    loopEnabled = loop_enabled != 0.toByte(),
+    loopStart = loop_start.toKotlin(),
+    loopEnd = loop_end.toKotlin(),
+    tempo = tempo,
+    timeSignatureNumerator = time_signature_numerator,
+    timeSignatureDenominator = time_signature_denominator,
+    sampleRate = sample_rate
+)

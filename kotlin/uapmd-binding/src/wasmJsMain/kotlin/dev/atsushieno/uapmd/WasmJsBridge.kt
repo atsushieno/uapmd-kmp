@@ -358,6 +358,12 @@ external interface UapmdCApiModule : JsAny {
     // ── Timeline track ─────────────────────────────────────────────────────
     @JsName("_uapmd_tt_reference_id")
     fun uapmdTtReferenceId(handle: Int): Int
+    @JsName("_uapmd_engine_track_freeze_policy")
+    fun uapmdEngineTrackFreezePolicy(engine: Int, trackIndex: Int): Int
+    @JsName("_uapmd_engine_track_freeze_state")
+    fun uapmdEngineTrackFreezeState(engine: Int, trackIndex: Int): Int
+    @JsName("_uapmd_engine_is_track_busy")
+    fun uapmdEngineIsTrackBusy(engine: Int, trackIndex: Int): Boolean
     @JsName("_uapmd_tt_channel_count")
     fun uapmdTtChannelCount(handle: Int): Int
     @JsName("_uapmd_tt_sample_rate")
@@ -379,6 +385,7 @@ external interface UapmdCApiModule : JsAny {
     // ── Audio file reader ──────────────────────────────────────────────────
     @JsName("_uapmd_audio_file_reader_create")
     fun uapmdAudioFileReaderCreate(filePathPtr: Int): Int
+
     @JsName("_uapmd_audio_file_reader_destroy")
     fun uapmdAudioFileReaderDestroy(handle: Int)
     @JsName("_uapmd_audio_file_reader_get_properties")
@@ -452,6 +459,20 @@ external interface UapmdCApiModule : JsAny {
     // ── Track ──────────────────────────────────────────────────────────────
     @JsName("_uapmd_track_graph")
     fun uapmdTrackGraph(handle: Int): Int
+    @JsName("_uapmd_engine_midi_recorder")
+    fun uapmdEngineMidiRecorder(engine: Int): Int
+    @JsName("_uapmd_midi_recorder_stop")
+    fun uapmdMidiRecorderStop(rec: Int)
+    @JsName("_uapmd_midi_recorder_cancel")
+    fun uapmdMidiRecorderCancel(rec: Int)
+    @JsName("_uapmd_midi_recorder_is_recording")
+    fun uapmdMidiRecorderIsRecording(rec: Int): Boolean
+    @JsName("_uapmd_track_get_gain")
+    fun uapmdTrackGetGain(track: Int): Double
+    @JsName("_uapmd_track_get_muted")
+    fun uapmdTrackGetMuted(track: Int): Boolean
+    @JsName("_uapmd_track_get_solo")
+    fun uapmdTrackGetSolo(track: Int): Boolean
     @JsName("_uapmd_track_get_bypassed")
     fun uapmdTrackGetBypassed(handle: Int): Boolean
     @JsName("_uapmd_track_set_bypassed")
@@ -804,7 +825,166 @@ external interface UapmdCApiModule : JsAny {
     fun uapmdAddinManagerLastError(mgr: Int, buf: Int, bufSize: Int): Int
     @JsName("_uapmd_addin_supports_dynamic_loading")
     fun uapmdAddinSupportsDynamicLoading(): Boolean
+    // ── AppModel / TransportController ─────────────────────────────────────
+
+    @JsName("_uapmd_app_instantiate")
+    fun uapmdAppInstantiate()
+    @JsName("_uapmd_app_instance")
+    fun uapmdAppInstance(): Int
+    @JsName("_uapmd_app_cleanup")
+    fun uapmdAppCleanup()
+
+    @JsName("_uapmd_app_sequencer")
+    fun uapmdAppSequencer(app: Int): Int
+    @JsName("_uapmd_app_transport")
+    fun uapmdAppTransport(app: Int): Int
+    @JsName("_uapmd_app_sample_rate")
+    fun uapmdAppSampleRate(app: Int): Int
+    @JsName("_uapmd_app_track_count")
+    fun uapmdAppTrackCount(app: Int): Int
+
+    @JsName("_uapmd_app_is_scanning")
+    fun uapmdAppIsScanning(app: Int): Boolean
+    @JsName("_uapmd_app_is_audio_engine_enabled")
+    fun uapmdAppIsAudioEngineEnabled(app: Int): Boolean
+    @JsName("_uapmd_app_set_audio_engine_enabled")
+    fun uapmdAppSetAudioEngineEnabled(app: Int, enabled: Boolean)
+    @JsName("_uapmd_app_toggle_audio_engine")
+    fun uapmdAppToggleAudioEngine(app: Int)
+    @JsName("_uapmd_app_update_audio_device_settings")
+    fun uapmdAppUpdateAudioDeviceSettings(app: Int, sampleRate: Int, bufferSize: Int)
+    @JsName("_uapmd_app_set_auto_buffer_size_enabled")
+    fun uapmdAppSetAutoBufferSizeEnabled(app: Int, enabled: Boolean)
+    @JsName("_uapmd_app_auto_buffer_size_enabled")
+    fun uapmdAppAutoBufferSizeEnabled(app: Int): Boolean
+
+    @JsName("_uapmd_app_notify_ui_ready")
+    fun uapmdAppNotifyUiReady(app: Int)
+    @JsName("_uapmd_app_notify_persistent_storage_ready")
+    fun uapmdAppNotifyPersistentStorageReady(app: Int)
+
+    @JsName("_uapmd_transport_is_playing")
+    fun uapmdTransportIsPlaying(tc: Int): Boolean
+    @JsName("_uapmd_transport_is_paused")
+    fun uapmdTransportIsPaused(tc: Int): Boolean
+    @JsName("_uapmd_transport_is_recording")
+    fun uapmdTransportIsRecording(tc: Int): Boolean
+    @JsName("_uapmd_transport_get_volume")
+    fun uapmdTransportGetVolume(tc: Int): Float
+    @JsName("_uapmd_transport_set_volume")
+    fun uapmdTransportSetVolume(tc: Int, volume: Float)
+    @JsName("_uapmd_transport_play")
+    fun uapmdTransportPlay(tc: Int)
+    @JsName("_uapmd_transport_stop")
+    fun uapmdTransportStop(tc: Int)
+    @JsName("_uapmd_transport_pause")
+    fun uapmdTransportPause(tc: Int)
+    @JsName("_uapmd_transport_resume")
+    fun uapmdTransportResume(tc: Int)
+    @JsName("_uapmd_transport_record")
+    fun uapmdTransportRecord(tc: Int)
+
+    @JsName("_uapmd_app_perform_plugin_scanning")
+    fun uapmdAppPerformPluginScanning(app: Int, forceRescan: Boolean, request: Int, remoteTimeoutSeconds: Double, requireFastScanning: Boolean)
+    @JsName("_uapmd_app_cancel_plugin_scanning")
+    fun uapmdAppCancelPluginScanning(app: Int)
+    @JsName("_uapmd_app_generate_scan_report")
+    fun uapmdAppGenerateScanReport(app: Int, buf: Int, bufSize: Int): Int
+    @JsName("_uapmd_app_refresh_master_tempo_map")
+    fun uapmdAppRefreshMasterTempoMap(app: Int): Double
+    @JsName("_uapmd_app_master_tempo_point_count")
+    fun uapmdAppMasterTempoPointCount(app: Int): Int
+    @JsName("_uapmd_app_get_master_tempo_point")
+    fun uapmdAppGetMasterTempoPoint(app: Int, index: Int, out: Int): Boolean
+    @JsName("_uapmd_app_master_time_signature_count")
+    fun uapmdAppMasterTimeSignatureCount(app: Int): Int
+    @JsName("_uapmd_app_get_master_time_signature")
+    fun uapmdAppGetMasterTimeSignature(app: Int, index: Int, out: Int): Boolean
+    @JsName("_uapmd_app_blocklist_count")
+    fun uapmdAppBlocklistCount(app: Int): Int
+    @JsName("_uapmd_app_get_blocklist_entry")
+    fun uapmdAppGetBlocklistEntry(app: Int, index: Int, out: Int): Boolean
+    @JsName("_uapmd_app_unblock_plugin")
+    fun uapmdAppUnblockPlugin(app: Int, entryIdPtr: Int): Boolean
+    @JsName("_uapmd_app_clear_plugin_blocklist")
+    fun uapmdAppClearPluginBlocklist(app: Int)
+
+    @JsName("_uapmd_app_add_track")
+    fun uapmdAppAddTrack(app: Int, userData: Int, callback: Int)
+    @JsName("_uapmd_app_remove_track")
+    fun uapmdAppRemoveTrack(app: Int, trackIndex: Int, userData: Int, callback: Int)
+    @JsName("_uapmd_app_remove_all_tracks")
+    fun uapmdAppRemoveAllTracks(app: Int, userData: Int, callback: Int)
+
+    @JsName("_uapmd_app_timeline_track_count")
+    fun uapmdAppTimelineTrackCount(app: Int): Int
+    @JsName("_uapmd_app_get_timeline_track")
+    fun uapmdAppGetTimelineTrack(app: Int, index: Int): Int
+    @JsName("_uapmd_app_master_timeline_track")
+    fun uapmdAppMasterTimelineTrack(app: Int): Int
+    @JsName("_uapmd_app_get_timeline_state")
+    fun uapmdAppGetTimelineState(app: Int, out: Int): Boolean
+
+    @JsName("_uapmd_app_get_history_state")
+    fun uapmdAppGetHistoryState(app: Int, out: Int): Boolean
+    @JsName("_uapmd_app_undo")
+    fun uapmdAppUndo(app: Int, userData: Int, callback: Int)
+    @JsName("_uapmd_app_redo")
+    fun uapmdAppRedo(app: Int, userData: Int, callback: Int)
+
+    @JsName("_uapmd_app_create_plugin_instance")
+    fun uapmdAppCreatePluginInstance(app: Int, format: Int, pluginId: Int, trackIndex: Int, config: Int, userData: Int, callback: Int)
+    @JsName("_uapmd_app_remove_plugin_instance")
+    fun uapmdAppRemovePluginInstance(app: Int, instanceId: Int)
+    @JsName("_uapmd_app_get_instance_group")
+    fun uapmdAppGetInstanceGroup(app: Int, instanceId: Int): Int
+    @JsName("_uapmd_app_set_instance_group")
+    fun uapmdAppSetInstanceGroup(app: Int, instanceId: Int, group: Int): Boolean
+    @JsName("_uapmd_app_enable_ump_device")
+    fun uapmdAppEnableUmpDevice(app: Int, instanceId: Int, deviceName: Int)
+    @JsName("_uapmd_app_disable_ump_device")
+    fun uapmdAppDisableUmpDevice(app: Int, instanceId: Int)
+    @JsName("_uapmd_app_request_show_instance_details")
+    fun uapmdAppRequestShowInstanceDetails(app: Int, instanceId: Int)
+    @JsName("_uapmd_app_request_show_plugin_ui")
+    fun uapmdAppRequestShowPluginUi(app: Int, instanceId: Int)
+    @JsName("_uapmd_app_hide_plugin_ui")
+    fun uapmdAppHidePluginUi(app: Int, instanceId: Int)
+
+    // Struct-returning functions take the result pointer as their FIRST argument (sret).
+    @JsName("_uapmd_app_load_project")
+    fun uapmdAppLoadProject(out: Int, app: Int, filePath: Int)
+    @JsName("_uapmd_app_save_project_sync")
+    fun uapmdAppSaveProjectSync(out: Int, app: Int, filePath: Int)
+    @JsName("_uapmd_app_save_project")
+    fun uapmdAppSaveProject(app: Int, filePath: Int, userData: Int, callback: Int)
+    @JsName("_uapmd_app_load_project_from_handle_token")
+    fun uapmdAppLoadProjectFromHandleToken(out: Int, app: Int, token: Int)
+
+    @JsName("_uapmd_app_get_midi_clip_ump_events")
+    fun uapmdAppGetMidiClipUmpEvents(out: Int, app: Int, trackIndex: Int, clipId: Int)
+    @JsName("_uapmd_app_remove_ump_event_from_clip")
+    fun uapmdAppRemoveUmpEventFromClip(app: Int, trackIndex: Int, clipId: Int, eventIndex: Int): Boolean
+    @JsName("_uapmd_app_remove_clip_from_track")
+    fun uapmdAppRemoveClipFromTrack(app: Int, trackIndex: Int, clipId: Int): Boolean
+
+    @JsName("_uapmd_app_ensure_track_uses_editor_graph")
+    fun uapmdAppEnsureTrackUsesEditorGraph(app: Int, trackIndex: Int): Boolean
+    @JsName("_uapmd_app_revert_track_to_simple_graph")
+    fun uapmdAppRevertTrackToSimpleGraph(app: Int, trackIndex: Int): Boolean
+    @JsName("_uapmd_app_get_clip_audio_events")
+    fun uapmdAppGetClipAudioEvents(out: Int, app: Int, trackIndex: Int, clipId: Int)
+    @JsName("_uapmd_app_set_clip_audio_events")
+    fun uapmdAppSetClipAudioEvents(out: Int, app: Int, trackIndex: Int, clipId: Int, markers: Int, markerCount: Int, warps: Int, warpCount: Int)
+    @JsName("_uapmd_app_get_track_graph_connections")
+    fun uapmdAppGetTrackGraphConnections(out: Int, app: Int, trackIndex: Int)
+    @JsName("_uapmd_app_get_track_graph_nodes")
+    fun uapmdAppGetTrackGraphNodes(out: Int, app: Int, trackIndex: Int)
+    @JsName("_uapmd_app_connect_track_graph")
+    fun uapmdAppConnectTrackGraph(out: Int, app: Int, trackIndex: Int, connection: Int)
+
 }
+
 
 // ── External adapter declarations ────────────────────────────────────────────
 
@@ -1048,6 +1228,38 @@ fun uapmdDispatchLoadState(cbId: Int, errorPtr: Int) {
 // arrive as BigInt. Passing the value as a decimal string keeps it exact for
 // magnitudes beyond 2^53.
 
+@JsFun("(mod, out, app, t, id) => mod._uapmd_app_disconnect_track_graph_connection(out, app, t, BigInt(id))")
+internal external fun wasmAppDisconnectTrackGraph(
+    mod: UapmdCApiModule, out: Int, app: Int, trackIndex: Int, connectionId: String
+)
+
+@JsFun("(mod, ptr, v) => { new DataView(mod.HEAPU8.buffer).setBigInt64(ptr, BigInt(v), true); }")
+internal external fun wasmWriteI64(mod: UapmdCApiModule, ptr: Int, value: String)
+
+@JsFun("(mod, ptr) => new DataView(mod.HEAPU8.buffer).getBigInt64(ptr, true).toString()")
+internal external fun wasmReadI64(mod: UapmdCApiModule, ptr: Int): String
+
+// num_frames is uint64_t, so it crosses as BigInt; pass it as a decimal string.
+@JsFun("(mod, n, ch, sr) => mod._uapmd_audio_file_reader_create_silent(BigInt(n), ch, sr)")
+internal external fun wasmAudioFileReaderCreateSilent(
+    mod: UapmdCApiModule, numFrames: String, numChannels: Int, sampleRate: Int
+): Int
+
+@JsFun("(mod, rec, t, c, s) => mod._uapmd_midi_recorder_start(rec, t, c, BigInt(s))")
+internal external fun wasmMidiRecorderStart(
+    mod: UapmdCApiModule, rec: Int, trackReferenceId: Int, clipId: Int, startSample: String
+): Boolean
+
+@JsFun("(mod, out, app, t, pos, res, bpm) => mod._uapmd_app_create_empty_midi_clip(out, app, t, BigInt(pos), res, bpm)")
+internal external fun wasmAppCreateEmptyMidiClip(
+    mod: UapmdCApiModule, out: Int, app: Int, trackIndex: Int, positionSamples: String, tickResolution: Int, bpm: Double
+)
+
+@JsFun("(mod, app, t, c, tick, words, n) => mod._uapmd_app_add_ump_event_to_clip(app, t, c, BigInt(tick), words, n)")
+internal external fun wasmAppAddUmpEventToClip(
+    mod: UapmdCApiModule, app: Int, trackIndex: Int, clipId: Int, tick: String, words: Int, wordCount: Int
+): Boolean
+
 @JsFun("(mod, eng, v) => mod._uapmd_undo_engine_mark_state_saved(eng, BigInt(v))")
 internal external fun wasmUndoEngineMarkStateSaved(mod: UapmdCApiModule, eng: Int, v: String): Boolean
 
@@ -1062,6 +1274,10 @@ internal external fun wasmCommandsResizeClip(mod: UapmdCApiModule, cmd: Int, t: 
 internal val pendingUndoCompletions   = mutableMapOf<Int, (UndoResult) -> Unit>()
 internal val pendingTrackMutations    = mutableMapOf<Int, (Int, String?) -> Unit>()
 internal val pendingTrackFragments    = mutableMapOf<Int, (TrackFragment?, String?) -> Unit>()
+/** For C callbacks shaped (const char* error, void* user_data). */
+internal val pendingErrorOnlyCallbacks = mutableMapOf<Int, (String?) -> Unit>()
+internal val pendingInstanceCreations = mutableMapOf<Int, (PluginInstanceResult) -> Unit>()
+internal val pendingProjectSaves = mutableMapOf<Int, (AppProjectResult) -> Unit>()
 
 /** The C callback takes uapmd_undo_result_t by value, i.e. as a pointer. */
 @JsExport
@@ -1077,6 +1293,42 @@ fun uapmdDispatchUndoCompletion(cbId: Int, resultPtr: Int) {
 fun uapmdDispatchTrackMutation(cbId: Int, trackIndex: Int, errorPtr: Int) {
     val error = if (errorPtr != 0) wasmMod.utf8ToString(errorPtr) else null
     pendingTrackMutations.remove(cbId)?.invoke(trackIndex, error)
+}
+
+/**
+ * The C callback takes uapmd_plugin_instance_result_t by value, which Emscripten
+ * passes as a pointer. Layout on wasm32: int32 id @0, char* name @4, char* err @8.
+ */
+@JsExport
+fun uapmdDispatchInstanceCreated(cbId: Int, resultPtr: Int) {
+    val mod = wasmMod
+    val id = mod.getValue(resultPtr, "i32").toInt()
+    val namePtr = mod.getValue(resultPtr + 4, "i32").toInt()
+    val errPtr = mod.getValue(resultPtr + 8, "i32").toInt()
+    pendingInstanceCreations.remove(cbId)?.invoke(
+        PluginInstanceResult(
+            instanceId = id,
+            pluginName = if (namePtr != 0) mod.utf8ToString(namePtr) else "",
+            error = if (errPtr != 0) mod.utf8ToString(errPtr) else null
+        )
+    )
+}
+
+/** uapmd_app_project_result_t by value = a pointer. wasm32: bool @0, char* @4. */
+@JsExport
+fun uapmdDispatchProjectSave(cbId: Int, resultPtr: Int) {
+    val mod = wasmMod
+    val ok = mod.getValue(resultPtr, "i8").toInt() != 0
+    val errPtr = mod.getValue(resultPtr + 4, "i32").toInt()
+    pendingProjectSaves.remove(cbId)?.invoke(
+        AppProjectResult(ok, if (errPtr != 0) mod.utf8ToString(errPtr) else null)
+    )
+}
+
+@JsExport
+fun uapmdDispatchErrorOnly(cbId: Int, errorPtr: Int) {
+    val error = if (errorPtr != 0) wasmMod.utf8ToString(errorPtr) else null
+    pendingErrorOnlyCallbacks.remove(cbId)?.invoke(error)
 }
 
 @JsExport

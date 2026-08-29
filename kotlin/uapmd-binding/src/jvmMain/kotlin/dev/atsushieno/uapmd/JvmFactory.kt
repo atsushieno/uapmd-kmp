@@ -37,6 +37,12 @@ actual fun getMidiIODevice(driverName: String): MidiIODevice =
 actual fun createAudioFileReader(filepath: String): AudioFileReader =
     JvmAudioFileReader(lib.uapmd_audio_file_reader_create(filepath) ?: error("uapmd_audio_file_reader_create failed for: $filepath"))
 
+actual fun createSilentAudioFileReader(numFrames: Long, numChannels: Int, sampleRate: Int): AudioFileReader =
+    JvmAudioFileReader(
+        lib.uapmd_audio_file_reader_create_silent(numFrames, numChannels, sampleRate)
+            ?: error("uapmd_audio_file_reader_create_silent failed")
+    )
+
 actual fun createScanTool(): ScanTool =
     JvmScanTool(lib.uapmd_scan_tool_create() ?: error("uapmd_scan_tool_create failed"))
 
@@ -49,3 +55,13 @@ actual fun createPluginInstancing(scanTool: ScanTool, format: String, pluginId: 
             (scanTool as JvmScanTool).handle, format, pluginId
         ) ?: error("uapmd_instancing_create failed for $format / $pluginId")
     )
+
+class JvmPreparedProject internal constructor(private val handle: com.sun.jna.Pointer) : PreparedProject {
+    override val success: Boolean get() = lib.uapmd_prepared_project_success(handle)
+    override val path: String get() = readJvmString { b, n -> lib.uapmd_prepared_project_path(handle, b, n) }
+    override val error: String get() = readJvmString { b, n -> lib.uapmd_prepared_project_error(handle, b, n) }
+    override fun close() = lib.uapmd_prepared_project_destroy(handle)
+}
+
+actual fun prepareProjectLoad(filePath: String): PreparedProject =
+    JvmPreparedProject(lib.uapmd_prepare_project_load(filePath) ?: error("uapmd_prepare_project_load failed"))

@@ -68,6 +68,32 @@ void uapmd_engine_enqueue_ump(uapmd_sequencer_engine_t engine, int32_t instance_
     E(engine)->enqueueUmp(instance_id, ump, size_in_bytes, timestamp);
 }
 
+uapmd_freeze_policy_t uapmd_engine_track_freeze_policy(uapmd_sequencer_engine_t engine,
+                                                       int32_t track_index) {
+    if (!engine) return UAPMD_FREEZE_POLICY_OFF;
+    auto policy = E(engine)->frozenTrackManager().freezePolicyForTrack(track_index);
+    return policy == uapmd::FrozenTrackManager::FreezePolicy::On
+        ? UAPMD_FREEZE_POLICY_ON : UAPMD_FREEZE_POLICY_OFF;
+}
+
+uapmd_freeze_runtime_state_t uapmd_engine_track_freeze_state(uapmd_sequencer_engine_t engine,
+                                                             int32_t track_index) {
+    if (!engine) return UAPMD_FREEZE_STATE_LIVE;
+    using RS = uapmd::FrozenTrackManager::RuntimeState;
+    switch (E(engine)->frozenTrackManager().runtimeStateForTrack(track_index)) {
+        case RS::Rendering: return UAPMD_FREEZE_STATE_RENDERING;
+        case RS::Frozen:    return UAPMD_FREEZE_STATE_FROZEN;
+        case RS::Error:     return UAPMD_FREEZE_STATE_ERROR;
+        case RS::Live:
+        default:            return UAPMD_FREEZE_STATE_LIVE;
+    }
+}
+
+bool uapmd_engine_is_track_busy(uapmd_sequencer_engine_t engine, int32_t track_index) {
+    if (!engine) return false;
+    return E(engine)->frozenTrackManager().isTrackBusy(track_index);
+}
+
 uapmd_plugin_host_t uapmd_engine_plugin_host(uapmd_sequencer_engine_t engine) {
     return reinterpret_cast<uapmd_plugin_host_t>(E(engine)->pluginHost());
 }
@@ -269,6 +295,35 @@ uapmd_plugin_graph_t uapmd_track_graph(uapmd_sequencer_track_t track) {
 uint32_t uapmd_track_latency_in_samples(uapmd_sequencer_track_t track)  { return ST(track)->latencyInSamples(); }
 uint32_t uapmd_track_render_lead_in_samples(uapmd_sequencer_track_t track) { return ST(track)->renderLeadInSamples(); }
 double   uapmd_track_tail_length_in_seconds(uapmd_sequencer_track_t track) { return ST(track)->tailLengthInSeconds(); }
+
+static uapmd::MidiRecorder* MR(uapmd_midi_recorder_t h) {
+    return reinterpret_cast<uapmd::MidiRecorder*>(h);
+}
+
+uapmd_midi_recorder_t uapmd_engine_midi_recorder(uapmd_sequencer_engine_t engine) {
+    auto* ext = E(engine)->findPlaybackEngineExtension("midi-recorder");
+    return reinterpret_cast<uapmd_midi_recorder_t>(dynamic_cast<uapmd::MidiRecorder*>(ext));
+}
+
+bool uapmd_midi_recorder_start(uapmd_midi_recorder_t rec, const char* trackReferenceId,
+                                 int32_t clipId, int64_t startSample) {
+    if (!rec) return false;
+    uapmd::MidiRecorder::Target target;
+    target.trackId = trackReferenceId ? trackReferenceId : "";
+    target.clipId = clipId;
+    target.startSample = startSample;
+    return MR(rec)->start(std::move(target));
+}
+
+void uapmd_midi_recorder_stop(uapmd_midi_recorder_t rec)   { if (rec) MR(rec)->stop(); }
+void uapmd_midi_recorder_cancel(uapmd_midi_recorder_t rec) { if (rec) MR(rec)->cancel(); }
+bool uapmd_midi_recorder_is_recording(uapmd_midi_recorder_t rec) {
+    return rec && MR(rec)->isRecording();
+}
+
+double uapmd_track_get_gain(uapmd_sequencer_track_t track)  { return ST(track)->trackGain(); }
+bool   uapmd_track_get_muted(uapmd_sequencer_track_t track) { return ST(track)->muted(); }
+bool   uapmd_track_get_solo(uapmd_sequencer_track_t track)  { return ST(track)->solo(); }
 
 bool uapmd_track_get_bypassed(uapmd_sequencer_track_t track) { return ST(track)->bypassed(); }
 bool uapmd_track_get_frozen(uapmd_sequencer_track_t track)   { return ST(track)->frozen(); }

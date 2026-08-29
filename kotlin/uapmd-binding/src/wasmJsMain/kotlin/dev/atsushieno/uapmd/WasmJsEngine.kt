@@ -39,6 +39,12 @@ class WasmJsSequencerEngine internal constructor(
     override fun getTrack(index: UInt): SequencerTrack =
         WasmJsSequencerTrack(wasmMod.uapmdEngineGetTrack(handle, index.toInt()))
 
+    override fun trackFreezePolicy(trackIndex: Int) =
+        FreezePolicy.fromNative(wasmMod.uapmdEngineTrackFreezePolicy(handle, trackIndex))
+    override fun trackFreezeState(trackIndex: Int) =
+        FreezeRuntimeState.fromNative(wasmMod.uapmdEngineTrackFreezeState(handle, trackIndex))
+    override fun isTrackBusy(trackIndex: Int) = wasmMod.uapmdEngineIsTrackBusy(handle, trackIndex)
+
     override val masterTrack: SequencerTrack
         get() = WasmJsSequencerTrack(wasmMod.uapmdEngineMasterTrack(handle))
 
@@ -135,6 +141,9 @@ class WasmJsSequencerEngine internal constructor(
     override fun getInputSpectrum(numBars: Int): FloatArray  = FloatArray(numBars) // C API exists; stub for now
     override fun getOutputSpectrum(numBars: Int): FloatArray = FloatArray(numBars)
 
+    override val midiRecorder: MidiRecorder?
+        get() = wasmMod.uapmdEngineMidiRecorder(handle).takeIf { it != 0 }?.let { WasmJsMidiRecorder(it) }
+
     override val timeline: TimelineFacade
         get() = WasmJsTimelineFacade(wasmMod.uapmdEngineTimeline(handle))
 
@@ -167,6 +176,10 @@ class WasmJsSequencerTrack internal constructor(
 
     override val tailLengthInSeconds: Double
         get() = wasmMod.uapmdTrackTailLengthInSeconds(handle)
+
+    override val gain: Double get() = wasmMod.uapmdTrackGetGain(handle)
+    override val muted: Boolean get() = wasmMod.uapmdTrackGetMuted(handle)
+    override val solo: Boolean get() = wasmMod.uapmdTrackGetSolo(handle)
 
     override var bypassed: Boolean
         get() = wasmMod.uapmdTrackGetBypassed(handle)
@@ -296,3 +309,13 @@ class WasmJsAudioIODevice internal constructor(
 class WasmJsMidiIODevice internal constructor(
     internal val handle: Int
 ) : MidiIODevice
+
+class WasmJsMidiRecorder internal constructor(private val handle: Int) : MidiRecorder {
+    override val isRecording: Boolean get() = wasmMod.uapmdMidiRecorderIsRecording(handle)
+    override fun start(trackReferenceId: String, clipId: Int, startSample: Long): Boolean =
+        withCStringKt(trackReferenceId) { t ->
+            wasmMidiRecorderStart(wasmMod, handle, t, clipId, startSample.toString())
+        }
+    override fun stop() = wasmMod.uapmdMidiRecorderStop(handle)
+    override fun cancel() = wasmMod.uapmdMidiRecorderCancel(handle)
+}

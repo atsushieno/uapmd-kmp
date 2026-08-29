@@ -51,6 +51,8 @@ class NativeAudioFileReader internal constructor(
 class NativeTimelineTrack internal constructor(
     private val handle: uapmd_timeline_track_t
 ) : TimelineTrack {
+    override val channelCount: Int get() = uapmd_tt_channel_count(handle).toInt()
+
     override fun getClips(): List<ClipData> = memScoped {
         val cm = uapmd_tt_clip_manager(handle) ?: return emptyList()
         val count = uapmd_cm_clip_count(cm).toInt()
@@ -70,7 +72,11 @@ class NativeTimelineTrack internal constructor(
                 muted               = c.muted,
                 name                = c.name?.toKString() ?: "",
                 filepath            = c.filepath?.toKString() ?: "",
-                clipType            = ClipType.fromNative(c.clip_type.toInt())
+                clipType            = ClipType.fromNative(c.clip_type.toInt()),
+                referenceId         = c.reference_id?.toKString() ?: "",
+                anchorReferenceId   = c.anchor_reference_id?.toKString() ?: "",
+                anchorOrigin        = AnchorOrigin.fromNative(c.anchor_origin.toInt()),
+                anchorOffsetSamples = c.anchor_offset.samples
             )
         }
     }

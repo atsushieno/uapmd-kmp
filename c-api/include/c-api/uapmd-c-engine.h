@@ -63,6 +63,28 @@ UAPMD_C_EXPORT void uapmd_engine_enqueue_ump(uapmd_sequencer_engine_t engine,
                                                uapmd_timestamp_t timestamp);
 
 UAPMD_C_EXPORT uapmd_plugin_host_t uapmd_engine_plugin_host(uapmd_sequencer_engine_t engine);
+
+/* ── FrozenTrackManager ─────────────────────────────────────────────────────
+ * Track freeze state, which the track legend's freeze button renders: the
+ * requested policy, the runtime state, and whether a render is in flight. */
+
+typedef enum uapmd_freeze_policy {
+    UAPMD_FREEZE_POLICY_OFF = 0,
+    UAPMD_FREEZE_POLICY_ON  = 1
+} uapmd_freeze_policy_t;
+
+typedef enum uapmd_freeze_runtime_state {
+    UAPMD_FREEZE_STATE_LIVE      = 0,
+    UAPMD_FREEZE_STATE_RENDERING = 1,
+    UAPMD_FREEZE_STATE_FROZEN    = 2,
+    UAPMD_FREEZE_STATE_ERROR     = 3
+} uapmd_freeze_runtime_state_t;
+
+UAPMD_C_EXPORT uapmd_freeze_policy_t uapmd_engine_track_freeze_policy(uapmd_sequencer_engine_t engine,
+                                                                     int32_t track_index);
+UAPMD_C_EXPORT uapmd_freeze_runtime_state_t uapmd_engine_track_freeze_state(uapmd_sequencer_engine_t engine,
+                                                                           int32_t track_index);
+UAPMD_C_EXPORT bool uapmd_engine_is_track_busy(uapmd_sequencer_engine_t engine, int32_t track_index);
 UAPMD_C_EXPORT uapmd_plugin_instance_t uapmd_engine_get_plugin_instance(uapmd_sequencer_engine_t engine, int32_t instance_id);
 UAPMD_C_EXPORT uapmd_function_block_mgr_t uapmd_engine_function_block_manager(uapmd_sequencer_engine_t engine);
 
@@ -135,6 +157,12 @@ UAPMD_C_EXPORT uapmd_plugin_graph_t uapmd_track_graph(uapmd_sequencer_track_t tr
 UAPMD_C_EXPORT uint32_t uapmd_track_latency_in_samples(uapmd_sequencer_track_t track);
 UAPMD_C_EXPORT uint32_t uapmd_track_render_lead_in_samples(uapmd_sequencer_track_t track);
 UAPMD_C_EXPORT double   uapmd_track_tail_length_in_seconds(uapmd_sequencer_track_t track);
+
+/* Mixer state. The setters live on ProjectCommands (uapmd-c-undo.h) so edits are
+ * undoable; these getters exist so a UI can draw the current value. */
+UAPMD_C_EXPORT double uapmd_track_get_gain(uapmd_sequencer_track_t track);
+UAPMD_C_EXPORT bool   uapmd_track_get_muted(uapmd_sequencer_track_t track);
+UAPMD_C_EXPORT bool   uapmd_track_get_solo(uapmd_sequencer_track_t track);
 
 UAPMD_C_EXPORT bool uapmd_track_get_bypassed(uapmd_sequencer_track_t track);
 UAPMD_C_EXPORT bool uapmd_track_get_frozen(uapmd_sequencer_track_t track);
@@ -390,6 +418,24 @@ UAPMD_C_EXPORT uapmd_offline_render_result_t uapmd_render_offline(uapmd_sequence
                                                                      void* user_data,
                                                                      uapmd_render_progress_cb_t progress_cb,
                                                                      uapmd_render_should_cancel_cb_t cancel_cb);
+
+/* ═══════════════════════════════════════════════════════════════════════════
+ *  MIDI recorder (uapmd::MidiRecorder, a playback engine extension)
+ *
+ *  Captures live MIDI input into one selected clip. `uapmd_engine_recorder()`
+ *  returns NULL when the extension is not installed.
+ * ═══════════════════════════════════════════════════════════════════════════ */
+
+typedef struct uapmd_midi_recorder* uapmd_midi_recorder_t;
+
+UAPMD_C_EXPORT uapmd_midi_recorder_t uapmd_engine_midi_recorder(uapmd_sequencer_engine_t engine);
+UAPMD_C_EXPORT bool uapmd_midi_recorder_start(uapmd_midi_recorder_t rec,
+                                                 const char* track_reference_id,
+                                                 int32_t clip_id,
+                                                 int64_t start_sample);
+UAPMD_C_EXPORT void uapmd_midi_recorder_stop(uapmd_midi_recorder_t rec);
+UAPMD_C_EXPORT void uapmd_midi_recorder_cancel(uapmd_midi_recorder_t rec);
+UAPMD_C_EXPORT bool uapmd_midi_recorder_is_recording(uapmd_midi_recorder_t rec);
 
 /* ═══════════════════════════════════════════════════════════════════════════
  *  Custom Event Loop

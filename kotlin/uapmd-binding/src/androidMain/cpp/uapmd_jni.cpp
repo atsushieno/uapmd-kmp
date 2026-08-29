@@ -128,21 +128,26 @@ static std::mutex               g_el_task_mutex;
 static std::atomic<jlong>       g_el_next_id{1};
 static std::unordered_map<jlong, std::function<void()>> g_el_tasks;
 
+/*
+ * Always false, matching remidy's own EventLoopAndroid
+ * (`remidy/src/EventLoop.cpp`), which returns false with the note that UI tasks
+ * should always be delegated rather than run inline.
+ *
+ * `EventLoop::runTaskOnMainThread` runs a task inline when this says the caller
+ * is already the main thread. Reporting true on the Android main looper let
+ * uapmd continue a plug-in instantiation chain *inside* AAP's
+ * `onServiceConnected` callback, which runs on that looper: the nested
+ * `ensureBinderConnected` then `runBlocking`s waiting for a connection only that
+ * same looper could deliver. Always enqueuing keeps every task on the event-loop
+ * thread, so a blocking bind never occupies the looper that must complete it.
+ *
+ * AAP itself expects this: `plugin-format-aap.hpp:55` reports
+ * `PluginUIThreadRequirement::None`, so instancing is meant to run on an
+ * ordinary thread, and `bindService` is the 3-argument form whose callback is
+ * always delivered on the Android main looper.
+ */
 static bool android_is_main_thread(void*) {
-    JNIEnv* env = jni_env();
-    if (!env) return false;
-    jclass cls = env->FindClass("android/os/Looper");
-    if (!cls) return false;
-    jmethodID my_lp   = env->GetStaticMethodID(cls, "myLooper",   "()Landroid/os/Looper;");
-    jmethodID main_lp = env->GetStaticMethodID(cls, "getMainLooper", "()Landroid/os/Looper;");
-    if (!my_lp || !main_lp) { env->DeleteLocalRef(cls); return false; }
-    jobject cur  = env->CallStaticObjectMethod(cls, my_lp);
-    jobject main = env->CallStaticObjectMethod(cls, main_lp);
-    bool on_main = cur && main && env->IsSameObject(cur, main);
-    if (cur)  env->DeleteLocalRef(cur);
-    if (main) env->DeleteLocalRef(main);
-    env->DeleteLocalRef(cls);
-    return on_main;
+    return false;
 }
 
 static void android_enqueue_task(uapmd_event_loop_task_fn_t task_fn, void* task_ctx, void*) {
@@ -331,6 +336,38 @@ JNIEXPORT void JNICALL Java_dev_atsushieno_uapmd_JniBridge_uapmdDocumentProvider
         ctx,
         document_pick_callback
     );
+}
+
+JNIEXPORT void JNICALL Java_dev_atsushieno_uapmd_JniBridge_uapmdDocumentProviderPickSavePath(
+        JNIEnv* env, jclass, jlong h, jint kind, jstring defaultName, jobject callback) {
+    auto provider = j2p<uapmd_document_provider_t>(h);
+    jclass cls = env->GetObjectClass(callback);
+    jmethodID mid = env->GetMethodID(
+        cls, "onResult", "(ZLjava/lang/String;Ljava/lang/String;)V");
+    env->DeleteLocalRef(cls);
+    if (!mid) {
+        LOGE("uapmdDocumentProviderPickSavePath: callback.onResult() not found");
+        return;
+    }
+
+    auto extensions = document_filter_extensions(kind);
+    uapmd_document_filter_t filters[2]{};
+    filters[0].label = document_filter_label(kind);
+    filters[0].mime_types = nullptr;
+    filters[0].mime_type_count = 0;
+    filters[0].extensions = extensions.data();
+    filters[0].extension_count = static_cast<uint32_t>(extensions.size());
+    static const char* save_all_files[] = {"*"};
+    filters[1].label = "All Files";
+    filters[1].mime_types = nullptr;
+    filters[1].mime_type_count = 0;
+    filters[1].extensions = save_all_files;
+    filters[1].extension_count = 1;
+
+    const char* name = jstr(env, defaultName);
+    auto* ctx = new DocumentPathCtx(env, callback, mid, provider);
+    uapmd_document_provider_pick_save(provider, name, filters, 2, ctx, document_pick_callback);
+    jstr_release(env, defaultName, name);
 }
 
 JNIEXPORT jlong JNICALL Java_dev_atsushieno_uapmd_JniBridge_uapmdPrepareProjectLoad(
@@ -1168,6 +1205,37 @@ JNIEXPORT jint JNICALL Java_dev_atsushieno_uapmd_JniBridge_uapmdTrackRenderLeadI
         JNIEnv*, jclass, jlong h) { return static_cast<jint>(uapmd_track_render_lead_in_samples(j2p<uapmd_sequencer_track_t>(h))); }
 JNIEXPORT jdouble JNICALL Java_dev_atsushieno_uapmd_JniBridge_uapmdTrackTailLengthInSeconds(
         JNIEnv*, jclass, jlong h) { return uapmd_track_tail_length_in_seconds(j2p<uapmd_sequencer_track_t>(h)); }
+JNIEXPORT jlong JNICALL Java_dev_atsushieno_uapmd_JniBridge_uapmdEngineMidiRecorder(
+        JNIEnv*, jclass, jlong e) { return p2j(uapmd_engine_midi_recorder(j2p<uapmd_sequencer_engine_t>(e))); }
+JNIEXPORT jboolean JNICALL Java_dev_atsushieno_uapmd_JniBridge_uapmdMidiRecorderStart(
+        JNIEnv* env, jclass, jlong r, jstring t, jint c, jlong s) {
+    const char* tid = t ? env->GetStringUTFChars(t, nullptr) : nullptr;
+    bool ok = uapmd_midi_recorder_start(j2p<uapmd_midi_recorder_t>(r), tid, c, s);
+    if (t) env->ReleaseStringUTFChars(t, tid);
+    return ok;
+}
+JNIEXPORT void JNICALL Java_dev_atsushieno_uapmd_JniBridge_uapmdMidiRecorderStop(
+        JNIEnv*, jclass, jlong r) { uapmd_midi_recorder_stop(j2p<uapmd_midi_recorder_t>(r)); }
+JNIEXPORT void JNICALL Java_dev_atsushieno_uapmd_JniBridge_uapmdMidiRecorderCancel(
+        JNIEnv*, jclass, jlong r) { uapmd_midi_recorder_cancel(j2p<uapmd_midi_recorder_t>(r)); }
+JNIEXPORT jboolean JNICALL Java_dev_atsushieno_uapmd_JniBridge_uapmdMidiRecorderIsRecording(
+        JNIEnv*, jclass, jlong r) { return uapmd_midi_recorder_is_recording(j2p<uapmd_midi_recorder_t>(r)); }
+
+JNIEXPORT jdouble JNICALL Java_dev_atsushieno_uapmd_JniBridge_uapmdTrackGetGain(
+        JNIEnv*, jclass, jlong track) {
+    return uapmd_track_get_gain(j2p<uapmd_sequencer_track_t>(track));
+}
+
+JNIEXPORT jboolean JNICALL Java_dev_atsushieno_uapmd_JniBridge_uapmdTrackGetMuted(
+        JNIEnv*, jclass, jlong track) {
+    return uapmd_track_get_muted(j2p<uapmd_sequencer_track_t>(track));
+}
+
+JNIEXPORT jboolean JNICALL Java_dev_atsushieno_uapmd_JniBridge_uapmdTrackGetSolo(
+        JNIEnv*, jclass, jlong track) {
+    return uapmd_track_get_solo(j2p<uapmd_sequencer_track_t>(track));
+}
+
 JNIEXPORT jboolean JNICALL Java_dev_atsushieno_uapmd_JniBridge_uapmdTrackGetBypassed(
         JNIEnv*, jclass, jlong h) { return uapmd_track_get_bypassed(j2p<uapmd_sequencer_track_t>(h)); }
 JNIEXPORT jboolean JNICALL Java_dev_atsushieno_uapmd_JniBridge_uapmdTrackGetFrozen(
@@ -1362,6 +1430,28 @@ JNIEXPORT void JNICALL Java_dev_atsushieno_uapmd_JniBridge_uapmdTlSetTimelineCha
 
 // ─── TimelineTrack (clip data) ────────────────────────────────────────────────
 
+JNIEXPORT jint JNICALL Java_dev_atsushieno_uapmd_JniBridge_uapmdEngineTrackFreezePolicy(
+        JNIEnv*, jclass, jlong engine, jint trackIndex) {
+    return static_cast<jint>(
+        uapmd_engine_track_freeze_policy(j2p<uapmd_sequencer_engine_t>(engine), trackIndex));
+}
+
+JNIEXPORT jint JNICALL Java_dev_atsushieno_uapmd_JniBridge_uapmdEngineTrackFreezeState(
+        JNIEnv*, jclass, jlong engine, jint trackIndex) {
+    return static_cast<jint>(
+        uapmd_engine_track_freeze_state(j2p<uapmd_sequencer_engine_t>(engine), trackIndex));
+}
+
+JNIEXPORT jboolean JNICALL Java_dev_atsushieno_uapmd_JniBridge_uapmdEngineIsTrackBusy(
+        JNIEnv*, jclass, jlong engine, jint trackIndex) {
+    return uapmd_engine_is_track_busy(j2p<uapmd_sequencer_engine_t>(engine), trackIndex);
+}
+
+JNIEXPORT jint JNICALL Java_dev_atsushieno_uapmd_JniBridge_uapmdTtChannelCount(
+        JNIEnv*, jclass, jlong tt) {
+    return static_cast<jint>(uapmd_tt_channel_count(j2p<uapmd_timeline_track_t>(tt)));
+}
+
 JNIEXPORT jint JNICALL Java_dev_atsushieno_uapmd_JniBridge_uapmdTtClipCount(
         JNIEnv*, jclass, jlong h) {
     auto cm = uapmd_tt_clip_manager(j2p<uapmd_timeline_track_t>(h));
@@ -1377,21 +1467,28 @@ JNIEXPORT jdoubleArray JNICALL Java_dev_atsushieno_uapmd_JniBridge_uapmdTtGetAll
     if (count == 0) return env->NewDoubleArray(0);
     std::vector<uapmd_clip_data_t> clips(count);
     auto actual = uapmd_cm_get_all_clips(cm, clips.data(), count);
-    std::vector<jdouble> numerics(actual * 7);
+    constexpr uint32_t kNumerics = 9;   // keep in sync with AndroidTimelineTrack.getClips
+    constexpr uint32_t kStrings  = 4;
+    std::vector<jdouble> numerics(actual * kNumerics);
     for (uint32_t i = 0; i < actual; i++) {
         const auto& c = clips[i];
-        numerics[i*7 + 0] = static_cast<jdouble>(c.clip_id);
-        numerics[i*7 + 1] = static_cast<jdouble>(c.position.samples);
-        numerics[i*7 + 2] = c.position.legacy_beats;
-        numerics[i*7 + 3] = static_cast<jdouble>(c.duration_samples);
-        numerics[i*7 + 4] = c.gain;
-        numerics[i*7 + 5] = c.muted ? 1.0 : 0.0;
-        numerics[i*7 + 6] = static_cast<jdouble>(c.clip_type);
-        env->SetObjectArrayElement(outStrings, i*2,   env->NewStringUTF(c.name     ? c.name     : ""));
-        env->SetObjectArrayElement(outStrings, i*2+1, env->NewStringUTF(c.filepath ? c.filepath : ""));
+        numerics[i*kNumerics + 0] = static_cast<jdouble>(c.clip_id);
+        numerics[i*kNumerics + 1] = static_cast<jdouble>(c.position.samples);
+        numerics[i*kNumerics + 2] = c.position.legacy_beats;
+        numerics[i*kNumerics + 3] = static_cast<jdouble>(c.duration_samples);
+        numerics[i*kNumerics + 4] = c.gain;
+        numerics[i*kNumerics + 5] = c.muted ? 1.0 : 0.0;
+        numerics[i*kNumerics + 6] = static_cast<jdouble>(c.clip_type);
+        numerics[i*kNumerics + 7] = static_cast<jdouble>(c.anchor_origin);
+        numerics[i*kNumerics + 8] = static_cast<jdouble>(c.anchor_offset.samples);
+        env->SetObjectArrayElement(outStrings, i*kStrings,   env->NewStringUTF(c.name     ? c.name     : ""));
+        env->SetObjectArrayElement(outStrings, i*kStrings+1, env->NewStringUTF(c.filepath ? c.filepath : ""));
+        env->SetObjectArrayElement(outStrings, i*kStrings+2, env->NewStringUTF(c.reference_id ? c.reference_id : ""));
+        env->SetObjectArrayElement(outStrings, i*kStrings+3,
+            env->NewStringUTF(c.anchor_reference_id ? c.anchor_reference_id : ""));
     }
-    jdoubleArray arr = env->NewDoubleArray(actual * 7);
-    env->SetDoubleArrayRegion(arr, 0, actual * 7, numerics.data());
+    jdoubleArray arr = env->NewDoubleArray(actual * kNumerics);
+    env->SetDoubleArrayRegion(arr, 0, actual * kNumerics, numerics.data());
     return arr;
 }
 
@@ -1493,6 +1590,13 @@ JNIEXPORT jlong JNICALL Java_dev_atsushieno_uapmd_JniBridge_uapmdAudioFileReader
     jlong r = p2j(uapmd_audio_file_reader_create(p));
     jstr_release(env, path, p);
     return r;
+}
+JNIEXPORT jlong JNICALL Java_dev_atsushieno_uapmd_JniBridge_uapmdAudioFileReaderCreateSilent(
+        JNIEnv*, jclass, jlong numFrames, jint numChannels, jint sampleRate) {
+    return p2j(uapmd_audio_file_reader_create_silent(
+        static_cast<uint64_t>(numFrames),
+        static_cast<uint32_t>(numChannels),
+        static_cast<uint32_t>(sampleRate)));
 }
 JNIEXPORT void JNICALL Java_dev_atsushieno_uapmd_JniBridge_uapmdAudioFileReaderDestroy(
         JNIEnv*, jclass, jlong h) { uapmd_audio_file_reader_destroy(j2p<uapmd_audio_file_reader_t>(h)); }

@@ -26,13 +26,16 @@ class AndroidAudioFileReader internal constructor(
 class AndroidTimelineTrack internal constructor(
     private val handle: Long
 ) : TimelineTrack {
+    override val channelCount: Int get() = JniBridge.uapmdTtChannelCount(handle)
+
     override fun getClips(): List<ClipData> {
         val count = JniBridge.uapmdTtClipCount(handle)
         if (count == 0) return emptyList()
-        val outStrings = arrayOfNulls<String>(count * 2)
+        // 4 strings and 9 numerics per clip; see uapmdTtGetAllClips in uapmd_jni.cpp.
+        val outStrings = arrayOfNulls<String>(count * 4)
         val numerics = JniBridge.uapmdTtGetAllClips(handle, outStrings) ?: return emptyList()
         return (0 until count).map { i ->
-            val base = i * 7
+            val base = i * 9
             ClipData(
                 clipId               = numerics[base + 0].toInt(),
                 positionSamples      = numerics[base + 1].toLong(),
@@ -40,9 +43,13 @@ class AndroidTimelineTrack internal constructor(
                 durationSamples      = numerics[base + 3].toLong(),
                 gain                 = numerics[base + 4],
                 muted                = numerics[base + 5] != 0.0,
-                name                 = outStrings[i * 2] ?: "",
-                filepath             = outStrings[i * 2 + 1] ?: "",
-                clipType             = ClipType.fromNative(numerics[base + 6].toInt())
+                name                 = outStrings[i * 4] ?: "",
+                filepath             = outStrings[i * 4 + 1] ?: "",
+                clipType             = ClipType.fromNative(numerics[base + 6].toInt()),
+                referenceId          = outStrings[i * 4 + 2] ?: "",
+                anchorReferenceId    = outStrings[i * 4 + 3] ?: "",
+                anchorOrigin         = AnchorOrigin.fromNative(numerics[base + 7].toInt()),
+                anchorOffsetSamples  = numerics[base + 8].toLong()
             )
         }
     }

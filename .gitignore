@@ -2,3 +2,4 @@
 hs_err_*.log
 .claude
 cmake-build-*
+.DS_Store

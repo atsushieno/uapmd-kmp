@@ -196,7 +196,7 @@ private fun decodeUndoResult(ptr: Int) = UndoResult(
     wasmGetI32(ptr + WasmOff.RESULT_ERROR).let { if (it != 0) wasmMod.utf8ToString(it) else null }
 )
 
-private fun decodeUndoState(ptr: Int) = UndoState(
+internal fun decodeUndoState(ptr: Int) = UndoState(
     busy = wasmGetBool(ptr + WasmOff.STATE_BUSY),
     compoundOpen = wasmGetBool(ptr + WasmOff.STATE_COMPOUND_OPEN),
     gestureOpen = wasmGetBool(ptr + WasmOff.STATE_GESTURE_OPEN),

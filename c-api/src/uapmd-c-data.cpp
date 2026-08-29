@@ -309,6 +309,16 @@ uapmd_audio_file_reader_t uapmd_audio_file_reader_create(const char* filepath) {
     return reinterpret_cast<uapmd_audio_file_reader_t>(raw);
 }
 
+uapmd_audio_file_reader_t uapmd_audio_file_reader_create_silent(uint64_t num_frames,
+                                                                uint32_t num_channels,
+                                                                uint32_t sample_rate) {
+    auto reader = std::make_unique<uapmd::SilentAudioFileReader>(num_frames, num_channels, sample_rate);
+    auto raw = static_cast<uapmd::AudioFileReader*>(reader.get());
+    std::lock_guard lock(s_reader_mutex);
+    s_owned_readers[raw] = std::move(reader);
+    return reinterpret_cast<uapmd_audio_file_reader_t>(raw);
+}
+
 void uapmd_audio_file_reader_destroy(uapmd_audio_file_reader_t reader) {
     if (!reader) return;
     std::lock_guard lock(s_reader_mutex);

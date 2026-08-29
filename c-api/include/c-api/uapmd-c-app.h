@@ -7,6 +7,7 @@
 #include "uapmd-c-data.h"
 #include "uapmd-c-engine.h"
 #include "uapmd-c-file.h"
+#include "uapmd-c-tooling.h"
 #include "uapmd-c-undo.h"
 
 #ifdef __cplusplus
@@ -65,6 +66,48 @@ UAPMD_C_EXPORT void uapmd_app_perform_plugin_scanning(uapmd_app_model_t app,
 UAPMD_C_EXPORT void uapmd_app_cancel_plugin_scanning(uapmd_app_model_t app);
 UAPMD_C_EXPORT size_t uapmd_app_generate_scan_report(uapmd_app_model_t app, char* buf, size_t buf_size);
 UAPMD_C_EXPORT void uapmd_app_clear_plugin_blocklist(uapmd_app_model_t app);
+
+/*
+ * AppModel's plug-in blocklist, the one the Plugin Selector shows. A standalone
+ * PluginScanTool keeps its own, so reading it there would not necessarily be the
+ * same list. `timestamp` from uapmd's BlocklistEntry is not carried across:
+ * `uapmd_blocklist_entry_t` (uapmd-c-tooling.h) has no field for it.
+ */
+/*
+ * Master-track tempo map (`AppModel::buildMasterTrackSnapshot`).
+ *
+ * This is what a beats/ticks view needs: a project whose tempo changes mid-way
+ * cannot be rendered from `uapmd_app_get_timeline_state`'s single tempo value.
+ * Callers rebuild the snapshot once (`uapmd_app_refresh_master_tempo_map`) and
+ * then read the points; the returned lists stay valid until the next refresh on
+ * the same model.
+ */
+typedef struct uapmd_tempo_point {
+    double   time_seconds;
+    uint64_t tick_position;
+    double   bpm;
+} uapmd_tempo_point_t;
+
+typedef struct uapmd_time_signature_point {
+    double   time_seconds;
+    uint64_t tick_position;
+    uint8_t  numerator;
+    uint8_t  denominator;
+} uapmd_time_signature_point_t;
+
+/** Rebuilds the snapshot; returns the master track's content length in seconds. */
+UAPMD_C_EXPORT double   uapmd_app_refresh_master_tempo_map(uapmd_app_model_t app);
+UAPMD_C_EXPORT uint32_t uapmd_app_master_tempo_point_count(uapmd_app_model_t app);
+UAPMD_C_EXPORT bool     uapmd_app_get_master_tempo_point(uapmd_app_model_t app, uint32_t index,
+                                                             uapmd_tempo_point_t* out);
+UAPMD_C_EXPORT uint32_t uapmd_app_master_time_signature_count(uapmd_app_model_t app);
+UAPMD_C_EXPORT bool     uapmd_app_get_master_time_signature(uapmd_app_model_t app, uint32_t index,
+                                                                uapmd_time_signature_point_t* out);
+
+UAPMD_C_EXPORT uint32_t uapmd_app_blocklist_count(uapmd_app_model_t app);
+UAPMD_C_EXPORT bool     uapmd_app_get_blocklist_entry(uapmd_app_model_t app, uint32_t index,
+                                                          uapmd_blocklist_entry_t* out);
+UAPMD_C_EXPORT bool     uapmd_app_unblock_plugin(uapmd_app_model_t app, const char* entry_id);
 
 /* ═══════════════════════════════════════════════════════════════════════════
  *  Plugin instance management
@@ -158,6 +201,21 @@ UAPMD_C_EXPORT uapmd_clip_add_result_t uapmd_app_add_clip_to_track(uapmd_app_mod
                                                                       uapmd_audio_file_reader_t reader,
                                                                       const char* filepath);
 
+/**
+ * Imports a possibly multi-track SMF, creating one track per SMF track
+ * (`AppModel::importMidiTracksFromFile`). The C shape is flattened to
+ * success/error plus the number of tracks created; the caller re-reads the
+ * timeline for the detail, which is what a UI does anyway. Per-track warnings
+ * from the C++ result are not carried across.
+ */
+typedef void (*uapmd_midi_tracks_import_cb_t)(bool success, const char* error,
+                                              uint32_t imported_track_count, void* user_data);
+
+UAPMD_C_EXPORT void uapmd_app_import_midi_tracks_from_file(uapmd_app_model_t app,
+                                                           const char* filepath,
+                                                           void* user_data,
+                                                           uapmd_midi_tracks_import_cb_t callback);
+
 UAPMD_C_EXPORT uapmd_clip_add_result_t uapmd_app_add_midi_clip_to_track(uapmd_app_model_t app,
                                                                            int32_t track_index,
                                                                            uapmd_timeline_position_t position,
@@ -236,8 +294,17 @@ typedef enum uapmd_graph_bus_type {
     UAPMD_GRAPH_BUS_EVENT = 1
 } uapmd_graph_bus_type_t;
 
+/*
+ * `node_id` is the node's persistent identity as stored in the project, and is the
+ * field a graph editor must key its pins by: `instance_id` is -1 for BOTH graph
+ * endpoints and for every built-in node, so it cannot tell them apart. It may be
+ * null or empty, in which case the identity is derived the way uapmd-app's
+ * `endpointNodeId()` derives it (PluginGraphEditor.cpp:105): "graph:input",
+ * "graph:output", or "plugin:<instance_id>".
+ */
 typedef struct uapmd_graph_endpoint {
     uapmd_graph_endpoint_type_t type;
+    const char* node_id;
     int32_t instance_id;
     uint32_t bus_index;
 } uapmd_graph_endpoint_t;
@@ -265,7 +332,77 @@ UAPMD_C_EXPORT bool uapmd_app_ensure_track_uses_editor_graph(uapmd_app_model_t a
 UAPMD_C_EXPORT void uapmd_app_request_show_track_graph(uapmd_app_model_t app, int32_t track_index);
 UAPMD_C_EXPORT bool uapmd_app_revert_track_to_simple_graph(uapmd_app_model_t app, int32_t track_index);
 
+/* remidy::AudioBusRole. */
+typedef enum uapmd_audio_bus_role {
+    UAPMD_AUDIO_BUS_ROLE_MAIN = 0,
+    UAPMD_AUDIO_BUS_ROLE_AUX  = 1
+} uapmd_audio_bus_role_t;
+
+/*
+ * One audio bus of a graph node, mirroring `remidy::AudioBusConfiguration` and the
+ * `AudioBusDefinition` / `AudioChannelLayout` it is built from.
+ *
+ * `enabled` is reported as the plugin reports it. Callers that draw one pin per bus
+ * must decide for themselves whether to skip disabled buses — uapmd-app does skip
+ * them, and numbers the buses it draws sequentially over the ones it kept
+ * (PluginGraphEditor.cpp:371-400) — but that is a presentation rule, not something
+ * this API imposes.
+ */
+typedef struct uapmd_graph_audio_bus {
+    const char* name;                 /* AudioBusDefinition::name() */
+    uapmd_audio_bus_role_t role;      /* AudioBusConfiguration::role() */
+    bool enabled;                     /* AudioBusConfiguration::enabled() */
+    const char* channel_layout_name;  /* AudioChannelLayout::name() */
+    uint32_t channel_count;           /* AudioChannelLayout::channels() */
+} uapmd_graph_audio_bus_t;
+
+/*
+ * One node of a track's graph: `uapmd_graph::AudioGraphNode` as `AudioGraph::nodes()`
+ * reports it, plus the `remidy::PluginAudioBuses` facade the node exposes.
+ *
+ * A node that hosts no plugin instance (a built-in node such as the track's gain)
+ * reports `instance_id` -1 and `has_audio_buses` false; it has no bus list of its
+ * own, and a caller that needs bus counts for it should fall back to the graph's
+ * own layout, reported on uapmd_graph_nodes_result_t.
+ *
+ * The node's buses live in the result's `audio_buses` array, inputs first and then
+ * outputs, starting at `audio_bus_offset`.
+ */
+typedef struct uapmd_graph_node {
+    const char* node_id;              /* AudioGraphNode::nodeId() */
+    const char* node_type;            /* AudioGraphNode::nodeType() */
+    const char* display_name;         /* AudioGraphNode::displayName() */
+    int32_t instance_id;              /* AudioPluginNode::instanceId(), -1 when not a plugin node */
+    bool bypassed;                    /* AudioGraphNode::bypassed() */
+    uint32_t latency_in_samples;      /* AudioGraphNode::latencyInSamples() */
+    double tail_length_in_seconds;    /* AudioGraphNode::tailLengthInSeconds() */
+    bool has_audio_buses;             /* AudioGraphNode::audioBuses() != nullptr */
+    bool has_event_inputs;            /* PluginAudioBuses::hasEventInputs() */
+    bool has_event_outputs;           /* PluginAudioBuses::hasEventOutputs() */
+    uint32_t audio_bus_offset;        /* index into uapmd_graph_nodes_result_t::audio_buses */
+    uint32_t audio_input_bus_count;   /* PluginAudioBuses::audioInputBuses().size() */
+    uint32_t audio_output_bus_count;  /* PluginAudioBuses::audioOutputBuses().size() */
+    int32_t main_input_bus_index;     /* PluginAudioBuses::mainInputBusIndex(), <0 when none */
+    int32_t main_output_bus_index;    /* PluginAudioBuses::mainOutputBusIndex(), <0 when none */
+} uapmd_graph_node_t;
+
+typedef struct uapmd_graph_nodes_result {
+    bool success;
+    const char* error;
+    uint32_t count;
+    const uapmd_graph_node_t* nodes;
+    uint32_t audio_bus_count;
+    const uapmd_graph_audio_bus_t* audio_buses;
+    /* uapmd_graph::AudioGraphBusesLayout, from the graph's AudioBusesLayoutExtension
+       (all four default to 1 when the graph carries no such extension). */
+    uint32_t graph_audio_input_bus_count;
+    uint32_t graph_audio_output_bus_count;
+    uint32_t graph_event_input_bus_count;
+    uint32_t graph_event_output_bus_count;
+} uapmd_graph_nodes_result_t;
+
 UAPMD_C_EXPORT uapmd_graph_connections_result_t uapmd_app_get_track_graph_connections(uapmd_app_model_t app, int32_t track_index);
+UAPMD_C_EXPORT uapmd_graph_nodes_result_t uapmd_app_get_track_graph_nodes(uapmd_app_model_t app, int32_t track_index);
 UAPMD_C_EXPORT uapmd_op_result_t uapmd_app_connect_track_graph(uapmd_app_model_t app,
                                                                   int32_t track_index,
                                                                   const uapmd_graph_connection_t* connection);

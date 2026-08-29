@@ -34,6 +34,9 @@ actual fun getMidiIODevice(driverName: String): MidiIODevice =
 actual fun createAudioFileReader(filepath: String): AudioFileReader =
     AndroidAudioFileReader(JniBridge.uapmdAudioFileReaderCreate(filepath))
 
+actual fun createSilentAudioFileReader(numFrames: Long, numChannels: Int, sampleRate: Int): AudioFileReader =
+    AndroidAudioFileReader(JniBridge.uapmdAudioFileReaderCreateSilent(numFrames, numChannels, sampleRate))
+
 actual fun createScanTool(): ScanTool =
     AndroidScanTool(JniBridge.uapmdScanToolCreate())
 
@@ -44,3 +47,13 @@ actual fun createPluginInstancing(scanTool: ScanTool, format: String, pluginId: 
     AndroidPluginInstancing(
         JniBridge.uapmdInstancingCreate((scanTool as AndroidScanTool).handle, format, pluginId)
     )
+
+class AndroidPreparedProject internal constructor(private val handle: Long) : PreparedProject {
+    override val success: Boolean get() = JniBridge.uapmdPreparedProjectSuccess(handle)
+    override val path: String get() = JniBridge.uapmdPreparedProjectPath(handle)
+    override val error: String get() = JniBridge.uapmdPreparedProjectError(handle)
+    override fun close() = JniBridge.uapmdPreparedProjectDestroy(handle)
+}
+
+actual fun prepareProjectLoad(filePath: String): PreparedProject =
+    AndroidPreparedProject(JniBridge.uapmdPrepareProjectLoad(filePath))
