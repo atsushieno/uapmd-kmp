@@ -143,8 +143,12 @@ class NativeTimelineFacade internal constructor(
         if (count < 0) return null
         if (count == 0) return emptyList()
         val buf = allocArray<uapmd_midi_note_t>(count)
-        uapmd_tl_get_clip_midi_notes(handle, trackIndex, clipId, buf, count, null, null)
-        (0 until count).map { i ->
+        // See JvmTimeline: count and fill are separate calls, so bound the read by
+        // the refreshed count rather than inventing notes for entries the C side
+        // never wrote.
+        val filled = uapmd_tl_get_clip_midi_notes(handle, trackIndex, clipId, buf, count, null, null)
+        if (filled < 0) return@memScoped null
+        (0 until minOf(count, filled)).map { i ->
             val n = interpretCPointer<uapmd_midi_note_t>(buf.rawValue + i.toLong() * sizeOf<uapmd_midi_note_t>())!!.pointed
             MidiNoteData(n.start_seconds, n.duration_seconds, n.note.toInt() and 0xFF, n.velocity)
         }

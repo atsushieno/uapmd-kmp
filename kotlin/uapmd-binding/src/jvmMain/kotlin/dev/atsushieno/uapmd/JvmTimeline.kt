@@ -125,8 +125,16 @@ class JvmTimelineFacade internal constructor(
         if (count == 0) return emptyList()
         @Suppress("UNCHECKED_CAST")
         val arr = dev.atsushieno.uapmd.jna.UapmdMidiNote().toArray(count) as Array<dev.atsushieno.uapmd.jna.UapmdMidiNote>
-        lib.uapmd_tl_get_clip_midi_notes(handle, trackIndex, clipId, arr[0], count, null, null)
-        return arr.map { n -> MidiNoteData(n.start_seconds, n.duration_seconds, n.note.toInt() and 0xFF, n.velocity) }
+        // Count and fill are two calls, and the clip can change in between — the
+        // UI asks for these right after a move, while the poll and audio thread
+        // are live. The C side clamps its writes to our capacity, so a clip that
+        // shrank leaves the tail of the array untouched; mapping the full count
+        // would invent notes at 0.0s. Trust the refreshed count from the second
+        // call, bounded by what we actually allocated.
+        val filled = lib.uapmd_tl_get_clip_midi_notes(handle, trackIndex, clipId, arr[0], count, null, null)
+        if (filled < 0) return null
+        return arr.take(minOf(count, filled))
+            .map { n -> MidiNoteData(n.start_seconds, n.duration_seconds, n.note.toInt() and 0xFF, n.velocity) }
     }
 
     override fun setTimelineChangedCallback(callback: (() -> Unit)?) {

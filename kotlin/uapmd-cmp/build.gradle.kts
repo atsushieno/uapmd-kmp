@@ -192,6 +192,20 @@ tasks.register<JavaExec>("runScanPollProbe") {
     )
 }
 
+tasks.register<JavaExec>("runClipMoveProbe") {
+    group = "verification"
+    description = "Headless repro attempt for a crash when moving a MIDI2 clip on a track."
+    dependsOn("jvmJar")
+    mainClass.set("dev.atsushieno.uapmd.cmp.ClipMoveProbeMainKt")
+    System.getProperty("uapmd.probe.smf")?.let { systemProperty("uapmd.probe.smf", it) }
+    forwardScannerExecutable()
+    classpath(
+        files(tasks.named("jvmJar")),
+        jvmMainCompilation.runtimeDependencyFiles
+    )
+    jvmArgs("-Dapple.awt.application.name=uapmd-cmp", "-Xdock:name=uapmd-cmp")
+}
+
 tasks.register<JavaExec>("runBootstrapProbe") {
     group = "verification"
     description = "Headless check that the AppModel bootstrap starts, cleanly stops, and restarts audio."

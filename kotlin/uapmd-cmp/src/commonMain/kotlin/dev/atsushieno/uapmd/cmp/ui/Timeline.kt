@@ -20,6 +20,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
@@ -738,7 +739,13 @@ private fun TrackLane(
                 ((clip.positionSamples / sampleRate + shift) * pixelsPerSecond).toFloat().toDp()
             }
             val isMidi = clip.clipType == ClipType.Midi
-            Box(Modifier.padding(start = x + 3.dp, top = 5.dp)) {
+            // offset, not padding: padding requires a non-negative value and throws
+            // otherwise, and `x` follows the clip's position, which can be negative —
+            // a clip anchored before zero, or dragged relative to a marker. On the
+            // desktop that exception surfaced as a Java error dialog and a window
+            // that never drew again. offset takes negatives and simply places the
+            // label off to the left, with the clip it belongs to.
+            Box(Modifier.offset(x = x + 3.dp, y = 5.dp)) {
                 Text(
                     clip.name.ifEmpty { if (isMidi) "MIDI clip" else "audio clip" },
                     Modifier.clickable {
