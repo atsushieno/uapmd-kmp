@@ -1,0 +1,49 @@
+name: 'Set up Emscripten'
+description: >
+  Installs ninja and a pinned Emscripten SDK, then puts emcc/emcmake on PATH.
+  macOS runners only — it installs ninja with Homebrew.
+
+inputs:
+  emsdk-version:
+    description: >
+      Emscripten SDK version to install and activate. Pinned deliberately: the
+      binding depends on Emscripten ABI details verified against this exact
+      release (sret handling and struct layouts dumped from its bundled clang),
+      so a floating `latest` could change them under us and surface as a
+      baffling wasm-only failure. Bump consciously, and re-check the layouts.
+    required: false
+    default: '4.0.22'
+
+runs:
+  using: composite
+  steps:
+    # The wasm build configures with -G Ninja, and ninja is not on the macOS
+    # runner image.
+    - name: install ninja
+      shell: bash
+      run: brew list ninja >/dev/null 2>&1 || brew install ninja
+
+    - name: restore emsdk cache
+      uses: actions/cache@v4
+      with:
+        path: external/uapmd/source/tools/uapmd-app/web/.emsdk
+        key: emsdk-${{ runner.os }}-${{ inputs.emsdk-version }}
+        restore-keys: emsdk-${{ runner.os }}-
+
+    - name: install and activate Emscripten SDK
+      shell: bash
+      env:
+        EMSDK_VERSION: ${{ inputs.emsdk-version }}
+      run: |
+        set -euo pipefail
+        EMSDK_DIR="external/uapmd/source/tools/uapmd-app/web/.emsdk"
+        if [[ ! -d "${EMSDK_DIR}/.git" ]]; then
+          git clone --depth 1 https://github.com/emscripten-core/emsdk.git "${EMSDK_DIR}"
+        else
+          git -C "${EMSDK_DIR}" pull --ff-only || true
+        fi
+        cd "${EMSDK_DIR}"
+        ./emsdk install "${EMSDK_VERSION}"
+        ./emsdk activate "${EMSDK_VERSION}"
+        # Export the emscripten bin directory to subsequent steps
+        echo "$(pwd)/upstream/emscripten" >> $GITHUB_PATH

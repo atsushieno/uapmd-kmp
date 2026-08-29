@@ -1,0 +1,151 @@
+name: publish pages
+
+# Human-triggered only. Every run refreshes /demo/latest/ and /api/latest/;
+# supplying a version tag additionally archives an immutable snapshot under
+# /demo/<version>/ and /api/<version>/, the same scheme uapmd's site uses.
+on:
+  workflow_dispatch:
+    inputs:
+      version_tag:
+        description: 'Optional version tag to snapshot under /demo/<tag>/ and /api/<tag>/'
+        required: false
+        type: string
+        default: ''
+
+concurrency:
+  group: pages-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build-demo:
+    name: build wasm demo for pages
+    runs-on: macos-15
+    steps:
+    - name: checkout
+      uses: actions/checkout@v4
+      with:
+        submodules: recursive
+
+    - name: set up Emscripten
+      uses: ./.github/actions-shared/setup-emscripten
+
+    - name: restore CPM package cache
+      uses: actions/cache@v4
+      with:
+        path: ~/.cache/CPM/uapmd
+        key: cpm-wasm-${{ runner.os }}-${{ hashFiles('**/CMakeLists.txt', '**/*.cmake') }}
+        restore-keys: cpm-wasm-${{ runner.os }}-
+
+    - name: set up JDK 17
+      uses: actions/setup-java@v4
+      with:
+        java-version: '17'
+        distribution: 'temurin'
+
+    - name: setup Gradle
+      uses: gradle/actions/setup-gradle@v4
+
+    - name: build browser distribution
+      working-directory: kotlin
+      shell: bash
+      run: ./gradlew :uapmd-cmp:wasmJsBrowserDistribution
+
+    - name: upload pages demo bundle
+      uses: actions/upload-artifact@v4
+      with:
+        name: pages-demo
+        path: kotlin/uapmd-cmp/build/dist/wasmJs/productionExecutable
+        if-no-files-found: error
+
+  build-api-docs:
+    name: build dokka for pages
+    # macOS, not Linux: dokkaGenerate pulls in cinteropUapmdIosArm64, which needs
+    # the Kotlin/Native Apple toolchain. It only reads the c-api headers, so no
+    # native library has to be built first.
+    runs-on: macos-15
+    steps:
+    - name: checkout
+      uses: actions/checkout@v4
+      with:
+        submodules: recursive
+
+    - name: set up JDK 17
+      uses: actions/setup-java@v4
+      with:
+        java-version: '17'
+        distribution: 'temurin'
+
+    - name: setup Gradle
+      uses: gradle/actions/setup-gradle@v4
+
+    - name: build dokka html
+      working-directory: kotlin
+      shell: bash
+      run: ./gradlew :uapmd-binding:dokkaGenerate
+
+    - name: upload pages api docs
+      uses: actions/upload-artifact@v4
+      with:
+        name: pages-api-docs
+        path: kotlin/uapmd-binding/build/dokka/html
+        if-no-files-found: error
+
+  deploy:
+    name: deploy to gh-pages
+    needs: [build-demo, build-api-docs]
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write
+    env:
+      VERSION_TAG: ${{ github.event.inputs.version_tag }}
+    steps:
+    - name: checkout
+      uses: actions/checkout@v4
+      with:
+        fetch-depth: 1
+
+    - name: download pages demo bundle
+      uses: actions/download-artifact@v4
+      with:
+        name: pages-demo
+        path: pages-demo
+
+    - name: download pages api docs
+      uses: actions/download-artifact@v4
+      with:
+        name: pages-api-docs
+        path: pages-api-docs
+
+    - name: prepare gh-pages checkout
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      run: |
+        set -euo pipefail
+        remote_url="https://x-access-token:${GITHUB_TOKEN}@github.com/${GITHUB_REPOSITORY}.git"
+        if git ls-remote --exit-code --heads "${remote_url}" gh-pages >/dev/null 2>&1; then
+          git clone --depth 1 --branch gh-pages "${remote_url}" publish
+        else
+          git init publish
+          git -C publish checkout --orphan gh-pages
+        fi
+
+    - name: update published site tree
+      run: |
+        bash scripts/prepare-gh-pages-site.sh pages-src pages-demo pages-api-docs publish "${VERSION_TAG}"
+
+    - name: commit and push
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      run: |
+        set -euo pipefail
+        git -C publish add -A
+        if git -C publish diff --cached --quiet; then
+          echo "No gh-pages changes to publish."
+          exit 0
+        fi
+
+        git -C publish config user.name "github-actions[bot]"
+        git -C publish config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+        git -C publish commit -m "Publish Pages for ${GITHUB_SHA}"
+        git -C publish remote add origin "https://x-access-token:${GITHUB_TOKEN}@github.com/${GITHUB_REPOSITORY}.git" 2>/dev/null || true
+        git -C publish push --force origin HEAD:gh-pages

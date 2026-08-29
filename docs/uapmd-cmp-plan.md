@@ -498,5 +498,8 @@ if (response.status === 204 || response.status === 205 || response.status === 30
     return response;
 ```
 
-Not fixed here because `external/uapmd` commits are yours; uapmd-app serves the same file and
-takes the same path.
+Now carried as `patches/uapmd/0002-coop-coep-sw-null-body-status.patch`, applied by
+`applyUapmdPatches` like the other submodule changes. It moved from "yours to commit" to
+blocking once the site went to GitHub Pages: a static host answers conditional requests with
+304 on every revisit, so without the guard the demo would load once and fail on reload.
+uapmd-app serves the same file and takes the same path.
