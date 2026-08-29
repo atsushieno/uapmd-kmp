@@ -190,11 +190,30 @@ tasks.register("applyUapmdPatches") {
                     fragment.writeText(fileDiff)
                     val fragmentPath = fragment.absolutePath
 
-                    if (runGitInSubmodule("apply", "--reverse", "--check", fragmentPath).first == 0) {
+                    if (runGitInSubmodule("apply", "--reverse", "--check", fragmentPath).first == 0 ||
+                        runGitInSubmodule("apply", "--reverse", "--check", "--ignore-whitespace", fragmentPath).first == 0) {
                         logger.info("uapmd patches: $target already patched")
                         return@forEach
                     }
-                    if (runGitInSubmodule("apply", "--3way", fragmentPath).first == 0) {
+
+                    // Order matters, and not in the obvious way. A plain apply is the
+                    // most tolerant of a checkout whose line endings differ from the
+                    // patch — Git for Windows checks out CRLF by default, and --3way
+                    // rejects that outright while a plain apply takes it. --3way is
+                    // still needed, but only for the case it is uniquely good at:
+                    // completing a half-applied patch. Trying it first is what broke
+                    // the Windows build.
+                    var applyOutput = ""
+                    val applied = listOf(
+                        listOf("apply", fragmentPath),
+                        listOf("apply", "--3way", fragmentPath),
+                        listOf("apply", "--ignore-whitespace", fragmentPath)
+                    ).any { args ->
+                        val (code, output) = runGitInSubmodule(*args.toTypedArray())
+                        if (code != 0) applyOutput = output
+                        code == 0
+                    }
+                    if (applied) {
                         // --3way stages what it merges. A build has no business
                         // leaving things staged in the submodule, so unstage exactly
                         // the file we touched and leave the working tree alone.
@@ -219,7 +238,8 @@ tasks.register("applyUapmdPatches") {
                         logger.warn(
                             "uapmd patches: $target does not take the patch and is unmodified — " +
                                 "external/uapmd has probably moved. Refresh it with:\n" +
-                                "    git -C external/uapmd diff > ${patch.absolutePath}"
+                                "    git -C external/uapmd diff > ${patch.absolutePath}\n" +
+                                applyOutput.trim().prependIndent("  ")
                         )
                 } finally {
                     fragment.delete()

@@ -298,8 +298,14 @@ applied, or applied and then edited further while working on the hook. So:
 
 - each file in a patch is handled **independently**, because a half-applied patch
   would otherwise be rejected whole;
-- `--3way` merges rather than demanding exact context, and the file it stages is
-  unstaged again, since a build has no business leaving things staged;
+- the apply order is **plain, then `--3way`, then `--ignore-whitespace`**, and that
+  order is load-bearing. Git for Windows checks out with `core.autocrlf=true`, and
+  `--3way` refuses a CRLF working tree outright while a plain apply takes it happily.
+  Trying `--3way` first broke every Windows CI build: all three files were reported
+  as refusing the patch, and the job then failed fourteen minutes later at
+  `'setRemoteScannerExecutable': is not a member`. `--3way` is still needed, but only
+  for what it is uniquely good at - completing a half-applied patch. The file it
+  stages is unstaged again, since a build has no business leaving things staged;
 - a file that will not take the patch is **left exactly as it is** - never reverted.
   An early version ran `git checkout --merge -- .` to clean up and destroyed the
   patched state of all three files;
@@ -309,7 +315,14 @@ applied, or applied and then edited further while working on the hook. So:
   *unmodified* and still refuses the patch warns, because that means the submodule
   moved and the patch is stale.
 
-Refresh a patch with `git -C external/uapmd diff > patches/uapmd/<name>.patch`.
+The warning carries git's own output, because a CI failure that does not say *why*
+the patch was refused costs a round trip to find out - which is exactly what the
+first Windows failure cost.
+
+Refresh a patch with `git -C external/uapmd diff > patches/uapmd/<name>.patch`. To
+check a change against a Windows-style checkout without one, convert the target
+files to CRLF and run `:uapmd-binding:applyUapmdPatches`; that reproduces the
+failure faithfully.
 
 ## 3 · Window model
 
