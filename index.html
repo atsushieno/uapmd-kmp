@@ -1,0 +1,78 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <title>uapmd-kmp web</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="description" content="uapmd-kmp GitHub Pages entry point for the Compose Multiplatform Wasm demo and the Kotlin API reference.">
+    <link rel="stylesheet" href="./styles.css">
+</head>
+<body>
+<div class="shell">
+    <nav class="nav">
+        <a class="brand" href="./">uapmd-kmp web</a>
+        <div class="nav-links">
+            <a class="nav-link" href="./demo/">Demo</a>
+            <a class="nav-link" href="./api/">API reference</a>
+            <a class="nav-link" href="https://github.com/atsushieno/uapmd-kmp">Repository</a>
+        </div>
+    </nav>
+
+    <section class="hero">
+        <p class="eyebrow">GitHub Pages</p>
+        <h1>Run the browser build. Read the Kotlin API.</h1>
+        <p class="lede">
+            uapmd-kmp is the Kotlin Multiplatform binding for uapmd, together with
+            <code>uapmd-cmp</code>, a Compose Multiplatform host application. This site
+            publishes the WebAssembly build of that app and the Dokka reference for the
+            binding, both kept under versioned paths.
+        </p>
+        <div class="actions">
+            <a class="button button-primary" href="./demo/latest/">Open latest demo</a>
+            <a class="button button-secondary" href="./api/latest/">Open latest API docs</a>
+        </div>
+    </section>
+
+    <div class="grid two">
+        <section class="card">
+            <p class="eyebrow">Demo</p>
+            <h2>Versioned browser builds</h2>
+            <p>
+                A stable <code>/demo/latest/</code> entry point, plus archived build
+                snapshots under versioned paths such as <code>/demo/0.5.6/</code>.
+            </p>
+            <p><a href="./demo/">Browse demo builds</a></p>
+        </section>
+
+        <section class="card">
+            <p class="eyebrow">API reference</p>
+            <h2>Dokka for uapmd-binding</h2>
+            <p>
+                The generated reference for the multiplatform binding, at
+                <code>/api/latest/</code> and versioned paths such as
+                <code>/api/0.5.6/</code>.
+            </p>
+            <p><a href="./api/">Browse API reference pages</a></p>
+        </section>
+    </div>
+
+    <section class="card">
+        <p class="eyebrow">Before you open the demo</p>
+        <h2>What the browser build needs</h2>
+        <p>
+            The audio engine needs <code>SharedArrayBuffer</code>, which requires a
+            cross-origin isolated page. GitHub Pages cannot send the COOP/COEP headers
+            itself, so the demo installs a service worker that supplies them and reloads
+            once on first visit. Plug-in scanning additionally needs the audio engine
+            running, and browsers only start audio after a user gesture — so start the
+            engine before scanning for WebCLAP plug-ins.
+        </p>
+    </section>
+
+    <p class="footer">
+        Published to the repository’s <code>gh-pages</code> branch from the source files
+        kept under <code>pages-src/</code> on <code>main</code>.
+    </p>
+</div>
+</body>
+</html>
