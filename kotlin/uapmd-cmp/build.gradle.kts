@@ -210,4 +210,31 @@ tasks.register<JavaExec>("runBootstrapProbe") {
 
 afterEvaluate {
     tasks.findByName("wasmJsResolveResourcesFromDependencies")?.dependsOn(":uapmd-binding:wasmJsProcessResources")
+
+    // webpack.config.d/uapmd-alias.js resolves modules straight out of
+    // uapmd-binding's build directory — the wasm adapter from its processed
+    // resources, and uapmd-c-api plus the WebCLAP assets from the Emscripten
+    // output. Neither is something Gradle can infer from the project
+    // dependency, because the reference lives in a JavaScript config file.
+    // Without these, a clean checkout fails with "Can't resolve
+    // 'uapmd-wasm-adapter'"; a developer machine hides it, because an earlier
+    // build has already left the files in place.
+    // buildUapmdCApiWasm brings applyUapmdPatches with it, so the patched
+    // coop-coep-sw.js the config also copies is in place by then too.
+    listOf(
+        "wasmJsBrowserProductionWebpack",
+        "wasmJsBrowserDevelopmentWebpack",
+        "wasmJsBrowserProductionRun",
+        "wasmJsBrowserDevelopmentRun",
+    ).forEach { name ->
+        // Warn rather than throw: this block configures on every invocation, so a
+        // task renamed by a future Kotlin plugin must not take unrelated builds
+        // (jvmRun, the probes) down with it. The warning is there because a silent
+        // no-op here comes back as a confusing webpack resolve failure.
+        val task = tasks.findByName(name)
+        if (task == null)
+            logger.warn("uapmd-cmp: task $name not found; wasm alias inputs are not wired for it")
+        else
+            task.dependsOn(":uapmd-binding:wasmJsProcessResources", ":uapmd-binding:buildUapmdCApiWasm")
+    }
 }
