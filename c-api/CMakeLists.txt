@@ -31,6 +31,8 @@ else()
     add_library(uapmd-c-api SHARED ${UAPMD_C_API_HEADERS} ${UAPMD_C_API_SOURCES})
 endif()
 
+target_compile_definitions(uapmd-c-api PRIVATE UAPMD_C_API_BUILDING)
+
 target_include_directories(uapmd-c-api
     PUBLIC
         ${CMAKE_CURRENT_SOURCE_DIR}/include
