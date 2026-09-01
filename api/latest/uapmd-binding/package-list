@@ -468,6 +468,7 @@ $dokka.location:dev.atsushieno.uapmd.jna/UapmdLibrary/uapmd_engine_stop_playback
 $dokka.location:dev.atsushieno.uapmd.jna/UapmdLibrary/uapmd_engine_timeline/#com.sun.jna.Pointer?/PointingToDeclaration/uapmd-binding/dev.atsushieno.uapmd.jna/-uapmd-library/uapmd_engine_timeline.html
 $dokka.location:dev.atsushieno.uapmd.jna/UapmdLibrary/uapmd_engine_track_count/#com.sun.jna.Pointer?/PointingToDeclaration/uapmd-binding/dev.atsushieno.uapmd.jna/-uapmd-library/uapmd_engine_track_count.html
 $dokka.location:dev.atsushieno.uapmd.jna/UapmdLibrary/uapmd_engine_track_freeze_policy/#com.sun.jna.Pointer#kotlin.Int/PointingToDeclaration/uapmd-binding/dev.atsushieno.uapmd.jna/-uapmd-library/uapmd_engine_track_freeze_policy.html
+$dokka.location:dev.atsushieno.uapmd.jna/UapmdLibrary/uapmd_engine_track_freeze_render_progress/#com.sun.jna.Pointer#kotlin.Int#dev.atsushieno.uapmd.jna.UapmdOfflineRenderProgress/PointingToDeclaration/uapmd-binding/dev.atsushieno.uapmd.jna/-uapmd-library/uapmd_engine_track_freeze_render_progress.html
 $dokka.location:dev.atsushieno.uapmd.jna/UapmdLibrary/uapmd_engine_track_freeze_state/#com.sun.jna.Pointer#kotlin.Int/PointingToDeclaration/uapmd-binding/dev.atsushieno.uapmd.jna/-uapmd-library/uapmd_engine_track_freeze_state.html
 $dokka.location:dev.atsushieno.uapmd.jna/UapmdLibrary/uapmd_engine_track_latency/#com.sun.jna.Pointer?#kotlin.Int/PointingToDeclaration/uapmd-binding/dev.atsushieno.uapmd.jna/-uapmd-library/uapmd_engine_track_latency.html
 $dokka.location:dev.atsushieno.uapmd.jna/UapmdLibrary/uapmd_engine_track_render_lead/#com.sun.jna.Pointer?#kotlin.Int/PointingToDeclaration/uapmd-binding/dev.atsushieno.uapmd.jna/-uapmd-library/uapmd_engine_track_render_lead.html
@@ -540,6 +541,7 @@ $dokka.location:dev.atsushieno.uapmd.jna/UapmdLibrary/uapmd_instancing_create/#c
 $dokka.location:dev.atsushieno.uapmd.jna/UapmdLibrary/uapmd_instancing_destroy/#com.sun.jna.Pointer?/PointingToDeclaration/uapmd-binding/dev.atsushieno.uapmd.jna/-uapmd-library/uapmd_instancing_destroy.html
 $dokka.location:dev.atsushieno.uapmd.jna/UapmdLibrary/uapmd_instancing_make_alive/#com.sun.jna.Pointer?#com.sun.jna.Pointer?#dev.atsushieno.uapmd.jna.InstancingCb?/PointingToDeclaration/uapmd-binding/dev.atsushieno.uapmd.jna/-uapmd-library/uapmd_instancing_make_alive.html
 $dokka.location:dev.atsushieno.uapmd.jna/UapmdLibrary/uapmd_instancing_state/#com.sun.jna.Pointer?/PointingToDeclaration/uapmd-binding/dev.atsushieno.uapmd.jna/-uapmd-library/uapmd_instancing_state.html
+$dokka.location:dev.atsushieno.uapmd.jna/UapmdLibrary/uapmd_internal_ui_presentation_bind_instance_owner/#com.sun.jna.Pointer?#com.sun.jna.Pointer?#kotlin.Int/PointingToDeclaration/uapmd-binding/dev.atsushieno.uapmd.jna/-uapmd-library/uapmd_internal_ui_presentation_bind_instance_owner.html
 $dokka.location:dev.atsushieno.uapmd.jna/UapmdLibrary/uapmd_midi_device_instance/#kotlin.String?/PointingToDeclaration/uapmd-binding/dev.atsushieno.uapmd.jna/-uapmd-library/uapmd_midi_device_instance.html
 $dokka.location:dev.atsushieno.uapmd.jna/UapmdLibrary/uapmd_midi_io_add_input_handler/#com.sun.jna.Pointer?#dev.atsushieno.uapmd.jna.UmpReceiverCallback?#com.sun.jna.Pointer?/PointingToDeclaration/uapmd-binding/dev.atsushieno.uapmd.jna/-uapmd-library/uapmd_midi_io_add_input_handler.html
 $dokka.location:dev.atsushieno.uapmd.jna/UapmdLibrary/uapmd_midi_io_remove_input_handler/#com.sun.jna.Pointer?#dev.atsushieno.uapmd.jna.UmpReceiverCallback?/PointingToDeclaration/uapmd-binding/dev.atsushieno.uapmd.jna/-uapmd-library/uapmd_midi_io_remove_input_handler.html
@@ -1339,6 +1341,7 @@ $dokka.location:dev.atsushieno.uapmd/AndroidSequencerEngine/stopPlayback/#/Point
 $dokka.location:dev.atsushieno.uapmd/AndroidSequencerEngine/timeline/#/PointingToDeclaration/uapmd-binding/dev.atsushieno.uapmd/-android-sequencer-engine/timeline.html
 $dokka.location:dev.atsushieno.uapmd/AndroidSequencerEngine/trackCount/#/PointingToDeclaration/uapmd-binding/dev.atsushieno.uapmd/-android-sequencer-engine/track-count.html
 $dokka.location:dev.atsushieno.uapmd/AndroidSequencerEngine/trackFreezePolicy/#kotlin.Int/PointingToDeclaration/uapmd-binding/dev.atsushieno.uapmd/-android-sequencer-engine/track-freeze-policy.html
+$dokka.location:dev.atsushieno.uapmd/AndroidSequencerEngine/trackFreezeRenderProgress/#kotlin.Int/PointingToDeclaration/uapmd-binding/dev.atsushieno.uapmd/-android-sequencer-engine/track-freeze-render-progress.html
 $dokka.location:dev.atsushieno.uapmd/AndroidSequencerEngine/trackFreezeState/#kotlin.Int/PointingToDeclaration/uapmd-binding/dev.atsushieno.uapmd/-android-sequencer-engine/track-freeze-state.html
 $dokka.location:dev.atsushieno.uapmd/AndroidSequencerTrack///PointingToDeclaration/uapmd-binding/dev.atsushieno.uapmd/-android-sequencer-track/index.html
 $dokka.location:dev.atsushieno.uapmd/AndroidSequencerTrack/bypassed/#/PointingToDeclaration/uapmd-binding/dev.atsushieno.uapmd/-android-sequencer-track/bypassed.html
@@ -1971,6 +1974,7 @@ $dokka.location:dev.atsushieno.uapmd/JniBridge/uapmdEngineStopPlayback/#kotlin.L
 $dokka.location:dev.atsushieno.uapmd/JniBridge/uapmdEngineTimeline/#kotlin.Long/PointingToDeclaration/uapmd-binding/dev.atsushieno.uapmd/-jni-bridge/uapmd-engine-timeline.html
 $dokka.location:dev.atsushieno.uapmd/JniBridge/uapmdEngineTrackCount/#kotlin.Long/PointingToDeclaration/uapmd-binding/dev.atsushieno.uapmd/-jni-bridge/uapmd-engine-track-count.html
 $dokka.location:dev.atsushieno.uapmd/JniBridge/uapmdEngineTrackFreezePolicy/#kotlin.Long#kotlin.Int/PointingToDeclaration/uapmd-binding/dev.atsushieno.uapmd/-jni-bridge/uapmd-engine-track-freeze-policy.html
+$dokka.location:dev.atsushieno.uapmd/JniBridge/uapmdEngineTrackFreezeRenderProgress/#kotlin.Long#kotlin.Int/PointingToDeclaration/uapmd-binding/dev.atsushieno.uapmd/-jni-bridge/uapmd-engine-track-freeze-render-progress.html
 $dokka.location:dev.atsushieno.uapmd/JniBridge/uapmdEngineTrackFreezeState/#kotlin.Long#kotlin.Int/PointingToDeclaration/uapmd-binding/dev.atsushieno.uapmd/-jni-bridge/uapmd-engine-track-freeze-state.html
 $dokka.location:dev.atsushieno.uapmd/JniBridge/uapmdEngineTrackLatency/#kotlin.Long#kotlin.Int/PointingToDeclaration/uapmd-binding/dev.atsushieno.uapmd/-jni-bridge/uapmd-engine-track-latency.html
 $dokka.location:dev.atsushieno.uapmd/JniBridge/uapmdEngineTrackRenderLead/#kotlin.Long#kotlin.Int/PointingToDeclaration/uapmd-binding/dev.atsushieno.uapmd/-jni-bridge/uapmd-engine-track-render-lead.html
@@ -2508,6 +2512,7 @@ $dokka.location:dev.atsushieno.uapmd/JsSequencerEngine/stopPlayback/#/PointingTo
 $dokka.location:dev.atsushieno.uapmd/JsSequencerEngine/timeline/#/PointingToDeclaration/uapmd-binding/dev.atsushieno.uapmd/-js-sequencer-engine/timeline.html
 $dokka.location:dev.atsushieno.uapmd/JsSequencerEngine/trackCount/#/PointingToDeclaration/uapmd-binding/dev.atsushieno.uapmd/-js-sequencer-engine/track-count.html
 $dokka.location:dev.atsushieno.uapmd/JsSequencerEngine/trackFreezePolicy/#kotlin.Int/PointingToDeclaration/uapmd-binding/dev.atsushieno.uapmd/-js-sequencer-engine/track-freeze-policy.html
+$dokka.location:dev.atsushieno.uapmd/JsSequencerEngine/trackFreezeRenderProgress/#kotlin.Int/PointingToDeclaration/uapmd-binding/dev.atsushieno.uapmd/-js-sequencer-engine/track-freeze-render-progress.html
 $dokka.location:dev.atsushieno.uapmd/JsSequencerEngine/trackFreezeState/#kotlin.Int/PointingToDeclaration/uapmd-binding/dev.atsushieno.uapmd/-js-sequencer-engine/track-freeze-state.html
 $dokka.location:dev.atsushieno.uapmd/JsSequencerTrack///PointingToDeclaration/uapmd-binding/dev.atsushieno.uapmd/-js-sequencer-track/index.html
 $dokka.location:dev.atsushieno.uapmd/JsSequencerTrack/bypassed/#/PointingToDeclaration/uapmd-binding/dev.atsushieno.uapmd/-js-sequencer-track/bypassed.html
@@ -2906,6 +2911,7 @@ $dokka.location:dev.atsushieno.uapmd/JvmSequencerEngine/stopPlayback/#/PointingT
 $dokka.location:dev.atsushieno.uapmd/JvmSequencerEngine/timeline/#/PointingToDeclaration/uapmd-binding/dev.atsushieno.uapmd/-jvm-sequencer-engine/timeline.html
 $dokka.location:dev.atsushieno.uapmd/JvmSequencerEngine/trackCount/#/PointingToDeclaration/uapmd-binding/dev.atsushieno.uapmd/-jvm-sequencer-engine/track-count.html
 $dokka.location:dev.atsushieno.uapmd/JvmSequencerEngine/trackFreezePolicy/#kotlin.Int/PointingToDeclaration/uapmd-binding/dev.atsushieno.uapmd/-jvm-sequencer-engine/track-freeze-policy.html
+$dokka.location:dev.atsushieno.uapmd/JvmSequencerEngine/trackFreezeRenderProgress/#kotlin.Int/PointingToDeclaration/uapmd-binding/dev.atsushieno.uapmd/-jvm-sequencer-engine/track-freeze-render-progress.html
 $dokka.location:dev.atsushieno.uapmd/JvmSequencerEngine/trackFreezeState/#kotlin.Int/PointingToDeclaration/uapmd-binding/dev.atsushieno.uapmd/-jvm-sequencer-engine/track-freeze-state.html
 $dokka.location:dev.atsushieno.uapmd/JvmSequencerTrack///PointingToDeclaration/uapmd-binding/dev.atsushieno.uapmd/-jvm-sequencer-track/index.html
 $dokka.location:dev.atsushieno.uapmd/JvmSequencerTrack/bypassed/#/PointingToDeclaration/uapmd-binding/dev.atsushieno.uapmd/-jvm-sequencer-track/bypassed.html
@@ -3341,6 +3347,7 @@ $dokka.location:dev.atsushieno.uapmd/NativeSequencerEngine/stopPlayback/#/Pointi
 $dokka.location:dev.atsushieno.uapmd/NativeSequencerEngine/timeline/#/PointingToDeclaration/uapmd-binding/dev.atsushieno.uapmd/-native-sequencer-engine/timeline.html
 $dokka.location:dev.atsushieno.uapmd/NativeSequencerEngine/trackCount/#/PointingToDeclaration/uapmd-binding/dev.atsushieno.uapmd/-native-sequencer-engine/track-count.html
 $dokka.location:dev.atsushieno.uapmd/NativeSequencerEngine/trackFreezePolicy/#kotlin.Int/PointingToDeclaration/uapmd-binding/dev.atsushieno.uapmd/-native-sequencer-engine/track-freeze-policy.html
+$dokka.location:dev.atsushieno.uapmd/NativeSequencerEngine/trackFreezeRenderProgress/#kotlin.Int/PointingToDeclaration/uapmd-binding/dev.atsushieno.uapmd/-native-sequencer-engine/track-freeze-render-progress.html
 $dokka.location:dev.atsushieno.uapmd/NativeSequencerEngine/trackFreezeState/#kotlin.Int/PointingToDeclaration/uapmd-binding/dev.atsushieno.uapmd/-native-sequencer-engine/track-freeze-state.html
 $dokka.location:dev.atsushieno.uapmd/NativeSequencerTrack///PointingToDeclaration/uapmd-binding/dev.atsushieno.uapmd/-native-sequencer-track/index.html
 $dokka.location:dev.atsushieno.uapmd/NativeSequencerTrack/bypassed/#/PointingToDeclaration/uapmd-binding/dev.atsushieno.uapmd/-native-sequencer-track/bypassed.html
@@ -3752,6 +3759,7 @@ $dokka.location:dev.atsushieno.uapmd/SequencerEngine/stopPlayback/#/PointingToDe
 $dokka.location:dev.atsushieno.uapmd/SequencerEngine/timeline/#/PointingToDeclaration/uapmd-binding/dev.atsushieno.uapmd/-sequencer-engine/timeline.html
 $dokka.location:dev.atsushieno.uapmd/SequencerEngine/trackCount/#/PointingToDeclaration/uapmd-binding/dev.atsushieno.uapmd/-sequencer-engine/track-count.html
 $dokka.location:dev.atsushieno.uapmd/SequencerEngine/trackFreezePolicy/#kotlin.Int/PointingToDeclaration/uapmd-binding/dev.atsushieno.uapmd/-sequencer-engine/track-freeze-policy.html
+$dokka.location:dev.atsushieno.uapmd/SequencerEngine/trackFreezeRenderProgress/#kotlin.Int/PointingToDeclaration/uapmd-binding/dev.atsushieno.uapmd/-sequencer-engine/track-freeze-render-progress.html
 $dokka.location:dev.atsushieno.uapmd/SequencerEngine/trackFreezeState/#kotlin.Int/PointingToDeclaration/uapmd-binding/dev.atsushieno.uapmd/-sequencer-engine/track-freeze-state.html
 $dokka.location:dev.atsushieno.uapmd/SequencerTrack///PointingToDeclaration/uapmd-binding/dev.atsushieno.uapmd/-sequencer-track/index.html
 $dokka.location:dev.atsushieno.uapmd/SequencerTrack/bypassed/#/PointingToDeclaration/uapmd-binding/dev.atsushieno.uapmd/-sequencer-track/bypassed.html
@@ -4109,6 +4117,7 @@ $dokka.location:dev.atsushieno.uapmd/UapmdCApiModule/uapmdEngineStopPlayback/#ko
 $dokka.location:dev.atsushieno.uapmd/UapmdCApiModule/uapmdEngineTimeline/#kotlin.Int/PointingToDeclaration/uapmd-binding/dev.atsushieno.uapmd/-uapmd-c-api-module/uapmd-engine-timeline.html
 $dokka.location:dev.atsushieno.uapmd/UapmdCApiModule/uapmdEngineTrackCount/#kotlin.Int/PointingToDeclaration/uapmd-binding/dev.atsushieno.uapmd/-uapmd-c-api-module/uapmd-engine-track-count.html
 $dokka.location:dev.atsushieno.uapmd/UapmdCApiModule/uapmdEngineTrackFreezePolicy/#kotlin.Int#kotlin.Int/PointingToDeclaration/uapmd-binding/dev.atsushieno.uapmd/-uapmd-c-api-module/uapmd-engine-track-freeze-policy.html
+$dokka.location:dev.atsushieno.uapmd/UapmdCApiModule/uapmdEngineTrackFreezeRenderProgress/#kotlin.Int#kotlin.Int#kotlin.Int/PointingToDeclaration/uapmd-binding/dev.atsushieno.uapmd/-uapmd-c-api-module/uapmd-engine-track-freeze-render-progress.html
 $dokka.location:dev.atsushieno.uapmd/UapmdCApiModule/uapmdEngineTrackFreezeState/#kotlin.Int#kotlin.Int/PointingToDeclaration/uapmd-binding/dev.atsushieno.uapmd/-uapmd-c-api-module/uapmd-engine-track-freeze-state.html
 $dokka.location:dev.atsushieno.uapmd/UapmdCApiModule/uapmdEngineTrackLatency/#kotlin.Int#kotlin.Int/PointingToDeclaration/uapmd-binding/dev.atsushieno.uapmd/-uapmd-c-api-module/uapmd-engine-track-latency.html
 $dokka.location:dev.atsushieno.uapmd/UapmdCApiModule/uapmdEngineTrackRenderLead/#kotlin.Int#kotlin.Int/PointingToDeclaration/uapmd-binding/dev.atsushieno.uapmd/-uapmd-c-api-module/uapmd-engine-track-render-lead.html
@@ -4722,6 +4731,7 @@ $dokka.location:dev.atsushieno.uapmd/WasmJsSequencerEngine/stopPlayback/#/Pointi
 $dokka.location:dev.atsushieno.uapmd/WasmJsSequencerEngine/timeline/#/PointingToDeclaration/uapmd-binding/dev.atsushieno.uapmd/-wasm-js-sequencer-engine/timeline.html
 $dokka.location:dev.atsushieno.uapmd/WasmJsSequencerEngine/trackCount/#/PointingToDeclaration/uapmd-binding/dev.atsushieno.uapmd/-wasm-js-sequencer-engine/track-count.html
 $dokka.location:dev.atsushieno.uapmd/WasmJsSequencerEngine/trackFreezePolicy/#kotlin.Int/PointingToDeclaration/uapmd-binding/dev.atsushieno.uapmd/-wasm-js-sequencer-engine/track-freeze-policy.html
+$dokka.location:dev.atsushieno.uapmd/WasmJsSequencerEngine/trackFreezeRenderProgress/#kotlin.Int/PointingToDeclaration/uapmd-binding/dev.atsushieno.uapmd/-wasm-js-sequencer-engine/track-freeze-render-progress.html
 $dokka.location:dev.atsushieno.uapmd/WasmJsSequencerEngine/trackFreezeState/#kotlin.Int/PointingToDeclaration/uapmd-binding/dev.atsushieno.uapmd/-wasm-js-sequencer-engine/track-freeze-state.html
 $dokka.location:dev.atsushieno.uapmd/WasmJsSequencerTrack///PointingToDeclaration/uapmd-binding/dev.atsushieno.uapmd/-wasm-js-sequencer-track/index.html
 $dokka.location:dev.atsushieno.uapmd/WasmJsSequencerTrack/bypassed/#/PointingToDeclaration/uapmd-binding/dev.atsushieno.uapmd/-wasm-js-sequencer-track/bypassed.html
