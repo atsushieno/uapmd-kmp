@@ -32,6 +32,12 @@ actual fun dumpThreadStacks(): String = "(not available)"
 actual fun startupForceRescan(): Boolean = false
 actual fun startupLoadCount(): Int = 1
 
+actual fun startupShowLoadedUi(): String? = null
+
+actual fun startupPreloadPlugin(): String? = null
+
+actual fun startupShowPreloadUi(): Boolean = false
+
 actual fun startupPlaySeconds(): Int = 0
 
 actual fun startupSuppressPolling(): Boolean = false

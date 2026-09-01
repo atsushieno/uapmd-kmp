@@ -4,10 +4,18 @@
 #include <uapmd-midi-service/uapmd-midi-service.hpp>
 #include <uapmd-plugin-hosting/uapmd-plugin-hosting.hpp>
 #include <uapmd-graph/uapmd-graph.hpp>
+#include <remidy-gui/remidy-gui.hpp>
 #include <cstring>
 #include <memory>
+#include <optional>
 #include <string>
+#include <type_traits>
+#include <utility>
 #include <vector>
+#if defined(__APPLE__)
+#include <dispatch/dispatch.h>
+#include <pthread.h>
+#endif
 
 /* ── Cast helpers ─────────────────────────────────────────────────────────── */
 
@@ -24,13 +32,57 @@ static uapmd_midi_service::UapmdUmpOutputMapper*   UOUT(uapmd_ump_output_mapper_
 
 struct UiPresentationHandle {
     uapmd_plugin_hosting::AudioPluginInstanceAPI* instance{};
+    uapmd_plugin_hosting::AudioPluginHostingAPI* instance_owner{};
+    int32_t instance_id{-1};
     uapmd_ui_presentation_request_t request{};
     std::string web_container_id;
     void* resize_user_data{};
     uapmd_ui_resize_handler_t resize_handler{};
+    std::unique_ptr<remidy::gui::ContainerWindow> hosted_window;
+    bool applying_plugin_resize{};
 };
 
 static UiPresentationHandle* P(uapmd_ui_presentation_t h) { return reinterpret_cast<UiPresentationHandle*>(h); }
+
+static uapmd_plugin_hosting::AudioPluginInstanceAPI* presentation_instance(UiPresentationHandle* presentation) {
+    if (!presentation)
+        return nullptr;
+    if (!presentation->instance_owner)
+        return presentation->instance;
+    auto* current = presentation->instance_owner->getInstance(presentation->instance_id);
+    return current == presentation->instance ? current : nullptr;
+}
+
+// JVM/AWT and Cocoa do not share a UI thread. Keep the cross-thread hop native:
+// dispatching a JNA callback to Cocoa and then invoking JNA again from that
+// callback can deadlock after a plug-in view has attached. A native trampoline
+// has no JVM re-entry and is also correct for non-JVM C API clients.
+template <class F>
+static auto on_native_ui_thread(F&& operation) -> std::invoke_result_t<F&> {
+#if defined(__APPLE__)
+    using Result = std::invoke_result_t<F&>;
+    if (pthread_main_np() != 0)
+        return operation();
+    if constexpr (std::is_void_v<Result>) {
+        dispatch_sync_f(dispatch_get_main_queue(), &operation, [](void* context) {
+            (*static_cast<std::remove_reference_t<F>*>(context))();
+        });
+    } else {
+        static_assert(!std::is_reference_v<Result>);
+        struct Context {
+            std::remove_reference_t<F>* operation;
+            std::optional<Result> result;
+        } context{&operation, std::nullopt};
+        dispatch_sync_f(dispatch_get_main_queue(), &context, [](void* raw) {
+            auto* context = static_cast<Context*>(raw);
+            context->result.emplace((*context->operation)());
+        });
+        return std::move(*context.result);
+    }
+#else
+    return operation();
+#endif
+}
 
 /* ── String copy helper ──────────────────────────────────────────────────── */
 
@@ -248,6 +300,7 @@ uapmd_ui_presentation_t uapmd_instance_create_ui_presentation(
         const uapmd_ui_presentation_request_t* request,
         void* resize_user_data,
         uapmd_ui_resize_handler_t resize_handler) {
+    return on_native_ui_thread([&]() -> uapmd_ui_presentation_t {
     if (!inst || !request)
         return nullptr;
 
@@ -261,9 +314,38 @@ uapmd_ui_presentation_t uapmd_instance_create_ui_presentation(
 
     bool is_floating = request->host_kind == UAPMD_UI_HOST_FLOATING;
     void* parent_handle = nullptr;
+    bool uses_hosted_window = false;
+    // VST3 exposes an embeddable IPlugView, not a plug-in-owned floating
+    // window. Supply the same native container that uapmd-app uses while
+    // preserving the public floating-presentation contract for the client.
+    if (is_floating && presentation->instance->formatName() == "VST3") {
+        auto* raw = presentation.get();
+        const auto title = presentation->instance->displayName() + " (VST3)";
+        presentation->hosted_window = remidy::gui::ContainerWindow::create(
+            title.c_str(), 800, 600, [raw] {
+                if (auto* instance = presentation_instance(raw))
+                    instance->hideUI();
+            });
+        if (!presentation->hosted_window)
+            return nullptr;
+        presentation->hosted_window->setResizeCallback([raw](int width, int height) {
+            if (raw->applying_plugin_resize) {
+                raw->applying_plugin_resize = false;
+                return;
+            }
+            if (auto* instance = presentation_instance(raw); instance && width > 0 && height > 0)
+                instance->setUISize(
+                    static_cast<uint32_t>(width), static_cast<uint32_t>(height));
+        });
+        presentation->hosted_window->show(true);
+        parent_handle = presentation->hosted_window->getHandle();
+        is_floating = false;
+        uses_hosted_window = true;
+    }
     switch (request->host_kind) {
         case UAPMD_UI_HOST_FLOATING:
-            parent_handle = nullptr;
+            if (!uses_hosted_window)
+                parent_handle = nullptr;
             break;
         case UAPMD_UI_HOST_NATIVE_EMBEDDED:
             parent_handle = request->parent_handle;
@@ -275,18 +357,43 @@ uapmd_ui_presentation_t uapmd_instance_create_ui_presentation(
             return nullptr;
     }
 
+    auto* raw = presentation.get();
     const bool created = presentation->instance->createUI(
         is_floating,
         parent_handle,
-        [resize_handler, resize_user_data](uint32_t w, uint32_t h) -> bool {
+        [raw, resize_handler, resize_user_data](uint32_t w, uint32_t h) -> bool {
+            if (raw->hosted_window && w > 0 && h > 0) {
+                raw->applying_plugin_resize = true;
+                raw->hosted_window->resize(static_cast<int>(w), static_cast<int>(h));
+                if (auto* instance = presentation_instance(raw))
+                    instance->setUISize(w, h);
+            }
             if (resize_handler)
                 return resize_handler(w, h, resize_user_data);
             return true;
         });
-    if (!created)
+    if (!created) {
+        if (presentation->hosted_window)
+            presentation->hosted_window->show(false);
         return nullptr;
+    }
 
     return reinterpret_cast<uapmd_ui_presentation_t>(presentation.release());
+    });
+}
+
+// Private bridge used by the JVM binding. This deliberately is not declared in
+// the public C API header: owner resolution is a binding lifetime mechanism,
+// not a client-facing presentation operation.
+extern "C" UAPMD_C_EXPORT void uapmd_internal_ui_presentation_bind_instance_owner(
+        uapmd_ui_presentation_t presentation,
+        uapmd_plugin_host_t host,
+        int32_t instance_id) {
+    if (!presentation)
+        return;
+    auto* p = P(presentation);
+    p->instance_owner = host ? H(host) : nullptr;
+    p->instance_id = instance_id;
 }
 
 bool uapmd_instance_create_ui(uapmd_plugin_instance_t inst,
@@ -317,38 +424,87 @@ bool uapmd_instance_get_ui_size(uapmd_plugin_instance_t inst, uint32_t* width, u
 bool uapmd_instance_can_ui_resize(uapmd_plugin_instance_t inst) { return I(inst)->canUIResize(); }
 
 void uapmd_ui_presentation_destroy(uapmd_ui_presentation_t presentation) {
+    on_native_ui_thread([&] {
     if (!presentation)
         return;
     auto* p = P(presentation);
-    p->instance->destroyUI();
+    if (auto* instance = presentation_instance(p))
+        instance->destroyUI();
+    if (p->hosted_window)
+        p->hosted_window->show(false);
     delete p;
+    });
 }
 
 bool uapmd_ui_presentation_show(uapmd_ui_presentation_t presentation) {
-    return presentation ? P(presentation)->instance->showUI() : false;
+    return on_native_ui_thread([&] {
+    if (!presentation)
+        return false;
+    auto* p = P(presentation);
+    auto* instance = presentation_instance(p);
+    if (!instance)
+        return false;
+    const bool shown = instance->showUI();
+    if (shown && p->hosted_window)
+        p->hosted_window->show(true);
+    return shown;
+    });
 }
 
 void uapmd_ui_presentation_hide(uapmd_ui_presentation_t presentation) {
-    if (presentation)
-        P(presentation)->instance->hideUI();
+    on_native_ui_thread([&] {
+    if (!presentation)
+        return;
+    auto* p = P(presentation);
+    if (auto* instance = presentation_instance(p))
+        instance->hideUI();
+    if (p->hosted_window)
+        p->hosted_window->show(false);
+    });
 }
 
 bool uapmd_ui_presentation_is_visible(uapmd_ui_presentation_t presentation) {
-    return presentation ? P(presentation)->instance->isUIVisible() : false;
+    return on_native_ui_thread([&] {
+        auto* instance = presentation_instance(P(presentation));
+        return instance ? instance->isUIVisible() : false;
+    });
 }
 
 bool uapmd_ui_presentation_set_size(uapmd_ui_presentation_t presentation, uint32_t width, uint32_t height) {
-    return presentation ? P(presentation)->instance->setUISize(width, height) : false;
+    return on_native_ui_thread([&] {
+    if (!presentation)
+        return false;
+    auto* p = P(presentation);
+    auto* instance = presentation_instance(p);
+    if (!instance)
+        return false;
+    const bool resized = instance->setUISize(width, height);
+    uint32_t applied_width = width;
+    uint32_t applied_height = height;
+    instance->getUISize(applied_width, applied_height);
+    if (p->hosted_window && applied_width > 0 && applied_height > 0) {
+        p->applying_plugin_resize = true;
+        p->hosted_window->resize(
+            static_cast<int>(applied_width), static_cast<int>(applied_height));
+    }
+    return resized;
+    });
 }
 
 bool uapmd_ui_presentation_get_size(uapmd_ui_presentation_t presentation, uint32_t* width, uint32_t* height) {
-    if (!presentation || !width || !height)
-        return false;
-    return P(presentation)->instance->getUISize(*width, *height);
+    return on_native_ui_thread([&] {
+        if (!presentation || !width || !height)
+            return false;
+        auto* instance = presentation_instance(P(presentation));
+        return instance ? instance->getUISize(*width, *height) : false;
+    });
 }
 
 bool uapmd_ui_presentation_can_resize(uapmd_ui_presentation_t presentation) {
-    return presentation ? P(presentation)->instance->canUIResize() : false;
+    return on_native_ui_thread([&] {
+        auto* instance = presentation_instance(P(presentation));
+        return instance ? instance->canUIResize() : false;
+    });
 }
 
 /* ═══════════════════════════════════════════════════════════════════════════

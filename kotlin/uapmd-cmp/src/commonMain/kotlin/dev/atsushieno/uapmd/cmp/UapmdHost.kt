@@ -443,6 +443,8 @@ class UapmdHost private constructor(val model: AppModel) {
      *    directory has to outlive the load and is only retired on the next one.
      */
     fun loadProject(path: String) {
+        if (isLoadingProject)
+            return
         // Set synchronously: posting it through onUiThread left a window where
         // the poll saw "not loading" and refreshed straight into the load.
         isLoadingProject = true
@@ -474,6 +476,17 @@ class UapmdHost private constructor(val model: AppModel) {
             engine.setActive(false)
             sequencer.stopAudio()
         }
+
+        // Project replacement destroys the old plugin instances as part of
+        // timeline reset. Detach Compose-owned state on its dispatcher, then
+        // perform native teardown on this background load coroutine.
+        val presentationsToClose = withContext(uiDispatcher) {
+            nativeUiPresentations.values.toList().also {
+                nativeUiPresentations.clear()
+            }
+        }
+        presentationsToClose.forEach { runCatching { it.close() } }
+
         val result = try {
             engine.timeline.loadProject(prepared.path)
         } finally {
@@ -484,8 +497,6 @@ class UapmdHost private constructor(val model: AppModel) {
         }
 
         if (result.success) {
-            nativeUiPresentations.values.forEach { runCatching { it.close() } }
-            nativeUiPresentations.clear()
             // The previous project's unpacked files are only safe to drop once a
             // new project has taken over.
             activePreparedProject?.let { runCatching { it.close() } }
@@ -536,6 +547,10 @@ class UapmdHost private constructor(val model: AppModel) {
         nativeUiPresentations[instanceId]?.isVisible == true || instanceId in platformHostedUiInstanceIds
 
     fun showPluginUi(instanceId: Int) {
+        if (isLoadingProject) {
+            pluginUiStatusMessage = "Wait for the project to finish loading before opening a plug-in UI."
+            return
+        }
         val inst = model.sequencer.engine.getPluginInstance(instanceId) ?: return
 
         // Android AAP plugins are hosted by the platform's own view system.
@@ -1039,10 +1054,11 @@ class UapmdHost private constructor(val model: AppModel) {
 
     fun shutdown() {
         scope.cancel()
+        val presentationsToClose = nativeUiPresentations.values.toList()
+        nativeUiPresentations.clear()
+        presentationsToClose.forEach { runCatching { it.close() } }
         addins?.shutdown()
         addins?.close()
-        nativeUiPresentations.values.forEach { it.close() }
-        nativeUiPresentations.clear()
         model.setAudioEngineEnabled(false)
         cleanupUapmdAppModel()
     }
@@ -1253,6 +1269,43 @@ private suspend fun runStartupDevHooks(host: UapmdHost) = kotlinx.coroutines.cor
             }
             println("uapmd.cmp dev hook: catalog ready after ${waited}ms, entries=${host.catalog.size}")
             host.catalog.forEach { println("uapmd.cmp catalog: ${it.format} | ${it.pluginId} | ${it.displayName}") }
+            startupPreloadPlugin()?.let { requestedName ->
+                val matchingEntries = host.catalog.filter {
+                    it.displayName.contains(requestedName, ignoreCase = true)
+                }
+                val entry = matchingEntries.firstOrNull { it.format == "AU" }
+                    ?: matchingEntries.firstOrNull()
+                if (entry == null) {
+                    println("uapmd.cmp dev hook: no preload plug-in matches '$requestedName'")
+                } else {
+                    println(
+                        "uapmd.cmp dev hook: preloading ${entry.format} " +
+                            "${entry.pluginId} ${entry.displayName}"
+                    )
+                    host.instantiate(entry, 0)
+                    var instantiateWait = 0
+                    while (host.isInstantiating && instantiateWait < 30_000) {
+                        kotlinx.coroutines.delay(50)
+                        instantiateWait += 50
+                    }
+                    println(
+                        "uapmd.cmp dev hook: preload completed in ${instantiateWait}ms " +
+                            "id=${host.lastInstantiation?.instanceId} " +
+                            "err=${host.lastInstantiation?.error}"
+                    )
+                    val preloadedId = host.lastInstantiation?.instanceId ?: -1
+                    if (startupShowPreloadUi() && preloadedId >= 0 && host.lastInstantiation?.error == null) {
+                        host.showPluginUi(preloadedId)
+                        println(
+                            "uapmd.cmp dev hook: preload UI visible=" +
+                                host.isPluginUiVisible(preloadedId) +
+                                " status=${host.pluginUiStatusMessage}"
+                        )
+                        kotlinx.coroutines.delay(1000)
+                    }
+                }
+            }
+            repeat(startupLoadCount()) { pass ->
             // Heartbeat on the UI dispatcher: every gap longer than a frame is a
             // stall the user would see as a freeze.
             var worstGapMs = 0L
@@ -1268,7 +1321,6 @@ private suspend fun runStartupDevHooks(host: UapmdHost) = kotlinx.coroutines.cor
                     ticks++
                 }
             }
-            repeat(startupLoadCount()) { pass ->
             println("uapmd.cmp dev hook: load pass ${pass + 1}")
             val started = nowMillis()
             // The watchdog must not live on the UI dispatcher: that is the thread
@@ -1290,6 +1342,36 @@ private suspend fun runStartupDevHooks(host: UapmdHost) = kotlinx.coroutines.cor
                     "UI ticks=$ticks worstStall=${worstGapMs}ms, " +
                     "result=${host.lastProjectResult?.success} err=${host.lastProjectResult?.error}"
             )
+            startupShowLoadedUi()?.let { requestedName ->
+                val pluginHost = host.model.sequencer.engine.pluginHost
+                val restored = pluginHost.getInstanceIds().mapNotNull { id ->
+                    pluginHost.getInstance(id)?.let { id to it }
+                }
+                println(
+                    "uapmd.cmp dev hook: restored instances=" +
+                        restored.joinToString { (id, instance) ->
+                            "$id:${instance.formatName}:${instance.displayName}"
+                        }
+                )
+                val match = restored.firstOrNull { (_, instance) ->
+                    instance.displayName.contains(requestedName, ignoreCase = true)
+                }
+                if (match == null) {
+                    println("uapmd.cmp dev hook: no restored plug-in matches '$requestedName'")
+                } else {
+                    println(
+                        "uapmd.cmp dev hook: showing restored plug-in " +
+                            "id=${match.first} format=${match.second.formatName} " +
+                            "name=${match.second.displayName}"
+                    )
+                    host.showPluginUi(match.first)
+                    println(
+                        "uapmd.cmp dev hook: restored UI visible=" +
+                            host.isPluginUiVisible(match.first) +
+                            " status=${host.pluginUiStatusMessage}"
+                    )
+                }
+            }
             kotlinx.coroutines.delay(2000)
             }
             startupRenderPath()?.let { renderPath ->

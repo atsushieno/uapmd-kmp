@@ -84,6 +84,15 @@ expect fun startupPlaySeconds(): Int
 /** Dev hook: how many times to load the project, for re-load testing. */
 expect fun startupLoadCount(): Int
 
+/** Dev hook: show the restored plug-in whose display name contains this value. */
+expect fun startupShowLoadedUi(): String?
+
+/** Dev hook: instantiate this named plug-in before loading a project. */
+expect fun startupPreloadPlugin(): String?
+
+/** Dev hook: open the preloaded plug-in UI before project replacement. */
+expect fun startupShowPreloadUi(): Boolean
+
 /** Dev hook: save the session to this path once startup work is done. */
 expect fun startupSaveProjectPath(): String?
 

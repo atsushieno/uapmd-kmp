@@ -126,6 +126,13 @@ compose.desktop {
             System.getProperty("uapmd.cmp.instantiate")?.let { "-Duapmd.cmp.instantiate=$it" },
             System.getProperty("uapmd.cmp.windowSize")?.let { "-Duapmd.cmp.windowSize=$it" },
             System.getProperty("uapmd.cmp.addTracks")?.let { "-Duapmd.cmp.addTracks=$it" },
+            System.getProperty("uapmd.cmp.loadProject")?.let { "-Duapmd.cmp.loadProject=$it" },
+            System.getProperty("uapmd.cmp.loadCount")?.let { "-Duapmd.cmp.loadCount=$it" },
+            System.getProperty("uapmd.cmp.forceRescan")?.let { "-Duapmd.cmp.forceRescan=$it" },
+            System.getProperty("uapmd.cmp.noPoll")?.let { "-Duapmd.cmp.noPoll=$it" },
+            System.getProperty("uapmd.cmp.showLoadedUi")?.let { "-Duapmd.cmp.showLoadedUi=$it" },
+            System.getProperty("uapmd.cmp.preloadPlugin")?.let { "-Duapmd.cmp.preloadPlugin=$it" },
+            System.getProperty("uapmd.cmp.showPreloadUi")?.let { "-Duapmd.cmp.showPreloadUi=$it" },
             (System.getProperty("uapmd.cmp.scannerExe")
                 ?: uapmdScanExecutable.takeIf { it.isFile }?.absolutePath)
                 ?.let { "-Duapmd.cmp.scannerExe=$it" }

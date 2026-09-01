@@ -8,7 +8,9 @@ import dev.atsushieno.uapmd.jna.*
 // ─── JvmPluginInstance ───────────────────────────────────────────────────────
 
 class JvmPluginInstance internal constructor(
-    internal val handle: Pointer
+    internal val handle: Pointer,
+    private val ownerHostHandle: Pointer? = null,
+    private val ownerInstanceId: Int = -1
 ) : PluginInstance {
 
     private val activeUiPresentations = linkedSetOf<JvmPluginUiPresentation>()
@@ -199,6 +201,10 @@ class JvmPluginInstance internal constructor(
         }
         if (presentationHandle == null)
             return null
+        if (ownerHostHandle != null && ownerInstanceId >= 0)
+            lib.uapmd_internal_ui_presentation_bind_instance_owner(
+                presentationHandle, ownerHostHandle, ownerInstanceId
+            )
 
         return JvmPluginUiPresentation(request, presentationHandle, resizeHandlerRef).also { activeUiPresentations += it }
     }
@@ -215,6 +221,7 @@ class JvmPluginInstance internal constructor(
         private val presentationHandle: Pointer,
         private val resizeHandlerRef: UiResizeHandler?
     ) : PluginUiPresentation {
+        private var closed = false
 
         override val host: PluginUiHost get() = request.host
         override val role: PluginUiPresentationRole get() = request.role
@@ -224,8 +231,9 @@ class JvmPluginInstance internal constructor(
         override val canResize: Boolean
             get() = runOnJvmNativeUiThread { lib.uapmd_ui_presentation_can_resize(presentationHandle) }
 
-        override fun show(): Boolean =
-            runOnJvmNativeUiThread { lib.uapmd_ui_presentation_show(presentationHandle) }
+        override fun show(): Boolean {
+            return runOnJvmNativeUiThread { lib.uapmd_ui_presentation_show(presentationHandle) }
+        }
 
         override fun hide() {
             runOnJvmNativeUiThread {
@@ -234,6 +242,11 @@ class JvmPluginInstance internal constructor(
         }
 
         override fun close() {
+            synchronized(this) {
+                if (closed)
+                    return
+                closed = true
+            }
             runOnJvmNativeUiThread {
                 lib.uapmd_ui_presentation_destroy(presentationHandle)
             }
@@ -306,7 +319,9 @@ class JvmPluginHost internal constructor(
         lib.uapmd_plugin_host_delete_instance(handle, instanceId)
 
     override fun getInstance(instanceId: Int): PluginInstance? =
-        lib.uapmd_plugin_host_get_instance(handle, instanceId)?.let { JvmPluginInstance(it) }
+        lib.uapmd_plugin_host_get_instance(handle, instanceId)?.let {
+            JvmPluginInstance(it, handle, instanceId)
+        }
 
     override fun getInstanceIds(): List<Int> {
         val count = lib.uapmd_plugin_host_instance_id_count(handle)

@@ -72,6 +72,12 @@ actual fun dumpThreadStacks(): String = buildString {
 actual fun startupForceRescan(): Boolean = System.getProperty("uapmd.cmp.forceRescan") == "1"
 actual fun startupLoadCount(): Int = System.getProperty("uapmd.cmp.loadCount")?.toIntOrNull() ?: 1
 
+actual fun startupShowLoadedUi(): String? = System.getProperty("uapmd.cmp.showLoadedUi")
+
+actual fun startupPreloadPlugin(): String? = System.getProperty("uapmd.cmp.preloadPlugin")
+
+actual fun startupShowPreloadUi(): Boolean = System.getProperty("uapmd.cmp.showPreloadUi") == "1"
+
 actual fun startupPlaySeconds(): Int = System.getProperty("uapmd.cmp.playSeconds")?.toIntOrNull() ?: 0
 
 actual fun startupSuppressPolling(): Boolean = System.getProperty("uapmd.cmp.noPoll") == "1"

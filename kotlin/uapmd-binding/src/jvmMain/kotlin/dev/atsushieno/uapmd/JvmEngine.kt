@@ -18,7 +18,11 @@ class JvmSequencerEngine internal constructor(
         get() = JvmPluginHost(lib.uapmd_engine_plugin_host(handle) ?: error("uapmd_engine_plugin_host returned null"))
 
     override fun getPluginInstance(instanceId: Int): PluginInstance? =
-        lib.uapmd_engine_get_plugin_instance(handle, instanceId)?.let { JvmPluginInstance(it) }
+        lib.uapmd_engine_get_plugin_instance(handle, instanceId)?.let {
+            val host = lib.uapmd_engine_plugin_host(handle)
+                ?: error("uapmd_engine_plugin_host returned null")
+            JvmPluginInstance(it, host, instanceId)
+        }
 
     override val functionBlockManager: FunctionBlockManager
         get() = JvmFunctionBlockManager(lib.uapmd_engine_function_block_manager(handle) ?: error("uapmd_engine_function_block_manager returned null"))

@@ -63,17 +63,6 @@ private object AppleMainQueueDispatcher {
             pendingWork.remove(token)?.invoke()
         }
     }
-    private val captureThreadCallback = object : Callback {
-        @Suppress("unused")
-        fun invoke(context: Pointer?) = Unit
-    }
-
-    fun install() {
-        debugJvmThread("AppleMainQueueDispatcher.install.request")
-        dispatchSync.invoke(Void::class.java, arrayOf(mainQueue, Pointer.NULL, captureThreadCallback))
-        debugJvmThread("AppleMainQueueDispatcher.install.captured")
-    }
-
     fun isMainQueueThread(): Boolean =
         (pthreadMainNp.invokeInt(emptyArray()) != 0)
 
@@ -164,13 +153,8 @@ internal fun <T> runOnJvmEventLoopThread(action: () -> T): T =
 internal fun <T> runOnJvmNativeUiThread(action: () -> T): T {
     if (!isMacOs)
         return runOnJvmEventLoopThread(action)
-    AppleMainQueueDispatcher.install()
-    val dispatcher = SystemMainThreadJvmEventLoopDispatcher()
-    return if (AppleMainQueueDispatcher.isMainQueueThread()) {
-        withInstalledDispatcher(dispatcher) { action() }
-    } else {
-        AppleMainQueueDispatcher.runSync {
-            withInstalledDispatcher(dispatcher) { action() }
-        }
-    }
+    // Presentation C API entry points marshal to Cocoa natively. Keep remidy's
+    // main-thread identity correct around the call without routing the operation
+    // through a Java callback on dispatch_get_main_queue().
+    return withInstalledDispatcher(SystemMainThreadJvmEventLoopDispatcher(), action)
 }

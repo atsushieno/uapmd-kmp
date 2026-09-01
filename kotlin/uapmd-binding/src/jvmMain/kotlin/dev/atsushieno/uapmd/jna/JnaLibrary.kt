@@ -838,6 +838,11 @@ interface UapmdLibrary : Library {
         resizeUserData: Pointer?,
         resizeHandler: UiResizeHandler?
     ): Pointer?
+    fun uapmd_internal_ui_presentation_bind_instance_owner(
+        presentation: Pointer?,
+        host: Pointer?,
+        instanceId: Int
+    )
     fun uapmd_instance_create_ui(
         inst: Pointer?,
         isFloating: Boolean,

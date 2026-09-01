@@ -151,6 +151,12 @@ actual fun dumpThreadStacks(): String = buildString {
 actual fun startupForceRescan(): Boolean = androidStartupForceRescan
 actual fun startupLoadCount(): Int = androidStartupLoadCount
 
+actual fun startupShowLoadedUi(): String? = null
+
+actual fun startupPreloadPlugin(): String? = null
+
+actual fun startupShowPreloadUi(): Boolean = false
+
 actual fun startupPlaySeconds(): Int = androidStartupPlaySeconds
 
 actual fun startupSuppressPolling(): Boolean = androidStartupNoPoll
