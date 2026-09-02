@@ -373,7 +373,7 @@ private fun DrawScope.drawNode(
     drawLine(c.separator, Offset(pos.x, pos.y + TITLE_H), Offset(pos.x + width, pos.y + TITLE_H), 1f)
 
     // Title text
-    val titleLayout = measurer.measure(node.label, TitleStyle)
+    val titleLayout = measurer.measure(node.label, TitleStyle.copy(color = c.titleText))
     drawText(titleLayout, topLeft = Offset(pos.x + PAD, pos.y + (TITLE_H - titleLayout.size.height) / 2))
 
     // Node border
@@ -390,7 +390,7 @@ private fun DrawScope.drawNode(
         val pinColor = if (pin.busType == BusType.Event) c.pinEvent else c.pinAudio
         drawCircle(pinColor, PIN_R, pinPos)
         drawCircle(c.pinOutline, PIN_R, pinPos, style = Stroke(1f))
-        val layout = measurer.measure(pin.label, PinStyle)
+        val layout = measurer.measure(pin.label, PinStyle.copy(color = c.bodyText))
         drawText(layout, topLeft = Offset(pinPos.x + PIN_R + 4f, pinPos.y - layout.size.height / 2f))
     }
 
@@ -400,7 +400,7 @@ private fun DrawScope.drawNode(
         val pinColor = if (pin.busType == BusType.Event) c.pinEvent else c.pinAudio
         drawCircle(pinColor, PIN_R, pinPos)
         drawCircle(c.pinOutline, PIN_R, pinPos, style = Stroke(1f))
-        val layout = measurer.measure(pin.label, PinStyle)
+        val layout = measurer.measure(pin.label, PinStyle.copy(color = c.bodyText))
         drawText(layout, topLeft = Offset(pinPos.x - PIN_R - 4f - layout.size.width, pinPos.y - layout.size.height / 2f))
     }
 }
@@ -636,4 +636,3 @@ private fun segDist(p: Offset, a: Offset, b: Offset): Float {
     val t = ((p.x - a.x) * ab.x + (p.y - a.y) * ab.y).div(lenSq).coerceIn(0f, 1f)
     return (p - Offset(a.x + ab.x * t, a.y + ab.y * t)).getDistance()
 }
-
