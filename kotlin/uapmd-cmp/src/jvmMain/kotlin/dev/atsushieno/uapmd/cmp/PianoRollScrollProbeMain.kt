@@ -14,23 +14,131 @@ import dev.atsushieno.uapmd.cleanupAppModel
 import dev.atsushieno.uapmd.getAppModel
 import dev.atsushieno.uapmd.initJvmEventLoop
 import dev.atsushieno.uapmd.instantiateAppModel
+import dev.atsushieno.uapmd.cmp.ui.EditorScrollbarThickness
 import dev.atsushieno.uapmd.cmp.ui.PianoRollEditor
+import org.jetbrains.skia.Bitmap
 import org.jetbrains.skia.EncodedImageFormat
 
+/** `EditorPalette.scrollThumb` in the dark scheme, as the bitmap reports it. */
+private val ThumbArgb = 0xFF5E5E70.toInt()
+
 /**
- * Scrolls the piano roll with the wheel and checks the view actually moves.
+ * Scrolls the piano roll with the wheel and with its scrollbars, and checks the
+ * view actually moves.
  *
  * "Scrolling" here means what an editor means by it - wheel, trackpad, scrollbar -
  * not dragging the canvas. An earlier version of this probe drove drags, which is
  * why it passed while the editor did not scroll at all: it was testing a pan that
- * nobody uses instead of the mechanism that was missing.
+ * nobody uses instead of the mechanism that was missing. The scrollbar checks
+ * matter most on a full clip, where there is no empty grid left to drag and a
+ * drag that lands on a note moves the note.
  *
  *   ./gradlew :uapmd-cmp:runPianoRollScrollProbe
  */
+private const val SceneWidth = 900
+private const val SceneHeight = 600
+private const val SceneDensity = 1.5f
+
+/**
+ * The middle of a bar's footprint, in scene pixels. Taken from the real constant
+ * rather than repeated here, so widening the bar for touch cannot leave the probe
+ * pressing beside it.
+ */
+private val ScrollbarMidPx = EditorScrollbarThickness.value * SceneDensity / 2f
+
+private fun newScene(clipId: Int): ImageComposeScene {
+    val scene = ImageComposeScene(
+        width = SceneWidth, height = SceneHeight, density = Density(SceneDensity)
+    )
+    scene.setContent {
+        MaterialTheme(colorScheme = darkColorScheme()) {
+            Surface(color = MaterialTheme.colorScheme.background) {
+                val host = remember { UapmdHost.attach(getAppModel()) }
+                host.refresh()
+                PianoRollEditor(host, 0, clipId)
+            }
+        }
+    }
+    return scene
+}
+
+/**
+ * Where the thumb of the bar hugging the given edge is, found in the rendered
+ * pixels rather than computed from the layout the probe cannot see. Guessing a
+ * point on the track instead is what made an earlier version of these checks
+ * "fail": they were pressing the track beside the thumb, which pages rather than
+ * drags. Reading it back also proves the thumb is on screen at all.
+ */
+private fun findThumbCenter(bmp: Bitmap, vertical: Boolean): Offset? {
+    val across = (if (vertical) SceneWidth else SceneHeight) - ScrollbarMidPx.toInt()
+    val along = if (vertical) SceneHeight else SceneWidth
+    var bestStart = -1
+    var bestLen = 0
+    var start = -1
+    fun close(end: Int) {
+        if (start >= 0 && end - start > bestLen) { bestLen = end - start; bestStart = start }
+        start = -1
+    }
+    for (i in 0 until along) {
+        val color = if (vertical) bmp.getColor(across, i) else bmp.getColor(i, across)
+        if (color == ThumbArgb) { if (start < 0) start = i } else close(i)
+    }
+    close(along)
+    if (bestLen <= 0) return null
+    val mid = bestStart + bestLen / 2f
+    return if (vertical) Offset(across.toFloat(), mid) else Offset(mid, across.toFloat())
+}
+
+private fun ImageComposeScene.pixels(now: Long): Bitmap {
+    val bitmap = Bitmap()
+    bitmap.allocN32Pixels(SceneWidth, SceneHeight)
+    render(now).readPixels(bitmap)
+    return bitmap
+}
+
+/**
+ * Drags a scrollbar thumb the way a pointer does: press on the thumb, a run of
+ * small moves - one big jump would be swallowed as touch slop - then release.
+ */
+private fun renderAfterThumbDrag(clipId: Int, vertical: Boolean, step: Float, steps: Int,
+    pointer: PointerType = PointerType.Mouse, acrossOffset: Float = 0f): ByteArray {
+    val scene = newScene(clipId)
+    try {
+        var now = 0L
+        fun frame() { now += 16_000_000L; scene.render(now) }
+        // Two passes: a bar only learns its track and viewport sizes from the first
+        // measure, so its thumb is not there to be grabbed until the second.
+        frame()
+        frame()
+
+        val painted = findThumbCenter(scene.pixels(now), vertical)
+            ?: error("no ${if (vertical) "vertical" else "horizontal"} thumb on screen")
+        // acrossOffset moves the press off the painted thumb and into the transparent
+        // gutter beside it, which is the half of the touch target that is not visible.
+        val from =
+            if (vertical) Offset(painted.x + acrossOffset, painted.y)
+            else Offset(painted.x, painted.y + acrossOffset)
+        fun at(i: Int) =
+            if (vertical) Offset(from.x, from.y + step * i) else Offset(from.x + step * i, from.y)
+
+        scene.sendPointerEvent(PointerEventType.Enter, from, type = pointer)
+        scene.sendPointerEvent(PointerEventType.Press, from, type = pointer)
+        frame()
+        for (i in 1..steps) {
+            scene.sendPointerEvent(PointerEventType.Move, at(i), type = pointer)
+            frame()
+        }
+        scene.sendPointerEvent(PointerEventType.Release, at(steps), type = pointer)
+        return scene.render(now).encodeToData(EncodedImageFormat.PNG)!!.bytes
+    } finally {
+        scene.close()
+    }
+}
+
 private fun renderAfterScroll(clipId: Int, dx: Float, dy: Float, ticks: Int): ByteArray {
-    val width = 900
-    val height = 600
-    val scene = ImageComposeScene(width = width, height = height, density = Density(1.5f))
+    val width = SceneWidth
+    val height = SceneHeight
+    val scene = ImageComposeScene(width = width, height = height, density = Density(SceneDensity))
     try {
         scene.setContent {
             MaterialTheme(colorScheme = darkColorScheme()) {
@@ -102,6 +210,29 @@ fun main() {
     check("the wheel scrolls horizontally", !oneRight.contentEquals(still))
     check("horizontal scrolling keeps going", !manyRight.contentEquals(oneRight))
     check("the two axes differ", !manyDown.contentEquals(manyRight))
+
+    // The scrollbars are the point of the exercise: a clip full of notes leaves no
+    // empty grid to drag, so these are the only handle the pointer has.
+    val vThumbDown = renderAfterThumbDrag(added.clipId, vertical = true, step = 6f, steps = 20)
+    val vThumbUp = renderAfterThumbDrag(added.clipId, vertical = true, step = -6f, steps = 20)
+    val hThumbRight = renderAfterThumbDrag(added.clipId, vertical = false, step = 6f, steps = 20)
+
+    check("dragging the vertical thumb scrolls", !vThumbDown.contentEquals(still))
+    check("the vertical thumb scrolls both ways", !vThumbUp.contentEquals(vThumbDown))
+    check("dragging the horizontal thumb scrolls", !hThumbRight.contentEquals(still))
+    val vThumbTouch = renderAfterThumbDrag(added.clipId, vertical = true, step = 6f, steps = 20,
+        pointer = PointerType.Touch)
+    check("a finger drags the vertical thumb too", !vThumbTouch.contentEquals(still))
+
+    // The bar is painted narrower than it is: the gutter around the visible thumb is
+    // transparent but still takes the press, which is what makes it a touch target
+    // rather than the 2 mm sliver it looks like. A press two pixels inside the
+    // footprint's edge has to drag the same way one on the paint does.
+    val edge = ScrollbarMidPx - 2f
+    val vThumbGutter = renderAfterThumbDrag(added.clipId, vertical = true, step = 6f, steps = 20,
+        pointer = PointerType.Touch, acrossOffset = -edge)
+    check("the gutter beside the thumb drags it too", !vThumbGutter.contentEquals(still))
+    check("the two thumbs move different axes", !vThumbDown.contentEquals(hThumbRight))
 
     cleanupAppModel()
     if (failures > 0) {

@@ -14,6 +14,7 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.width
@@ -264,7 +265,10 @@ fun PianoRollEditor(
         }
         val contentHeight = with(LocalDensity.current) { (NoteCount * noteHeight).toDp() }
 
-        Row(Modifier.fillMaxSize()) {
+        // Scrollbars on the viewport's edges, where the pointer can always reach them.
+        // A clip that is full of notes leaves no empty grid to drag, and a drag that
+        // starts on a note moves the note, so the grid cannot be its own scroller.
+        Row(Modifier.fillMaxWidth().weight(1f)) {
             PianoKeyColumn(
                 noteHeight = noteHeight,
                 contentHeight = contentHeight,
@@ -274,7 +278,7 @@ fun PianoRollEditor(
                 onKeyDown = { previewNote = it; previewOn(it) },
                 onKeyUp = { previewOff(it); previewNote = null }
             )
-            Box(Modifier.fillMaxSize().horizontalScroll(hScroll).verticalScroll(vScroll)) {
+            Box(Modifier.weight(1f).fillMaxHeight().horizontalScroll(hScroll).verticalScroll(vScroll)) {
                 Box(Modifier.size(contentWidth, contentHeight)
                     .pointerInput(notes, pixelsPerTick, noteHeight) {
                         detectDragGestures(
@@ -387,6 +391,14 @@ fun PianoRollEditor(
                     }
                 }
             }
+            VerticalEditorScrollbar(vScroll, Modifier.fillMaxHeight())
+        }
+        Row(Modifier.fillMaxWidth()) {
+            // Indented past the key column so the bar spans exactly the grid it moves.
+            Spacer(Modifier.width(KeyColumnWidth))
+            HorizontalEditorScrollbar(hScroll, Modifier.weight(1f))
+            // The corner the two bars would otherwise fight over.
+            Spacer(Modifier.width(EditorScrollbarThickness))
         }
     }
 }

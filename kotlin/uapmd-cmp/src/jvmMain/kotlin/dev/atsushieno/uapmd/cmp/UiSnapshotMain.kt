@@ -122,7 +122,13 @@ fun main() {
                 }
             }
         }
-        val image = scene.render()
+        // Three passes, not one: anything sized from a first measure pass - the piano
+        // roll's scrollbar thumbs, which need the viewport and content sizes the
+        // scrolling container only reports once measured - is missing from frame one,
+        // and a snapshot that drops it does not show what the app shows.
+        var now = 0L
+        repeat(2) { now += 16_000_000L; scene.render(now) }
+        val image = scene.render(now + 16_000_000L)
         val data = image.encodeToData(EncodedImageFormat.PNG)
             ?: error("failed to encode the snapshot")
         File(out).writeBytes(data.bytes)

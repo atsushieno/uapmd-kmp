@@ -177,7 +177,7 @@ tasks.register<JavaExec>("runKeyboardDragProbe") {
 
 tasks.register<JavaExec>("runPianoRollScrollProbe") {
     group = "verification"
-    description = "Drags the piano roll headlessly and checks the view actually scrolls."
+    description = "Scrolls the piano roll by wheel and by scrollbar headlessly, and checks the view moves."
     dependsOn("jvmJar")
     mainClass.set("dev.atsushieno.uapmd.cmp.PianoRollScrollProbeMainKt")
     classpath = objects.fileCollection().from(
