@@ -306,6 +306,37 @@ uapmd_plugin_graph_t uapmd_track_graph(uapmd_sequencer_track_t track) {
     return reinterpret_cast<uapmd_plugin_graph_t>(&ST(track)->graph());
 }
 
+/* Size-query convention: a null or zero-length buffer reports what is needed
+ * (including the NUL for strings), otherwise the truncated copy is written and
+ * its length returned. */
+static size_t copy_out_string(const std::string& src, char* buf, size_t buf_size) {
+    if (!buf || buf_size == 0)
+        return src.size() + 1;
+    size_t to_copy = (src.size() < buf_size) ? src.size() : (buf_size - 1);
+    std::memcpy(buf, src.data(), to_copy);
+    buf[to_copy] = '\0';
+    return to_copy;
+}
+
+static size_t copy_out_bytes(const std::vector<uint8_t>& src, uint8_t* buf, size_t buf_size) {
+    if (!buf || buf_size == 0)
+        return src.size();
+    size_t to_copy = (src.size() < buf_size) ? src.size() : buf_size;
+    if (to_copy)
+        std::memcpy(buf, src.data(), to_copy);
+    return to_copy;
+}
+
+size_t uapmd_track_unresolved_graph_type(uapmd_sequencer_track_t track, char* buf, size_t buf_size) {
+    if (!track) return 0;
+    return copy_out_string(ST(track)->unresolvedGraphType(), buf, buf_size);
+}
+
+size_t uapmd_track_unresolved_graph_payload(uapmd_sequencer_track_t track, uint8_t* buf, size_t buf_size) {
+    if (!track) return 0;
+    return copy_out_bytes(ST(track)->unresolvedGraphPayload(), buf, buf_size);
+}
+
 uint32_t uapmd_track_latency_in_samples(uapmd_sequencer_track_t track)  { return ST(track)->latencyInSamples(); }
 uint32_t uapmd_track_render_lead_in_samples(uapmd_sequencer_track_t track) { return ST(track)->renderLeadInSamples(); }
 double   uapmd_track_tail_length_in_seconds(uapmd_sequencer_track_t track) { return ST(track)->tailLengthInSeconds(); }
@@ -499,6 +530,67 @@ uapmd_project_result_t uapmd_tl_load_project(uapmd_timeline_facade_t tl, const c
     auto r = promise->get_future().get();
     tl_error = r.error;
     return { r.success, tl_error.empty() ? nullptr : tl_error.c_str() };
+}
+
+uapmd_project_result_t uapmd_tl_new_project(uapmd_timeline_facade_t tl) {
+    auto promise = std::make_shared<std::promise<uapmd::TimelineFacade::ProjectResult>>();
+    TF(tl)->newProject([promise](uapmd::TimelineFacade::ProjectResult r) mutable {
+        promise->set_value(std::move(r));
+    });
+    auto r = promise->get_future().get();
+    tl_error = r.error;
+    return { r.success, tl_error.empty() ? nullptr : tl_error.c_str() };
+}
+
+/* ── Master tempo map ─────────────────────────────────────────────────────── */
+
+static const uapmd::TempoMap* TM(uapmd_tempo_map_t h) {
+    return reinterpret_cast<const uapmd::TempoMap*>(h);
+}
+
+uapmd_tempo_map_t uapmd_tl_master_tempo_map(uapmd_timeline_facade_t tl) {
+    if (!tl) return nullptr;
+    return reinterpret_cast<uapmd_tempo_map_t>(
+        const_cast<uapmd::TempoMap*>(&TF(tl)->masterTempoMap()));
+}
+
+bool uapmd_tempo_map_has_tempo_data(uapmd_tempo_map_t map) {
+    return map && TM(map)->hasTempoData();
+}
+
+bool uapmd_tempo_map_is_empty(uapmd_tempo_map_t map) {
+    return !map || TM(map)->empty();
+}
+
+double uapmd_tempo_map_seconds_to_beats(uapmd_tempo_map_t map, double seconds) {
+    return map ? TM(map)->secondsToBeats(seconds) : 0.0;
+}
+
+double uapmd_tempo_map_beats_to_seconds(uapmd_tempo_map_t map, double beats) {
+    return map ? TM(map)->beatsToSeconds(beats) : 0.0;
+}
+
+uint32_t uapmd_tempo_map_effective_signature_count(uapmd_tempo_map_t map) {
+    return map ? static_cast<uint32_t>(TM(map)->effectiveSignatures().size()) : 0;
+}
+
+bool uapmd_tempo_map_get_effective_signature(uapmd_tempo_map_t map, uint32_t index, uapmd_effective_signature_t* out) {
+    if (!map || !out) return false;
+    const auto& list = TM(map)->effectiveSignatures();
+    if (index >= list.size()) return false;
+    const auto& s = list[index];
+    out->start_beat = s.startBeat;
+    out->end_beat = s.endBeat;
+    out->numerator = s.numerator;
+    out->denominator = s.denominator;
+    return true;
+}
+
+double uapmd_tempo_map_bar_length_beats(int32_t numerator, int32_t denominator) {
+    uapmd::TempoMap::EffectiveSignature s;
+    s.numerator = static_cast<uint8_t>(numerator);
+    s.denominator = static_cast<uint8_t>(denominator);
+    return uapmd::TempoMap::barLengthBeats(s);
 }
 
 uapmd_content_bounds_t uapmd_tl_calculate_content_bounds(uapmd_timeline_facade_t tl) {

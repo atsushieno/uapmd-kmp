@@ -338,38 +338,10 @@ UAPMD_C_EXPORT bool uapmd_app_get_timeline_state(uapmd_app_model_t app, uapmd_ti
  *  Track graph editing (DAG graph)
  * ═══════════════════════════════════════════════════════════════════════════ */
 
-typedef enum uapmd_graph_endpoint_type {
-    UAPMD_GRAPH_ENDPOINT_GRAPH_INPUT  = 0,
-    UAPMD_GRAPH_ENDPOINT_PLUGIN       = 1,
-    UAPMD_GRAPH_ENDPOINT_GRAPH_OUTPUT = 2
-} uapmd_graph_endpoint_type_t;
-
-typedef enum uapmd_graph_bus_type {
-    UAPMD_GRAPH_BUS_AUDIO = 0,
-    UAPMD_GRAPH_BUS_EVENT = 1
-} uapmd_graph_bus_type_t;
-
-/*
- * `node_id` is the node's persistent identity as stored in the project, and is the
- * field a graph editor must key its pins by: `instance_id` is -1 for BOTH graph
- * endpoints and for every built-in node, so it cannot tell them apart. It may be
- * null or empty, in which case the identity is derived the way uapmd-app's
- * `endpointNodeId()` derives it (PluginGraphEditor.cpp:105): "graph:input",
- * "graph:output", or "plugin:<instance_id>".
- */
-typedef struct uapmd_graph_endpoint {
-    uapmd_graph_endpoint_type_t type;
-    const char* node_id;
-    int32_t instance_id;
-    uint32_t bus_index;
-} uapmd_graph_endpoint_t;
-
-typedef struct uapmd_graph_connection {
-    int64_t id;
-    uapmd_graph_bus_type_t bus_type;
-    uapmd_graph_endpoint_t source;
-    uapmd_graph_endpoint_t target;
-} uapmd_graph_connection_t;
+/* uapmd_graph_endpoint_type_t, uapmd_graph_bus_type_t, uapmd_graph_endpoint_t
+ * and uapmd_graph_connection_t are declared in uapmd-c-undo.h: uapmd 0.5.7
+ * moved connection editing onto ProjectCommands, so the types have to be
+ * visible there, and this header includes it. */
 
 typedef struct uapmd_graph_connections_result {
     bool success;
@@ -559,6 +531,17 @@ UAPMD_C_EXPORT void uapmd_app_save_project(uapmd_app_model_t app, const char* fi
 UAPMD_C_EXPORT uapmd_app_project_result_t uapmd_app_save_project_sync(uapmd_app_model_t app, const char* file_path);
 UAPMD_C_EXPORT uapmd_app_project_result_t uapmd_app_load_project(uapmd_app_model_t app, const char* file_path);
 UAPMD_C_EXPORT uapmd_app_project_result_t uapmd_app_load_project_from_handle_token(uapmd_app_model_t app, const char* token);
+/* Discards the current project and starts an empty one. Asks nothing and
+ * always replaces: whether unsaved changes may be discarded is the caller's
+ * decision. Unlike uapmd_tl_new_project() this also tears down what the
+ * outgoing project instantiated and rebuilds the model's view of the result. */
+UAPMD_C_EXPORT uapmd_app_project_result_t uapmd_app_new_project(uapmd_app_model_t app);
+
+/* The project's tempo curve, as the engine derived it from the master track.
+ * Read this rather than assembling one from uapmd_app_get_master_tempo_point(),
+ * so that display and playback can never be working from different maps. See
+ * uapmd_tempo_map_* in uapmd-c-engine.h. */
+UAPMD_C_EXPORT uapmd_tempo_map_t uapmd_app_master_tempo_map(uapmd_app_model_t app);
 
 /* ═══════════════════════════════════════════════════════════════════════════
  *  Offline rendering

@@ -194,6 +194,11 @@ class JvmAppModel internal constructor(
     override fun loadProjectFromHandleToken(token: String): AppProjectResult =
         lib.uapmd_app_load_project_from_handle_token(handle, token).toKotlin()
 
+    override fun newProject(): AppProjectResult = lib.uapmd_app_new_project(handle).toKotlin()
+
+    override val masterTempoMap: TempoMap
+        get() = JvmTempoMap(lib.uapmd_app_master_tempo_map(handle) ?: error("no master tempo map"))
+
     // ── MIDI clip UMP events ────────────────────────────────────────────────
 
     override fun getMidiClipUmpEvents(trackIndex: Int, clipId: Int): UmpEventsResult {
@@ -318,13 +323,7 @@ class JvmAppModel internal constructor(
     }
 
     override fun connectTrackGraph(trackIndex: Int, connection: GraphConnection): OpResult {
-        val c = UapmdGraphConnection().apply {
-            id = connection.id
-            bus_type = connection.busType.nativeValue
-            source = connection.source.toNative()
-            target = connection.target.toNative()
-        }
-        val r = lib.uapmd_app_connect_track_graph(handle, trackIndex, c)
+        val r = lib.uapmd_app_connect_track_graph(handle, trackIndex, connection.toJvmStruct())
         return OpResult(r.success != 0.toByte(), r.error)
     }
 
@@ -374,6 +373,13 @@ private fun UapmdAudioWarpPoint.toKotlinWarp() = AudioWarpPointData(
 
 private fun UapmdGraphEndpoint.toKotlin() =
     GraphEndpoint(GraphEndpointType.fromNative(type), node_id.orEmpty(), instance_id, bus_index.toUInt())
+
+internal fun GraphConnection.toJvmStruct() = UapmdGraphConnection().apply {
+    id = this@toJvmStruct.id
+    bus_type = busType.nativeValue
+    source = this@toJvmStruct.source.toNative()
+    target = this@toJvmStruct.target.toNative()
+}
 
 private fun GraphEndpoint.toNative() = UapmdGraphEndpoint().also {
     it.type = type.nativeValue

@@ -222,6 +222,21 @@ class WasmJsTimelineFacade internal constructor(
         } finally { mod.free(outPtr) }
     }
 
+    override fun newProject(): ProjectResult {
+        val mod = wasmMod
+        // uapmd_project_result_t: { bool success (+0), const char* error (+4) } = 8 bytes
+        val outPtr = mod.malloc(8)
+        return try {
+            mod.uapmdTlNewProject(outPtr, handle)
+            val success = mod.getValue(outPtr + 0, "i8").toInt() != 0
+            val errPtr  = mod.getValue(outPtr + 4, "i32").toInt()
+            ProjectResult(success, if (errPtr != 0) mod.utf8ToString(errPtr) else null)
+        } finally { mod.free(outPtr) }
+    }
+
+    override val masterTempoMap: TempoMap
+        get() = WasmJsTempoMap(wasmMod.uapmdTlMasterTempoMap(handle))
+
     override fun calculateContentBounds(): ContentBounds {
         val mod = wasmMod
         // uapmd_content_bounds_t layout (approximate; check actual C struct)
@@ -301,7 +316,6 @@ class WasmJsTimelineFacade internal constructor(
 
     // ─── Project history (uapmd 0.5.6) ──────────────────────────────────────
 
-    override val undoEngine get() = history.undoEngine
     override val commands get() = history.commands
     override val addresses get() = history.addresses
 
@@ -329,6 +343,9 @@ class WasmJsTimelineFacade internal constructor(
 
     override fun attachClipFragment(trackIndex: Int, fragment: ClipFragment, idPolicy: ObjectIdPolicy) =
         history.attachClipFragment(trackIndex, fragment, idPolicy)
+
+    override fun pasteClipFragment(trackIndex: Int, fragment: ClipFragment) =
+        history.pasteClipFragment(trackIndex, fragment)
 
     override fun captureTrackFragment(trackIndex: Int, callback: (TrackFragment?, String?) -> Unit) =
         history.captureTrackFragment(trackIndex, callback)
@@ -385,4 +402,30 @@ internal fun decodeTimelineStateAt(mod: UapmdCApiModule, ptr: Int): TimelineStat
         timeSignatureDenominator = getI32(68),
         sampleRate               = getI32(72)
     )
+}
+
+/**
+ * Borrows the timeline's own map: the handle is only valid until the project
+ * changes, so this is fetched fresh from [TimelineFacade.masterTempoMap] rather
+ * than cached.
+ */
+class WasmJsTempoMap internal constructor(private val handle: Int) : TempoMap {
+    override val hasTempoData: Boolean get() = wasmMod.uapmdTempoMapHasTempoData(handle)
+    override val isEmpty: Boolean get() = wasmMod.uapmdTempoMapIsEmpty(handle)
+
+    override fun secondsToBeats(seconds: Double): Double = wasmMod.uapmdTempoMapSecondsToBeats(handle, seconds)
+    override fun beatsToSeconds(beats: Double): Double = wasmMod.uapmdTempoMapBeatsToSeconds(handle, beats)
+
+    override val effectiveSignatures: List<EffectiveSignature>
+        get() = withWasmStruct(WasmOff.SIGNATURE_SIZE) { out ->
+            (0 until wasmMod.uapmdTempoMapEffectiveSignatureCount(handle)).mapNotNull { i ->
+                if (!wasmMod.uapmdTempoMapGetEffectiveSignature(handle, i, out)) null
+                else EffectiveSignature(
+                    wasmGetF64(out + WasmOff.SIGNATURE_START_BEAT),
+                    wasmGetF64(out + WasmOff.SIGNATURE_END_BEAT),
+                    wasmGetI32(out + WasmOff.SIGNATURE_NUMERATOR),
+                    wasmGetI32(out + WasmOff.SIGNATURE_DENOMINATOR)
+                )
+            }
+        }
 }

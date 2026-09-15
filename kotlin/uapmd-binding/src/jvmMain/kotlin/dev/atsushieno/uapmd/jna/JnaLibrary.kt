@@ -684,6 +684,92 @@ open class UapmdClipAudioEventsResult : Structure() {
     class ByVal : UapmdClipAudioEventsResult(), Structure.ByValue
 }
 
+@FieldOrder(
+    "implementation_id", "playback_compensation_mode", "input_monitoring_policy",
+    "monitored_track_indexes", "monitored_track_count",
+    "record_armed_track_indexes", "record_armed_track_count",
+    "implementation_properties", "property_count"
+)
+open class UapmdLatencyCompensationSettings : Structure() {
+    @JvmField var implementation_id: String? = null
+    @JvmField var playback_compensation_mode: Int = 0
+    @JvmField var input_monitoring_policy: Int = 0
+    @JvmField var monitored_track_indexes: Pointer? = null
+    @JvmField var monitored_track_count: Int = 0
+    @JvmField var record_armed_track_indexes: Pointer? = null
+    @JvmField var record_armed_track_count: Int = 0
+    /** Flat key, value, key, value... array; property_count counts pairs. */
+    @JvmField var implementation_properties: Pointer? = null
+    @JvmField var property_count: Int = 0
+}
+
+@FieldOrder("start_beat", "end_beat", "numerator", "denominator")
+open class UapmdEffectiveSignature : Structure() {
+    @JvmField var start_beat: Double = 0.0
+    @JvmField var end_beat: Double = 0.0
+    @JvmField var numerator: Int = 0
+    @JvmField var denominator: Int = 0
+}
+
+@FieldOrder("id", "title", "order", "enabled")
+open class UapmdAddinCommandInfo : Structure() {
+    @JvmField var id: String? = null
+    @JvmField var title: String? = null
+    @JvmField var order: Int = 0
+    @JvmField var enabled: Byte = 0
+}
+
+@FieldOrder("track_index", "clip_id", "midi_clip", "master_track")
+open class UapmdClipCommandTarget : Structure() {
+    @JvmField var track_index: Int = 0
+    @JvmField var clip_id: Int = 0
+    @JvmField var midi_clip: Byte = 0
+    @JvmField var master_track: Byte = 0
+
+    class ByVal : UapmdClipCommandTarget(), Structure.ByValue
+}
+
+@FieldOrder("id", "name")
+open class UapmdClipEditorInfo : Structure() {
+    @JvmField var id: String? = null
+    @JvmField var name: String? = null
+}
+
+@FieldOrder("id", "name", "model_file_label", "model_file_extension_count")
+open class UapmdStemSeparatorInfo : Structure() {
+    @JvmField var id: String? = null
+    @JvmField var name: String? = null
+    @JvmField var model_file_label: String? = null
+    @JvmField var model_file_extension_count: Int = 0
+}
+
+@FieldOrder("stem_name", "filepath", "clip_display_name")
+open class UapmdAudioStemImport : Structure {
+    constructor() : super()
+    constructor(p: Pointer) : super(p) { read() }
+    @JvmField var stem_name: String? = null
+    @JvmField var filepath: String? = null
+    @JvmField var clip_display_name: String? = null
+}
+
+@FieldOrder("success", "canceled", "error", "warning_count", "warnings", "stem_count", "stems")
+open class UapmdAudioImportResult : Structure() {
+    @JvmField var success: Byte = 0
+    @JvmField var canceled: Byte = 0
+    @JvmField var error: String? = null
+    @JvmField var warning_count: Int = 0
+    @JvmField var warnings: Pointer? = null
+    @JvmField var stem_count: Int = 0
+    @JvmField var stems: Pointer? = null
+
+    class ByVal : UapmdAudioImportResult(), Structure.ByValue
+}
+
+/** Return false to cancel the import. Called from the worker thread. */
+interface ImportProgressCb : Callback {
+    fun invoke(progress: Float, message: String?, userData: Pointer?): Boolean
+}
+
 @FieldOrder("success", "error")
 open class UapmdOpResult : Structure() {
     @JvmField var success: Byte = 0
@@ -1038,6 +1124,8 @@ interface UapmdLibrary : Library {
     // ── SequencerTrack ───────────────────────────────────────────────────────
 
     fun uapmd_track_graph(track: Pointer?): Pointer?
+    fun uapmd_track_unresolved_graph_type(track: Pointer?, buf: ByteArray?, bufSize: Long): Long
+    fun uapmd_track_unresolved_graph_payload(track: Pointer?, buf: ByteArray?, bufSize: Long): Long
     fun uapmd_track_latency_in_samples(track: Pointer?): Int
     fun uapmd_track_render_lead_in_samples(track: Pointer?): Int
     fun uapmd_track_tail_length_in_seconds(track: Pointer?): Double
@@ -1090,6 +1178,15 @@ interface UapmdLibrary : Library {
     fun uapmd_tl_remove_clip(tl: Pointer?, trackIndex: Int, clipId: Int): Boolean
 
     fun uapmd_tl_load_project(tl: Pointer?, filePath: String?): UapmdProjectResult.ByVal
+    fun uapmd_tl_new_project(tl: Pointer?): UapmdProjectResult.ByVal
+    fun uapmd_tl_master_tempo_map(tl: Pointer?): Pointer?
+    fun uapmd_tempo_map_has_tempo_data(map: Pointer?): Boolean
+    fun uapmd_tempo_map_is_empty(map: Pointer?): Boolean
+    fun uapmd_tempo_map_seconds_to_beats(map: Pointer?, seconds: Double): Double
+    fun uapmd_tempo_map_beats_to_seconds(map: Pointer?, beats: Double): Double
+    fun uapmd_tempo_map_effective_signature_count(map: Pointer?): Int
+    fun uapmd_tempo_map_get_effective_signature(map: Pointer?, index: Int, out: UapmdEffectiveSignature): Boolean
+    fun uapmd_tempo_map_bar_length_beats(numerator: Int, denominator: Int): Double
     fun uapmd_tl_calculate_content_bounds(tl: Pointer?): UapmdContentBounds.ByVal
 
     fun uapmd_tl_get_clip_midi_notes(tl: Pointer?, trackIndex: Int, clipId: Int,
@@ -1220,35 +1317,25 @@ interface UapmdLibrary : Library {
         enqueueTask: EventLoopEnqueueCb
     )
 
-    // ══ Project history: ProjectUndoEngine (uapmd 0.5.6) ═════════════════════
-
-    fun uapmd_undo_engine_get_state(eng: Pointer?, out: UapmdUndoState): Boolean
-    fun uapmd_undo_engine_undo(eng: Pointer?, userData: Pointer?, callback: UndoCompletionCb?)
-    fun uapmd_undo_engine_redo(eng: Pointer?, userData: Pointer?, callback: UndoCompletionCb?)
-    fun uapmd_undo_engine_begin_compound(eng: Pointer?, description: String?, origin: Int): UapmdUndoResult.ByVal
-    fun uapmd_undo_engine_end_compound(eng: Pointer?, userData: Pointer?, callback: UndoCompletionCb?)
-    fun uapmd_undo_engine_cancel_compound(eng: Pointer?, userData: Pointer?, callback: UndoCompletionCb?)
-    fun uapmd_undo_engine_begin_gesture(eng: Pointer?, description: String?, origin: Int): UapmdUndoResult.ByVal
-    fun uapmd_undo_engine_end_gesture(eng: Pointer?, userData: Pointer?, callback: UndoCompletionCb?)
-    fun uapmd_undo_engine_cancel_gesture(eng: Pointer?, userData: Pointer?, callback: UndoCompletionCb?)
-    fun uapmd_undo_engine_clear(eng: Pointer?, markCurrentStateSaved: Boolean): Boolean
-    fun uapmd_undo_engine_mark_saved(eng: Pointer?): Boolean
-    fun uapmd_undo_engine_mark_state_saved(eng: Pointer?, stateId: Long): Boolean
-    fun uapmd_undo_engine_set_maximum_history_size(eng: Pointer?, bytes: Long): Boolean
-    fun uapmd_undo_engine_shutdown(eng: Pointer?)
-
     // ══ Project history: ProjectCommandManager ══════════════════════════════
+    //
+    // uapmd 0.5.7 withdrew the ProjectUndoEngine handle; the command manager
+    // carries the whole history contract now, so the uapmd_undo_engine_* family
+    // is gone and its calls live here.
 
     fun uapmd_command_manager_get_state(cm: Pointer?, out: UapmdUndoState): Boolean
-    fun uapmd_command_manager_history(cm: Pointer?): Pointer?
     fun uapmd_command_manager_undo(cm: Pointer?, userData: Pointer?, callback: UndoCompletionCb?)
     fun uapmd_command_manager_redo(cm: Pointer?, userData: Pointer?, callback: UndoCompletionCb?)
-    fun uapmd_command_manager_begin_step(cm: Pointer?, description: String?, origin: Int): UapmdUndoResult.ByVal
+    fun uapmd_command_manager_begin_step(cm: Pointer?, description: String?, origin: Int, batching: Int): UapmdUndoResult.ByVal
     fun uapmd_command_manager_end_step(cm: Pointer?, userData: Pointer?, callback: UndoCompletionCb?)
     fun uapmd_command_manager_cancel_step(cm: Pointer?, userData: Pointer?, callback: UndoCompletionCb?)
-    fun uapmd_command_manager_begin_gesture(cm: Pointer?, description: String?, origin: Int): UapmdUndoResult.ByVal
+    fun uapmd_command_manager_begin_gesture(cm: Pointer?, description: String?, origin: Int, batching: Int): UapmdUndoResult.ByVal
     fun uapmd_command_manager_end_gesture(cm: Pointer?, userData: Pointer?, callback: UndoCompletionCb?)
     fun uapmd_command_manager_cancel_gesture(cm: Pointer?, userData: Pointer?, callback: UndoCompletionCb?)
+    fun uapmd_command_manager_mark_saved(cm: Pointer?): Boolean
+    fun uapmd_command_manager_mark_state_saved(cm: Pointer?, stateId: Long): Boolean
+    fun uapmd_command_manager_clear(cm: Pointer?, markCurrentStateSaved: Boolean): Boolean
+    fun uapmd_command_manager_set_maximum_history_size(cm: Pointer?, bytes: Long): Boolean
     fun uapmd_command_manager_shutdown(cm: Pointer?)
 
     // ══ Project history: ProjectCommands ════════════════════════════════════
@@ -1278,6 +1365,14 @@ interface UapmdLibrary : Library {
     ): Boolean
     fun uapmd_commands_set_plugin_group(cmd: Pointer?, instanceId: Int, group: Byte, origin: Int): Boolean
     fun uapmd_commands_set_master_track_markers(cmd: Pointer?, markers: UapmdClipMarker?, markerCount: Int, origin: Int): Boolean
+    fun uapmd_commands_add_device_input_to_track(cmd: Pointer?, trackIndex: Int, sourceNodeId: Int, channelIndices: IntArray?, channelCount: Int, origin: Int): Boolean
+    fun uapmd_commands_set_device_input_channels(cmd: Pointer?, trackIndex: Int, sourceNodeId: Int, channelIndices: IntArray?, channelCount: Int, origin: Int): Boolean
+    fun uapmd_commands_remove_device_input_from_track(cmd: Pointer?, trackIndex: Int, sourceNodeId: Int, origin: Int): Boolean
+    fun uapmd_commands_connect_track_graph(cmd: Pointer?, trackIndex: Int, connection: UapmdGraphConnection, origin: Int): Boolean
+    fun uapmd_commands_disconnect_track_graph_connection(cmd: Pointer?, trackIndex: Int, connectionId: Long, origin: Int): Boolean
+    fun uapmd_commands_last_graph_error(): String?
+    fun uapmd_commands_replace_track_graph_type(cmd: Pointer?, trackIndex: Int, graphTypeId: String?, eventBufferSizeInBytes: Long, origin: Int): Boolean
+    fun uapmd_commands_set_latency_compensation_settings(cmd: Pointer?, settings: UapmdLatencyCompensationSettings, origin: Int): Boolean
 
     // ══ Project history: ProjectAddressBook ═════════════════════════════════
 
@@ -1316,8 +1411,8 @@ interface UapmdLibrary : Library {
 
     // ══ TimelineFacade history accessors and undoable mutations ═════════════
 
-    fun uapmd_tl_undo_engine(tl: Pointer?): Pointer?
     fun uapmd_tl_commands(tl: Pointer?): Pointer?
+    fun uapmd_tl_history(tl: Pointer?): Pointer?
     fun uapmd_tl_addresses(tl: Pointer?): Pointer?
     fun uapmd_tl_begin_document_transaction(tl: Pointer?)
     fun uapmd_tl_end_document_transaction(tl: Pointer?)
@@ -1337,6 +1432,7 @@ interface UapmdLibrary : Library {
     ): Boolean
     fun uapmd_tl_capture_clip_fragment(tl: Pointer?, trackIndex: Int, clipId: Int): Pointer?
     fun uapmd_tl_attach_clip_fragment(tl: Pointer?, trackIndex: Int, fragment: Pointer?, idPolicy: Int): UapmdClipAddResult.ByVal
+    fun uapmd_tl_paste_clip_fragment(tl: Pointer?, trackIndex: Int, fragment: Pointer?): UapmdClipAddResult.ByVal
     fun uapmd_tl_capture_track_fragment(tl: Pointer?, trackIndex: Int, userData: Pointer?, callback: TrackFragmentCb?)
     fun uapmd_tl_attach_track_fragment(tl: Pointer?, fragment: Pointer?, options: UapmdTrackAttachOptions.ByVal, userData: Pointer?, callback: TrackMutationCb?)
     fun uapmd_tl_add_empty_track(tl: Pointer?, origin: Int, userData: Pointer?, callback: TrackMutationCb?)
@@ -1363,6 +1459,41 @@ interface UapmdLibrary : Library {
     fun uapmd_addin_manager_create(): Pointer?
     fun uapmd_addin_manager_destroy(mgr: Pointer?)
     fun uapmd_addin_manager_register_extension_point(mgr: Pointer?, path: String?, extensionPoint: Pointer?)
+
+    fun uapmd_command_registry_create(): Pointer?
+    fun uapmd_command_registry_destroy(reg: Pointer?)
+    fun uapmd_addin_manager_register_command_registry(mgr: Pointer?, reg: Pointer?)
+    fun uapmd_command_registry_count(reg: Pointer?): Int
+    fun uapmd_command_registry_get(reg: Pointer?, index: Int, out: UapmdAddinCommandInfo): Boolean
+    fun uapmd_command_registry_invoke(reg: Pointer?, index: Int): Boolean
+    fun uapmd_command_registry_invoke_by_id(reg: Pointer?, id: String?): Boolean
+
+    fun uapmd_clip_command_registry_create(): Pointer?
+    fun uapmd_clip_command_registry_destroy(reg: Pointer?)
+    fun uapmd_addin_manager_register_clip_command_registry(mgr: Pointer?, reg: Pointer?)
+    fun uapmd_clip_command_registry_count(reg: Pointer?): Int
+    fun uapmd_clip_command_registry_get(reg: Pointer?, index: Int, out: UapmdAddinCommandInfo): Boolean
+    fun uapmd_clip_command_registry_applies_to(reg: Pointer?, index: Int, target: UapmdClipCommandTarget.ByVal): Boolean
+    fun uapmd_clip_command_registry_enabled(reg: Pointer?, index: Int, target: UapmdClipCommandTarget.ByVal): Boolean
+    fun uapmd_clip_command_registry_invoke(reg: Pointer?, index: Int, target: UapmdClipCommandTarget.ByVal): Boolean
+
+    fun uapmd_clip_editor_registry_create(): Pointer?
+    fun uapmd_clip_editor_registry_destroy(reg: Pointer?)
+    fun uapmd_addin_manager_register_clip_editor_registry(mgr: Pointer?, reg: Pointer?)
+    fun uapmd_clip_editor_registry_count(reg: Pointer?): Int
+    fun uapmd_clip_editor_registry_get(reg: Pointer?, index: Int, out: UapmdClipEditorInfo): Boolean
+
+    fun uapmd_stem_separator_registry_create(): Pointer?
+    fun uapmd_stem_separator_registry_destroy(reg: Pointer?)
+    fun uapmd_addin_manager_register_stem_separator_registry(mgr: Pointer?, reg: Pointer?)
+    fun uapmd_stem_separator_registry_count(reg: Pointer?): Int
+    fun uapmd_stem_separator_registry_get(reg: Pointer?, index: Int, out: UapmdStemSeparatorInfo): Boolean
+    fun uapmd_stem_separator_registry_get_model_extension(reg: Pointer?, index: Int, extensionIndex: Int, buf: ByteArray?, bufSize: Long): Long
+
+    fun uapmd_import_audio_file(
+        reg: Pointer?, separatorId: String?, filepath: String?, outputDirectory: String?,
+        modelPath: String?, userData: Pointer?, progress: ImportProgressCb?
+    ): UapmdAudioImportResult.ByVal
     fun uapmd_engine_register_addin_extension_points(engine: Pointer?, mgr: Pointer?)
     fun uapmd_addin_manager_initialize(mgr: Pointer?)
     fun uapmd_addin_manager_set_enabled(mgr: Pointer?, packageId: String?, addinId: String?, enabled: Boolean): Boolean
@@ -1451,6 +1582,8 @@ interface UapmdLibrary : Library {
     fun uapmd_app_save_project_sync(app: Pointer?, filePath: String?): UapmdAppProjectResult.ByVal
     fun uapmd_app_save_project(app: Pointer?, filePath: String?, userData: Pointer?, callback: ProjectSaveCb?)
     fun uapmd_app_load_project_from_handle_token(app: Pointer?, token: String?): UapmdAppProjectResult.ByVal
+    fun uapmd_app_new_project(app: Pointer?): UapmdAppProjectResult.ByVal
+    fun uapmd_app_master_tempo_map(app: Pointer?): Pointer?
 
     fun uapmd_app_get_midi_clip_ump_events(app: Pointer?, trackIndex: Int, clipId: Int): UapmdUmpEventsResult.ByVal
     fun uapmd_app_add_ump_event_to_clip(app: Pointer?, trackIndex: Int, clipId: Int, tick: Long, words: IntArray?, wordCount: Int): Boolean

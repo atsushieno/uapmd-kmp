@@ -263,6 +263,15 @@ class JsAppModel internal constructor(internal val handle: Int) : AppModel {
     override fun loadProjectFromHandleToken(token: String): AppProjectResult =
         projectCall(token) { out, t -> jsMod._uapmd_app_load_project_from_handle_token(out, handle, t) }
 
+    override fun newProject(): AppProjectResult =
+        withWasmMem(8) { out ->                    // sizeof uapmd_app_project_result_t
+            jsMod._uapmd_app_new_project(out, handle)
+            decodeJsProjectResult(out)
+        }
+
+    override val masterTempoMap: TempoMap
+        get() = JsTempoMap(jsMod._uapmd_app_master_tempo_map(handle) as Int)
+
     // ── MIDI clip UMP events ────────────────────────────────────────────────
     // uapmd_ump_events_result_t: bool @0, char* @4, uint32 @8, ptr @12 (16 bytes)
     // uapmd_ump_event_t:         uint64 @0, uint32 @8, ptr @12 (16 bytes)

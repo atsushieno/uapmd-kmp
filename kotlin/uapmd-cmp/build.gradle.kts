@@ -251,8 +251,6 @@ afterEvaluate {
     // Without these, a clean checkout fails with "Can't resolve
     // 'uapmd-wasm-adapter'"; a developer machine hides it, because an earlier
     // build has already left the files in place.
-    // buildUapmdCApiWasm brings applyUapmdPatches with it, so the patched
-    // coop-coep-sw.js the config also copies is in place by then too.
     listOf(
         "wasmJsBrowserProductionWebpack",
         "wasmJsBrowserDevelopmentWebpack",

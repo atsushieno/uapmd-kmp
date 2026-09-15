@@ -568,6 +568,14 @@ JNI_FN(jobjectArray, uapmdAppLoadProjectFromHandleToken)(JNIEnv* env, jclass, jl
     return pack_project_result(env, r);
 }
 
+JNI_FN(jobjectArray, uapmdAppNewProject)(JNIEnv* env, jclass, jlong app) {
+    return pack_project_result(env, uapmd_app_new_project(AM(app)));
+}
+
+JNI_FN(jlong, uapmdAppMasterTempoMap)(JNIEnv*, jclass, jlong app) {
+    return p2j(uapmd_app_master_tempo_map(AM(app)));
+}
+
 /* ── MIDI clip UMP events ──────────────────────────────────────────────────── */
 
 /** Returns Object[]{ long[1] success, String? error, long[] ticks, int[][] words } or null. */

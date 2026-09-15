@@ -14,7 +14,6 @@
 /* ── Cast helpers ─────────────────────────────────────────────────────────── */
 
 static uapmd::TimelineFacade*        TF(uapmd_timeline_facade_t h)   { return reinterpret_cast<uapmd::TimelineFacade*>(h); }
-static uapmd::ProjectUndoEngine*     UE(uapmd_undo_engine_t h)       { return reinterpret_cast<uapmd::ProjectUndoEngine*>(h); }
 static uapmd::ProjectCommandManager* CM(uapmd_command_manager_t h)   { return reinterpret_cast<uapmd::ProjectCommandManager*>(h); }
 static uapmd::ProjectCommands*       PC(uapmd_project_commands_t h)  { return reinterpret_cast<uapmd::ProjectCommands*>(h); }
 static uapmd::ProjectAddressBook*    AB(uapmd_address_book_t h)      { return reinterpret_cast<uapmd::ProjectAddressBook*>(h); }
@@ -142,79 +141,17 @@ static uapmd::ProjectUndoCompletion wrap_completion(void* user_data, uapmd_undo_
 }
 
 /* ═══════════════════════════════════════════════════════════════════════════
- *  ProjectUndoEngine
+ *  ProjectCommandManager — the project's history
  * ═══════════════════════════════════════════════════════════════════════════ */
 
-bool uapmd_undo_engine_get_state(uapmd_undo_engine_t eng, uapmd_undo_state_t* out) {
-    if (!eng || !out) return false;
-    fill_state(UE(eng)->state(), out);
-    return true;
+static uapmd::ProjectStepEventBatching to_cpp_batching(uapmd_step_event_batching_t b) {
+    return static_cast<uapmd::ProjectStepEventBatching>(b);
 }
-
-void uapmd_undo_engine_undo(uapmd_undo_engine_t eng, void* user_data, uapmd_undo_completion_cb_t callback) {
-    UE(eng)->undo(wrap_completion(user_data, callback));
-}
-
-void uapmd_undo_engine_redo(uapmd_undo_engine_t eng, void* user_data, uapmd_undo_completion_cb_t callback) {
-    UE(eng)->redo(wrap_completion(user_data, callback));
-}
-
-uapmd_undo_result_t uapmd_undo_engine_begin_compound(uapmd_undo_engine_t eng,
-                                                       const char* description,
-                                                       uapmd_mutation_origin_t origin) {
-    return to_c_result(UE(eng)->beginCompound(description ? description : "", to_cpp_origin(origin)));
-}
-
-void uapmd_undo_engine_end_compound(uapmd_undo_engine_t eng, void* user_data, uapmd_undo_completion_cb_t callback) {
-    UE(eng)->endCompound(wrap_completion(user_data, callback));
-}
-
-void uapmd_undo_engine_cancel_compound(uapmd_undo_engine_t eng, void* user_data, uapmd_undo_completion_cb_t callback) {
-    UE(eng)->cancelCompound(wrap_completion(user_data, callback));
-}
-
-uapmd_undo_result_t uapmd_undo_engine_begin_gesture(uapmd_undo_engine_t eng,
-                                                      const char* description,
-                                                      uapmd_mutation_origin_t origin) {
-    return to_c_result(UE(eng)->beginGesture(description ? description : "", to_cpp_origin(origin)));
-}
-
-void uapmd_undo_engine_end_gesture(uapmd_undo_engine_t eng, void* user_data, uapmd_undo_completion_cb_t callback) {
-    UE(eng)->endGesture(wrap_completion(user_data, callback));
-}
-
-void uapmd_undo_engine_cancel_gesture(uapmd_undo_engine_t eng, void* user_data, uapmd_undo_completion_cb_t callback) {
-    UE(eng)->cancelGesture(wrap_completion(user_data, callback));
-}
-
-bool uapmd_undo_engine_clear(uapmd_undo_engine_t eng, bool mark_current_state_saved) {
-    return UE(eng)->clear(mark_current_state_saved);
-}
-
-bool uapmd_undo_engine_mark_saved(uapmd_undo_engine_t eng) { return UE(eng)->markSaved(); }
-
-bool uapmd_undo_engine_mark_state_saved(uapmd_undo_engine_t eng, uint64_t state_id) {
-    return UE(eng)->markStateSaved(state_id);
-}
-
-bool uapmd_undo_engine_set_maximum_history_size(uapmd_undo_engine_t eng, uint64_t bytes) {
-    return UE(eng)->setMaximumHistorySizeInBytes(static_cast<size_t>(bytes));
-}
-
-void uapmd_undo_engine_shutdown(uapmd_undo_engine_t eng) { UE(eng)->shutdown(); }
-
-/* ═══════════════════════════════════════════════════════════════════════════
- *  ProjectCommandManager
- * ═══════════════════════════════════════════════════════════════════════════ */
 
 bool uapmd_command_manager_get_state(uapmd_command_manager_t cm, uapmd_undo_state_t* out) {
     if (!cm || !out) return false;
     fill_state(CM(cm)->state(), out);
     return true;
-}
-
-uapmd_undo_engine_t uapmd_command_manager_history(uapmd_command_manager_t cm) {
-    return reinterpret_cast<uapmd_undo_engine_t>(&CM(cm)->history());
 }
 
 void uapmd_command_manager_undo(uapmd_command_manager_t cm, void* user_data, uapmd_undo_completion_cb_t callback) {
@@ -227,8 +164,11 @@ void uapmd_command_manager_redo(uapmd_command_manager_t cm, void* user_data, uap
 
 uapmd_undo_result_t uapmd_command_manager_begin_step(uapmd_command_manager_t cm,
                                                        const char* description,
-                                                       uapmd_mutation_origin_t origin) {
-    return to_c_result(CM(cm)->beginStep(description ? description : "", to_cpp_origin(origin)));
+                                                       uapmd_mutation_origin_t origin,
+                                                       uapmd_step_event_batching_t batching) {
+    return to_c_result(CM(cm)->beginStep(description ? description : "",
+                                         to_cpp_origin(origin),
+                                         to_cpp_batching(batching)));
 }
 
 void uapmd_command_manager_end_step(uapmd_command_manager_t cm, void* user_data, uapmd_undo_completion_cb_t callback) {
@@ -241,8 +181,11 @@ void uapmd_command_manager_cancel_step(uapmd_command_manager_t cm, void* user_da
 
 uapmd_undo_result_t uapmd_command_manager_begin_gesture(uapmd_command_manager_t cm,
                                                           const char* description,
-                                                          uapmd_mutation_origin_t origin) {
-    return to_c_result(CM(cm)->beginGesture(description ? description : "", to_cpp_origin(origin)));
+                                                          uapmd_mutation_origin_t origin,
+                                                          uapmd_step_event_batching_t batching) {
+    return to_c_result(CM(cm)->beginGesture(description ? description : "",
+                                            to_cpp_origin(origin),
+                                            to_cpp_batching(batching)));
 }
 
 void uapmd_command_manager_end_gesture(uapmd_command_manager_t cm, void* user_data, uapmd_undo_completion_cb_t callback) {
@@ -251,6 +194,22 @@ void uapmd_command_manager_end_gesture(uapmd_command_manager_t cm, void* user_da
 
 void uapmd_command_manager_cancel_gesture(uapmd_command_manager_t cm, void* user_data, uapmd_undo_completion_cb_t callback) {
     CM(cm)->cancelGesture(wrap_completion(user_data, callback));
+}
+
+bool uapmd_command_manager_mark_saved(uapmd_command_manager_t cm) {
+    return cm && CM(cm)->markSaved();
+}
+
+bool uapmd_command_manager_mark_state_saved(uapmd_command_manager_t cm, uint64_t state_id) {
+    return cm && CM(cm)->markStateSaved(state_id);
+}
+
+bool uapmd_command_manager_clear(uapmd_command_manager_t cm, bool mark_current_state_saved) {
+    return cm && CM(cm)->clear(mark_current_state_saved);
+}
+
+bool uapmd_command_manager_set_maximum_history_size(uapmd_command_manager_t cm, uint64_t bytes) {
+    return cm && CM(cm)->setMaximumHistorySizeInBytes(static_cast<size_t>(bytes));
 }
 
 void uapmd_command_manager_shutdown(uapmd_command_manager_t cm) { CM(cm)->shutdown(); }
@@ -357,6 +316,123 @@ bool uapmd_commands_set_plugin_group(uapmd_project_commands_t cmd, int32_t insta
 
 bool uapmd_commands_set_master_track_markers(uapmd_project_commands_t cmd, const uapmd_clip_marker_t* markers, uint32_t marker_count, uapmd_mutation_origin_t origin) {
     return PC(cmd)->setMasterTrackMarkers(markers_from_c(markers, marker_count), to_cpp_origin(origin));
+}
+
+/* ── Device inputs, graph edges, graph type, latency settings ─────────────── */
+
+static std::vector<uint32_t> channels_from_c(const uint32_t* indices, uint32_t count) {
+    if (!indices || !count)
+        return {};
+    return std::vector<uint32_t>(indices, indices + count);
+}
+
+bool uapmd_commands_add_device_input_to_track(uapmd_project_commands_t cmd,
+                                                int32_t track_index,
+                                                int32_t source_node_id,
+                                                const uint32_t* channel_indices,
+                                                uint32_t channel_count,
+                                                uapmd_mutation_origin_t origin) {
+    if (!cmd) return false;
+    return PC(cmd)->addDeviceInputToTrack(track_index, source_node_id,
+                                          channels_from_c(channel_indices, channel_count),
+                                          to_cpp_origin(origin));
+}
+
+bool uapmd_commands_set_device_input_channels(uapmd_project_commands_t cmd,
+                                                int32_t track_index,
+                                                int32_t source_node_id,
+                                                const uint32_t* channel_indices,
+                                                uint32_t channel_count,
+                                                uapmd_mutation_origin_t origin) {
+    if (!cmd) return false;
+    return PC(cmd)->setDeviceInputChannels(track_index, source_node_id,
+                                           channels_from_c(channel_indices, channel_count),
+                                           to_cpp_origin(origin));
+}
+
+bool uapmd_commands_remove_device_input_from_track(uapmd_project_commands_t cmd,
+                                                     int32_t track_index,
+                                                     int32_t source_node_id,
+                                                     uapmd_mutation_origin_t origin) {
+    if (!cmd) return false;
+    return PC(cmd)->removeDeviceInputFromTrack(track_index, source_node_id, to_cpp_origin(origin));
+}
+
+/* The reason the graph refused an edge. Per-thread, like every other string
+ * this API hands back by pointer. */
+static thread_local std::string tl_graph_error;
+
+static uapmd_graph::AudioPluginGraphEndpoint to_cpp_endpoint(const uapmd_graph_endpoint_t& e) {
+    uapmd_graph::AudioPluginGraphEndpoint r;
+    r.type = static_cast<uapmd_graph::AudioPluginGraphEndpointType>(e.type);
+    r.node_id = e.node_id ? e.node_id : "";
+    r.instance_id = e.instance_id;
+    r.bus_index = e.bus_index;
+    return r;
+}
+
+bool uapmd_commands_connect_track_graph(uapmd_project_commands_t cmd,
+                                          int32_t track_index,
+                                          const uapmd_graph_connection_t* connection,
+                                          uapmd_mutation_origin_t origin) {
+    tl_graph_error.clear();
+    if (!cmd || !connection) return false;
+    uapmd_graph::AudioPluginGraphConnection c;
+    c.id = connection->id;
+    c.bus_type = static_cast<uapmd_graph::AudioPluginGraphBusType>(connection->bus_type);
+    c.source = to_cpp_endpoint(connection->source);
+    c.target = to_cpp_endpoint(connection->target);
+    return PC(cmd)->connectTrackGraph(track_index, c, tl_graph_error, to_cpp_origin(origin));
+}
+
+bool uapmd_commands_disconnect_track_graph_connection(uapmd_project_commands_t cmd,
+                                                        int32_t track_index,
+                                                        int64_t connection_id,
+                                                        uapmd_mutation_origin_t origin) {
+    tl_graph_error.clear();
+    if (!cmd) return false;
+    return PC(cmd)->disconnectTrackGraphConnection(track_index, connection_id, tl_graph_error,
+                                                   to_cpp_origin(origin));
+}
+
+const char* uapmd_commands_last_graph_error(void) { return tl_graph_error.c_str(); }
+
+bool uapmd_commands_replace_track_graph_type(uapmd_project_commands_t cmd,
+                                               int32_t track_index,
+                                               const char* graph_type_id,
+                                               size_t event_buffer_size_in_bytes,
+                                               uapmd_mutation_origin_t origin) {
+    if (!cmd) return false;
+    return PC(cmd)->replaceTrackGraphType(track_index, graph_type_id ? graph_type_id : "",
+                                          event_buffer_size_in_bytes, to_cpp_origin(origin));
+}
+
+bool uapmd_commands_set_latency_compensation_settings(uapmd_project_commands_t cmd,
+                                                        const uapmd_latency_compensation_settings_t* settings,
+                                                        uapmd_mutation_origin_t origin) {
+    if (!cmd || !settings) return false;
+    uapmd::LatencyCompensationProjectSettings s;
+    if (settings->implementation_id)
+        s.implementation_id = settings->implementation_id;
+    s.playback_compensation_mode =
+        static_cast<uapmd::PlaybackCompensationMode>(settings->playback_compensation_mode);
+    s.input_monitoring_policy =
+        static_cast<uapmd::InputMonitoringPolicy>(settings->input_monitoring_policy);
+    if (settings->monitored_track_indexes)
+        s.monitored_track_indexes.assign(settings->monitored_track_indexes,
+                                         settings->monitored_track_indexes + settings->monitored_track_count);
+    if (settings->record_armed_track_indexes)
+        s.record_armed_track_indexes.assign(settings->record_armed_track_indexes,
+                                            settings->record_armed_track_indexes + settings->record_armed_track_count);
+    if (settings->implementation_properties) {
+        for (uint32_t i = 0; i < settings->property_count; i++) {
+            const char* key = settings->implementation_properties[i * 2];
+            const char* value = settings->implementation_properties[i * 2 + 1];
+            if (key)
+                s.implementation_properties[key] = value ? value : "";
+        }
+    }
+    return PC(cmd)->setLatencyCompensationSettings(s, to_cpp_origin(origin));
 }
 
 /* ═══════════════════════════════════════════════════════════════════════════
@@ -631,12 +707,12 @@ bool uapmd_track_fragment_get_plugin(uapmd_track_fragment_t fragment, uint32_t i
  *  TimelineFacade — history accessors and undoable mutations
  * ═══════════════════════════════════════════════════════════════════════════ */
 
-uapmd_undo_engine_t uapmd_tl_undo_engine(uapmd_timeline_facade_t tl) {
-    return reinterpret_cast<uapmd_undo_engine_t>(&TF(tl)->undoEngine());
-}
-
 uapmd_project_commands_t uapmd_tl_commands(uapmd_timeline_facade_t tl) {
     return reinterpret_cast<uapmd_project_commands_t>(&TF(tl)->commands());
+}
+
+uapmd_command_manager_t uapmd_tl_history(uapmd_timeline_facade_t tl) {
+    return reinterpret_cast<uapmd_command_manager_t>(&TF(tl)->commands().history());
 }
 
 uapmd_address_book_t uapmd_tl_addresses(uapmd_timeline_facade_t tl) {
@@ -715,6 +791,18 @@ uapmd_clip_add_result_t uapmd_tl_attach_clip_fragment(uapmd_timeline_facade_t tl
         track_index,
         CF(fragment)->get(),
         static_cast<uapmd::ProjectObjectIdPolicy>(id_policy));
+    tl_undo_error = r.error;
+    return { r.clipId, r.sourceNodeId, r.success, tl_undo_error.empty() ? nullptr : tl_undo_error.c_str() };
+}
+
+uapmd_clip_add_result_t uapmd_tl_paste_clip_fragment(uapmd_timeline_facade_t tl,
+                                                       int32_t track_index,
+                                                       uapmd_clip_fragment_t fragment) {
+    if (!fragment) {
+        tl_undo_error = "null clip fragment";
+        return { -1, -1, false, tl_undo_error.c_str() };
+    }
+    auto r = TF(tl)->pasteClipFragment(track_index, CF(fragment)->get());
     tl_undo_error = r.error;
     return { r.clipId, r.sourceNodeId, r.success, tl_undo_error.empty() ? nullptr : tl_undo_error.c_str() };
 }

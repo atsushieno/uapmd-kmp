@@ -31,6 +31,14 @@ set(UAPMD_TARGET_WASM  ON  CACHE BOOL "" FORCE)
 set(BUILD_SHARED_LIBS  OFF CACHE BOOL "" FORCE)
 set(UAPMD_BUILD_TESTS  OFF CACHE BOOL "" FORCE)
 set(MIDICCI_SKIP_TOOLS ON  CACHE BOOL "" FORCE)
+
+# Every UAPMD_ENABLE_* feature option, on -- before add_subdirectory(), since
+# uapmd declares the same options and option() is a no-op once the cache entry
+# exists. uapmd excludes ARA from wasm itself (ARA_API has no wasm32 ABI
+# definition), so leaving the option on here changes nothing for this target.
+get_filename_component(UAPMD_KMP_CMAKE_DIR
+    "${CMAKE_CURRENT_SOURCE_DIR}/../../../../../cmake" ABSOLUTE)
+include("${UAPMD_KMP_CMAKE_DIR}/UapmdFeatureOptions.cmake")
 add_compile_options(-pthread -matomics -mbulk-memory)
 
 # Pull in the full uapmd source tree, then our owned C API wrapper.

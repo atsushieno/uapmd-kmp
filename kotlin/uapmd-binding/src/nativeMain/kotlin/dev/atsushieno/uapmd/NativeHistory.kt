@@ -93,51 +93,6 @@ private val trackFragmentTrampoline = staticCFunction<uapmd_track_fragment_t?, C
 private fun completionRef(completion: ((UndoResult) -> Unit)?): COpaquePointer? =
     completion?.let { StableRef.create(it).asCPointer() }
 
-// ─── NativeUndoEngine ────────────────────────────────────────────────────────
-
-class NativeUndoEngine internal constructor(private val handle: uapmd_undo_engine_t) : UndoEngine {
-    override val state: UndoState
-        get() = memScoped {
-            val out = alloc<uapmd_undo_state_t>()
-            uapmd_undo_engine_get_state(handle, out.ptr)
-            out.toKotlin()
-        }
-
-    override fun undo(completion: ((UndoResult) -> Unit)?) =
-        uapmd_undo_engine_undo(handle, completionRef(completion), undoCompletionTrampoline)
-
-    override fun redo(completion: ((UndoResult) -> Unit)?) =
-        uapmd_undo_engine_redo(handle, completionRef(completion), undoCompletionTrampoline)
-
-    override fun beginCompound(description: String, origin: MutationOrigin): UndoResult =
-        uapmd_undo_engine_begin_compound(handle, description, origin.nativeValue.toUInt())
-            .useContents { UndoResult(UndoStatus.fromNative(status.toInt()), error?.toKString()) }
-
-    override fun endCompound(completion: ((UndoResult) -> Unit)?) =
-        uapmd_undo_engine_end_compound(handle, completionRef(completion), undoCompletionTrampoline)
-
-    override fun cancelCompound(completion: ((UndoResult) -> Unit)?) =
-        uapmd_undo_engine_cancel_compound(handle, completionRef(completion), undoCompletionTrampoline)
-
-    override fun beginGesture(description: String, origin: MutationOrigin): UndoResult =
-        uapmd_undo_engine_begin_gesture(handle, description, origin.nativeValue.toUInt())
-            .useContents { UndoResult(UndoStatus.fromNative(status.toInt()), error?.toKString()) }
-
-    override fun endGesture(completion: ((UndoResult) -> Unit)?) =
-        uapmd_undo_engine_end_gesture(handle, completionRef(completion), undoCompletionTrampoline)
-
-    override fun cancelGesture(completion: ((UndoResult) -> Unit)?) =
-        uapmd_undo_engine_cancel_gesture(handle, completionRef(completion), undoCompletionTrampoline)
-
-    override fun clear(markCurrentStateSaved: Boolean) = uapmd_undo_engine_clear(handle, markCurrentStateSaved)
-    override fun markSaved() = uapmd_undo_engine_mark_saved(handle)
-    override fun markStateSaved(stateId: Long) = uapmd_undo_engine_mark_state_saved(handle, stateId.toULong())
-    override fun setMaximumHistorySizeInBytes(bytes: Long) =
-        uapmd_undo_engine_set_maximum_history_size(handle, bytes.toULong())
-
-    override fun shutdown() = uapmd_undo_engine_shutdown(handle)
-}
-
 // ─── NativeCommandManager ────────────────────────────────────────────────────
 
 class NativeCommandManager internal constructor(private val handle: uapmd_command_manager_t) : CommandManager {
@@ -148,17 +103,14 @@ class NativeCommandManager internal constructor(private val handle: uapmd_comman
             out.toKotlin()
         }
 
-    override val history: UndoEngine
-        get() = NativeUndoEngine(uapmd_command_manager_history(handle)!!)
-
     override fun undo(completion: ((UndoResult) -> Unit)?) =
         uapmd_command_manager_undo(handle, completionRef(completion), undoCompletionTrampoline)
 
     override fun redo(completion: ((UndoResult) -> Unit)?) =
         uapmd_command_manager_redo(handle, completionRef(completion), undoCompletionTrampoline)
 
-    override fun beginStep(description: String, origin: MutationOrigin): UndoResult =
-        uapmd_command_manager_begin_step(handle, description, origin.nativeValue.toUInt())
+    override fun beginStep(description: String, origin: MutationOrigin, batching: StepEventBatching): UndoResult =
+        uapmd_command_manager_begin_step(handle, description, origin.nativeValue.toUInt(), batching.nativeValue.toUInt())
             .useContents { UndoResult(UndoStatus.fromNative(status.toInt()), error?.toKString()) }
 
     override fun endStep(completion: ((UndoResult) -> Unit)?) =
@@ -167,8 +119,8 @@ class NativeCommandManager internal constructor(private val handle: uapmd_comman
     override fun cancelStep(completion: ((UndoResult) -> Unit)?) =
         uapmd_command_manager_cancel_step(handle, completionRef(completion), undoCompletionTrampoline)
 
-    override fun beginGesture(description: String, origin: MutationOrigin): UndoResult =
-        uapmd_command_manager_begin_gesture(handle, description, origin.nativeValue.toUInt())
+    override fun beginGesture(description: String, origin: MutationOrigin, batching: StepEventBatching): UndoResult =
+        uapmd_command_manager_begin_gesture(handle, description, origin.nativeValue.toUInt(), batching.nativeValue.toUInt())
             .useContents { UndoResult(UndoStatus.fromNative(status.toInt()), error?.toKString()) }
 
     override fun endGesture(completion: ((UndoResult) -> Unit)?) =
@@ -176,6 +128,12 @@ class NativeCommandManager internal constructor(private val handle: uapmd_comman
 
     override fun cancelGesture(completion: ((UndoResult) -> Unit)?) =
         uapmd_command_manager_cancel_gesture(handle, completionRef(completion), undoCompletionTrampoline)
+
+    override fun markSaved() = uapmd_command_manager_mark_saved(handle)
+    override fun markStateSaved(stateId: Long) = uapmd_command_manager_mark_state_saved(handle, stateId.toULong())
+    override fun clear(markCurrentStateSaved: Boolean) = uapmd_command_manager_clear(handle, markCurrentStateSaved)
+    override fun setMaximumHistorySizeInBytes(bytes: Long) =
+        uapmd_command_manager_set_maximum_history_size(handle, bytes.toULong())
 
     override fun shutdown() = uapmd_command_manager_shutdown(handle)
 }
@@ -269,6 +227,84 @@ class NativeProjectCommands internal constructor(private val handle: uapmd_proje
             handle, markersToNative(markers), markers.size.toUInt(), origin.nativeValue.toUInt()
         )
     }
+
+    override fun addDeviceInputToTrack(trackIndex: Int, sourceNodeId: Int, channelIndices: List<UInt>, origin: MutationOrigin) = memScoped {
+        uapmd_commands_add_device_input_to_track(
+            handle, trackIndex, sourceNodeId,
+            channelsToNative(channelIndices), channelIndices.size.toUInt(), origin.nativeValue.toUInt()
+        )
+    }
+
+    override fun setDeviceInputChannels(trackIndex: Int, sourceNodeId: Int, channelIndices: List<UInt>, origin: MutationOrigin) = memScoped {
+        uapmd_commands_set_device_input_channels(
+            handle, trackIndex, sourceNodeId,
+            channelsToNative(channelIndices), channelIndices.size.toUInt(), origin.nativeValue.toUInt()
+        )
+    }
+
+    override fun removeDeviceInputFromTrack(trackIndex: Int, sourceNodeId: Int, origin: MutationOrigin) =
+        uapmd_commands_remove_device_input_from_track(handle, trackIndex, sourceNodeId, origin.nativeValue.toUInt())
+
+    override fun connectTrackGraph(trackIndex: Int, connection: GraphConnection, origin: MutationOrigin) = memScoped {
+        val c = alloc<uapmd_graph_connection_t>()
+        c.id = connection.id
+        c.bus_type = connection.busType.nativeValue.toUInt()
+        writeEndpoint(c.source, connection.source)
+        writeEndpoint(c.target, connection.target)
+        uapmd_commands_connect_track_graph(handle, trackIndex, c.ptr, origin.nativeValue.toUInt())
+    }
+
+    override fun disconnectTrackGraphConnection(trackIndex: Int, connectionId: Long, origin: MutationOrigin) =
+        uapmd_commands_disconnect_track_graph_connection(handle, trackIndex, connectionId, origin.nativeValue.toUInt())
+
+    override val lastGraphError: String
+        get() = uapmd_commands_last_graph_error()?.toKString() ?: ""
+
+    override fun replaceTrackGraphType(trackIndex: Int, graphTypeId: String, eventBufferSizeInBytes: Long, origin: MutationOrigin) =
+        uapmd_commands_replace_track_graph_type(
+            handle, trackIndex, graphTypeId, eventBufferSizeInBytes.toULong(), origin.nativeValue.toUInt()
+        )
+
+    override fun setLatencyCompensationSettings(settings: LatencyCompensationSettings, origin: MutationOrigin) = memScoped {
+        val s = alloc<uapmd_latency_compensation_settings_t>()
+        s.implementation_id = settings.implementationId.cstr.ptr
+        s.playback_compensation_mode = settings.playbackCompensationMode.nativeValue
+        s.input_monitoring_policy = settings.inputMonitoringPolicy.nativeValue
+        s.monitored_track_indexes = intsToNative(settings.monitoredTrackIndexes)
+        s.monitored_track_count = settings.monitoredTrackIndexes.size.toUInt()
+        s.record_armed_track_indexes = intsToNative(settings.recordArmedTrackIndexes)
+        s.record_armed_track_count = settings.recordArmedTrackIndexes.size.toUInt()
+        // Flat key, value, key, value... array; property_count counts pairs.
+        val properties = settings.implementationProperties
+        s.implementation_properties = if (properties.isEmpty()) null else
+            allocArray<CPointerVar<ByteVar>>(properties.size * 2).also { arr ->
+                properties.entries.forEachIndexed { i, (key, value) ->
+                    arr[i * 2] = key.cstr.ptr
+                    arr[i * 2 + 1] = value.cstr.ptr
+                }
+            }
+        s.property_count = properties.size.toUInt()
+        uapmd_commands_set_latency_compensation_settings(handle, s.ptr, origin.nativeValue.toUInt())
+    }
+}
+
+private fun MemScope.channelsToNative(values: List<UInt>): CPointer<UIntVar>? =
+    if (values.isEmpty()) null
+    else allocArray<UIntVar>(values.size).also { arr -> values.forEachIndexed { i, v -> arr[i] = v } }
+
+private fun MemScope.intsToNative(values: List<Int>): CPointer<IntVar>? =
+    if (values.isEmpty()) null
+    else allocArray<IntVar>(values.size).also { arr -> values.forEachIndexed { i, v -> arr[i] = v } }
+
+/**
+ * The node_id string is allocated in the same scope as the connection struct,
+ * so it stays alive for exactly as long as the call that reads it.
+ */
+private fun MemScope.writeEndpoint(target: uapmd_graph_endpoint_t, source: GraphEndpoint) {
+    target.type = source.type.nativeValue.toUInt()
+    target.node_id = source.nodeId.ifEmpty { null }?.cstr?.ptr
+    target.instance_id = source.instanceId
+    target.bus_index = source.busIndex
 }
 
 // ─── NativeProjectAddressBook ────────────────────────────────────────────────
@@ -430,7 +466,6 @@ class NativeTrackFragment internal constructor(internal val handle: uapmd_track_
 // ─── Timeline history implementation ─────────────────────────────────────────
 
 internal class NativeTimelineHistory(private val handle: uapmd_timeline_facade_t) {
-    val undoEngine: UndoEngine get() = NativeUndoEngine(uapmd_tl_undo_engine(handle)!!)
     val commands: ProjectCommands get() = NativeProjectCommands(uapmd_tl_commands(handle)!!)
     val addresses: ProjectAddressBook get() = NativeProjectAddressBook(uapmd_tl_addresses(handle)!!)
 
@@ -486,6 +521,11 @@ internal class NativeTimelineHistory(private val handle: uapmd_timeline_facade_t
     fun attachClipFragment(trackIndex: Int, fragment: ClipFragment, idPolicy: ObjectIdPolicy): ClipAddResult =
         uapmd_tl_attach_clip_fragment(
             handle, trackIndex, (fragment as NativeClipFragment).handle, idPolicy.nativeValue.toUInt()
+        ).useContents { ClipAddResult(clip_id, source_node_id, success, error?.toKString()) }
+
+    fun pasteClipFragment(trackIndex: Int, fragment: ClipFragment): ClipAddResult =
+        uapmd_tl_paste_clip_fragment(
+            handle, trackIndex, (fragment as NativeClipFragment).handle
         ).useContents { ClipAddResult(clip_id, source_node_id, success, error?.toKString()) }
 
     fun captureTrackFragment(trackIndex: Int, callback: (TrackFragment?, String?) -> Unit) =

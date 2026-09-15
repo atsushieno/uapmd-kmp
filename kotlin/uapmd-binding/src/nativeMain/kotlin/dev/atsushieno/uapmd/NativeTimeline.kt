@@ -133,6 +133,13 @@ class NativeTimelineFacade internal constructor(
         uapmd_tl_load_project(handle, filePath)
             .useContents { ProjectResult(success, error?.toKString()) }
 
+    override fun newProject(): ProjectResult =
+        uapmd_tl_new_project(handle)
+            .useContents { ProjectResult(success, error?.toKString()) }
+
+    override val masterTempoMap: TempoMap
+        get() = NativeTempoMap(uapmd_tl_master_tempo_map(handle)!!)
+
     override fun calculateContentBounds(): ContentBounds =
         uapmd_tl_calculate_content_bounds(handle).useContents {
             ContentBounds(has_content, first_sample, last_sample, first_seconds, last_seconds)
@@ -161,7 +168,6 @@ class NativeTimelineFacade internal constructor(
 
     // ─── Project history (uapmd 0.5.6) ──────────────────────────────────────
 
-    override val undoEngine get() = history.undoEngine
     override val commands get() = history.commands
     override val addresses get() = history.addresses
 
@@ -189,6 +195,9 @@ class NativeTimelineFacade internal constructor(
 
     override fun attachClipFragment(trackIndex: Int, fragment: ClipFragment, idPolicy: ObjectIdPolicy) =
         history.attachClipFragment(trackIndex, fragment, idPolicy)
+
+    override fun pasteClipFragment(trackIndex: Int, fragment: ClipFragment) =
+        history.pasteClipFragment(trackIndex, fragment)
 
     override fun captureTrackFragment(trackIndex: Int, callback: (TrackFragment?, String?) -> Unit) =
         history.captureTrackFragment(trackIndex, callback)
@@ -219,4 +228,26 @@ class NativeTimelineFacade internal constructor(
         history.removePluginInstance(instanceId, origin, completion)
 
     override val hasPendingPluginMutations get() = history.hasPendingPluginMutations
+}
+
+/**
+ * Borrows the timeline's own map: the handle is only valid until the project
+ * changes, so this is fetched fresh from [TimelineFacade.masterTempoMap] rather
+ * than cached.
+ */
+class NativeTempoMap internal constructor(private val handle: uapmd_tempo_map_t) : TempoMap {
+    override val hasTempoData: Boolean get() = uapmd_tempo_map_has_tempo_data(handle)
+    override val isEmpty: Boolean get() = uapmd_tempo_map_is_empty(handle)
+
+    override fun secondsToBeats(seconds: Double): Double = uapmd_tempo_map_seconds_to_beats(handle, seconds)
+    override fun beatsToSeconds(beats: Double): Double = uapmd_tempo_map_beats_to_seconds(handle, beats)
+
+    override val effectiveSignatures: List<EffectiveSignature>
+        get() = memScoped {
+            val out = alloc<uapmd_effective_signature_t>()
+            (0u until uapmd_tempo_map_effective_signature_count(handle)).mapNotNull { i ->
+                if (!uapmd_tempo_map_get_effective_signature(handle, i, out.ptr)) null
+                else EffectiveSignature(out.start_beat, out.end_beat, out.numerator, out.denominator)
+            }
+        }
 }

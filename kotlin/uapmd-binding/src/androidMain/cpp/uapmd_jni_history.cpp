@@ -77,6 +77,20 @@ struct MarkerBuffer {
     uint32_t size() const { return static_cast<uint32_t>(markers.size()); }
 };
 
+std::vector<int32_t> decode_ints(JNIEnv* env, jintArray values) {
+    if (!values) return {};
+    jsize n = env->GetArrayLength(values);
+    std::vector<int32_t> out(static_cast<size_t>(n));
+    if (n) env->GetIntArrayRegion(values, 0, n, reinterpret_cast<jint*>(out.data()));
+    return out;
+}
+
+/* Kotlin has no jintArray of unsigned; the same 32 bits mean the same thing. */
+std::vector<uint32_t> decode_uints(JNIEnv* env, jintArray values) {
+    auto ints = decode_ints(env, values);
+    return std::vector<uint32_t>(ints.begin(), ints.end());
+}
+
 MarkerBuffer decode_markers(JNIEnv* env, jobjectArray strings, jdoubleArray numbers, jintArray refTypes) {
     MarkerBuffer out;
     if (!numbers) return out;
@@ -271,85 +285,17 @@ extern "C" {
 #define JNI_FN(ret, name) JNIEXPORT ret JNICALL Java_dev_atsushieno_uapmd_JniBridge_##name
 
 /* ═══════════════════════════════════════════════════════════════════════════
- *  ProjectUndoEngine
- * ═══════════════════════════════════════════════════════════════════════════ */
-
-JNI_FN(jobjectArray, uapmdUndoEngineGetState)(JNIEnv* env, jclass, jlong h) {
-    uapmd_undo_state_t s{};
-    if (!uapmd_undo_engine_get_state(j2p<uapmd_undo_engine_t>(h), &s)) return nullptr;
-    return pack_undo_state(env, s);
-}
-
-JNI_FN(void, uapmdUndoEngineUndo)(JNIEnv* env, jclass, jlong h, jobject cb) {
-    uapmd_undo_engine_undo(j2p<uapmd_undo_engine_t>(h), undo_ctx(env, cb), undo_completion_trampoline);
-}
-
-JNI_FN(void, uapmdUndoEngineRedo)(JNIEnv* env, jclass, jlong h, jobject cb) {
-    uapmd_undo_engine_redo(j2p<uapmd_undo_engine_t>(h), undo_ctx(env, cb), undo_completion_trampoline);
-}
-
-JNI_FN(jobjectArray, uapmdUndoEngineBeginCompound)(JNIEnv* env, jclass, jlong h, jstring desc, jint origin) {
-    const char* d = jstr(env, desc);
-    auto r = uapmd_undo_engine_begin_compound(j2p<uapmd_undo_engine_t>(h), d, static_cast<uapmd_mutation_origin_t>(origin));
-    jstr_release(env, desc, d);
-    return pack_undo_result(env, r);
-}
-
-JNI_FN(void, uapmdUndoEngineEndCompound)(JNIEnv* env, jclass, jlong h, jobject cb) {
-    uapmd_undo_engine_end_compound(j2p<uapmd_undo_engine_t>(h), undo_ctx(env, cb), undo_completion_trampoline);
-}
-
-JNI_FN(void, uapmdUndoEngineCancelCompound)(JNIEnv* env, jclass, jlong h, jobject cb) {
-    uapmd_undo_engine_cancel_compound(j2p<uapmd_undo_engine_t>(h), undo_ctx(env, cb), undo_completion_trampoline);
-}
-
-JNI_FN(jobjectArray, uapmdUndoEngineBeginGesture)(JNIEnv* env, jclass, jlong h, jstring desc, jint origin) {
-    const char* d = jstr(env, desc);
-    auto r = uapmd_undo_engine_begin_gesture(j2p<uapmd_undo_engine_t>(h), d, static_cast<uapmd_mutation_origin_t>(origin));
-    jstr_release(env, desc, d);
-    return pack_undo_result(env, r);
-}
-
-JNI_FN(void, uapmdUndoEngineEndGesture)(JNIEnv* env, jclass, jlong h, jobject cb) {
-    uapmd_undo_engine_end_gesture(j2p<uapmd_undo_engine_t>(h), undo_ctx(env, cb), undo_completion_trampoline);
-}
-
-JNI_FN(void, uapmdUndoEngineCancelGesture)(JNIEnv* env, jclass, jlong h, jobject cb) {
-    uapmd_undo_engine_cancel_gesture(j2p<uapmd_undo_engine_t>(h), undo_ctx(env, cb), undo_completion_trampoline);
-}
-
-JNI_FN(jboolean, uapmdUndoEngineClear)(JNIEnv*, jclass, jlong h, jboolean markSaved) {
-    return uapmd_undo_engine_clear(j2p<uapmd_undo_engine_t>(h), markSaved);
-}
-
-JNI_FN(jboolean, uapmdUndoEngineMarkSaved)(JNIEnv*, jclass, jlong h) {
-    return uapmd_undo_engine_mark_saved(j2p<uapmd_undo_engine_t>(h));
-}
-
-JNI_FN(jboolean, uapmdUndoEngineMarkStateSaved)(JNIEnv*, jclass, jlong h, jlong stateId) {
-    return uapmd_undo_engine_mark_state_saved(j2p<uapmd_undo_engine_t>(h), static_cast<uint64_t>(stateId));
-}
-
-JNI_FN(jboolean, uapmdUndoEngineSetMaximumHistorySize)(JNIEnv*, jclass, jlong h, jlong bytes) {
-    return uapmd_undo_engine_set_maximum_history_size(j2p<uapmd_undo_engine_t>(h), static_cast<uint64_t>(bytes));
-}
-
-JNI_FN(void, uapmdUndoEngineShutdown)(JNIEnv*, jclass, jlong h) {
-    uapmd_undo_engine_shutdown(j2p<uapmd_undo_engine_t>(h));
-}
-
-/* ═══════════════════════════════════════════════════════════════════════════
  *  ProjectCommandManager
+ *
+ *  uapmd 0.5.7 withdrew the ProjectUndoEngine handle; the command manager
+ *  carries the whole history contract now, so the uapmdUndoEngine* family is
+ *  gone and its calls live here.
  * ═══════════════════════════════════════════════════════════════════════════ */
 
 JNI_FN(jobjectArray, uapmdCommandManagerGetState)(JNIEnv* env, jclass, jlong h) {
     uapmd_undo_state_t s{};
     if (!uapmd_command_manager_get_state(j2p<uapmd_command_manager_t>(h), &s)) return nullptr;
     return pack_undo_state(env, s);
-}
-
-JNI_FN(jlong, uapmdCommandManagerHistory)(JNIEnv*, jclass, jlong h) {
-    return p2j(uapmd_command_manager_history(j2p<uapmd_command_manager_t>(h)));
 }
 
 JNI_FN(void, uapmdCommandManagerUndo)(JNIEnv* env, jclass, jlong h, jobject cb) {
@@ -360,9 +306,11 @@ JNI_FN(void, uapmdCommandManagerRedo)(JNIEnv* env, jclass, jlong h, jobject cb) 
     uapmd_command_manager_redo(j2p<uapmd_command_manager_t>(h), undo_ctx(env, cb), undo_completion_trampoline);
 }
 
-JNI_FN(jobjectArray, uapmdCommandManagerBeginStep)(JNIEnv* env, jclass, jlong h, jstring desc, jint origin) {
+JNI_FN(jobjectArray, uapmdCommandManagerBeginStep)(JNIEnv* env, jclass, jlong h, jstring desc, jint origin, jint batching) {
     const char* d = jstr(env, desc);
-    auto r = uapmd_command_manager_begin_step(j2p<uapmd_command_manager_t>(h), d, static_cast<uapmd_mutation_origin_t>(origin));
+    auto r = uapmd_command_manager_begin_step(j2p<uapmd_command_manager_t>(h), d,
+                                              static_cast<uapmd_mutation_origin_t>(origin),
+                                              static_cast<uapmd_step_event_batching_t>(batching));
     jstr_release(env, desc, d);
     return pack_undo_result(env, r);
 }
@@ -375,9 +323,11 @@ JNI_FN(void, uapmdCommandManagerCancelStep)(JNIEnv* env, jclass, jlong h, jobjec
     uapmd_command_manager_cancel_step(j2p<uapmd_command_manager_t>(h), undo_ctx(env, cb), undo_completion_trampoline);
 }
 
-JNI_FN(jobjectArray, uapmdCommandManagerBeginGesture)(JNIEnv* env, jclass, jlong h, jstring desc, jint origin) {
+JNI_FN(jobjectArray, uapmdCommandManagerBeginGesture)(JNIEnv* env, jclass, jlong h, jstring desc, jint origin, jint batching) {
     const char* d = jstr(env, desc);
-    auto r = uapmd_command_manager_begin_gesture(j2p<uapmd_command_manager_t>(h), d, static_cast<uapmd_mutation_origin_t>(origin));
+    auto r = uapmd_command_manager_begin_gesture(j2p<uapmd_command_manager_t>(h), d,
+                                                 static_cast<uapmd_mutation_origin_t>(origin),
+                                                 static_cast<uapmd_step_event_batching_t>(batching));
     jstr_release(env, desc, d);
     return pack_undo_result(env, r);
 }
@@ -388,6 +338,22 @@ JNI_FN(void, uapmdCommandManagerEndGesture)(JNIEnv* env, jclass, jlong h, jobjec
 
 JNI_FN(void, uapmdCommandManagerCancelGesture)(JNIEnv* env, jclass, jlong h, jobject cb) {
     uapmd_command_manager_cancel_gesture(j2p<uapmd_command_manager_t>(h), undo_ctx(env, cb), undo_completion_trampoline);
+}
+
+JNI_FN(jboolean, uapmdCommandManagerMarkSaved)(JNIEnv*, jclass, jlong h) {
+    return uapmd_command_manager_mark_saved(j2p<uapmd_command_manager_t>(h));
+}
+
+JNI_FN(jboolean, uapmdCommandManagerMarkStateSaved)(JNIEnv*, jclass, jlong h, jlong stateId) {
+    return uapmd_command_manager_mark_state_saved(j2p<uapmd_command_manager_t>(h), static_cast<uint64_t>(stateId));
+}
+
+JNI_FN(jboolean, uapmdCommandManagerClear)(JNIEnv*, jclass, jlong h, jboolean markSaved) {
+    return uapmd_command_manager_clear(j2p<uapmd_command_manager_t>(h), markSaved);
+}
+
+JNI_FN(jboolean, uapmdCommandManagerSetMaximumHistorySize)(JNIEnv*, jclass, jlong h, jlong bytes) {
+    return uapmd_command_manager_set_maximum_history_size(j2p<uapmd_command_manager_t>(h), static_cast<uint64_t>(bytes));
 }
 
 JNI_FN(void, uapmdCommandManagerShutdown)(JNIEnv*, jclass, jlong h) {
@@ -506,6 +472,135 @@ JNI_FN(jboolean, uapmdCommandsSetMasterTrackMarkers)(JNIEnv* env, jclass, jlong 
     auto buf = decode_markers(env, strings, numbers, refTypes);
     return uapmd_commands_set_master_track_markers(j2p<uapmd_project_commands_t>(h),
                                                    buf.data(), buf.size(), static_cast<uapmd_mutation_origin_t>(o));
+}
+
+/* ── Device inputs, graph edges, graph type, latency settings ─────────────── */
+
+JNI_FN(jboolean, uapmdCommandsAddDeviceInputToTrack)(JNIEnv* env, jclass, jlong h, jint t, jint nodeId,
+                                                      jintArray channels, jint o) {
+    std::vector<uint32_t> buf = decode_uints(env, channels);
+    return uapmd_commands_add_device_input_to_track(j2p<uapmd_project_commands_t>(h), t, nodeId,
+                                                    buf.empty() ? nullptr : buf.data(),
+                                                    static_cast<uint32_t>(buf.size()),
+                                                    static_cast<uapmd_mutation_origin_t>(o));
+}
+
+JNI_FN(jboolean, uapmdCommandsSetDeviceInputChannels)(JNIEnv* env, jclass, jlong h, jint t, jint nodeId,
+                                                       jintArray channels, jint o) {
+    std::vector<uint32_t> buf = decode_uints(env, channels);
+    return uapmd_commands_set_device_input_channels(j2p<uapmd_project_commands_t>(h), t, nodeId,
+                                                    buf.empty() ? nullptr : buf.data(),
+                                                    static_cast<uint32_t>(buf.size()),
+                                                    static_cast<uapmd_mutation_origin_t>(o));
+}
+
+JNI_FN(jboolean, uapmdCommandsRemoveDeviceInputFromTrack)(JNIEnv*, jclass, jlong h, jint t, jint nodeId, jint o) {
+    return uapmd_commands_remove_device_input_from_track(j2p<uapmd_project_commands_t>(h), t, nodeId,
+                                                         static_cast<uapmd_mutation_origin_t>(o));
+}
+
+/**
+ * A connection crosses as its flat field list, the same way markers do:
+ *   numbers[0]  = connection id
+ *   ints        = {busType, sourceType, sourceInstanceId, sourceBusIndex,
+ *                  targetType, targetInstanceId, targetBusIndex}
+ *   strings     = {sourceNodeId, targetNodeId}
+ */
+JNI_FN(jboolean, uapmdCommandsConnectTrackGraph)(JNIEnv* env, jclass, jlong h, jint t,
+                                                  jlong connectionId, jintArray ints,
+                                                  jobjectArray strings, jint o) {
+    jint fields[7]{};
+    if (env->GetArrayLength(ints) < 7) return false;
+    env->GetIntArrayRegion(ints, 0, 7, fields);
+    auto sourceNodeString = static_cast<jstring>(env->GetObjectArrayElement(strings, 0));
+    auto targetNodeString = static_cast<jstring>(env->GetObjectArrayElement(strings, 1));
+    const char* sourceNode = jstr(env, sourceNodeString, nullptr);
+    const char* targetNode = jstr(env, targetNodeString, nullptr);
+
+    uapmd_graph_connection_t c{};
+    c.id = connectionId;
+    c.bus_type = static_cast<uapmd_graph_bus_type_t>(fields[0]);
+    c.source.type = static_cast<uapmd_graph_endpoint_type_t>(fields[1]);
+    c.source.node_id = sourceNode;
+    c.source.instance_id = fields[2];
+    c.source.bus_index = static_cast<uint32_t>(fields[3]);
+    c.target.type = static_cast<uapmd_graph_endpoint_type_t>(fields[4]);
+    c.target.node_id = targetNode;
+    c.target.instance_id = fields[5];
+    c.target.bus_index = static_cast<uint32_t>(fields[6]);
+
+    bool result = uapmd_commands_connect_track_graph(j2p<uapmd_project_commands_t>(h), t, &c,
+                                                     static_cast<uapmd_mutation_origin_t>(o));
+    jstr_release(env, sourceNodeString, sourceNode);
+    jstr_release(env, targetNodeString, targetNode);
+    return result;
+}
+
+JNI_FN(jboolean, uapmdCommandsDisconnectTrackGraphConnection)(JNIEnv*, jclass, jlong h, jint t, jlong id, jint o) {
+    return uapmd_commands_disconnect_track_graph_connection(j2p<uapmd_project_commands_t>(h), t, id,
+                                                             static_cast<uapmd_mutation_origin_t>(o));
+}
+
+JNI_FN(jstring, uapmdCommandsLastGraphError)(JNIEnv* env, jclass) {
+    const char* e = uapmd_commands_last_graph_error();
+    return env->NewStringUTF(e ? e : "");
+}
+
+JNI_FN(jboolean, uapmdCommandsReplaceTrackGraphType)(JNIEnv* env, jclass, jlong h, jint t,
+                                                      jstring graphTypeId, jlong bufferSize, jint o) {
+    const char* g = jstr(env, graphTypeId);
+    bool result = uapmd_commands_replace_track_graph_type(j2p<uapmd_project_commands_t>(h), t, g,
+                                                          static_cast<size_t>(bufferSize),
+                                                          static_cast<uapmd_mutation_origin_t>(o));
+    jstr_release(env, graphTypeId, g);
+    return result;
+}
+
+/**
+ * Settings cross as their flat field list:
+ *   ints      = {playbackCompensationMode, inputMonitoringPolicy}
+ *   monitored = monitored track indexes,  armed = record-armed track indexes
+ *   strings   = {implementationId, key, value, key, value, ...}
+ * The C struct holds borrowed pointers, so every decoded string is kept alive
+ * until after the call.
+ */
+JNI_FN(jboolean, uapmdCommandsSetLatencyCompensationSettings)(JNIEnv* env, jclass, jlong h,
+                                                               jintArray ints, jintArray monitored,
+                                                               jintArray armed, jobjectArray strings, jint o) {
+    jint modes[2]{};
+    if (env->GetArrayLength(ints) >= 2)
+        env->GetIntArrayRegion(ints, 0, 2, modes);
+
+    std::vector<int32_t> monitoredBuf = decode_ints(env, monitored);
+    std::vector<int32_t> armedBuf = decode_ints(env, armed);
+
+    jsize stringCount = strings ? env->GetArrayLength(strings) : 0;
+    std::vector<std::string> storage;
+    storage.reserve(static_cast<size_t>(stringCount));
+    for (jsize i = 0; i < stringCount; i++) {
+        auto js = static_cast<jstring>(env->GetObjectArrayElement(strings, i));
+        const char* c = jstr(env, js);
+        storage.emplace_back(c ? c : "");
+        jstr_release(env, js, c);
+    }
+
+    std::vector<const char*> properties;
+    for (size_t i = 1; i < storage.size(); i++)
+        properties.push_back(storage[i].c_str());
+
+    uapmd_latency_compensation_settings_t s{};
+    s.implementation_id = storage.empty() ? "default" : storage[0].c_str();
+    s.playback_compensation_mode = modes[0];
+    s.input_monitoring_policy = modes[1];
+    s.monitored_track_indexes = monitoredBuf.empty() ? nullptr : monitoredBuf.data();
+    s.monitored_track_count = static_cast<uint32_t>(monitoredBuf.size());
+    s.record_armed_track_indexes = armedBuf.empty() ? nullptr : armedBuf.data();
+    s.record_armed_track_count = static_cast<uint32_t>(armedBuf.size());
+    s.implementation_properties = properties.empty() ? nullptr : properties.data();
+    s.property_count = static_cast<uint32_t>(properties.size() / 2);
+
+    return uapmd_commands_set_latency_compensation_settings(j2p<uapmd_project_commands_t>(h), &s,
+                                                             static_cast<uapmd_mutation_origin_t>(o));
 }
 
 /* ═══════════════════════════════════════════════════════════════════════════
@@ -730,12 +825,12 @@ JNI_FN(jint, uapmdTrackFragmentPluginGroupIndex)(JNIEnv*, jclass, jlong h, jint 
  *  TimelineFacade history accessors and undoable mutations
  * ═══════════════════════════════════════════════════════════════════════════ */
 
-JNI_FN(jlong, uapmdTlUndoEngine)(JNIEnv*, jclass, jlong h) {
-    return p2j(uapmd_tl_undo_engine(j2p<uapmd_timeline_facade_t>(h)));
-}
-
 JNI_FN(jlong, uapmdTlCommands)(JNIEnv*, jclass, jlong h) {
     return p2j(uapmd_tl_commands(j2p<uapmd_timeline_facade_t>(h)));
+}
+
+JNI_FN(jlong, uapmdTlHistory)(JNIEnv*, jclass, jlong h) {
+    return p2j(uapmd_tl_history(j2p<uapmd_timeline_facade_t>(h)));
 }
 
 JNI_FN(jlong, uapmdTlAddresses)(JNIEnv*, jclass, jlong h) {
@@ -806,6 +901,19 @@ JNI_FN(jintArray, uapmdTlAttachClipFragment)(JNIEnv* env, jclass, jlong h, jint 
     auto r = uapmd_tl_attach_clip_fragment(j2p<uapmd_timeline_facade_t>(h), t,
                                            j2p<uapmd_clip_fragment_t>(fragment),
                                            static_cast<uapmd_object_id_policy_t>(idPolicy));
+    if (outStrings && r.error)
+        env->SetObjectArrayElement(outStrings, 0, env->NewStringUTF(r.error));
+    jint vals[3] = {r.clip_id, r.source_node_id, r.success ? 1 : 0};
+    jintArray arr = env->NewIntArray(3);
+    env->SetIntArrayRegion(arr, 0, 3, vals);
+    return arr;
+}
+
+/** Returns int[3] {clipId, sourceNodeId, success}; fills outStrings[0] with the error. */
+JNI_FN(jintArray, uapmdTlPasteClipFragment)(JNIEnv* env, jclass, jlong h, jint t, jlong fragment,
+                                             jobjectArray outStrings) {
+    auto r = uapmd_tl_paste_clip_fragment(j2p<uapmd_timeline_facade_t>(h), t,
+                                          j2p<uapmd_clip_fragment_t>(fragment));
     if (outStrings && r.error)
         env->SetObjectArrayElement(outStrings, 0, env->NewStringUTF(r.error));
     jint vals[3] = {r.clip_id, r.source_node_id, r.success ? 1 : 0};
@@ -1027,6 +1135,279 @@ JNI_FN(jstring, uapmdAddinManagerLastError)(JNIEnv* env, jclass, jlong h) {
 
 JNI_FN(jboolean, uapmdAddinSupportsDynamicLoading)(JNIEnv*, jclass) {
     return uapmd_addin_supports_dynamic_loading();
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════
+ *  Host registries
+ *
+ *  Command info crosses as int[2] {order, enabled} plus a caller-allocated
+ *  String[2] {id, title}, the same shape the addin-info getter uses.
+ * ═══════════════════════════════════════════════════════════════════════════ */
+
+JNI_FN(jlong, uapmdCommandRegistryCreate)(JNIEnv*, jclass) {
+    return p2j(uapmd_command_registry_create());
+}
+
+JNI_FN(void, uapmdCommandRegistryDestroy)(JNIEnv*, jclass, jlong h) {
+    uapmd_command_registry_destroy(j2p<uapmd_command_registry_t>(h));
+}
+
+JNI_FN(void, uapmdAddinManagerRegisterCommandRegistry)(JNIEnv*, jclass, jlong mgr, jlong reg) {
+    uapmd_addin_manager_register_command_registry(j2p<uapmd_addin_manager_t>(mgr),
+                                                   j2p<uapmd_command_registry_t>(reg));
+}
+
+JNI_FN(jint, uapmdCommandRegistryCount)(JNIEnv*, jclass, jlong h) {
+    return static_cast<jint>(uapmd_command_registry_count(j2p<uapmd_command_registry_t>(h)));
+}
+
+JNI_FN(jintArray, uapmdCommandRegistryGet)(JNIEnv* env, jclass, jlong h, jint index, jobjectArray outStrings) {
+    uapmd_addin_command_info_t info{};
+    if (!uapmd_command_registry_get(j2p<uapmd_command_registry_t>(h), static_cast<uint32_t>(index), &info))
+        return nullptr;
+    if (outStrings && env->GetArrayLength(outStrings) >= 2) {
+        env->SetObjectArrayElement(outStrings, 0, env->NewStringUTF(info.id ? info.id : ""));
+        env->SetObjectArrayElement(outStrings, 1, env->NewStringUTF(info.title ? info.title : ""));
+    }
+    jint vals[2] = {info.order, info.enabled ? 1 : 0};
+    jintArray arr = env->NewIntArray(2);
+    env->SetIntArrayRegion(arr, 0, 2, vals);
+    return arr;
+}
+
+JNI_FN(jboolean, uapmdCommandRegistryInvoke)(JNIEnv*, jclass, jlong h, jint index) {
+    return uapmd_command_registry_invoke(j2p<uapmd_command_registry_t>(h), static_cast<uint32_t>(index));
+}
+
+JNI_FN(jboolean, uapmdCommandRegistryInvokeById)(JNIEnv* env, jclass, jlong h, jstring id) {
+    const char* i = jstr(env, id);
+    bool result = uapmd_command_registry_invoke_by_id(j2p<uapmd_command_registry_t>(h), i);
+    jstr_release(env, id, i);
+    return result;
+}
+
+JNI_FN(jlong, uapmdClipCommandRegistryCreate)(JNIEnv*, jclass) {
+    return p2j(uapmd_clip_command_registry_create());
+}
+
+JNI_FN(void, uapmdClipCommandRegistryDestroy)(JNIEnv*, jclass, jlong h) {
+    uapmd_clip_command_registry_destroy(j2p<uapmd_clip_command_registry_t>(h));
+}
+
+JNI_FN(void, uapmdAddinManagerRegisterClipCommandRegistry)(JNIEnv*, jclass, jlong mgr, jlong reg) {
+    uapmd_addin_manager_register_clip_command_registry(j2p<uapmd_addin_manager_t>(mgr),
+                                                        j2p<uapmd_clip_command_registry_t>(reg));
+}
+
+JNI_FN(jint, uapmdClipCommandRegistryCount)(JNIEnv*, jclass, jlong h) {
+    return static_cast<jint>(uapmd_clip_command_registry_count(j2p<uapmd_clip_command_registry_t>(h)));
+}
+
+JNI_FN(jintArray, uapmdClipCommandRegistryGet)(JNIEnv* env, jclass, jlong h, jint index, jobjectArray outStrings) {
+    uapmd_addin_command_info_t info{};
+    if (!uapmd_clip_command_registry_get(j2p<uapmd_clip_command_registry_t>(h), static_cast<uint32_t>(index), &info))
+        return nullptr;
+    if (outStrings && env->GetArrayLength(outStrings) >= 2) {
+        env->SetObjectArrayElement(outStrings, 0, env->NewStringUTF(info.id ? info.id : ""));
+        env->SetObjectArrayElement(outStrings, 1, env->NewStringUTF(info.title ? info.title : ""));
+    }
+    jint vals[2] = {info.order, info.enabled ? 1 : 0};
+    jintArray arr = env->NewIntArray(2);
+    env->SetIntArrayRegion(arr, 0, 2, vals);
+    return arr;
+}
+
+namespace {
+uapmd_clip_command_target_t clip_target(jint trackIndex, jint clipId, jboolean midi, jboolean master) {
+    uapmd_clip_command_target_t t{};
+    t.track_index = trackIndex;
+    t.clip_id = clipId;
+    t.midi_clip = midi;
+    t.master_track = master;
+    return t;
+}
+} // namespace
+
+JNI_FN(jboolean, uapmdClipCommandRegistryAppliesTo)(JNIEnv*, jclass, jlong h, jint index,
+                                                     jint trackIndex, jint clipId, jboolean midi, jboolean master) {
+    return uapmd_clip_command_registry_applies_to(j2p<uapmd_clip_command_registry_t>(h),
+                                                   static_cast<uint32_t>(index),
+                                                   clip_target(trackIndex, clipId, midi, master));
+}
+
+JNI_FN(jboolean, uapmdClipCommandRegistryEnabled)(JNIEnv*, jclass, jlong h, jint index,
+                                                   jint trackIndex, jint clipId, jboolean midi, jboolean master) {
+    return uapmd_clip_command_registry_enabled(j2p<uapmd_clip_command_registry_t>(h),
+                                                static_cast<uint32_t>(index),
+                                                clip_target(trackIndex, clipId, midi, master));
+}
+
+JNI_FN(jboolean, uapmdClipCommandRegistryInvoke)(JNIEnv*, jclass, jlong h, jint index,
+                                                  jint trackIndex, jint clipId, jboolean midi, jboolean master) {
+    return uapmd_clip_command_registry_invoke(j2p<uapmd_clip_command_registry_t>(h),
+                                               static_cast<uint32_t>(index),
+                                               clip_target(trackIndex, clipId, midi, master));
+}
+
+JNI_FN(jlong, uapmdClipEditorRegistryCreate)(JNIEnv*, jclass) {
+    return p2j(uapmd_clip_editor_registry_create());
+}
+
+JNI_FN(void, uapmdClipEditorRegistryDestroy)(JNIEnv*, jclass, jlong h) {
+    uapmd_clip_editor_registry_destroy(j2p<uapmd_clip_editor_registry_t>(h));
+}
+
+JNI_FN(void, uapmdAddinManagerRegisterClipEditorRegistry)(JNIEnv*, jclass, jlong mgr, jlong reg) {
+    uapmd_addin_manager_register_clip_editor_registry(j2p<uapmd_addin_manager_t>(mgr),
+                                                       j2p<uapmd_clip_editor_registry_t>(reg));
+}
+
+JNI_FN(jint, uapmdClipEditorRegistryCount)(JNIEnv*, jclass, jlong h) {
+    return static_cast<jint>(uapmd_clip_editor_registry_count(j2p<uapmd_clip_editor_registry_t>(h)));
+}
+
+JNI_FN(jboolean, uapmdClipEditorRegistryGet)(JNIEnv* env, jclass, jlong h, jint index, jobjectArray outStrings) {
+    uapmd_clip_editor_info_t info{};
+    if (!uapmd_clip_editor_registry_get(j2p<uapmd_clip_editor_registry_t>(h), static_cast<uint32_t>(index), &info))
+        return false;
+    if (outStrings && env->GetArrayLength(outStrings) >= 2) {
+        env->SetObjectArrayElement(outStrings, 0, env->NewStringUTF(info.id ? info.id : ""));
+        env->SetObjectArrayElement(outStrings, 1, env->NewStringUTF(info.name ? info.name : ""));
+    }
+    return true;
+}
+
+JNI_FN(jlong, uapmdStemSeparatorRegistryCreate)(JNIEnv*, jclass) {
+    return p2j(uapmd_stem_separator_registry_create());
+}
+
+JNI_FN(void, uapmdStemSeparatorRegistryDestroy)(JNIEnv*, jclass, jlong h) {
+    uapmd_stem_separator_registry_destroy(j2p<uapmd_stem_separator_registry_t>(h));
+}
+
+JNI_FN(void, uapmdAddinManagerRegisterStemSeparatorRegistry)(JNIEnv*, jclass, jlong mgr, jlong reg) {
+    uapmd_addin_manager_register_stem_separator_registry(j2p<uapmd_addin_manager_t>(mgr),
+                                                          j2p<uapmd_stem_separator_registry_t>(reg));
+}
+
+JNI_FN(jint, uapmdStemSeparatorRegistryCount)(JNIEnv*, jclass, jlong h) {
+    return static_cast<jint>(uapmd_stem_separator_registry_count(j2p<uapmd_stem_separator_registry_t>(h)));
+}
+
+/** Returns the model-file extension count, or -1 when there is no such separator. */
+JNI_FN(jint, uapmdStemSeparatorRegistryGet)(JNIEnv* env, jclass, jlong h, jint index, jobjectArray outStrings) {
+    uapmd_stem_separator_info_t info{};
+    if (!uapmd_stem_separator_registry_get(j2p<uapmd_stem_separator_registry_t>(h), static_cast<uint32_t>(index), &info))
+        return -1;
+    if (outStrings && env->GetArrayLength(outStrings) >= 3) {
+        env->SetObjectArrayElement(outStrings, 0, env->NewStringUTF(info.id ? info.id : ""));
+        env->SetObjectArrayElement(outStrings, 1, env->NewStringUTF(info.name ? info.name : ""));
+        env->SetObjectArrayElement(outStrings, 2, env->NewStringUTF(info.model_file_label ? info.model_file_label : ""));
+    }
+    return static_cast<jint>(info.model_file_extension_count);
+}
+
+JNI_FN(jstring, uapmdStemSeparatorRegistryGetModelExtension)(JNIEnv* env, jclass, jlong h, jint index, jint extensionIndex) {
+    auto reg = j2p<uapmd_stem_separator_registry_t>(h);
+    return cstr(env, [&](char* buf, size_t size) {
+        return uapmd_stem_separator_registry_get_model_extension(
+            reg, static_cast<uint32_t>(index), static_cast<uint32_t>(extensionIndex), buf, size);
+    });
+}
+
+namespace {
+/**
+ * The import runs on the calling thread and blocks, so the progress callback
+ * arrives on that same thread and the JNIEnv stays valid throughout. The
+ * callback is a Kotlin (Float, String) -> Boolean, whose erased `invoke` takes
+ * boxed arguments.
+ */
+struct ImportProgressCtx {
+    JNIEnv* env;
+    jobject callback;
+    jmethodID invoke;
+    jclass floatClass;
+    jmethodID floatValueOf;
+    jmethodID booleanValue;
+};
+
+bool import_progress_trampoline(float progress, const char* message, void* userData) {
+    auto* ctx = static_cast<ImportProgressCtx*>(userData);
+    if (!ctx) return true;
+    JNIEnv* env = ctx->env;
+    jobject boxed = env->CallStaticObjectMethod(ctx->floatClass, ctx->floatValueOf, progress);
+    jstring text = env->NewStringUTF(message ? message : "");
+    jobject result = env->CallObjectMethod(ctx->callback, ctx->invoke, boxed, text);
+    bool keepGoing = result && env->CallBooleanMethod(result, ctx->booleanValue);
+    env->DeleteLocalRef(boxed);
+    env->DeleteLocalRef(text);
+    if (result) env->DeleteLocalRef(result);
+    return keepGoing;
+}
+} // namespace
+
+/**
+ * Returns int[2] {success, canceled}. outStrings is filled with
+ * {error, warning..., stemName, stemPath, stemDisplayName, ...} and must be
+ * long enough; the two counts come back in outCounts as {warningCount,
+ * stemCount} so the caller can size a second call. Passing a null or short
+ * outStrings only reports the counts.
+ */
+JNI_FN(jintArray, uapmdImportAudioFile)(JNIEnv* env, jclass, jlong h, jstring separatorId,
+                                         jstring filepath, jstring outputDirectory, jstring modelPath,
+                                         jobject progress, jobjectArray outStrings, jintArray outCounts) {
+    const char* sep = jstr(env, separatorId);
+    const char* file = jstr(env, filepath);
+    const char* outDir = jstr(env, outputDirectory);
+    const char* model = modelPath ? env->GetStringUTFChars(modelPath, nullptr) : nullptr;
+
+    ImportProgressCtx ctx{};
+    if (progress) {
+        ctx.env = env;
+        ctx.callback = progress;
+        jclass cls = env->GetObjectClass(progress);
+        ctx.invoke = env->GetMethodID(cls, "invoke", "(Ljava/lang/Object;Ljava/lang/Object;)Ljava/lang/Object;");
+        ctx.floatClass = static_cast<jclass>(env->NewLocalRef(env->FindClass("java/lang/Float")));
+        ctx.floatValueOf = env->GetStaticMethodID(ctx.floatClass, "valueOf", "(F)Ljava/lang/Float;");
+        jclass booleanClass = env->FindClass("java/lang/Boolean");
+        ctx.booleanValue = env->GetMethodID(booleanClass, "booleanValue", "()Z");
+    }
+
+    auto r = uapmd_import_audio_file(j2p<uapmd_stem_separator_registry_t>(h), sep, file, outDir, model,
+                                     progress ? &ctx : nullptr,
+                                     progress ? import_progress_trampoline : nullptr);
+
+    if (outCounts && env->GetArrayLength(outCounts) >= 2) {
+        jint counts[2] = {static_cast<jint>(r.warning_count), static_cast<jint>(r.stem_count)};
+        env->SetIntArrayRegion(outCounts, 0, 2, counts);
+    }
+    if (outStrings) {
+        jsize capacity = env->GetArrayLength(outStrings);
+        jsize at = 0;
+        auto put = [&](const char* value) {
+            if (at < capacity)
+                env->SetObjectArrayElement(outStrings, at, env->NewStringUTF(value ? value : ""));
+            at++;
+        };
+        put(r.error);
+        for (uint32_t i = 0; i < r.warning_count; i++)
+            put(r.warnings ? r.warnings[i] : "");
+        for (uint32_t i = 0; i < r.stem_count; i++) {
+            put(r.stems[i].stem_name);
+            put(r.stems[i].filepath);
+            put(r.stems[i].clip_display_name);
+        }
+    }
+
+    jint vals[2] = {r.success ? 1 : 0, r.canceled ? 1 : 0};
+    jintArray arr = env->NewIntArray(2);
+    env->SetIntArrayRegion(arr, 0, 2, vals);
+
+    jstr_release(env, separatorId, sep);
+    jstr_release(env, filepath, file);
+    jstr_release(env, outputDirectory, outDir);
+    if (model) env->ReleaseStringUTFChars(modelPath, model);
+    return arr;
 }
 
 #undef JNI_FN

@@ -1199,6 +1199,22 @@ JNIEXPORT jobjectArray JNICALL Java_dev_atsushieno_uapmd_JniBridge_uapmdRenderOf
 
 JNIEXPORT jlong JNICALL Java_dev_atsushieno_uapmd_JniBridge_uapmdTrackGraph(
         JNIEnv*, jclass, jlong h) { return p2j(uapmd_track_graph(j2p<uapmd_sequencer_track_t>(h))); }
+JNIEXPORT jstring JNICALL Java_dev_atsushieno_uapmd_JniBridge_uapmdTrackUnresolvedGraphType(
+        JNIEnv* env, jclass, jlong h) {
+    auto track = j2p<uapmd_sequencer_track_t>(h);
+    return cstr(env, [&](char* buf, size_t size) { return uapmd_track_unresolved_graph_type(track, buf, size); });
+}
+JNIEXPORT jbyteArray JNICALL Java_dev_atsushieno_uapmd_JniBridge_uapmdTrackUnresolvedGraphPayload(
+        JNIEnv* env, jclass, jlong h) {
+    auto track = j2p<uapmd_sequencer_track_t>(h);
+    size_t n = uapmd_track_unresolved_graph_payload(track, nullptr, 0);
+    jbyteArray arr = env->NewByteArray(static_cast<jsize>(n));
+    if (n == 0) return arr;
+    std::vector<uint8_t> buf(n);
+    size_t written = uapmd_track_unresolved_graph_payload(track, buf.data(), n);
+    env->SetByteArrayRegion(arr, 0, static_cast<jsize>(written), reinterpret_cast<const jbyte*>(buf.data()));
+    return arr;
+}
 JNIEXPORT jint JNICALL Java_dev_atsushieno_uapmd_JniBridge_uapmdTrackLatencyInSamples(
         JNIEnv*, jclass, jlong h) { return static_cast<jint>(uapmd_track_latency_in_samples(j2p<uapmd_sequencer_track_t>(h))); }
 JNIEXPORT jint JNICALL Java_dev_atsushieno_uapmd_JniBridge_uapmdTrackRenderLeadInSamples(
@@ -1348,6 +1364,46 @@ JNIEXPORT jobjectArray JNICALL Java_dev_atsushieno_uapmd_JniBridge_uapmdTlLoadPr
     env->SetObjectArrayElement(arr, 1, r.error ? env->NewStringUTF(r.error) : nullptr);
     return arr;
 }
+JNIEXPORT jobjectArray JNICALL Java_dev_atsushieno_uapmd_JniBridge_uapmdTlNewProject(
+        JNIEnv* env, jclass, jlong h) {
+    auto r = uapmd_tl_new_project(j2p<uapmd_timeline_facade_t>(h));
+    jclass sc = env->FindClass("java/lang/String");
+    jobjectArray arr = env->NewObjectArray(2, sc, nullptr);
+    env->SetObjectArrayElement(arr, 0, env->NewStringUTF(r.success ? "1" : "0"));
+    env->SetObjectArrayElement(arr, 1, r.error ? env->NewStringUTF(r.error) : nullptr);
+    return arr;
+}
+
+/* ── Master tempo map ─────────────────────────────────────────────────────── */
+
+JNIEXPORT jlong JNICALL Java_dev_atsushieno_uapmd_JniBridge_uapmdTlMasterTempoMap(
+        JNIEnv*, jclass, jlong h) { return p2j(uapmd_tl_master_tempo_map(j2p<uapmd_timeline_facade_t>(h))); }
+JNIEXPORT jboolean JNICALL Java_dev_atsushieno_uapmd_JniBridge_uapmdTempoMapHasTempoData(
+        JNIEnv*, jclass, jlong h) { return uapmd_tempo_map_has_tempo_data(j2p<uapmd_tempo_map_t>(h)); }
+JNIEXPORT jboolean JNICALL Java_dev_atsushieno_uapmd_JniBridge_uapmdTempoMapIsEmpty(
+        JNIEnv*, jclass, jlong h) { return uapmd_tempo_map_is_empty(j2p<uapmd_tempo_map_t>(h)); }
+JNIEXPORT jdouble JNICALL Java_dev_atsushieno_uapmd_JniBridge_uapmdTempoMapSecondsToBeats(
+        JNIEnv*, jclass, jlong h, jdouble seconds) { return uapmd_tempo_map_seconds_to_beats(j2p<uapmd_tempo_map_t>(h), seconds); }
+JNIEXPORT jdouble JNICALL Java_dev_atsushieno_uapmd_JniBridge_uapmdTempoMapBeatsToSeconds(
+        JNIEnv*, jclass, jlong h, jdouble beats) { return uapmd_tempo_map_beats_to_seconds(j2p<uapmd_tempo_map_t>(h), beats); }
+JNIEXPORT jint JNICALL Java_dev_atsushieno_uapmd_JniBridge_uapmdTempoMapEffectiveSignatureCount(
+        JNIEnv*, jclass, jlong h) { return static_cast<jint>(uapmd_tempo_map_effective_signature_count(j2p<uapmd_tempo_map_t>(h))); }
+JNIEXPORT jdouble JNICALL Java_dev_atsushieno_uapmd_JniBridge_uapmdTempoMapBarLengthBeats(
+        JNIEnv*, jclass, jint numerator, jint denominator) { return uapmd_tempo_map_bar_length_beats(numerator, denominator); }
+
+// Returns double[4]: {startBeat, endBeat, numerator, denominator}, or null.
+JNIEXPORT jdoubleArray JNICALL Java_dev_atsushieno_uapmd_JniBridge_uapmdTempoMapGetEffectiveSignature(
+        JNIEnv* env, jclass, jlong h, jint index) {
+    uapmd_effective_signature_t sig{};
+    if (!uapmd_tempo_map_get_effective_signature(j2p<uapmd_tempo_map_t>(h), static_cast<uint32_t>(index), &sig))
+        return nullptr;
+    jdouble vals[4] = {sig.start_beat, sig.end_beat,
+                       static_cast<jdouble>(sig.numerator), static_cast<jdouble>(sig.denominator)};
+    jdoubleArray arr = env->NewDoubleArray(4);
+    env->SetDoubleArrayRegion(arr, 0, 4, vals);
+    return arr;
+}
+
 // Returns double[5]: {hasContent, firstSample, lastSample, firstSecs, lastSecs}
 JNIEXPORT jdoubleArray JNICALL Java_dev_atsushieno_uapmd_JniBridge_uapmdTlCalculateContentBounds(
         JNIEnv* env, jclass, jlong h) {

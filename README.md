@@ -93,10 +93,34 @@ The binding layer (`uapmd-binding`) wraps the C API surface defined in `c-api/in
 | State | `UapmdFunctionBlock` | Save and restore plugin state (synchronous and callback-based variants) |
 | UI presentation | `UapmdFunctionBlock` | Query UI capabilities, create/show/hide/resize embedded plugin windows |
 | Sequencer engine | `UapmdEngine` | Create the sequencer, enqueue UMP events with timestamps |
-| Timeline | `UapmdTimeline` | Track and event management for sequencer playback |
+| Timeline | `UapmdTimeline` | Track and event management for sequencer playback, new/load project, master tempo map |
+| Project history | `CommandManager`, `ProjectCommands` | Undo/redo, named steps and gestures, save points and retention; every undoable document edit |
+| Addins | `AddinManager`, `CommandRegistry`, `ClipCommandRegistry`, `ClipEditorRegistry` | Load installed and built-in addins, publish the extension points they attach to, present and invoke the commands they contribute |
+| Stem separation | `StemSeparatorRegistry` | Enumerate the separation backends addins contribute, and run a split audio import with progress and cancellation |
 | Audio / MIDI I/O | `UapmdEngine` | Enumerate audio and MIDI devices, configure the device I/O dispatcher |
 
 The raw C types and opaque handle wrappers are in `UapmdTypes.kt`; platform-specific factory implementations are selected at compile time via `expect`/`actual`.
+
+### Feature options
+
+`cmake/UapmdFeatureOptions.cmake` turns on every `UAPMD_ENABLE_*` feature option
+and is included by all three CMake entry points (the top-level desktop build,
+`androidMain/cpp`, and `webMain/cpp`). uapmd itself defaults most of them off
+because of the dependencies behind them — librosa.cpp and demucs.cpp bring in
+MPL-2.0 Eigen, ARA and Basic Pitch are Apache-2.0, and Basic Pitch downloads
+model weights at configure time and embeds them in the binary — but this project
+exists to bind the whole API surface, and the addins those options build are
+part of it.
+
+The built-in addins (ARA, Demucs, BS-Roformer, DrumScript, Basic Pitch) are
+static libraries whose only entry point is a file-scope registration object, so
+`c-api/CMakeLists.txt` links them with `WHOLE_ARCHIVE`, as uapmd-app does.
+Without that the linker would discard the archive and the addin would silently
+never exist.
+
+Each option is a plain `option()`, so `-D` on the command line still wins; the
+Android build relies on that to force `UAPMD_ENABLE_ARA=OFF`, because ARA_API
+has no ABI definition for the 32-bit ARM ABI.
 
 ---
 

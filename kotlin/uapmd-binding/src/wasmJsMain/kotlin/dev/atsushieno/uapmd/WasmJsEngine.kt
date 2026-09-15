@@ -190,6 +190,19 @@ class WasmJsSequencerTrack internal constructor(
     override val graph: PluginGraph
         get() = WasmJsPluginGraph(wasmMod.uapmdTrackGraph(handle))
 
+    override val unresolvedGraphType: String
+        get() = readString(handle) { h, buf, size -> uapmdTrackUnresolvedGraphType(h, buf, size) }
+
+    override val unresolvedGraphPayload: ByteArray
+        get() {
+            val size = wasmMod.uapmdTrackUnresolvedGraphPayload(handle, 0, 0)
+            if (size <= 0) return ByteArray(0)
+            return withWasmStruct(size) { p ->
+                val written = wasmMod.uapmdTrackUnresolvedGraphPayload(handle, p, size)
+                ByteArray(written) { wasmMod.getValue(p + it, "i8").toInt().toByte() }
+            }
+        }
+
     override val latencyInSamples: UInt
         get() = wasmMod.uapmdTrackLatencyInSamples(handle).toUInt()
 

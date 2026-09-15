@@ -53,6 +53,26 @@ interface TimelineFacade {
 
     fun removeClip(trackIndex: Int, clipId: Int): Boolean
     fun loadProject(filePath: String): ProjectResult
+
+    /**
+     * Discards the current document and starts an empty one: no tracks, a fresh
+     * master track, no undo history, nothing dirty. Observers see the same
+     * closing/loaded pair a load emits, so state owned outside the timeline is
+     * dropped the same way. Whether unsaved changes may be discarded is the
+     * caller's decision, not this one.
+     */
+    fun newProject(): ProjectResult
+
+    /**
+     * The project's seconds-to-beats curve, owned by the master track. This is
+     * the one the engine schedules playback against, so a display converting
+     * through it can never disagree with what is heard.
+     *
+     * Model thread only. It borrows the timeline's map: do not hold it across a
+     * project load, a [newProject], or a tempo edit.
+     */
+    val masterTempoMap: TempoMap
+
     fun calculateContentBounds(): ContentBounds
 
     /** Returns MIDI notes for the given clip, or null if the track/clip is not found
@@ -65,8 +85,11 @@ interface TimelineFacade {
 
     // ─── Project history (uapmd 0.5.6) ──────────────────────────────────────
 
-    val undoEngine: UndoEngine
-    /** The undoable edits this project supports. */
+    /**
+     * The undoable edits this project supports, and (through
+     * [ProjectCommands.history]) the history they record into. Everything that
+     * changes the document goes through here.
+     */
     val commands: ProjectCommands
     /** Translation between persistent document identities and runtime indexes. */
     val addresses: ProjectAddressBook
@@ -116,6 +139,13 @@ interface TimelineFacade {
     fun attachClipFragment(trackIndex: Int, fragment: ClipFragment, idPolicy: ObjectIdPolicy): ClipAddResult
 
     /**
+     * Paste: attaches with fresh identifiers AND records the result as one
+     * undoable edit, which [attachClipFragment] does not do. Must NOT be called
+     * inside a [documentTransaction].
+     */
+    fun pasteClipFragment(trackIndex: Int, fragment: ClipFragment): ClipAddResult
+
+    /**
      * Both halves are asynchronous because a track owns live plug-in instances.
      * The callback runs exactly once, on the thread completing the last plug-in
      * operation. Capture must NOT be called inside a [documentTransaction].
@@ -140,3 +170,40 @@ interface TimelineFacade {
     fun removePluginInstance(instanceId: Int, origin: MutationOrigin = MutationOrigin.User, completion: ((UndoResult) -> Unit)? = null)
     val hasPendingPluginMutations: Boolean
 }
+
+/**
+ * A project's tempo curve: conversion between real-world seconds and
+ * quarter-note beats, plus the time signature in force over each beat range.
+ * "Beat" always means a quarter note, matching BPM and MIDI tick-resolution
+ * conventions.
+ *
+ * A curve with no tempo data still converts, at the default BPM it was built
+ * with ([hasTempoData] is false in that case).
+ */
+interface TempoMap {
+    val hasTempoData: Boolean
+    val isEmpty: Boolean
+
+    fun secondsToBeats(seconds: Double): Double
+    fun beatsToSeconds(beats: Double): Double
+
+    /** Meter regions, in beat order. */
+    val effectiveSignatures: List<EffectiveSignature>
+
+    companion object {
+        /** How many quarter notes one bar of this meter spans (3.5 for 7/8). */
+        fun barLengthBeats(numerator: Int, denominator: Int): Double {
+            val n = if (numerator > 0) numerator else 4
+            val d = if (denominator > 0) denominator else 4
+            return n * 4.0 / d
+        }
+    }
+}
+
+/** One meter region of a [TempoMap]. [endBeat] is infinite for the last one. */
+data class EffectiveSignature(
+    val startBeat: Double,
+    val endBeat: Double,
+    val numerator: Int,
+    val denominator: Int
+)

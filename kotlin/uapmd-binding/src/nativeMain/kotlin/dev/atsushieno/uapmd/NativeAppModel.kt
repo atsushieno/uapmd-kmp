@@ -196,6 +196,12 @@ class NativeAppModel internal constructor(
     override fun loadProjectFromHandleToken(token: String): AppProjectResult =
         uapmd_app_load_project_from_handle_token(handle, token).useContents { toKotlin() }
 
+    override fun newProject(): AppProjectResult =
+        uapmd_app_new_project(handle).useContents { toKotlin() }
+
+    override val masterTempoMap: TempoMap
+        get() = NativeTempoMap(uapmd_app_master_tempo_map(handle)!!)
+
     // ── MIDI clip UMP events ────────────────────────────────────────────────
 
     override fun getMidiClipUmpEvents(trackIndex: Int, clipId: Int): UmpEventsResult =

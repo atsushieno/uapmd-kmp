@@ -210,6 +210,12 @@ class AndroidAppModel internal constructor(internal val handle: Long) : AppModel
     override fun loadProjectFromHandleToken(token: String): AppProjectResult =
         JniBridge.uapmdAppLoadProjectFromHandleToken(handle, token).toProjectResult()
 
+    override fun newProject(): AppProjectResult =
+        JniBridge.uapmdAppNewProject(handle).toProjectResult()
+
+    override val masterTempoMap: TempoMap
+        get() = AndroidTempoMap(JniBridge.uapmdAppMasterTempoMap(handle))
+
     // ── MIDI clip UMP events ────────────────────────────────────────────────
 
     override fun getMidiClipUmpEvents(trackIndex: Int, clipId: Int): UmpEventsResult {

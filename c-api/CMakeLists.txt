@@ -65,6 +65,34 @@ endif()
 # guards its desktop-only dependencies behind UAPMD_BUILDING_WASM.
 target_link_libraries(uapmd-c-api PRIVATE uapmd-app-model)
 
+# Built-in addins, mirroring what uapmd-app links (tools/uapmd-app/CMakeLists.txt).
+#
+# Each is a static library whose only entry point is a file-scope registration
+# object that calls registerBuiltinAddin() from its constructor -- nothing
+# references it by symbol, so a normal link discards the whole archive and the
+# addin silently never exists. WHOLE_ARCHIVE is what keeps it.
+#
+# The targets only exist when the matching UAPMD_ENABLE_* option is on
+# (cmake/UapmdFeatureOptions.cmake turns them all on), so the guards are about
+# a caller overriding one off, not about the default build.
+set(_uapmd_c_api_builtin_addins)
+foreach(_addin_pair IN ITEMS
+        "uapmd::ara;uapmd-ara"
+        "uapmd::demucs;uapmd-demucs"
+        "uapmd::bsroformer;uapmd-bsroformer"
+        "uapmd::drumscript;uapmd-drumscript"
+        "uapmd::basic-pitch;uapmd-basic-pitch")
+    list(GET _addin_pair 0 _addin_alias)
+    list(GET _addin_pair 1 _addin_target)
+    if(TARGET ${_addin_alias})
+        list(APPEND _uapmd_c_api_builtin_addins
+                "$<LINK_LIBRARY:WHOLE_ARCHIVE,${_addin_target}>")
+    endif()
+endforeach()
+if(_uapmd_c_api_builtin_addins)
+    target_link_libraries(uapmd-c-api PRIVATE ${_uapmd_c_api_builtin_addins})
+endif()
+
 # Private includes from the uapmd source tree (passed via UAPMD_SOURCE_DIR).
 # DOWNLOAD_ONLY CPM packages don't propagate their _SOURCE_DIR to parent scope;
 # read them from the CPM internal cache entries instead.

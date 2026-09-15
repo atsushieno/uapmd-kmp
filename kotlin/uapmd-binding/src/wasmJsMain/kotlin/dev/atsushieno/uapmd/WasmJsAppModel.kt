@@ -229,6 +229,15 @@ class WasmJsAppModel internal constructor(internal val handle: Int) : AppModel {
     override fun loadProjectFromHandleToken(token: String): AppProjectResult =
         projectCall(token) { out, app, t -> wasmMod.uapmdAppLoadProjectFromHandleToken(out, app, t) }
 
+    override fun newProject(): AppProjectResult =
+        withWasmStruct(8) { out ->                 // sizeof uapmd_app_project_result_t
+            wasmMod.uapmdAppNewProject(out, handle)
+            decodeProjectResult(out)
+        }
+
+    override val masterTempoMap: TempoMap
+        get() = WasmJsTempoMap(wasmMod.uapmdAppMasterTempoMap(handle))
+
     // ── MIDI clip UMP events ────────────────────────────────────────────────
     //
     // uapmd_ump_events_result_t: bool @0, char* @4, uint32 @8, ptr @12 (size 16)

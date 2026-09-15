@@ -110,18 +110,22 @@ class JsTimelineFacade internal constructor(
     override fun removeClip(trackIndex: Int, clipId: Int): Boolean =
         jsMod._uapmd_tl_remove_clip(handle, trackIndex, clipId) as Boolean
 
-    override fun loadProject(filePath: String): ProjectResult {
-        val errBufSize = 512
-        val errBuf  = jsMod._malloc(errBufSize) as Int
-        val sucPtr  = jsMod._malloc(4) as Int
-        return try {
-            withJsCString(filePath) { fpPtr ->
-                jsMod._uapmd_tl_load_project(handle, fpPtr, sucPtr, errBuf, errBufSize)
-            }
-            val ok = jsGetBool(sucPtr)
-            ProjectResult(ok, if (!ok) jsMod.UTF8ToString(errBuf) as String else null)
-        } finally { jsMod._free(errBuf); jsMod._free(sucPtr) }
-    }
+    // uapmd_project_result_t: { bool success (+0), const char* error (+4) } = 8 bytes,
+    // returned through a hidden first argument (Emscripten sret).
+    override fun loadProject(filePath: String): ProjectResult =
+        withWasmMem(8) { out ->
+            withJsCString(filePath) { fpPtr -> jsMod._uapmd_tl_load_project(out, handle, fpPtr) }
+            ProjectResult(jsGetBool(out), jsGetPtr(out + 4).let { if (it != 0) jsMod.UTF8ToString(it) as String else null })
+        }
+
+    override fun newProject(): ProjectResult =
+        withWasmMem(8) { out ->
+            jsMod._uapmd_tl_new_project(out, handle)
+            ProjectResult(jsGetBool(out), jsGetPtr(out + 4).let { if (it != 0) jsMod.UTF8ToString(it) as String else null })
+        }
+
+    override val masterTempoMap: TempoMap
+        get() = JsTempoMap(jsMod._uapmd_tl_master_tempo_map(handle) as Int)
 
     override fun calculateContentBounds(): ContentBounds =
         withWasmMem(48) { ptr ->
@@ -140,7 +144,6 @@ class JsTimelineFacade internal constructor(
 
     // ─── Project history (uapmd 0.5.6) ──────────────────────────────────────
 
-    override val undoEngine get() = history.undoEngine
     override val commands get() = history.commands
     override val addresses get() = history.addresses
 
@@ -168,6 +171,9 @@ class JsTimelineFacade internal constructor(
 
     override fun attachClipFragment(trackIndex: Int, fragment: ClipFragment, idPolicy: ObjectIdPolicy) =
         history.attachClipFragment(trackIndex, fragment, idPolicy)
+
+    override fun pasteClipFragment(trackIndex: Int, fragment: ClipFragment) =
+        history.pasteClipFragment(trackIndex, fragment)
 
     override fun captureTrackFragment(trackIndex: Int, callback: (TrackFragment?, String?) -> Unit) =
         history.captureTrackFragment(trackIndex, callback)
@@ -198,4 +204,33 @@ class JsTimelineFacade internal constructor(
         history.removePluginInstance(instanceId, origin, completion)
 
     override val hasPendingPluginMutations get() = history.hasPendingPluginMutations
+}
+
+/**
+ * Borrows the timeline's own map: the handle is only valid until the project
+ * changes, so this is fetched fresh from [TimelineFacade.masterTempoMap] rather
+ * than cached.
+ */
+class JsTempoMap internal constructor(private val handle: Int) : TempoMap {
+    override val hasTempoData: Boolean get() = jsMod._uapmd_tempo_map_has_tempo_data(handle) as Boolean
+    override val isEmpty: Boolean get() = jsMod._uapmd_tempo_map_is_empty(handle) as Boolean
+
+    override fun secondsToBeats(seconds: Double): Double =
+        jsMod._uapmd_tempo_map_seconds_to_beats(handle, seconds) as Double
+
+    override fun beatsToSeconds(beats: Double): Double =
+        jsMod._uapmd_tempo_map_beats_to_seconds(handle, beats) as Double
+
+    override val effectiveSignatures: List<EffectiveSignature>
+        get() = withWasmMem(Off.SIGNATURE_SIZE) { out ->
+            (0 until (jsMod._uapmd_tempo_map_effective_signature_count(handle) as Int)).mapNotNull { i ->
+                if (!(jsMod._uapmd_tempo_map_get_effective_signature(handle, i, out) as Boolean)) null
+                else EffectiveSignature(
+                    jsGetF64(out + Off.SIGNATURE_START_BEAT),
+                    jsGetF64(out + Off.SIGNATURE_END_BEAT),
+                    jsGetI32(out + Off.SIGNATURE_NUMERATOR),
+                    jsGetI32(out + Off.SIGNATURE_DENOMINATOR)
+                )
+            }
+        }
 }

@@ -147,60 +147,81 @@ data class TrackPluginFragment(
 // ─── Interfaces ──────────────────────────────────────────────────────────────
 
 /**
- * Thread-affine asynchronous project history. Its methods are called on the
- * model thread; completions may arrive on any thread.
+ * Whether one history step delivers its document events as a single batch.
+ *
+ * [PerCommand] lets observers see the step progress, which is what a step
+ * spanning asynchronous work needs: a document transaction must not stay open
+ * across a remote round trip or a plug-in archive. [WholeStep] hides the
+ * intermediate states and is only correct for a step whose commands all run
+ * inline. A gesture should almost always stay [PerCommand]: it lasts as long as
+ * the user drags, and batching would freeze every observer for that long.
  */
-interface UndoEngine {
-    val state: UndoState
+enum class StepEventBatching(val nativeValue: Int) {
+    PerCommand(0), WholeStep(1);
 
-    fun undo(completion: ((UndoResult) -> Unit)? = null)
-    fun redo(completion: ((UndoResult) -> Unit)? = null)
-
-    /**
-     * Opens one named history step. Operations performed while it is open are
-     * applied immediately but enter history only when [endCompound] succeeds.
-     * Nested compounds are deliberately rejected.
-     */
-    fun beginCompound(description: String, origin: MutationOrigin = MutationOrigin.User): UndoResult
-    fun endCompound(completion: ((UndoResult) -> Unit)? = null)
-    /** Reverts every successfully performed child in reverse order. */
-    fun cancelCompound(completion: ((UndoResult) -> Unit)? = null)
-
-    /**
-     * A gesture is a named compound scope that coalesces adjacent compatible
-     * operations: intermediate values are applied, but history retains only the
-     * initial and final ones.
-     */
-    fun beginGesture(description: String, origin: MutationOrigin = MutationOrigin.User): UndoResult
-    fun endGesture(completion: ((UndoResult) -> Unit)? = null)
-    fun cancelGesture(completion: ((UndoResult) -> Unit)? = null)
-
-    /** Fails while an operation is pending or a compound step is open. */
-    fun clear(markCurrentStateSaved: Boolean = true): Boolean
-    fun markSaved(): Boolean
-    fun markStateSaved(stateId: Long): Boolean
-    fun setMaximumHistorySizeInBytes(bytes: Long): Boolean
-
-    /** Rejects new work and completes pending notification as Cancelled. */
-    fun shutdown()
+    companion object {
+        fun fromNative(v: Int): StepEventBatching = entries.firstOrNull { it.nativeValue == v } ?: PerCommand
+    }
 }
 
-/** Groups several commands into one named history step. */
+/**
+ * The project's history: thread-affine and asynchronous. Its methods are called
+ * on the model thread; completions may arrive on any thread.
+ *
+ * uapmd 0.5.7 made the history an interface a project chooses an implementation
+ * of, and withdrew every direct handle on the engine behind it. The separate
+ * `UndoEngine` this binding used to expose is gone with it: everything it could
+ * do lives here, because the command manager now carries the whole contract.
+ */
 interface CommandManager {
     val state: UndoState
-    val history: UndoEngine
 
     fun undo(completion: ((UndoResult) -> Unit)? = null)
     fun redo(completion: ((UndoResult) -> Unit)? = null)
 
-    fun beginStep(description: String, origin: MutationOrigin = MutationOrigin.User): UndoResult
+    /**
+     * Opens one named history step spanning several commands. Commands
+     * performed while it is open are applied immediately but enter history as
+     * one entry only when [endStep] succeeds. Nested steps are deliberately
+     * rejected.
+     */
+    fun beginStep(
+        description: String,
+        origin: MutationOrigin = MutationOrigin.User,
+        batching: StepEventBatching = StepEventBatching.PerCommand
+    ): UndoResult
     fun endStep(completion: ((UndoResult) -> Unit)? = null)
+    /** Reverts every child that already ran, in reverse order. */
     fun cancelStep(completion: ((UndoResult) -> Unit)? = null)
 
-    fun beginGesture(description: String, origin: MutationOrigin = MutationOrigin.User): UndoResult
+    /**
+     * A gesture is a step that coalesces adjacent commands sharing a command
+     * id: intermediate values are applied, but history keeps only the first and
+     * the last.
+     */
+    fun beginGesture(
+        description: String,
+        origin: MutationOrigin = MutationOrigin.User,
+        batching: StepEventBatching = StepEventBatching.PerCommand
+    ): UndoResult
     fun endGesture(completion: ((UndoResult) -> Unit)? = null)
     fun cancelGesture(completion: ((UndoResult) -> Unit)? = null)
 
+    /**
+     * Save points and retention. What "dirty" means belongs to the history, not
+     * to whoever writes the file: a numeric cursor cannot tell an undo followed
+     * by a fresh edit from the state that was saved.
+     */
+    fun markSaved(): Boolean
+    fun markStateSaved(stateId: Long): Boolean
+    /**
+     * Releases every retained revert and makes the current document a new
+     * history root. Fails while a command is pending or a step is open.
+     */
+    fun clear(markCurrentStateSaved: Boolean = true): Boolean
+    fun setMaximumHistorySizeInBytes(bytes: Long): Boolean
+
+    /** Refuses new work and completes pending notification as Cancelled. */
     fun shutdown()
 }
 
@@ -258,7 +279,75 @@ interface ProjectCommands {
      * cycles before submitting.
      */
     fun setMasterTrackMarkers(markers: List<ClipMarkerData>, origin: MutationOrigin = MutationOrigin.User): Boolean
+
+    /**
+     * Device inputs. Adding one, rerouting it and removing it all write the
+     * same per-input value, so undoing an add is a removal. These moved off
+     * [TimelineFacade] in uapmd 0.5.7, which is what made them undoable.
+     */
+    fun addDeviceInputToTrack(trackIndex: Int, sourceNodeId: Int, channelIndices: List<UInt>, origin: MutationOrigin = MutationOrigin.User): Boolean
+    fun setDeviceInputChannels(trackIndex: Int, sourceNodeId: Int, channelIndices: List<UInt>, origin: MutationOrigin = MutationOrigin.User): Boolean
+    fun removeDeviceInputFromTrack(trackIndex: Int, sourceNodeId: Int, origin: MutationOrigin = MutationOrigin.User): Boolean
+
+    /**
+     * Track graph edges. Presence is the value here too, so undoing a connect
+     * is a disconnect. [lastGraphError] carries the reason the graph refused an
+     * edge -- a cycle, a missing endpoint, a direction mismatch -- and is empty
+     * after a call that succeeded.
+     */
+    fun connectTrackGraph(trackIndex: Int, connection: GraphConnection, origin: MutationOrigin = MutationOrigin.User): Boolean
+    fun disconnectTrackGraphConnection(trackIndex: Int, connectionId: Long, origin: MutationOrigin = MutationOrigin.User): Boolean
+    val lastGraphError: String
+
+    /**
+     * Replaces a track's graph with a fresh one of the requested type. The
+     * event buffer size is the caller's: the project loader and the application
+     * model each supply their own.
+     */
+    fun replaceTrackGraphType(trackIndex: Int, graphTypeId: String, eventBufferSizeInBytes: Long, origin: MutationOrigin = MutationOrigin.User): Boolean
+
+    /**
+     * The complete persisted latency/monitoring configuration, as one history
+     * step. To change one field, read the current settings, copy them with that
+     * field altered, and submit the whole snapshot.
+     */
+    fun setLatencyCompensationSettings(settings: LatencyCompensationSettings, origin: MutationOrigin = MutationOrigin.User): Boolean
 }
+
+enum class PlaybackCompensationMode(val nativeValue: Int) {
+    Compensated(0), LowLatency(1);
+
+    companion object {
+        fun fromNative(v: Int): PlaybackCompensationMode = entries.firstOrNull { it.nativeValue == v } ?: Compensated
+    }
+}
+
+enum class InputMonitoringPolicy(val nativeValue: Int) {
+    /**
+     * Prefer monitored live input over fully compensated playback on that path
+     * when the track is both record-armed and monitor-enabled.
+     */
+    TapeStyle(0),
+    /**
+     * Low-latency monitoring only for tracks with live input that are
+     * explicitly monitor-enabled; other playback stays compensated.
+     */
+    Auto(1),
+    Off(2);
+
+    companion object {
+        fun fromNative(v: Int): InputMonitoringPolicy = entries.firstOrNull { it.nativeValue == v } ?: Auto
+    }
+}
+
+data class LatencyCompensationSettings(
+    val implementationId: String = "default",
+    val playbackCompensationMode: PlaybackCompensationMode = PlaybackCompensationMode.Compensated,
+    val inputMonitoringPolicy: InputMonitoringPolicy = InputMonitoringPolicy.Auto,
+    val monitoredTrackIndexes: List<Int> = emptyList(),
+    val recordArmedTrackIndexes: List<Int> = emptyList(),
+    val implementationProperties: Map<String, String> = emptyMap()
+)
 
 /**
  * Translation between the persistent identities a history step carries and the

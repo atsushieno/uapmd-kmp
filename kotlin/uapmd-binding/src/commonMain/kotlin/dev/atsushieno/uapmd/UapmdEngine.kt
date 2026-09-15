@@ -119,6 +119,21 @@ interface MidiRecorder {
 
 interface SequencerTrack {
     val graph: PluginGraph
+
+    /**
+     * A graph this build could not construct, because no provider claimed its
+     * type when the project loaded -- typically an addin that is absent or
+     * disabled. The track runs a substitute graph, and these carry the original
+     * definition verbatim so that saving writes it back rather than replacing
+     * it with the substitute.
+     *
+     * Both are empty for every track whose graph did load, which is how a UI
+     * tells "this track is running what the project asked for" from "this track
+     * is standing in for something this build cannot make".
+     */
+    val unresolvedGraphType: String
+    val unresolvedGraphPayload: ByteArray
+
     val latencyInSamples: UInt
     val renderLeadInSamples: UInt
     val tailLengthInSeconds: Double

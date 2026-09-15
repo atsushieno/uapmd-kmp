@@ -86,41 +86,6 @@ private class TrackFragmentCallback(private val callback: (TrackFragment?, Strin
 private fun undoCb(completion: ((UndoResult) -> Unit)?): Any? =
     completion?.let { UndoCompletionCallback(it) }
 
-// ─── AndroidUndoEngine ───────────────────────────────────────────────────────
-
-class AndroidUndoEngine internal constructor(private val handle: Long) : UndoEngine {
-    override val state: UndoState
-        get() = JniBridge.uapmdUndoEngineGetState(handle)?.toUndoState()
-            ?: error("uapmdUndoEngineGetState returned null")
-
-    override fun undo(completion: ((UndoResult) -> Unit)?) = JniBridge.uapmdUndoEngineUndo(handle, undoCb(completion))
-    override fun redo(completion: ((UndoResult) -> Unit)?) = JniBridge.uapmdUndoEngineRedo(handle, undoCb(completion))
-
-    override fun beginCompound(description: String, origin: MutationOrigin): UndoResult =
-        JniBridge.uapmdUndoEngineBeginCompound(handle, description, origin.nativeValue).toUndoResult()
-
-    override fun endCompound(completion: ((UndoResult) -> Unit)?) =
-        JniBridge.uapmdUndoEngineEndCompound(handle, undoCb(completion))
-
-    override fun cancelCompound(completion: ((UndoResult) -> Unit)?) =
-        JniBridge.uapmdUndoEngineCancelCompound(handle, undoCb(completion))
-
-    override fun beginGesture(description: String, origin: MutationOrigin): UndoResult =
-        JniBridge.uapmdUndoEngineBeginGesture(handle, description, origin.nativeValue).toUndoResult()
-
-    override fun endGesture(completion: ((UndoResult) -> Unit)?) =
-        JniBridge.uapmdUndoEngineEndGesture(handle, undoCb(completion))
-
-    override fun cancelGesture(completion: ((UndoResult) -> Unit)?) =
-        JniBridge.uapmdUndoEngineCancelGesture(handle, undoCb(completion))
-
-    override fun clear(markCurrentStateSaved: Boolean) = JniBridge.uapmdUndoEngineClear(handle, markCurrentStateSaved)
-    override fun markSaved() = JniBridge.uapmdUndoEngineMarkSaved(handle)
-    override fun markStateSaved(stateId: Long) = JniBridge.uapmdUndoEngineMarkStateSaved(handle, stateId)
-    override fun setMaximumHistorySizeInBytes(bytes: Long) = JniBridge.uapmdUndoEngineSetMaximumHistorySize(handle, bytes)
-    override fun shutdown() = JniBridge.uapmdUndoEngineShutdown(handle)
-}
-
 // ─── AndroidCommandManager ───────────────────────────────────────────────────
 
 class AndroidCommandManager internal constructor(private val handle: Long) : CommandManager {
@@ -128,13 +93,11 @@ class AndroidCommandManager internal constructor(private val handle: Long) : Com
         get() = JniBridge.uapmdCommandManagerGetState(handle)?.toUndoState()
             ?: error("uapmdCommandManagerGetState returned null")
 
-    override val history: UndoEngine get() = AndroidUndoEngine(JniBridge.uapmdCommandManagerHistory(handle))
-
     override fun undo(completion: ((UndoResult) -> Unit)?) = JniBridge.uapmdCommandManagerUndo(handle, undoCb(completion))
     override fun redo(completion: ((UndoResult) -> Unit)?) = JniBridge.uapmdCommandManagerRedo(handle, undoCb(completion))
 
-    override fun beginStep(description: String, origin: MutationOrigin): UndoResult =
-        JniBridge.uapmdCommandManagerBeginStep(handle, description, origin.nativeValue).toUndoResult()
+    override fun beginStep(description: String, origin: MutationOrigin, batching: StepEventBatching): UndoResult =
+        JniBridge.uapmdCommandManagerBeginStep(handle, description, origin.nativeValue, batching.nativeValue).toUndoResult()
 
     override fun endStep(completion: ((UndoResult) -> Unit)?) =
         JniBridge.uapmdCommandManagerEndStep(handle, undoCb(completion))
@@ -142,14 +105,19 @@ class AndroidCommandManager internal constructor(private val handle: Long) : Com
     override fun cancelStep(completion: ((UndoResult) -> Unit)?) =
         JniBridge.uapmdCommandManagerCancelStep(handle, undoCb(completion))
 
-    override fun beginGesture(description: String, origin: MutationOrigin): UndoResult =
-        JniBridge.uapmdCommandManagerBeginGesture(handle, description, origin.nativeValue).toUndoResult()
+    override fun beginGesture(description: String, origin: MutationOrigin, batching: StepEventBatching): UndoResult =
+        JniBridge.uapmdCommandManagerBeginGesture(handle, description, origin.nativeValue, batching.nativeValue).toUndoResult()
 
     override fun endGesture(completion: ((UndoResult) -> Unit)?) =
         JniBridge.uapmdCommandManagerEndGesture(handle, undoCb(completion))
 
     override fun cancelGesture(completion: ((UndoResult) -> Unit)?) =
         JniBridge.uapmdCommandManagerCancelGesture(handle, undoCb(completion))
+
+    override fun markSaved() = JniBridge.uapmdCommandManagerMarkSaved(handle)
+    override fun markStateSaved(stateId: Long) = JniBridge.uapmdCommandManagerMarkStateSaved(handle, stateId)
+    override fun clear(markCurrentStateSaved: Boolean) = JniBridge.uapmdCommandManagerClear(handle, markCurrentStateSaved)
+    override fun setMaximumHistorySizeInBytes(bytes: Long) = JniBridge.uapmdCommandManagerSetMaximumHistorySize(handle, bytes)
 
     override fun shutdown() = JniBridge.uapmdCommandManagerShutdown(handle)
 }
@@ -230,7 +198,57 @@ class AndroidProjectCommands internal constructor(private val handle: Long) : Pr
         val a = MarkerArrays(markers)
         return JniBridge.uapmdCommandsSetMasterTrackMarkers(handle, a.strings, a.numbers, a.refTypes, origin.nativeValue)
     }
+
+    override fun addDeviceInputToTrack(trackIndex: Int, sourceNodeId: Int, channelIndices: List<UInt>, origin: MutationOrigin) =
+        JniBridge.uapmdCommandsAddDeviceInputToTrack(handle, trackIndex, sourceNodeId, channelIndices.toIntArray(), origin.nativeValue)
+
+    override fun setDeviceInputChannels(trackIndex: Int, sourceNodeId: Int, channelIndices: List<UInt>, origin: MutationOrigin) =
+        JniBridge.uapmdCommandsSetDeviceInputChannels(handle, trackIndex, sourceNodeId, channelIndices.toIntArray(), origin.nativeValue)
+
+    override fun removeDeviceInputFromTrack(trackIndex: Int, sourceNodeId: Int, origin: MutationOrigin) =
+        JniBridge.uapmdCommandsRemoveDeviceInputFromTrack(handle, trackIndex, sourceNodeId, origin.nativeValue)
+
+    override fun connectTrackGraph(trackIndex: Int, connection: GraphConnection, origin: MutationOrigin) =
+        JniBridge.uapmdCommandsConnectTrackGraph(
+            handle, trackIndex, connection.id,
+            intArrayOf(
+                connection.busType.nativeValue,
+                connection.source.type.nativeValue, connection.source.instanceId, connection.source.busIndex.toInt(),
+                connection.target.type.nativeValue, connection.target.instanceId, connection.target.busIndex.toInt()
+            ),
+            arrayOf(connection.source.nodeId.ifEmpty { null }, connection.target.nodeId.ifEmpty { null }),
+            origin.nativeValue
+        )
+
+    override fun disconnectTrackGraphConnection(trackIndex: Int, connectionId: Long, origin: MutationOrigin) =
+        JniBridge.uapmdCommandsDisconnectTrackGraphConnection(handle, trackIndex, connectionId, origin.nativeValue)
+
+    override val lastGraphError: String get() = JniBridge.uapmdCommandsLastGraphError()
+
+    override fun replaceTrackGraphType(trackIndex: Int, graphTypeId: String, eventBufferSizeInBytes: Long, origin: MutationOrigin) =
+        JniBridge.uapmdCommandsReplaceTrackGraphType(handle, trackIndex, graphTypeId, eventBufferSizeInBytes, origin.nativeValue)
+
+    override fun setLatencyCompensationSettings(settings: LatencyCompensationSettings, origin: MutationOrigin): Boolean {
+        // {implementationId, key, value, key, value, ...}
+        val strings = ArrayList<String?>(1 + settings.implementationProperties.size * 2)
+        strings.add(settings.implementationId)
+        settings.implementationProperties.forEach { (key, value) ->
+            strings.add(key)
+            strings.add(value)
+        }
+        return JniBridge.uapmdCommandsSetLatencyCompensationSettings(
+            handle,
+            intArrayOf(settings.playbackCompensationMode.nativeValue, settings.inputMonitoringPolicy.nativeValue),
+            settings.monitoredTrackIndexes.toIntArray(),
+            settings.recordArmedTrackIndexes.toIntArray(),
+            strings.toTypedArray(),
+            origin.nativeValue
+        )
+    }
 }
+
+/** JNI has no unsigned int array; the same 32 bits mean the same thing. */
+private fun List<UInt>.toIntArray(): IntArray = IntArray(size) { this[it].toInt() }
 
 // ─── AndroidProjectAddressBook ───────────────────────────────────────────────
 
@@ -335,7 +353,6 @@ class AndroidTrackFragment internal constructor(internal val handle: Long) : Tra
 // ─── Timeline history implementation ─────────────────────────────────────────
 
 internal class AndroidTimelineHistory(private val handle: Long) {
-    val undoEngine: UndoEngine get() = AndroidUndoEngine(JniBridge.uapmdTlUndoEngine(handle))
     val commands: ProjectCommands get() = AndroidProjectCommands(JniBridge.uapmdTlCommands(handle))
     val addresses: ProjectAddressBook get() = AndroidProjectAddressBook(JniBridge.uapmdTlAddresses(handle))
 
@@ -390,6 +407,14 @@ internal class AndroidTimelineHistory(private val handle: Long) {
         val strings = arrayOfNulls<String>(1)
         val r = JniBridge.uapmdTlAttachClipFragment(
             handle, trackIndex, (fragment as AndroidClipFragment).handle, idPolicy.nativeValue, strings
+        )
+        return ClipAddResult(r[0], r[1], r[2] != 0, strings[0])
+    }
+
+    fun pasteClipFragment(trackIndex: Int, fragment: ClipFragment): ClipAddResult {
+        val strings = arrayOfNulls<String>(1)
+        val r = JniBridge.uapmdTlPasteClipFragment(
+            handle, trackIndex, (fragment as AndroidClipFragment).handle, strings
         )
         return ClipAddResult(r[0], r[1], r[2] != 0, strings[0])
     }

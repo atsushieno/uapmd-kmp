@@ -162,6 +162,21 @@ class JsSequencerTrack internal constructor(
 ) : SequencerTrack {
 
     override val graph: PluginGraph get() = JsPluginGraph(jsMod._uapmd_track_graph(handle) as Int)
+
+    override val unresolvedGraphType: String
+        get() = readJsString(handle) { h, buf, size ->
+            jsMod._uapmd_track_unresolved_graph_type(h, buf, size) as Int
+        }
+
+    override val unresolvedGraphPayload: ByteArray
+        get() {
+            val size = jsMod._uapmd_track_unresolved_graph_payload(handle, 0, 0) as Int
+            if (size <= 0) return ByteArray(0)
+            return withWasmMem(size) { p ->
+                val written = jsMod._uapmd_track_unresolved_graph_payload(handle, p, size) as Int
+                ByteArray(written) { jsGetI8(p + it).toByte() }
+            }
+        }
     override val latencyInSamples: UInt   get() = (jsMod._uapmd_track_latency_in_samples(handle) as Int).toUInt()
     override val renderLeadInSamples: UInt get() = (jsMod._uapmd_track_render_lead_in_samples(handle) as Int).toUInt()
     override val tailLengthInSeconds: Double get() = jsMod._uapmd_track_tail_length_in_seconds(handle) as Double

@@ -34,6 +34,81 @@ internal object WasmOff {
 
     const val ADDRESS_SIZE = 8
 
+    // uapmd_graph_endpoint_t, sizeof 16
+    const val GRAPH_ENDPOINT_TYPE = 0
+    const val GRAPH_ENDPOINT_NODE_ID = 4
+    const val GRAPH_ENDPOINT_INSTANCE_ID = 8
+    const val GRAPH_ENDPOINT_BUS_INDEX = 12
+    const val GRAPH_ENDPOINT_SIZE = 16
+
+    // uapmd_graph_connection_t, sizeof 48 (int64 id forces 8-byte alignment)
+    const val GRAPH_CONN_ID = 0
+    const val GRAPH_CONN_BUS_TYPE = 8
+    const val GRAPH_CONN_SOURCE = 12
+    const val GRAPH_CONN_TARGET = 28
+    const val GRAPH_CONNECTION_SIZE = 48
+
+    // uapmd_latency_compensation_settings_t, sizeof 36
+    const val LATENCY_IMPLEMENTATION_ID = 0
+    const val LATENCY_PLAYBACK_MODE = 4
+    const val LATENCY_MONITORING_POLICY = 8
+    const val LATENCY_MONITORED = 12
+    const val LATENCY_MONITORED_COUNT = 16
+    const val LATENCY_ARMED = 20
+    const val LATENCY_ARMED_COUNT = 24
+    const val LATENCY_PROPERTIES = 28
+    const val LATENCY_PROPERTY_COUNT = 32
+    const val LATENCY_SETTINGS_SIZE = 36
+
+    // uapmd_addin_command_info_t, sizeof 16
+    const val COMMAND_INFO_ID = 0
+    const val COMMAND_INFO_TITLE = 4
+    const val COMMAND_INFO_ORDER = 8
+    const val COMMAND_INFO_ENABLED = 12
+    const val COMMAND_INFO_SIZE = 16
+
+    // uapmd_clip_command_target_t, sizeof 12
+    const val CLIP_TARGET_TRACK_INDEX = 0
+    const val CLIP_TARGET_CLIP_ID = 4
+    const val CLIP_TARGET_MIDI_CLIP = 8
+    const val CLIP_TARGET_MASTER_TRACK = 9
+    const val CLIP_TARGET_SIZE = 12
+
+    // uapmd_clip_editor_info_t, sizeof 8
+    const val CLIP_EDITOR_ID = 0
+    const val CLIP_EDITOR_NAME = 4
+    const val CLIP_EDITOR_SIZE = 8
+
+    // uapmd_stem_separator_info_t, sizeof 16
+    const val SEPARATOR_ID = 0
+    const val SEPARATOR_NAME = 4
+    const val SEPARATOR_MODEL_LABEL = 8
+    const val SEPARATOR_EXTENSION_COUNT = 12
+    const val SEPARATOR_INFO_SIZE = 16
+
+    // uapmd_audio_stem_import_t, sizeof 12
+    const val STEM_NAME = 0
+    const val STEM_FILEPATH = 4
+    const val STEM_DISPLAY_NAME = 8
+    const val STEM_SIZE = 12
+
+    // uapmd_audio_import_result_t, sizeof 24
+    const val IMPORT_SUCCESS = 0
+    const val IMPORT_CANCELED = 1
+    const val IMPORT_ERROR = 4
+    const val IMPORT_WARNING_COUNT = 8
+    const val IMPORT_WARNINGS = 12
+    const val IMPORT_STEM_COUNT = 16
+    const val IMPORT_STEMS = 20
+    const val IMPORT_RESULT_SIZE = 24
+
+    // uapmd_effective_signature_t, sizeof 24
+    const val SIGNATURE_START_BEAT = 0
+    const val SIGNATURE_END_BEAT = 8
+    const val SIGNATURE_NUMERATOR = 16
+    const val SIGNATURE_DENOMINATOR = 20
+    const val SIGNATURE_SIZE = 24
+
     // uapmd_track_attach_options_t, sizeof 12
     const val ATTACH_ID_POLICY = 0
     const val ATTACH_INSERTION_INDEX = 4
@@ -123,6 +198,12 @@ internal fun wasmGetI64(ptr: Int): Long {
 internal fun wasmSetI32(ptr: Int, v: Int) { wasmMod.setValue(ptr, v.toDouble(), "i32") }
 internal fun wasmSetI8(ptr: Int, v: Int) { wasmMod.setValue(ptr, v.toDouble(), "i8") }
 internal fun wasmSetF64(ptr: Int, v: Double) { wasmMod.setValue(ptr, v, "double") }
+
+/** Writes a 64-bit field as two little-endian 32-bit halves, mirroring [wasmGetI64]. */
+internal fun wasmSetI64(ptr: Int, v: Long) {
+    wasmSetI32(ptr, (v and 0xFFFFFFFFL).toInt())
+    wasmSetI32(ptr + 4, (v ushr 32).toInt())
+}
 
 internal fun <T> withWasmStruct(size: Int, block: (Int) -> T): T {
     val mod = wasmMod
@@ -234,59 +315,6 @@ private fun trackFragmentPtr(callback: (TrackFragment?, String?) -> Unit): Int {
     return makeCFunctionPtr(cbId, "uapmdDispatchTrackFragment", "viii")
 }
 
-// ─── WasmJsUndoEngine ────────────────────────────────────────────────────────
-
-class WasmJsUndoEngine internal constructor(private val handle: Int) : UndoEngine {
-    override val state: UndoState
-        get() = withWasmStruct(WasmOff.STATE_SIZE) { p ->
-            wasmMod.uapmdUndoEngineGetState(handle, p)
-            decodeUndoState(p)
-        }
-
-    override fun undo(completion: ((UndoResult) -> Unit)?) =
-        wasmMod.uapmdUndoEngineUndo(handle, 0, undoCompletionPtr(completion))
-
-    override fun redo(completion: ((UndoResult) -> Unit)?) =
-        wasmMod.uapmdUndoEngineRedo(handle, 0, undoCompletionPtr(completion))
-
-    override fun beginCompound(description: String, origin: MutationOrigin): UndoResult =
-        withWasmStruct(WasmOff.RESULT_SIZE) { out ->
-            withCStringKt(description) { d -> wasmMod.uapmdUndoEngineBeginCompound(out, handle, d, origin.nativeValue) }
-            decodeUndoResult(out)
-        }
-
-    override fun endCompound(completion: ((UndoResult) -> Unit)?) =
-        wasmMod.uapmdUndoEngineEndCompound(handle, 0, undoCompletionPtr(completion))
-
-    override fun cancelCompound(completion: ((UndoResult) -> Unit)?) =
-        wasmMod.uapmdUndoEngineCancelCompound(handle, 0, undoCompletionPtr(completion))
-
-    override fun beginGesture(description: String, origin: MutationOrigin): UndoResult =
-        withWasmStruct(WasmOff.RESULT_SIZE) { out ->
-            withCStringKt(description) { d -> wasmMod.uapmdUndoEngineBeginGesture(out, handle, d, origin.nativeValue) }
-            decodeUndoResult(out)
-        }
-
-    override fun endGesture(completion: ((UndoResult) -> Unit)?) =
-        wasmMod.uapmdUndoEngineEndGesture(handle, 0, undoCompletionPtr(completion))
-
-    override fun cancelGesture(completion: ((UndoResult) -> Unit)?) =
-        wasmMod.uapmdUndoEngineCancelGesture(handle, 0, undoCompletionPtr(completion))
-
-    override fun clear(markCurrentStateSaved: Boolean): Boolean =
-        wasmMod.uapmdUndoEngineClear(handle, markCurrentStateSaved)
-
-    override fun markSaved(): Boolean = wasmMod.uapmdUndoEngineMarkSaved(handle)
-
-    override fun markStateSaved(stateId: Long): Boolean =
-        wasmUndoEngineMarkStateSaved(wasmMod, handle, stateId.toString())
-
-    override fun setMaximumHistorySizeInBytes(bytes: Long): Boolean =
-        wasmUndoEngineSetMaximumHistorySize(wasmMod, handle, bytes.toString())
-
-    override fun shutdown() = wasmMod.uapmdUndoEngineShutdown(handle)
-}
-
 // ─── WasmJsCommandManager ────────────────────────────────────────────────────
 
 class WasmJsCommandManager internal constructor(private val handle: Int) : CommandManager {
@@ -296,17 +324,17 @@ class WasmJsCommandManager internal constructor(private val handle: Int) : Comma
             decodeUndoState(p)
         }
 
-    override val history: UndoEngine get() = WasmJsUndoEngine(wasmMod.uapmdCommandManagerHistory(handle))
-
     override fun undo(completion: ((UndoResult) -> Unit)?) =
         wasmMod.uapmdCommandManagerUndo(handle, 0, undoCompletionPtr(completion))
 
     override fun redo(completion: ((UndoResult) -> Unit)?) =
         wasmMod.uapmdCommandManagerRedo(handle, 0, undoCompletionPtr(completion))
 
-    override fun beginStep(description: String, origin: MutationOrigin): UndoResult =
+    override fun beginStep(description: String, origin: MutationOrigin, batching: StepEventBatching): UndoResult =
         withWasmStruct(WasmOff.RESULT_SIZE) { out ->
-            withCStringKt(description) { d -> wasmMod.uapmdCommandManagerBeginStep(out, handle, d, origin.nativeValue) }
+            withCStringKt(description) { d ->
+                wasmMod.uapmdCommandManagerBeginStep(out, handle, d, origin.nativeValue, batching.nativeValue)
+            }
             decodeUndoResult(out)
         }
 
@@ -316,9 +344,11 @@ class WasmJsCommandManager internal constructor(private val handle: Int) : Comma
     override fun cancelStep(completion: ((UndoResult) -> Unit)?) =
         wasmMod.uapmdCommandManagerCancelStep(handle, 0, undoCompletionPtr(completion))
 
-    override fun beginGesture(description: String, origin: MutationOrigin): UndoResult =
+    override fun beginGesture(description: String, origin: MutationOrigin, batching: StepEventBatching): UndoResult =
         withWasmStruct(WasmOff.RESULT_SIZE) { out ->
-            withCStringKt(description) { d -> wasmMod.uapmdCommandManagerBeginGesture(out, handle, d, origin.nativeValue) }
+            withCStringKt(description) { d ->
+                wasmMod.uapmdCommandManagerBeginGesture(out, handle, d, origin.nativeValue, batching.nativeValue)
+            }
             decodeUndoResult(out)
         }
 
@@ -327,6 +357,17 @@ class WasmJsCommandManager internal constructor(private val handle: Int) : Comma
 
     override fun cancelGesture(completion: ((UndoResult) -> Unit)?) =
         wasmMod.uapmdCommandManagerCancelGesture(handle, 0, undoCompletionPtr(completion))
+
+    override fun markSaved(): Boolean = wasmMod.uapmdCommandManagerMarkSaved(handle)
+
+    override fun markStateSaved(stateId: Long): Boolean =
+        wasmCommandManagerMarkStateSaved(wasmMod, handle, stateId.toString())
+
+    override fun clear(markCurrentStateSaved: Boolean): Boolean =
+        wasmMod.uapmdCommandManagerClear(handle, markCurrentStateSaved)
+
+    override fun setMaximumHistorySizeInBytes(bytes: Long): Boolean =
+        wasmCommandManagerSetMaximumHistorySize(wasmMod, handle, bytes.toString())
 
     override fun shutdown() = wasmMod.uapmdCommandManagerShutdown(handle)
 }
@@ -412,6 +453,128 @@ class WasmJsProjectCommands internal constructor(private val handle: Int) : Proj
         withWasmMarkers(markers) { ptr, count ->
             wasmMod.uapmdCommandsSetMasterTrackMarkers(handle, ptr, count, origin.nativeValue)
         }
+
+    override fun addDeviceInputToTrack(trackIndex: Int, sourceNodeId: Int, channelIndices: List<UInt>, origin: MutationOrigin) =
+        withWasmUInts(channelIndices) { ptr, count ->
+            wasmMod.uapmdCommandsAddDeviceInputToTrack(handle, trackIndex, sourceNodeId, ptr, count, origin.nativeValue)
+        }
+
+    override fun setDeviceInputChannels(trackIndex: Int, sourceNodeId: Int, channelIndices: List<UInt>, origin: MutationOrigin) =
+        withWasmUInts(channelIndices) { ptr, count ->
+            wasmMod.uapmdCommandsSetDeviceInputChannels(handle, trackIndex, sourceNodeId, ptr, count, origin.nativeValue)
+        }
+
+    override fun removeDeviceInputFromTrack(trackIndex: Int, sourceNodeId: Int, origin: MutationOrigin) =
+        wasmMod.uapmdCommandsRemoveDeviceInputFromTrack(handle, trackIndex, sourceNodeId, origin.nativeValue)
+
+    override fun connectTrackGraph(trackIndex: Int, connection: GraphConnection, origin: MutationOrigin) =
+        withWasmGraphConnection(connection) { ptr ->
+            wasmMod.uapmdCommandsConnectTrackGraph(handle, trackIndex, ptr, origin.nativeValue)
+        }
+
+    override fun disconnectTrackGraphConnection(trackIndex: Int, connectionId: Long, origin: MutationOrigin) =
+        wasmCommandsDisconnectTrackGraphConnection(wasmMod, handle, trackIndex, connectionId.toString(), origin.nativeValue)
+
+    override val lastGraphError: String
+        get() = wasmMod.uapmdCommandsLastGraphError().let { if (it != 0) wasmMod.utf8ToString(it) else "" }
+
+    override fun replaceTrackGraphType(trackIndex: Int, graphTypeId: String, eventBufferSizeInBytes: Long, origin: MutationOrigin) =
+        withCStringKt(graphTypeId) { ptr ->
+            wasmMod.uapmdCommandsReplaceTrackGraphType(
+                handle, trackIndex, ptr, eventBufferSizeInBytes.toInt(), origin.nativeValue)
+        }
+
+    override fun setLatencyCompensationSettings(settings: LatencyCompensationSettings, origin: MutationOrigin) =
+        withWasmLatencySettings(settings) { ptr ->
+            wasmMod.uapmdCommandsSetLatencyCompensationSettings(handle, ptr, origin.nativeValue)
+        }
+}
+
+/** A uint32_t[] the call borrows for its duration. */
+private fun <T> withWasmUInts(values: List<UInt>, block: (Int, Int) -> T): T {
+    if (values.isEmpty()) return block(0, 0)
+    val mod = wasmMod
+    val ptr = mod.malloc(values.size * 4)
+    return try {
+        values.forEachIndexed { i, v -> wasmSetI32(ptr + i * 4, v.toInt()) }
+        block(ptr, values.size)
+    } finally { mod.free(ptr) }
+}
+
+private fun <T> withWasmGraphConnection(connection: GraphConnection, block: (Int) -> T): T {
+    val mod = wasmMod
+    val strings = mutableListOf<Int>()
+    fun cstr(s: String): Int {
+        if (s.isEmpty()) return 0
+        val len = mod.lengthBytesUTF8(s) + 1
+        val p = mod.malloc(len)
+        mod.stringToUTF8(s, p, len)
+        strings.add(p)
+        return p
+    }
+    val ptr = mod.malloc(WasmOff.GRAPH_CONNECTION_SIZE)
+    return try {
+        wasmSetI64(ptr + WasmOff.GRAPH_CONN_ID, connection.id)
+        wasmSetI32(ptr + WasmOff.GRAPH_CONN_BUS_TYPE, connection.busType.nativeValue)
+        fun writeEndpoint(base: Int, e: GraphEndpoint) {
+            wasmSetI32(base + WasmOff.GRAPH_ENDPOINT_TYPE, e.type.nativeValue)
+            wasmSetI32(base + WasmOff.GRAPH_ENDPOINT_NODE_ID, cstr(e.nodeId))
+            wasmSetI32(base + WasmOff.GRAPH_ENDPOINT_INSTANCE_ID, e.instanceId)
+            wasmSetI32(base + WasmOff.GRAPH_ENDPOINT_BUS_INDEX, e.busIndex.toInt())
+        }
+        writeEndpoint(ptr + WasmOff.GRAPH_CONN_SOURCE, connection.source)
+        writeEndpoint(ptr + WasmOff.GRAPH_CONN_TARGET, connection.target)
+        block(ptr)
+    } finally {
+        strings.forEach { mod.free(it) }
+        mod.free(ptr)
+    }
+}
+
+private fun <T> withWasmLatencySettings(settings: LatencyCompensationSettings, block: (Int) -> T): T {
+    val mod = wasmMod
+    val owned = mutableListOf<Int>()
+    fun cstr(s: String): Int {
+        val len = mod.lengthBytesUTF8(s) + 1
+        val p = mod.malloc(len)
+        mod.stringToUTF8(s, p, len)
+        owned.add(p)
+        return p
+    }
+    fun ints(values: List<Int>): Int {
+        if (values.isEmpty()) return 0
+        val p = mod.malloc(values.size * 4)
+        owned.add(p)
+        values.forEachIndexed { i, v -> wasmSetI32(p + i * 4, v) }
+        return p
+    }
+    val ptr = mod.malloc(WasmOff.LATENCY_SETTINGS_SIZE)
+    return try {
+        wasmSetI32(ptr + WasmOff.LATENCY_IMPLEMENTATION_ID, cstr(settings.implementationId))
+        wasmSetI32(ptr + WasmOff.LATENCY_PLAYBACK_MODE, settings.playbackCompensationMode.nativeValue)
+        wasmSetI32(ptr + WasmOff.LATENCY_MONITORING_POLICY, settings.inputMonitoringPolicy.nativeValue)
+        wasmSetI32(ptr + WasmOff.LATENCY_MONITORED, ints(settings.monitoredTrackIndexes))
+        wasmSetI32(ptr + WasmOff.LATENCY_MONITORED_COUNT, settings.monitoredTrackIndexes.size)
+        wasmSetI32(ptr + WasmOff.LATENCY_ARMED, ints(settings.recordArmedTrackIndexes))
+        wasmSetI32(ptr + WasmOff.LATENCY_ARMED_COUNT, settings.recordArmedTrackIndexes.size)
+        // Flat key, value, key, value... array; property_count counts pairs.
+        val properties = settings.implementationProperties
+        val propertiesPtr = if (properties.isEmpty()) 0 else {
+            val p = mod.malloc(properties.size * 2 * 4)
+            owned.add(p)
+            properties.entries.forEachIndexed { i, entry ->
+                wasmSetI32(p + i * 8, cstr(entry.key))
+                wasmSetI32(p + i * 8 + 4, cstr(entry.value))
+            }
+            p
+        }
+        wasmSetI32(ptr + WasmOff.LATENCY_PROPERTIES, propertiesPtr)
+        wasmSetI32(ptr + WasmOff.LATENCY_PROPERTY_COUNT, properties.size)
+        block(ptr)
+    } finally {
+        owned.forEach { mod.free(it) }
+        mod.free(ptr)
+    }
 }
 
 // ─── WasmJsProjectAddressBook ────────────────────────────────────────────────
@@ -582,7 +745,6 @@ class WasmJsTrackFragment internal constructor(internal val handle: Int) : Track
 // ─── Timeline history implementation ─────────────────────────────────────────
 
 internal class WasmJsTimelineHistory(private val handle: Int) {
-    val undoEngine: UndoEngine get() = WasmJsUndoEngine(wasmMod.uapmdTlUndoEngine(handle))
     val commands: ProjectCommands get() = WasmJsProjectCommands(wasmMod.uapmdTlCommands(handle))
     val addresses: ProjectAddressBook get() = WasmJsProjectAddressBook(wasmMod.uapmdTlAddresses(handle))
 
@@ -646,6 +808,19 @@ internal class WasmJsTimelineHistory(private val handle: Int) {
         withWasmStruct(WasmOff.CLIP_ADD_SIZE) { out ->
             wasmMod.uapmdTlAttachClipFragment(
                 out, handle, trackIndex, (fragment as WasmJsClipFragment).handle, idPolicy.nativeValue
+            )
+            ClipAddResult(
+                clipId = wasmGetI32(out + WasmOff.CLIP_ADD_CLIP_ID),
+                sourceNodeId = wasmGetI32(out + WasmOff.CLIP_ADD_SOURCE_NODE_ID),
+                success = wasmGetBool(out + WasmOff.CLIP_ADD_SUCCESS),
+                error = wasmGetI32(out + WasmOff.CLIP_ADD_ERROR).let { if (it != 0) wasmMod.utf8ToString(it) else null }
+            )
+        }
+
+    fun pasteClipFragment(trackIndex: Int, fragment: ClipFragment): ClipAddResult =
+        withWasmStruct(WasmOff.CLIP_ADD_SIZE) { out ->
+            wasmMod.uapmdTlPasteClipFragment(
+                out, handle, trackIndex, (fragment as WasmJsClipFragment).handle
             )
             ClipAddResult(
                 clipId = wasmGetI32(out + WasmOff.CLIP_ADD_CLIP_ID),

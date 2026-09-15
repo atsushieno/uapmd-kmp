@@ -791,7 +791,7 @@ class UapmdHost private constructor(val model: AppModel) {
      */
     fun setTrackGain(trackIndex: Int, gain: Double): Boolean {
         if (!gainGestureOpen) {
-            model.sequencer.engine.timeline.undoEngine.beginGesture("Change track gain")
+            model.sequencer.engine.timeline.commands.history.beginGesture("Change track gain")
             gainGestureOpen = true
         }
         return commands.setTrackGain(trackIndex, gain).also { refresh() }
@@ -799,7 +799,7 @@ class UapmdHost private constructor(val model: AppModel) {
 
     fun endTrackGainGesture() {
         if (gainGestureOpen) {
-            model.sequencer.engine.timeline.undoEngine.endGesture()
+            model.sequencer.engine.timeline.commands.history.endGesture()
             gainGestureOpen = false
             refresh()
         }

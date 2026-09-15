@@ -141,6 +141,21 @@ interface AppModel {
     /** Android's document-picker path: resolves a content:// handle token. */
     fun loadProjectFromHandleToken(token: String): AppProjectResult
 
+    /**
+     * Discards the current project and starts an empty one. Asks nothing and
+     * always replaces: whether unsaved changes may be discarded is the caller's
+     * decision. Unlike [TimelineFacade.newProject] this also tears down what the
+     * outgoing project instantiated and rebuilds the model's view of the result.
+     */
+    fun newProject(): AppProjectResult
+
+    /**
+     * The project's tempo curve, as the engine derived it from the master
+     * track. Read this rather than assembling one from the master tempo points,
+     * so that display and playback can never be working from different maps.
+     */
+    val masterTempoMap: TempoMap
+
     // ── MIDI clip UMP events ────────────────────────────────────────────────
 
     fun getMidiClipUmpEvents(trackIndex: Int, clipId: Int): UmpEventsResult

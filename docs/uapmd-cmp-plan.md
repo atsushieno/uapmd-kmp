@@ -277,52 +277,32 @@ bridge code *inside the worker*, which builds a second, unreachable bridge with
 `node: null` and queues the request into it forever while the main-thread bridge sits
 idle. `EventLoopEmscripten` must therefore use `emscripten_is_main_browser_thread()`
 and proxy a task enqueued from a worker with
-`emscripten_async_run_in_main_runtime_thread`; carried by
-`patches/uapmd/0001-uapmd-cmp-embedder-hooks.patch`.
+`emscripten_async_run_in_main_runtime_thread`; this now lives upstream in
+`external/uapmd` (see 2.10).
 
 Note for future debugging: the worklet's fetches do **not** appear in the page's
 network log, because a worker issues them. `performance.getEntriesByType('resource')`
 does show them, and an empty page-level log means nothing here.
 
-### 2.10 Changes to `external/uapmd` ship as patches, applied by the build
+### 2.10 The embedder hooks live upstream; there is no patch step
 
-uapmd-cmp needs a few embedder hooks upstream does not have yet
-(`setRemoteScannerExecutable`, the Emscripten main-thread check). They live in a
-pinned submodule, so a fresh checkout - CI's especially - has none of them and would
-compile unpatched sources. They are kept in `patches/uapmd/*.patch`, and every
-native build depends on `:uapmd-binding:applyUapmdPatches`: the desktop and wasm C
-API builds directly, and AGP's CMake tasks through an `afterEvaluate` match. CI runs
-everything through Gradle, so nothing extra is needed there.
+uapmd-cmp needs a few embedder hooks that upstream once lacked
+(`setRemoteScannerExecutable`, the Emscripten main-thread check in
+`EventLoopEmscripten`, and the null-body-status guard in `coop-coep-sw.js`). These
+were carried for a while as `patches/uapmd/*.patch` and applied to the pinned
+submodule by a best-effort `:uapmd-binding:applyUapmdPatches` Gradle task.
 
-The rule that shapes the design: **the patch step must never stop a build.** It runs
-on every incremental build and meets messy states by nature - already applied, half
-applied, or applied and then edited further while working on the hook. So:
+**All of them are now in uapmd itself**, as of the pinned submodule commit. The
+patch files, the Gradle task, and the `dependsOn`/`afterEvaluate` wiring that
+brought it into the desktop, wasm and AGP CMake builds have all been removed. A
+fresh checkout compiles the hooks straight from the submodule, and nothing in the
+build mutates `external/uapmd` any more.
 
-- each file in a patch is handled **independently**, because a half-applied patch
-  would otherwise be rejected whole;
-- the apply order is **plain, then `--3way`, then `--ignore-whitespace`**, and that
-  order is load-bearing. Git for Windows checks out with `core.autocrlf=true`, and
-  `--3way` refuses a CRLF working tree outright while a plain apply takes it. With
-  `--3way` first, Windows builds report every file as refusing the patch and then
-  fail at the call site minutes later. `--3way` is still needed, but only for what it
-  is uniquely good at - completing a half-applied patch. The file it stages is
-  unstaged again, since a build has no business leaving things staged;
-- a file that will not take the patch is **left exactly as it is** - never reverted.
-  Any cleanup that touches the working tree (`git checkout --merge -- .` and the
-  like) destroys patched state and must not be used;
-- failure is not fatal. Sources that genuinely lack the hooks fail to compile
-  seconds later at the call site, which says far more than a patch-tool error. A
-  locally modified file is reported at lifecycle level; only a file that is
-  *unmodified* and still refuses the patch warns, because that means the submodule
-  moved and the patch is stale.
-
-The warning carries git's own output: a CI failure that does not say *why* the patch
-was refused costs a round trip to find out.
-
-Refresh a patch with `git -C external/uapmd diff > patches/uapmd/<name>.patch`. To
-check a change against a Windows-style checkout without one, convert the target
-files to CRLF and run `:uapmd-binding:applyUapmdPatches`; that reproduces the
-failure faithfully.
+The standing rule that replaces the old one: **do not reintroduce a patch step.**
+A change needed in uapmd goes upstream and the submodule pointer moves to pick it
+up. A build that edits its own submodule working tree makes every checkout's state
+depend on build history, which is what the old task's elaborate half-applied,
+CRLF-tolerant, never-fatal handling existed to paper over.
 
 ## 3 · Window model
 

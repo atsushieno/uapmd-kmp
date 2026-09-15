@@ -154,6 +154,20 @@ UAPMD_C_EXPORT uapmd_timeline_facade_t uapmd_engine_timeline(uapmd_sequencer_eng
  * ═══════════════════════════════════════════════════════════════════════════ */
 
 UAPMD_C_EXPORT uapmd_plugin_graph_t uapmd_track_graph(uapmd_sequencer_track_t track);
+
+/* A graph this build could not construct, because no provider claimed its type
+ * when the project loaded -- typically an addin that is absent or disabled. The
+ * track runs a substitute graph, and these carry the original definition
+ * verbatim so that saving writes it back rather than replacing it with the
+ * substitute. Both are empty for every track whose graph did load, which is how
+ * a UI tells "this track is running what the project asked for" from "this
+ * track is standing in for something this build cannot make".
+ *
+ * Both follow the usual size-query convention: pass a null buffer to learn the
+ * required length. */
+UAPMD_C_EXPORT size_t uapmd_track_unresolved_graph_type(uapmd_sequencer_track_t track, char* buf, size_t buf_size);
+UAPMD_C_EXPORT size_t uapmd_track_unresolved_graph_payload(uapmd_sequencer_track_t track, uint8_t* buf, size_t buf_size);
+
 UAPMD_C_EXPORT uint32_t uapmd_track_latency_in_samples(uapmd_sequencer_track_t track);
 UAPMD_C_EXPORT uint32_t uapmd_track_render_lead_in_samples(uapmd_sequencer_track_t track);
 UAPMD_C_EXPORT double   uapmd_track_tail_length_in_seconds(uapmd_sequencer_track_t track);
@@ -259,6 +273,48 @@ typedef struct uapmd_project_result {
 } uapmd_project_result_t;
 
 UAPMD_C_EXPORT uapmd_project_result_t uapmd_tl_load_project(uapmd_timeline_facade_t tl, const char* file_path);
+
+/* Discards the current document and starts an empty one: no tracks, a fresh
+ * master track, no undo history, nothing dirty. Observers see the same
+ * closing/loaded pair a load emits, so state owned outside the timeline is
+ * dropped the same way. Whether unsaved changes may be discarded is the
+ * caller's decision, not this one -- check uapmd_engine_is_project_dirty()
+ * first if that matters. */
+UAPMD_C_EXPORT uapmd_project_result_t uapmd_tl_new_project(uapmd_timeline_facade_t tl);
+
+/* ─── Master tempo map ───────────────────────────────────────────────────────
+ *
+ * The project's seconds<->beats curve, owned by the master track. This is the
+ * one the engine schedules playback against, so a display that converts through
+ * it can never disagree with what is heard. "Beat" is always a quarter note,
+ * matching BPM and tick-resolution conventions.
+ *
+ * Model thread only. The handle borrows the timeline's map and stays valid until
+ * the next project change; do not retain it across a load, a new project, or a
+ * tempo edit. */
+
+typedef struct uapmd_tempo_map* uapmd_tempo_map_t;
+
+/* One meter region of the curve. `end_beat` is +inf for the last one. */
+typedef struct uapmd_effective_signature {
+    double  start_beat;
+    double  end_beat;
+    int32_t numerator;
+    int32_t denominator;
+} uapmd_effective_signature_t;
+
+UAPMD_C_EXPORT uapmd_tempo_map_t uapmd_tl_master_tempo_map(uapmd_timeline_facade_t tl);
+
+/* True when the map carries real tempo data. A map without it still converts,
+ * at the default BPM it was built with. */
+UAPMD_C_EXPORT bool   uapmd_tempo_map_has_tempo_data(uapmd_tempo_map_t map);
+UAPMD_C_EXPORT bool   uapmd_tempo_map_is_empty(uapmd_tempo_map_t map);
+UAPMD_C_EXPORT double uapmd_tempo_map_seconds_to_beats(uapmd_tempo_map_t map, double seconds);
+UAPMD_C_EXPORT double uapmd_tempo_map_beats_to_seconds(uapmd_tempo_map_t map, double beats);
+UAPMD_C_EXPORT uint32_t uapmd_tempo_map_effective_signature_count(uapmd_tempo_map_t map);
+UAPMD_C_EXPORT bool     uapmd_tempo_map_get_effective_signature(uapmd_tempo_map_t map, uint32_t index, uapmd_effective_signature_t* out);
+/* How many quarter notes one bar of this meter spans (3.5 for 7/8). */
+UAPMD_C_EXPORT double   uapmd_tempo_map_bar_length_beats(int32_t numerator, int32_t denominator);
 
 /* Content bounds */
 typedef struct uapmd_content_bounds {

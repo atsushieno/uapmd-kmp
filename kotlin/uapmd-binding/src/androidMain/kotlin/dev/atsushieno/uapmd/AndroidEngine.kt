@@ -210,6 +210,9 @@ class AndroidSequencerTrack internal constructor(
 ) : SequencerTrack {
 
     override val graph: PluginGraph get() = AndroidPluginGraph(JniBridge.uapmdTrackGraph(handle))
+
+    override val unresolvedGraphType: String get() = JniBridge.uapmdTrackUnresolvedGraphType(handle)
+    override val unresolvedGraphPayload: ByteArray get() = JniBridge.uapmdTrackUnresolvedGraphPayload(handle)
     override val latencyInSamples: UInt get() = JniBridge.uapmdTrackLatencyInSamples(handle).toUInt()
     override val renderLeadInSamples: UInt get() = JniBridge.uapmdTrackRenderLeadInSamples(handle).toUInt()
     override val tailLengthInSeconds: Double get() = JniBridge.uapmdTrackTailLengthInSeconds(handle)

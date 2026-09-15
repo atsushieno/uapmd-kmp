@@ -39,6 +39,81 @@ internal object Off {
     // uapmd_clip_address_t / uapmd_plugin_address_t, sizeof 8
     const val ADDRESS_SIZE = 8
 
+    // uapmd_graph_endpoint_t, sizeof 16
+    const val GRAPH_ENDPOINT_TYPE = 0
+    const val GRAPH_ENDPOINT_NODE_ID = 4
+    const val GRAPH_ENDPOINT_INSTANCE_ID = 8
+    const val GRAPH_ENDPOINT_BUS_INDEX = 12
+    const val GRAPH_ENDPOINT_SIZE = 16
+
+    // uapmd_graph_connection_t, sizeof 48 (int64 id forces 8-byte alignment)
+    const val GRAPH_CONN_ID = 0
+    const val GRAPH_CONN_BUS_TYPE = 8
+    const val GRAPH_CONN_SOURCE = 12
+    const val GRAPH_CONN_TARGET = 28
+    const val GRAPH_CONNECTION_SIZE = 48
+
+    // uapmd_latency_compensation_settings_t, sizeof 36
+    const val LATENCY_IMPLEMENTATION_ID = 0
+    const val LATENCY_PLAYBACK_MODE = 4
+    const val LATENCY_MONITORING_POLICY = 8
+    const val LATENCY_MONITORED = 12
+    const val LATENCY_MONITORED_COUNT = 16
+    const val LATENCY_ARMED = 20
+    const val LATENCY_ARMED_COUNT = 24
+    const val LATENCY_PROPERTIES = 28
+    const val LATENCY_PROPERTY_COUNT = 32
+    const val LATENCY_SETTINGS_SIZE = 36
+
+    // uapmd_addin_command_info_t, sizeof 16
+    const val COMMAND_INFO_ID = 0
+    const val COMMAND_INFO_TITLE = 4
+    const val COMMAND_INFO_ORDER = 8
+    const val COMMAND_INFO_ENABLED = 12
+    const val COMMAND_INFO_SIZE = 16
+
+    // uapmd_clip_command_target_t, sizeof 12
+    const val CLIP_TARGET_TRACK_INDEX = 0
+    const val CLIP_TARGET_CLIP_ID = 4
+    const val CLIP_TARGET_MIDI_CLIP = 8
+    const val CLIP_TARGET_MASTER_TRACK = 9
+    const val CLIP_TARGET_SIZE = 12
+
+    // uapmd_clip_editor_info_t, sizeof 8
+    const val CLIP_EDITOR_ID = 0
+    const val CLIP_EDITOR_NAME = 4
+    const val CLIP_EDITOR_SIZE = 8
+
+    // uapmd_stem_separator_info_t, sizeof 16
+    const val SEPARATOR_ID = 0
+    const val SEPARATOR_NAME = 4
+    const val SEPARATOR_MODEL_LABEL = 8
+    const val SEPARATOR_EXTENSION_COUNT = 12
+    const val SEPARATOR_INFO_SIZE = 16
+
+    // uapmd_audio_stem_import_t, sizeof 12
+    const val STEM_NAME = 0
+    const val STEM_FILEPATH = 4
+    const val STEM_DISPLAY_NAME = 8
+    const val STEM_SIZE = 12
+
+    // uapmd_audio_import_result_t, sizeof 24
+    const val IMPORT_SUCCESS = 0
+    const val IMPORT_CANCELED = 1
+    const val IMPORT_ERROR = 4
+    const val IMPORT_WARNING_COUNT = 8
+    const val IMPORT_WARNINGS = 12
+    const val IMPORT_STEM_COUNT = 16
+    const val IMPORT_STEMS = 20
+    const val IMPORT_RESULT_SIZE = 24
+
+    // uapmd_effective_signature_t, sizeof 24
+    const val SIGNATURE_START_BEAT = 0
+    const val SIGNATURE_END_BEAT = 8
+    const val SIGNATURE_NUMERATOR = 16
+    const val SIGNATURE_DENOMINATOR = 20
+    const val SIGNATURE_SIZE = 24
+
     // uapmd_track_attach_options_t, sizeof 12
     const val ATTACH_ID_POLICY = 0
     const val ATTACH_INSERTION_INDEX = 4
@@ -110,6 +185,12 @@ internal object Off {
 
 internal fun jsSetPtr(ptr: Int, v: Int) { jsMod.setValue(ptr, v, "i32") }
 internal fun jsSetF64(ptr: Int, v: Double) { jsMod.setValue(ptr, v, "double") }
+
+/** Writes a 64-bit field as two little-endian 32-bit halves. */
+internal fun jsSetI64(ptr: Int, v: Long) {
+    jsSetI32(ptr, (v and 0xFFFFFFFFL).toInt())
+    jsSetI32(ptr + 4, (v ushr 32).toInt())
+}
 
 /** WASM_BIGINT=1 means scalar i64 parameters cross the boundary as BigInt. */
 private fun bigInt(v: Long): dynamic = js("BigInt")(v.toString())
@@ -246,70 +327,11 @@ private fun makeJsTrackFragment(callback: (TrackFragment?, String?) -> Unit): In
     return slot
 }
 
-// ─── JsUndoEngine ────────────────────────────────────────────────────────────
-
-class JsUndoEngine internal constructor(private val handle: Int) : UndoEngine {
-    override val state: UndoState
-        get() = withWasmMem(Off.STATE_SIZE) { p ->
-            jsMod._uapmd_undo_engine_get_state(handle, p)
-            decodeUndoState(p)
-        }
-
-    override fun undo(completion: ((UndoResult) -> Unit)?) {
-        jsMod._uapmd_undo_engine_undo(handle, 0, completion?.let { makeJsUndoCompletion(it) } ?: 0)
-    }
-
-    override fun redo(completion: ((UndoResult) -> Unit)?) {
-        jsMod._uapmd_undo_engine_redo(handle, 0, completion?.let { makeJsUndoCompletion(it) } ?: 0)
-    }
-
-    override fun beginCompound(description: String, origin: MutationOrigin): UndoResult =
-        withWasmMem(Off.RESULT_SIZE) { out ->
-            withJsCString(description) { d ->
-                jsMod._uapmd_undo_engine_begin_compound(out, handle, d, origin.nativeValue)
-            }
-            decodeUndoResult(out)
-        }
-
-    override fun endCompound(completion: ((UndoResult) -> Unit)?) {
-        jsMod._uapmd_undo_engine_end_compound(handle, 0, completion?.let { makeJsUndoCompletion(it) } ?: 0)
-    }
-
-    override fun cancelCompound(completion: ((UndoResult) -> Unit)?) {
-        jsMod._uapmd_undo_engine_cancel_compound(handle, 0, completion?.let { makeJsUndoCompletion(it) } ?: 0)
-    }
-
-    override fun beginGesture(description: String, origin: MutationOrigin): UndoResult =
-        withWasmMem(Off.RESULT_SIZE) { out ->
-            withJsCString(description) { d ->
-                jsMod._uapmd_undo_engine_begin_gesture(out, handle, d, origin.nativeValue)
-            }
-            decodeUndoResult(out)
-        }
-
-    override fun endGesture(completion: ((UndoResult) -> Unit)?) {
-        jsMod._uapmd_undo_engine_end_gesture(handle, 0, completion?.let { makeJsUndoCompletion(it) } ?: 0)
-    }
-
-    override fun cancelGesture(completion: ((UndoResult) -> Unit)?) {
-        jsMod._uapmd_undo_engine_cancel_gesture(handle, 0, completion?.let { makeJsUndoCompletion(it) } ?: 0)
-    }
-
-    override fun clear(markCurrentStateSaved: Boolean): Boolean =
-        jsMod._uapmd_undo_engine_clear(handle, markCurrentStateSaved) as Boolean
-
-    override fun markSaved(): Boolean = jsMod._uapmd_undo_engine_mark_saved(handle) as Boolean
-
-    override fun markStateSaved(stateId: Long): Boolean =
-        jsMod._uapmd_undo_engine_mark_state_saved(handle, bigInt(stateId)) as Boolean
-
-    override fun setMaximumHistorySizeInBytes(bytes: Long): Boolean =
-        jsMod._uapmd_undo_engine_set_maximum_history_size(handle, bigInt(bytes)) as Boolean
-
-    override fun shutdown() { jsMod._uapmd_undo_engine_shutdown(handle) }
-}
-
 // ─── JsCommandManager ────────────────────────────────────────────────────────
+//
+// uapmd 0.5.7 withdrew the ProjectUndoEngine handle; the command manager
+// carries the whole history contract now, so the JsUndoEngine that mirrored it
+// is gone and its calls live here.
 
 class JsCommandManager internal constructor(private val handle: Int) : CommandManager {
     override val state: UndoState
@@ -317,8 +339,6 @@ class JsCommandManager internal constructor(private val handle: Int) : CommandMa
             jsMod._uapmd_command_manager_get_state(handle, p)
             decodeUndoState(p)
         }
-
-    override val history: UndoEngine get() = JsUndoEngine(jsMod._uapmd_command_manager_history(handle) as Int)
 
     override fun undo(completion: ((UndoResult) -> Unit)?) {
         jsMod._uapmd_command_manager_undo(handle, 0, completion?.let { makeJsUndoCompletion(it) } ?: 0)
@@ -328,10 +348,10 @@ class JsCommandManager internal constructor(private val handle: Int) : CommandMa
         jsMod._uapmd_command_manager_redo(handle, 0, completion?.let { makeJsUndoCompletion(it) } ?: 0)
     }
 
-    override fun beginStep(description: String, origin: MutationOrigin): UndoResult =
+    override fun beginStep(description: String, origin: MutationOrigin, batching: StepEventBatching): UndoResult =
         withWasmMem(Off.RESULT_SIZE) { out ->
             withJsCString(description) { d ->
-                jsMod._uapmd_command_manager_begin_step(out, handle, d, origin.nativeValue)
+                jsMod._uapmd_command_manager_begin_step(out, handle, d, origin.nativeValue, batching.nativeValue)
             }
             decodeUndoResult(out)
         }
@@ -344,10 +364,10 @@ class JsCommandManager internal constructor(private val handle: Int) : CommandMa
         jsMod._uapmd_command_manager_cancel_step(handle, 0, completion?.let { makeJsUndoCompletion(it) } ?: 0)
     }
 
-    override fun beginGesture(description: String, origin: MutationOrigin): UndoResult =
+    override fun beginGesture(description: String, origin: MutationOrigin, batching: StepEventBatching): UndoResult =
         withWasmMem(Off.RESULT_SIZE) { out ->
             withJsCString(description) { d ->
-                jsMod._uapmd_command_manager_begin_gesture(out, handle, d, origin.nativeValue)
+                jsMod._uapmd_command_manager_begin_gesture(out, handle, d, origin.nativeValue, batching.nativeValue)
             }
             decodeUndoResult(out)
         }
@@ -359,6 +379,17 @@ class JsCommandManager internal constructor(private val handle: Int) : CommandMa
     override fun cancelGesture(completion: ((UndoResult) -> Unit)?) {
         jsMod._uapmd_command_manager_cancel_gesture(handle, 0, completion?.let { makeJsUndoCompletion(it) } ?: 0)
     }
+
+    override fun markSaved(): Boolean = jsMod._uapmd_command_manager_mark_saved(handle) as Boolean
+
+    override fun markStateSaved(stateId: Long): Boolean =
+        jsMod._uapmd_command_manager_mark_state_saved(handle, bigInt(stateId)) as Boolean
+
+    override fun clear(markCurrentStateSaved: Boolean): Boolean =
+        jsMod._uapmd_command_manager_clear(handle, markCurrentStateSaved) as Boolean
+
+    override fun setMaximumHistorySizeInBytes(bytes: Long): Boolean =
+        jsMod._uapmd_command_manager_set_maximum_history_size(handle, bigInt(bytes)) as Boolean
 
     override fun shutdown() { jsMod._uapmd_command_manager_shutdown(handle) }
 }
@@ -444,6 +475,126 @@ class JsProjectCommands internal constructor(private val handle: Int) : ProjectC
         withJsMarkers(markers) { ptr, count ->
             jsMod._uapmd_commands_set_master_track_markers(handle, ptr, count, origin.nativeValue) as Boolean
         }
+
+    override fun addDeviceInputToTrack(trackIndex: Int, sourceNodeId: Int, channelIndices: List<UInt>, origin: MutationOrigin): Boolean =
+        withJsUInts(channelIndices) { ptr, count ->
+            jsMod._uapmd_commands_add_device_input_to_track(handle, trackIndex, sourceNodeId, ptr, count, origin.nativeValue) as Boolean
+        }
+
+    override fun setDeviceInputChannels(trackIndex: Int, sourceNodeId: Int, channelIndices: List<UInt>, origin: MutationOrigin): Boolean =
+        withJsUInts(channelIndices) { ptr, count ->
+            jsMod._uapmd_commands_set_device_input_channels(handle, trackIndex, sourceNodeId, ptr, count, origin.nativeValue) as Boolean
+        }
+
+    override fun removeDeviceInputFromTrack(trackIndex: Int, sourceNodeId: Int, origin: MutationOrigin): Boolean =
+        jsMod._uapmd_commands_remove_device_input_from_track(handle, trackIndex, sourceNodeId, origin.nativeValue) as Boolean
+
+    override fun connectTrackGraph(trackIndex: Int, connection: GraphConnection, origin: MutationOrigin): Boolean =
+        withJsGraphConnection(connection) { ptr ->
+            jsMod._uapmd_commands_connect_track_graph(handle, trackIndex, ptr, origin.nativeValue) as Boolean
+        }
+
+    override fun disconnectTrackGraphConnection(trackIndex: Int, connectionId: Long, origin: MutationOrigin): Boolean =
+        jsMod._uapmd_commands_disconnect_track_graph_connection(
+            handle, trackIndex, bigInt(connectionId), origin.nativeValue) as Boolean
+
+    override val lastGraphError: String
+        get() = (jsMod._uapmd_commands_last_graph_error() as Int).let { if (it != 0) jsMod.UTF8ToString(it) as String else "" }
+
+    override fun replaceTrackGraphType(trackIndex: Int, graphTypeId: String, eventBufferSizeInBytes: Long, origin: MutationOrigin): Boolean =
+        withJsCString(graphTypeId) { ptr ->
+            jsMod._uapmd_commands_replace_track_graph_type(
+                handle, trackIndex, ptr, eventBufferSizeInBytes.toInt(), origin.nativeValue) as Boolean
+        }
+
+    override fun setLatencyCompensationSettings(settings: LatencyCompensationSettings, origin: MutationOrigin): Boolean =
+        withJsLatencySettings(settings) { ptr ->
+            jsMod._uapmd_commands_set_latency_compensation_settings(handle, ptr, origin.nativeValue) as Boolean
+        }
+}
+
+/** A uint32_t[] the call borrows for its duration. */
+private fun <T> withJsUInts(values: List<UInt>, block: (Int, Int) -> T): T {
+    if (values.isEmpty()) return block(0, 0)
+    val ptr = jsMod._malloc(values.size * 4) as Int
+    return try {
+        values.forEachIndexed { i, v -> jsSetI32(ptr + i * 4, v.toInt()) }
+        block(ptr, values.size)
+    } finally { jsMod._free(ptr) }
+}
+
+private fun <T> withJsGraphConnection(connection: GraphConnection, block: (Int) -> T): T {
+    val owned = mutableListOf<Int>()
+    fun cstr(s: String): Int {
+        if (s.isEmpty()) return 0
+        val len = (jsMod.lengthBytesUTF8(s) as Int) + 1
+        val p = jsMod._malloc(len) as Int
+        jsMod.stringToUTF8(s, p, len)
+        owned.add(p)
+        return p
+    }
+    val ptr = jsMod._malloc(Off.GRAPH_CONNECTION_SIZE) as Int
+    return try {
+        jsSetI64(ptr + Off.GRAPH_CONN_ID, connection.id)
+        jsSetI32(ptr + Off.GRAPH_CONN_BUS_TYPE, connection.busType.nativeValue)
+        fun writeEndpoint(base: Int, e: GraphEndpoint) {
+            jsSetI32(base + Off.GRAPH_ENDPOINT_TYPE, e.type.nativeValue)
+            jsSetPtr(base + Off.GRAPH_ENDPOINT_NODE_ID, cstr(e.nodeId))
+            jsSetI32(base + Off.GRAPH_ENDPOINT_INSTANCE_ID, e.instanceId)
+            jsSetI32(base + Off.GRAPH_ENDPOINT_BUS_INDEX, e.busIndex.toInt())
+        }
+        writeEndpoint(ptr + Off.GRAPH_CONN_SOURCE, connection.source)
+        writeEndpoint(ptr + Off.GRAPH_CONN_TARGET, connection.target)
+        block(ptr)
+    } finally {
+        owned.forEach { jsMod._free(it) }
+        jsMod._free(ptr)
+    }
+}
+
+private fun <T> withJsLatencySettings(settings: LatencyCompensationSettings, block: (Int) -> T): T {
+    val owned = mutableListOf<Int>()
+    fun cstr(s: String): Int {
+        val len = (jsMod.lengthBytesUTF8(s) as Int) + 1
+        val p = jsMod._malloc(len) as Int
+        jsMod.stringToUTF8(s, p, len)
+        owned.add(p)
+        return p
+    }
+    fun ints(values: List<Int>): Int {
+        if (values.isEmpty()) return 0
+        val p = jsMod._malloc(values.size * 4) as Int
+        owned.add(p)
+        values.forEachIndexed { i, v -> jsSetI32(p + i * 4, v) }
+        return p
+    }
+    val ptr = jsMod._malloc(Off.LATENCY_SETTINGS_SIZE) as Int
+    return try {
+        jsSetPtr(ptr + Off.LATENCY_IMPLEMENTATION_ID, cstr(settings.implementationId))
+        jsSetI32(ptr + Off.LATENCY_PLAYBACK_MODE, settings.playbackCompensationMode.nativeValue)
+        jsSetI32(ptr + Off.LATENCY_MONITORING_POLICY, settings.inputMonitoringPolicy.nativeValue)
+        jsSetPtr(ptr + Off.LATENCY_MONITORED, ints(settings.monitoredTrackIndexes))
+        jsSetI32(ptr + Off.LATENCY_MONITORED_COUNT, settings.monitoredTrackIndexes.size)
+        jsSetPtr(ptr + Off.LATENCY_ARMED, ints(settings.recordArmedTrackIndexes))
+        jsSetI32(ptr + Off.LATENCY_ARMED_COUNT, settings.recordArmedTrackIndexes.size)
+        // Flat key, value, key, value... array; property_count counts pairs.
+        val properties = settings.implementationProperties
+        val propertiesPtr = if (properties.isEmpty()) 0 else {
+            val p = jsMod._malloc(properties.size * 2 * 4) as Int
+            owned.add(p)
+            properties.entries.forEachIndexed { i, entry ->
+                jsSetPtr(p + i * 8, cstr(entry.key))
+                jsSetPtr(p + i * 8 + 4, cstr(entry.value))
+            }
+            p
+        }
+        jsSetPtr(ptr + Off.LATENCY_PROPERTIES, propertiesPtr)
+        jsSetI32(ptr + Off.LATENCY_PROPERTY_COUNT, properties.size)
+        block(ptr)
+    } finally {
+        owned.forEach { jsMod._free(it) }
+        jsMod._free(ptr)
+    }
 }
 
 // ─── JsProjectAddressBook ────────────────────────────────────────────────────
@@ -616,7 +767,6 @@ class JsTrackFragment internal constructor(internal val handle: Int) : TrackFrag
 // ─── Timeline history implementation ─────────────────────────────────────────
 
 internal class JsTimelineHistory(private val handle: Int) {
-    val undoEngine: UndoEngine get() = JsUndoEngine(jsMod._uapmd_tl_undo_engine(handle) as Int)
     val commands: ProjectCommands get() = JsProjectCommands(jsMod._uapmd_tl_commands(handle) as Int)
     val addresses: ProjectAddressBook get() = JsProjectAddressBook(jsMod._uapmd_tl_addresses(handle) as Int)
 
@@ -681,6 +831,14 @@ internal class JsTimelineHistory(private val handle: Int) {
         withWasmMem(Off.CLIP_ADD_SIZE) { out ->
             jsMod._uapmd_tl_attach_clip_fragment(
                 out, handle, trackIndex, (fragment as JsClipFragment).handle, idPolicy.nativeValue
+            )
+            jsDecodeClipAddResult(out)
+        }
+
+    fun pasteClipFragment(trackIndex: Int, fragment: ClipFragment): ClipAddResult =
+        withWasmMem(Off.CLIP_ADD_SIZE) { out ->
+            jsMod._uapmd_tl_paste_clip_fragment(
+                out, handle, trackIndex, (fragment as JsClipFragment).handle
             )
             jsDecodeClipAddResult(out)
         }

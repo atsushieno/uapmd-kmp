@@ -108,6 +108,14 @@ class JvmTimelineFacade internal constructor(
         return ProjectResult(r.success != 0.toByte(), r.error)
     }
 
+    override fun newProject(): ProjectResult {
+        val r = lib.uapmd_tl_new_project(handle)
+        return ProjectResult(r.success != 0.toByte(), r.error)
+    }
+
+    override val masterTempoMap: TempoMap
+        get() = JvmTempoMap(lib.uapmd_tl_master_tempo_map(handle) ?: error("no master tempo map"))
+
     override fun calculateContentBounds(): ContentBounds {
         val r = lib.uapmd_tl_calculate_content_bounds(handle)
         return ContentBounds(
@@ -152,7 +160,6 @@ class JvmTimelineFacade internal constructor(
 
     // ─── Project history (uapmd 0.5.6) ──────────────────────────────────────
 
-    override val undoEngine get() = history.undoEngine
     override val commands get() = history.commands
     override val addresses get() = history.addresses
 
@@ -180,6 +187,9 @@ class JvmTimelineFacade internal constructor(
 
     override fun attachClipFragment(trackIndex: Int, fragment: ClipFragment, idPolicy: ObjectIdPolicy) =
         history.attachClipFragment(trackIndex, fragment, idPolicy)
+
+    override fun pasteClipFragment(trackIndex: Int, fragment: ClipFragment) =
+        history.pasteClipFragment(trackIndex, fragment)
 
     override fun captureTrackFragment(trackIndex: Int, callback: (TrackFragment?, String?) -> Unit) =
         history.captureTrackFragment(trackIndex, callback)
@@ -259,3 +269,26 @@ internal fun UapmdTimelineState.toKotlin(): TimelineState = TimelineState(
     timeSignatureDenominator = time_signature_denominator,
     sampleRate = sample_rate
 )
+
+/**
+ * Borrows the timeline's own map: the handle is only valid until the project
+ * changes, so this is fetched fresh from [TimelineFacade.masterTempoMap] rather
+ * than cached.
+ */
+class JvmTempoMap internal constructor(private val handle: com.sun.jna.Pointer) : TempoMap {
+    override val hasTempoData: Boolean get() = lib.uapmd_tempo_map_has_tempo_data(handle)
+    override val isEmpty: Boolean get() = lib.uapmd_tempo_map_is_empty(handle)
+
+    override fun secondsToBeats(seconds: Double): Double = lib.uapmd_tempo_map_seconds_to_beats(handle, seconds)
+    override fun beatsToSeconds(beats: Double): Double = lib.uapmd_tempo_map_beats_to_seconds(handle, beats)
+
+    override val effectiveSignatures: List<EffectiveSignature>
+        get() {
+            val count = lib.uapmd_tempo_map_effective_signature_count(handle)
+            val out = dev.atsushieno.uapmd.jna.UapmdEffectiveSignature()
+            return (0 until count).mapNotNull { i ->
+                if (!lib.uapmd_tempo_map_get_effective_signature(handle, i, out)) null
+                else EffectiveSignature(out.start_beat, out.end_beat, out.numerator, out.denominator)
+            }
+        }
+}

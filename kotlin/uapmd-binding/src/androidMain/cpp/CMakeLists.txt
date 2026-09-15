@@ -13,6 +13,13 @@ get_filename_component(CAPI_DIR
 
 include("${UAPMD_SRC_DIR}/cmake/CPM.cmake")
 
+# Every UAPMD_ENABLE_* feature option, on -- before add_subdirectory(), since
+# uapmd declares the same options and option() is a no-op once the cache entry
+# exists. The Gradle build passes -DUAPMD_ENABLE_ARA=OFF, which still wins.
+get_filename_component(UAPMD_KMP_CMAKE_DIR
+    "${CMAKE_CURRENT_SOURCE_DIR}/../../../../../cmake" REALPATH)
+include("${UAPMD_KMP_CMAKE_DIR}/UapmdFeatureOptions.cmake")
+
 find_package(SDL3 REQUIRED CONFIG)
 
 set(UAPMD_SOURCE_DIR "${UAPMD_SRC_DIR}")

@@ -217,6 +217,18 @@ class NativeSequencerTrack internal constructor(
 ) : SequencerTrack {
 
     override val graph: PluginGraph get() = NativePluginGraph(uapmd_track_graph(handle)!!)
+
+    override val unresolvedGraphType: String
+        get() = readCString { buf, size -> uapmd_track_unresolved_graph_type(handle, buf, size) }
+
+    override val unresolvedGraphPayload: ByteArray
+        get() = memScoped {
+            val size = uapmd_track_unresolved_graph_payload(handle, null, 0u).toInt()
+            if (size <= 0) return@memScoped ByteArray(0)
+            val buf = allocArray<UByteVar>(size)
+            val written = uapmd_track_unresolved_graph_payload(handle, buf, size.toULong()).toInt()
+            ByteArray(written) { buf[it].toByte() }
+        }
     override val latencyInSamples: UInt get() = uapmd_track_latency_in_samples(handle)
     override val renderLeadInSamples: UInt get() = uapmd_track_render_lead_in_samples(handle)
     override val tailLengthInSeconds: Double get() = uapmd_track_tail_length_in_seconds(handle)

@@ -221,6 +221,18 @@ class JvmSequencerTrack internal constructor(
 ) : SequencerTrack {
 
     override val graph: PluginGraph get() = JvmPluginGraph(lib.uapmd_track_graph(handle) ?: error("uapmd_track_graph returned null"))
+
+    override val unresolvedGraphType: String
+        get() = readJvmString { buf, size -> lib.uapmd_track_unresolved_graph_type(handle, buf, size) }
+
+    override val unresolvedGraphPayload: ByteArray
+        get() {
+            val size = lib.uapmd_track_unresolved_graph_payload(handle, null, 0L).toInt()
+            if (size <= 0) return ByteArray(0)
+            val buf = ByteArray(size)
+            val written = lib.uapmd_track_unresolved_graph_payload(handle, buf, size.toLong()).toInt()
+            return if (written == size) buf else buf.copyOf(written)
+        }
     override val latencyInSamples: UInt get() = lib.uapmd_track_latency_in_samples(handle).toUInt()
     override val renderLeadInSamples: UInt get() = lib.uapmd_track_render_lead_in_samples(handle).toUInt()
     override val tailLengthInSeconds: Double get() = lib.uapmd_track_tail_length_in_seconds(handle)

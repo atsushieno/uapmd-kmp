@@ -984,6 +984,22 @@ uapmd_app_project_result_t uapmd_app_save_project_sync(uapmd_app_model_t app, co
     return { r.success, tl_error.empty() ? nullptr : tl_error.c_str() };
 }
 
+uapmd_app_project_result_t uapmd_app_new_project(uapmd_app_model_t app) {
+    auto promise = std::make_shared<std::promise<uapmd_app::AppModel::ProjectResult>>();
+    AM(app)->newProject([promise](uapmd_app::AppModel::ProjectResult r) mutable {
+        promise->set_value(std::move(r));
+    });
+    auto r = promise->get_future().get();
+    tl_error = r.error;
+    return { r.success, tl_error.empty() ? nullptr : tl_error.c_str() };
+}
+
+uapmd_tempo_map_t uapmd_app_master_tempo_map(uapmd_app_model_t app) {
+    if (!app) return nullptr;
+    return reinterpret_cast<uapmd_tempo_map_t>(
+        const_cast<uapmd::TempoMap*>(&AM(app)->masterTempoMap()));
+}
+
 uapmd_app_project_result_t uapmd_app_load_project(uapmd_app_model_t app, const char* file_path) {
     auto promise = std::make_shared<std::promise<uapmd_app::AppModel::ProjectResult>>();
     AM(app)->loadProject(file_path, [promise](uapmd_app::AppModel::ProjectResult r) mutable {

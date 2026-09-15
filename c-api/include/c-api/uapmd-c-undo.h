@@ -1,4 +1,4 @@
-/* uapmd C API — project history: undo engine, commands, fragments
+/* uapmd C API — project history: command manager, commands, fragments
  *
  * Introduced by uapmd 0.5.6. Reading the document goes through the timeline
  * facade (uapmd-c-engine.h); changing it as a user action goes through
@@ -17,7 +17,13 @@ extern "C" {
 
 /* ── Opaque handles ──────────────────────────────────────────────────────── */
 
-typedef struct uapmd_undo_engine*      uapmd_undo_engine_t;
+/* The project's history. uapmd 0.5.7 turned the history into an interface
+ * (uapmd::ProjectHistory) that the project chooses an implementation of, and
+ * withdrew every direct handle on the engine behind it: what used to be
+ * reachable as ProjectUndoEngine is now reached through the command manager,
+ * which carries the whole contract -- undo/redo, steps, gestures, save points
+ * and retention. The uapmd_undo_engine_* family that mirrored the old engine is
+ * gone with it; its calls live on here under uapmd_command_manager_*. */
 typedef struct uapmd_command_manager*  uapmd_command_manager_t;
 typedef struct uapmd_project_commands* uapmd_project_commands_t;
 typedef struct uapmd_address_book*     uapmd_address_book_t;
@@ -55,6 +61,19 @@ typedef enum uapmd_object_id_policy {
     UAPMD_OBJECT_ID_RESTORE = 0,
     UAPMD_OBJECT_ID_MINT    = 1
 } uapmd_object_id_policy_t;
+
+/* Whether one history step delivers its document events as a single batch.
+ *
+ * PER_COMMAND lets observers see the step progress, which is what a step that
+ * spans asynchronous work needs: a document transaction must not stay open
+ * across a remote round trip or a plug-in archive. WHOLE_STEP hides the
+ * intermediate states, and is only correct for a step whose commands all run
+ * inline. A gesture should almost always stay PER_COMMAND: it lasts as long as
+ * the user drags, and batching would freeze every observer for that long. */
+typedef enum uapmd_step_event_batching {
+    UAPMD_STEP_EVENTS_PER_COMMAND = 0,
+    UAPMD_STEP_EVENTS_WHOLE_STEP  = 1
+} uapmd_step_event_batching_t;
 
 /* ── Result / state structs ──────────────────────────────────────────────── */
 
@@ -120,60 +139,53 @@ typedef void (*uapmd_track_clear_cb_t)(const char* error, void* user_data);
 typedef void (*uapmd_track_fragment_cb_t)(uapmd_track_fragment_t fragment, const char* error, void* user_data);
 
 /* ═══════════════════════════════════════════════════════════════════════════
- *  ProjectUndoEngine
- * ═══════════════════════════════════════════════════════════════════════════ */
-
-UAPMD_C_EXPORT bool uapmd_undo_engine_get_state(uapmd_undo_engine_t eng, uapmd_undo_state_t* out);
-
-UAPMD_C_EXPORT void uapmd_undo_engine_undo(uapmd_undo_engine_t eng, void* user_data, uapmd_undo_completion_cb_t callback);
-UAPMD_C_EXPORT void uapmd_undo_engine_redo(uapmd_undo_engine_t eng, void* user_data, uapmd_undo_completion_cb_t callback);
-
-/* Opens one named history step. Operations performed while it is open are
- * applied immediately but enter history only when end_compound() succeeds.
- * Nested compounds are deliberately rejected. */
-UAPMD_C_EXPORT uapmd_undo_result_t uapmd_undo_engine_begin_compound(uapmd_undo_engine_t eng,
-                                                                       const char* description,
-                                                                       uapmd_mutation_origin_t origin);
-UAPMD_C_EXPORT void uapmd_undo_engine_end_compound(uapmd_undo_engine_t eng, void* user_data, uapmd_undo_completion_cb_t callback);
-UAPMD_C_EXPORT void uapmd_undo_engine_cancel_compound(uapmd_undo_engine_t eng, void* user_data, uapmd_undo_completion_cb_t callback);
-
-/* A gesture is a compound scope that coalesces adjacent compatible operations:
- * intermediate values are applied, history keeps only first and last. */
-UAPMD_C_EXPORT uapmd_undo_result_t uapmd_undo_engine_begin_gesture(uapmd_undo_engine_t eng,
-                                                                      const char* description,
-                                                                      uapmd_mutation_origin_t origin);
-UAPMD_C_EXPORT void uapmd_undo_engine_end_gesture(uapmd_undo_engine_t eng, void* user_data, uapmd_undo_completion_cb_t callback);
-UAPMD_C_EXPORT void uapmd_undo_engine_cancel_gesture(uapmd_undo_engine_t eng, void* user_data, uapmd_undo_completion_cb_t callback);
-
-UAPMD_C_EXPORT bool uapmd_undo_engine_clear(uapmd_undo_engine_t eng, bool mark_current_state_saved);
-UAPMD_C_EXPORT bool uapmd_undo_engine_mark_saved(uapmd_undo_engine_t eng);
-UAPMD_C_EXPORT bool uapmd_undo_engine_mark_state_saved(uapmd_undo_engine_t eng, uint64_t state_id);
-UAPMD_C_EXPORT bool uapmd_undo_engine_set_maximum_history_size(uapmd_undo_engine_t eng, uint64_t bytes);
-UAPMD_C_EXPORT void uapmd_undo_engine_shutdown(uapmd_undo_engine_t eng);
-
-/* ═══════════════════════════════════════════════════════════════════════════
- *  ProjectCommandManager
+ *  ProjectCommandManager — the project's history
+ *
+ *  Everything that changes the document goes through a command, and every
+ *  command is recorded here. Reading the document goes through the timeline
+ *  facade instead (uapmd-c-engine.h).
  * ═══════════════════════════════════════════════════════════════════════════ */
 
 UAPMD_C_EXPORT bool uapmd_command_manager_get_state(uapmd_command_manager_t cm, uapmd_undo_state_t* out);
-UAPMD_C_EXPORT uapmd_undo_engine_t uapmd_command_manager_history(uapmd_command_manager_t cm);
 
 UAPMD_C_EXPORT void uapmd_command_manager_undo(uapmd_command_manager_t cm, void* user_data, uapmd_undo_completion_cb_t callback);
 UAPMD_C_EXPORT void uapmd_command_manager_redo(uapmd_command_manager_t cm, void* user_data, uapmd_undo_completion_cb_t callback);
 
-/* One named history step spanning several commands. */
+/* One named history step spanning several commands. Commands performed while
+ * it is open are applied immediately but enter history as one entry only when
+ * end_step() succeeds. Nested steps are deliberately rejected. */
 UAPMD_C_EXPORT uapmd_undo_result_t uapmd_command_manager_begin_step(uapmd_command_manager_t cm,
                                                                       const char* description,
-                                                                      uapmd_mutation_origin_t origin);
+                                                                      uapmd_mutation_origin_t origin,
+                                                                      uapmd_step_event_batching_t batching);
 UAPMD_C_EXPORT void uapmd_command_manager_end_step(uapmd_command_manager_t cm, void* user_data, uapmd_undo_completion_cb_t callback);
+/* Reverts every child that already ran, in reverse order. */
 UAPMD_C_EXPORT void uapmd_command_manager_cancel_step(uapmd_command_manager_t cm, void* user_data, uapmd_undo_completion_cb_t callback);
 
+/* A gesture is a step that coalesces adjacent commands sharing a command id:
+ * intermediate values are applied, history keeps only first and last. */
 UAPMD_C_EXPORT uapmd_undo_result_t uapmd_command_manager_begin_gesture(uapmd_command_manager_t cm,
                                                                          const char* description,
-                                                                         uapmd_mutation_origin_t origin);
+                                                                         uapmd_mutation_origin_t origin,
+                                                                         uapmd_step_event_batching_t batching);
 UAPMD_C_EXPORT void uapmd_command_manager_end_gesture(uapmd_command_manager_t cm, void* user_data, uapmd_undo_completion_cb_t callback);
 UAPMD_C_EXPORT void uapmd_command_manager_cancel_gesture(uapmd_command_manager_t cm, void* user_data, uapmd_undo_completion_cb_t callback);
 
+/* Save points and retention. What "dirty" means belongs to the history, not to
+ * whoever writes the file: a numeric cursor cannot tell an undo followed by a
+ * fresh edit from the state that was saved.
+ *
+ * Saving captures the current state id when serialization starts and marks that
+ * node saved once the write succeeds, so an edit made while the write is in
+ * flight still leaves the project dirty. */
+UAPMD_C_EXPORT bool uapmd_command_manager_mark_saved(uapmd_command_manager_t cm);
+UAPMD_C_EXPORT bool uapmd_command_manager_mark_state_saved(uapmd_command_manager_t cm, uint64_t state_id);
+/* Releases every retained revert and makes the current document a new history
+ * root. Fails while a command is pending or a step is open. */
+UAPMD_C_EXPORT bool uapmd_command_manager_clear(uapmd_command_manager_t cm, bool mark_current_state_saved);
+UAPMD_C_EXPORT bool uapmd_command_manager_set_maximum_history_size(uapmd_command_manager_t cm, uint64_t bytes);
+
+/* Refuses new work and completes pending notification as Cancelled. */
 UAPMD_C_EXPORT void uapmd_command_manager_shutdown(uapmd_command_manager_t cm);
 
 /* ═══════════════════════════════════════════════════════════════════════════
@@ -223,9 +235,124 @@ UAPMD_C_EXPORT bool uapmd_commands_set_plugin_per_note_controller_value(uapmd_pr
                                                                            uapmd_mutation_origin_t origin);
 UAPMD_C_EXPORT bool uapmd_commands_set_plugin_group(uapmd_project_commands_t cmd, int32_t instance_id, uint8_t group, uapmd_mutation_origin_t origin);
 
+/* ── Track graph edges ───────────────────────────────────────────────────── */
+
+typedef enum uapmd_graph_endpoint_type {
+    UAPMD_GRAPH_ENDPOINT_GRAPH_INPUT  = 0,
+    UAPMD_GRAPH_ENDPOINT_PLUGIN       = 1,
+    UAPMD_GRAPH_ENDPOINT_GRAPH_OUTPUT = 2
+} uapmd_graph_endpoint_type_t;
+
+typedef enum uapmd_graph_bus_type {
+    UAPMD_GRAPH_BUS_AUDIO = 0,
+    UAPMD_GRAPH_BUS_EVENT = 1
+} uapmd_graph_bus_type_t;
+
+/*
+ * `node_id` is the node's persistent identity as stored in the project, and is the
+ * field a graph editor must key its pins by: `instance_id` is -1 for BOTH graph
+ * endpoints and for every built-in node, so it cannot tell them apart. It may be
+ * null or empty, in which case the identity is derived the way uapmd-app's
+ * `endpointNodeId()` derives it (PluginGraphEditor.cpp:105): "graph:input",
+ * "graph:output", or "plugin:<instance_id>".
+ */
+typedef struct uapmd_graph_endpoint {
+    uapmd_graph_endpoint_type_t type;
+    const char* node_id;
+    int32_t instance_id;
+    uint32_t bus_index;
+} uapmd_graph_endpoint_t;
+
+typedef struct uapmd_graph_connection {
+    int64_t id;
+    uapmd_graph_bus_type_t bus_type;
+    uapmd_graph_endpoint_t source;
+    uapmd_graph_endpoint_t target;
+} uapmd_graph_connection_t;
+
+/* Device inputs. Adding one, rerouting it and removing it all write the same
+ * per-input value, so undoing an add is a removal. Moved here from the timeline
+ * facade in uapmd 0.5.7, which is why they are undoable at all. */
+UAPMD_C_EXPORT bool uapmd_commands_add_device_input_to_track(uapmd_project_commands_t cmd,
+                                                                int32_t track_index,
+                                                                int32_t source_node_id,
+                                                                const uint32_t* channel_indices,
+                                                                uint32_t channel_count,
+                                                                uapmd_mutation_origin_t origin);
+UAPMD_C_EXPORT bool uapmd_commands_set_device_input_channels(uapmd_project_commands_t cmd,
+                                                                int32_t track_index,
+                                                                int32_t source_node_id,
+                                                                const uint32_t* channel_indices,
+                                                                uint32_t channel_count,
+                                                                uapmd_mutation_origin_t origin);
+UAPMD_C_EXPORT bool uapmd_commands_remove_device_input_from_track(uapmd_project_commands_t cmd,
+                                                                     int32_t track_index,
+                                                                     int32_t source_node_id,
+                                                                     uapmd_mutation_origin_t origin);
+
+/* Track graph edges. Presence is the value here too, so undoing a connect is a
+ * disconnect. On failure the reason the graph gave -- a cycle, a missing
+ * endpoint, a direction mismatch -- is left in per-thread storage readable with
+ * uapmd_commands_last_graph_error() until the next graph call on this thread. */
+UAPMD_C_EXPORT bool uapmd_commands_connect_track_graph(uapmd_project_commands_t cmd,
+                                                          int32_t track_index,
+                                                          const uapmd_graph_connection_t* connection,
+                                                          uapmd_mutation_origin_t origin);
+UAPMD_C_EXPORT bool uapmd_commands_disconnect_track_graph_connection(uapmd_project_commands_t cmd,
+                                                                         int32_t track_index,
+                                                                         int64_t connection_id,
+                                                                         uapmd_mutation_origin_t origin);
+/* Never NULL; empty when the last graph call succeeded. */
+UAPMD_C_EXPORT const char* uapmd_commands_last_graph_error(void);
+
+/* Replaces a track's graph with a fresh one of the requested type. The event
+ * buffer size is the caller's: the project loader and the application model
+ * each supply their own. */
+UAPMD_C_EXPORT bool uapmd_commands_replace_track_graph_type(uapmd_project_commands_t cmd,
+                                                               int32_t track_index,
+                                                               const char* graph_type_id,
+                                                               size_t event_buffer_size_in_bytes,
+                                                               uapmd_mutation_origin_t origin);
+
 /* Project-wide properties. The caller is responsible for validating marker
  * identity and reference cycles before submitting. */
 UAPMD_C_EXPORT bool uapmd_commands_set_master_track_markers(uapmd_project_commands_t cmd, const uapmd_clip_marker_t* markers, uint32_t marker_count, uapmd_mutation_origin_t origin);
+
+/* The complete persisted latency/monitoring configuration, as one history step.
+ * To change a single field, read the current settings with
+ * uapmd_engine_get_latency_compensation_settings(), alter that field, and
+ * submit the whole snapshot back. `implementation_properties` is a flat array
+ * of alternating key and value pointers, so `property_count` counts pairs. */
+typedef struct uapmd_latency_compensation_settings {
+    const char* implementation_id;
+    int32_t     playback_compensation_mode;  /* uapmd_playback_compensation_mode_t */
+    int32_t     input_monitoring_policy;     /* uapmd_input_monitoring_policy_t */
+    const int32_t* monitored_track_indexes;
+    uint32_t       monitored_track_count;
+    const int32_t* record_armed_track_indexes;
+    uint32_t       record_armed_track_count;
+    const char* const* implementation_properties; /* key, value, key, value, ... */
+    uint32_t           property_count;            /* number of pairs */
+} uapmd_latency_compensation_settings_t;
+
+typedef enum uapmd_playback_compensation_mode {
+    UAPMD_PLAYBACK_COMPENSATION_COMPENSATED = 0,
+    UAPMD_PLAYBACK_COMPENSATION_LOW_LATENCY = 1
+} uapmd_playback_compensation_mode_t;
+
+typedef enum uapmd_input_monitoring_policy {
+    /* Prefer monitored live input over fully compensated playback on that path
+     * when the track is both record-armed and monitor-enabled. */
+    UAPMD_INPUT_MONITORING_TAPE_STYLE = 0,
+    /* Low-latency monitoring only for tracks with live input that are
+     * explicitly monitor-enabled; other playback stays compensated. */
+    UAPMD_INPUT_MONITORING_AUTO       = 1,
+    UAPMD_INPUT_MONITORING_OFF        = 2
+} uapmd_input_monitoring_policy_t;
+
+UAPMD_C_EXPORT bool uapmd_commands_set_latency_compensation_settings(uapmd_project_commands_t cmd,
+                                                                        const uapmd_latency_compensation_settings_t* settings,
+                                                                        uapmd_mutation_origin_t origin);
 
 /* ═══════════════════════════════════════════════════════════════════════════
  *  ProjectAddressBook — persistent identity <-> runtime index
@@ -288,8 +415,9 @@ UAPMD_C_EXPORT bool     uapmd_track_fragment_get_plugin(uapmd_track_fragment_t f
  *  TimelineFacade — history accessors and undoable structural mutations
  * ═══════════════════════════════════════════════════════════════════════════ */
 
-UAPMD_C_EXPORT uapmd_undo_engine_t      uapmd_tl_undo_engine(uapmd_timeline_facade_t tl);
 UAPMD_C_EXPORT uapmd_project_commands_t uapmd_tl_commands(uapmd_timeline_facade_t tl);
+/* Shorthand for the command manager behind uapmd_tl_commands(). */
+UAPMD_C_EXPORT uapmd_command_manager_t  uapmd_tl_history(uapmd_timeline_facade_t tl);
 UAPMD_C_EXPORT uapmd_address_book_t     uapmd_tl_addresses(uapmd_timeline_facade_t tl);
 
 /* Groups the document events produced by everything between the two calls into
@@ -335,6 +463,13 @@ UAPMD_C_EXPORT uapmd_clip_add_result_t uapmd_tl_attach_clip_fragment(uapmd_timel
                                                                         int32_t track_index,
                                                                         uapmd_clip_fragment_t fragment,
                                                                         uapmd_object_id_policy_t id_policy);
+
+/* Paste: attaches with fresh identifiers AND records the result as one
+ * undoable edit, which plain attach does not do. Must NOT be called inside a
+ * document transaction. */
+UAPMD_C_EXPORT uapmd_clip_add_result_t uapmd_tl_paste_clip_fragment(uapmd_timeline_facade_t tl,
+                                                                       int32_t track_index,
+                                                                       uapmd_clip_fragment_t fragment);
 
 /* Both halves are asynchronous because a track owns live plug-in instances.
  * The callback runs exactly once, on the thread completing the last plug-in

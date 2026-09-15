@@ -19,6 +19,16 @@ extern "C" {
 
 typedef struct uapmd_addin_manager* uapmd_addin_manager_t;
 
+/* Host-owned registries that addins contribute to. The host creates them,
+ * publishes them into an AddinManager before initialize(), and keeps them alive
+ * for as long as any addin attached to them stays loaded -- destroying one
+ * before uapmd_addin_manager_shutdown() leaves whatever registered in it
+ * dangling. An addin removes its own contributions during cleanup(). */
+typedef struct uapmd_command_registry*        uapmd_command_registry_t;
+typedef struct uapmd_clip_command_registry*   uapmd_clip_command_registry_t;
+typedef struct uapmd_clip_editor_registry*    uapmd_clip_editor_registry_t;
+typedef struct uapmd_stem_separator_registry* uapmd_stem_separator_registry_t;
+
 /* ── Types ───────────────────────────────────────────────────────────────── */
 
 typedef enum uapmd_addin_state {
@@ -84,6 +94,157 @@ UAPMD_C_EXPORT size_t uapmd_addin_manager_last_error(uapmd_addin_manager_t mgr, 
  * addins are available. */
 UAPMD_C_EXPORT bool uapmd_addin_supports_dynamic_loading(void);
 UAPMD_C_EXPORT const char* uapmd_addin_state_name(uapmd_addin_state_t state);
+
+/* ═══════════════════════════════════════════════════════════════════════════
+ *  Host registries
+ *
+ *  An addin attaches to exactly one extension point, named by a path, and
+ *  fails to load when the host has not published that path. The registries
+ *  below are the ones the addins uapmd ships attach to, so a host that wants
+ *  them has to publish all of these before initialize():
+ *
+ *    /uapmd/app/command/v1                    the MIR, Basic Pitch, DrumScript
+ *                                             and Demucs analysis commands
+ *    /uapmd/app/clip-command/v1               their clip-scoped counterparts
+ *    /uapmd/app/timeline/clip-editor/v1       timeline clip editors
+ *    /uapmd/audio-import/stem-separator/v1    Demucs and BS-Roformer
+ *
+ *  uapmd_engine_register_addin_extension_points() publishes the engine's own
+ *  two (/uapmd/engine/v1 and /uapmd/audio-graph/provider/v1) separately.
+ *
+ *  Every index below addresses into the registry's current contents, which
+ *  change when an addin is enabled or disabled. Treat an index as valid only
+ *  until the next uapmd_addin_manager_set_enabled() or _initialize() call --
+ *  in practice, for the duration of one UI update.
+ *
+ *  Strings in the *_info_t structs point into per-thread storage that the next
+ *  call of the same getter on the same thread overwrites; copy to keep them.
+ * ═══════════════════════════════════════════════════════════════════════════ */
+
+/* One command an addin contributed. `order` is the addin's own placement hint;
+ * the host decides where and how to present it. */
+typedef struct uapmd_addin_command_info {
+    const char* id;
+    const char* title;
+    int32_t     order;
+    bool        enabled;  /* false: present it greyed out */
+} uapmd_addin_command_info_t;
+
+UAPMD_C_EXPORT uapmd_command_registry_t uapmd_command_registry_create(void);
+UAPMD_C_EXPORT void     uapmd_command_registry_destroy(uapmd_command_registry_t reg);
+UAPMD_C_EXPORT void     uapmd_addin_manager_register_command_registry(uapmd_addin_manager_t mgr, uapmd_command_registry_t reg);
+UAPMD_C_EXPORT uint32_t uapmd_command_registry_count(uapmd_command_registry_t reg);
+UAPMD_C_EXPORT bool     uapmd_command_registry_get(uapmd_command_registry_t reg, uint32_t index, uapmd_addin_command_info_t* out);
+UAPMD_C_EXPORT bool     uapmd_command_registry_invoke(uapmd_command_registry_t reg, uint32_t index);
+/* Invoking by id survives the list changing underneath, which an index does
+ * not. False when no command with that id is registered. */
+UAPMD_C_EXPORT bool     uapmd_command_registry_invoke_by_id(uapmd_command_registry_t reg, const char* id);
+
+/* The clip a clip-scoped command is being offered for. The identifiers are the
+ * ones the rest of this API takes, so a command resolves the clip through the
+ * engine rather than through anything carried here. */
+typedef struct uapmd_clip_command_target {
+    int32_t track_index;
+    int32_t clip_id;
+    bool    midi_clip;
+    bool    master_track;
+} uapmd_clip_command_target_t;
+
+UAPMD_C_EXPORT uapmd_clip_command_registry_t uapmd_clip_command_registry_create(void);
+UAPMD_C_EXPORT void     uapmd_clip_command_registry_destroy(uapmd_clip_command_registry_t reg);
+UAPMD_C_EXPORT void     uapmd_addin_manager_register_clip_command_registry(uapmd_addin_manager_t mgr, uapmd_clip_command_registry_t reg);
+UAPMD_C_EXPORT uint32_t uapmd_clip_command_registry_count(uapmd_clip_command_registry_t reg);
+/* `enabled` in `out` is left true here: a clip command's enablement depends on
+ * the target, so ask uapmd_clip_command_registry_enabled() for the real answer. */
+UAPMD_C_EXPORT bool     uapmd_clip_command_registry_get(uapmd_clip_command_registry_t reg, uint32_t index, uapmd_addin_command_info_t* out);
+/* False hides the command for this clip entirely; true with enabled() false
+ * means show it greyed out. */
+UAPMD_C_EXPORT bool     uapmd_clip_command_registry_applies_to(uapmd_clip_command_registry_t reg, uint32_t index, uapmd_clip_command_target_t target);
+UAPMD_C_EXPORT bool     uapmd_clip_command_registry_enabled(uapmd_clip_command_registry_t reg, uint32_t index, uapmd_clip_command_target_t target);
+UAPMD_C_EXPORT bool     uapmd_clip_command_registry_invoke(uapmd_clip_command_registry_t reg, uint32_t index, uapmd_clip_command_target_t target);
+
+/* Timeline clip editors.
+ *
+ * Only the registry is bound, not uapmd_addin::ClipEditor itself: an editor
+ * draws itself by calling update() and render() inside the host's own
+ * immediate-mode UI loop, which a Kotlin host does not have and cannot give it.
+ * Publishing the extension point still matters, because an addin that asks for
+ * it fails to load when it is missing, and enumerating lets a host report what
+ * it is declining to show. */
+typedef struct uapmd_clip_editor_info {
+    const char* id;
+    const char* name;
+} uapmd_clip_editor_info_t;
+
+UAPMD_C_EXPORT uapmd_clip_editor_registry_t uapmd_clip_editor_registry_create(void);
+UAPMD_C_EXPORT void     uapmd_clip_editor_registry_destroy(uapmd_clip_editor_registry_t reg);
+UAPMD_C_EXPORT void     uapmd_addin_manager_register_clip_editor_registry(uapmd_addin_manager_t mgr, uapmd_clip_editor_registry_t reg);
+UAPMD_C_EXPORT uint32_t uapmd_clip_editor_registry_count(uapmd_clip_editor_registry_t reg);
+UAPMD_C_EXPORT bool     uapmd_clip_editor_registry_get(uapmd_clip_editor_registry_t reg, uint32_t index, uapmd_clip_editor_info_t* out);
+
+/* ── Stem separation ─────────────────────────────────────────────────────── */
+
+/* A separator that needs no model file reports an empty label and zero
+ * extensions; one that does needs the file picked by the host and passed to
+ * uapmd_import_audio_file(). */
+typedef struct uapmd_stem_separator_info {
+    const char* id;
+    const char* name;
+    const char* model_file_label;
+    uint32_t    model_file_extension_count;
+} uapmd_stem_separator_info_t;
+
+UAPMD_C_EXPORT uapmd_stem_separator_registry_t uapmd_stem_separator_registry_create(void);
+UAPMD_C_EXPORT void     uapmd_stem_separator_registry_destroy(uapmd_stem_separator_registry_t reg);
+UAPMD_C_EXPORT void     uapmd_addin_manager_register_stem_separator_registry(uapmd_addin_manager_t mgr, uapmd_stem_separator_registry_t reg);
+UAPMD_C_EXPORT uint32_t uapmd_stem_separator_registry_count(uapmd_stem_separator_registry_t reg);
+UAPMD_C_EXPORT bool     uapmd_stem_separator_registry_get(uapmd_stem_separator_registry_t reg, uint32_t index, uapmd_stem_separator_info_t* out);
+/* One accepted model-file extension, e.g. ".onnx". */
+UAPMD_C_EXPORT size_t   uapmd_stem_separator_registry_get_model_extension(uapmd_stem_separator_registry_t reg, uint32_t index, uint32_t extension_index, char* buf, size_t buf_size);
+
+/* Progress and cancellation for an import. Return false from the progress
+ * callback to cancel; it is called from the worker thread running the import,
+ * not from the caller's. */
+typedef bool (*uapmd_import_progress_cb_t)(float progress, const char* message, void* user_data);
+
+/* One separated stem, ready to become a clip. */
+typedef struct uapmd_audio_stem_import {
+    const char* stem_name;
+    const char* filepath;
+    const char* clip_display_name;
+} uapmd_audio_stem_import_t;
+
+/* Pointers inside are valid until the next uapmd_import_audio_file() call on
+ * the same thread. */
+typedef struct uapmd_audio_import_result {
+    bool        success;
+    bool        canceled;
+    const char* error;      /* NULL when there is none */
+    uint32_t    warning_count;
+    const char* const* warnings;
+    uint32_t    stem_count;
+    const uapmd_audio_stem_import_t* stems;
+} uapmd_audio_import_result_t;
+
+/* Separates `filepath` into stems and writes them under `output_directory`.
+ *
+ * Blocking, and slow by nature -- it runs a neural model over the whole file --
+ * so call it off the UI thread. It holds a lease on the separator for the whole
+ * run, so disabling the contributing addin meanwhile cancels the run rather
+ * than unloading the code underneath it.
+ *
+ * `separator_id` names one of the separators this registry lists; passing an
+ * unknown or withdrawn one fails rather than silently picking another.
+ * `model_path` is the file the separator asked for through its info, and may be
+ * NULL when it asked for none. */
+UAPMD_C_EXPORT uapmd_audio_import_result_t uapmd_import_audio_file(
+    uapmd_stem_separator_registry_t reg,
+    const char* separator_id,
+    const char* filepath,
+    const char* output_directory,
+    const char* model_path,
+    void* user_data,
+    uapmd_import_progress_cb_t progress);
 
 #ifdef __cplusplus
 }

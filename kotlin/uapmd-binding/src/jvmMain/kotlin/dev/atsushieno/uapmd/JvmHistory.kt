@@ -6,6 +6,7 @@ import dev.atsushieno.uapmd.jna.UapmdAudioWarpPoint
 import dev.atsushieno.uapmd.jna.UapmdClipAddress
 import dev.atsushieno.uapmd.jna.UapmdClipData
 import dev.atsushieno.uapmd.jna.UapmdClipMarker
+import dev.atsushieno.uapmd.jna.UapmdLatencyCompensationSettings
 import dev.atsushieno.uapmd.jna.UapmdPluginAddress
 import dev.atsushieno.uapmd.jna.UapmdTimeReference
 import dev.atsushieno.uapmd.jna.UapmdTrackAttachOptions
@@ -136,55 +137,11 @@ private fun trackMutationCallback(callback: (Int, String?) -> Unit): TrackMutati
     return cb
 }
 
-// ─── JvmUndoEngine ───────────────────────────────────────────────────────────
-
-class JvmUndoEngine internal constructor(private val handle: Pointer) : UndoEngine {
-    override val state: UndoState
-        get() = UapmdUndoState().also { lib.uapmd_undo_engine_get_state(handle, it) }.toKotlin()
-
-    override fun undo(completion: ((UndoResult) -> Unit)?) =
-        lib.uapmd_undo_engine_undo(handle, null, completionCallback(completion))
-
-    override fun redo(completion: ((UndoResult) -> Unit)?) =
-        lib.uapmd_undo_engine_redo(handle, null, completionCallback(completion))
-
-    override fun beginCompound(description: String, origin: MutationOrigin): UndoResult =
-        lib.uapmd_undo_engine_begin_compound(handle, description, origin.nativeValue).toKotlin()
-
-    override fun endCompound(completion: ((UndoResult) -> Unit)?) =
-        lib.uapmd_undo_engine_end_compound(handle, null, completionCallback(completion))
-
-    override fun cancelCompound(completion: ((UndoResult) -> Unit)?) =
-        lib.uapmd_undo_engine_cancel_compound(handle, null, completionCallback(completion))
-
-    override fun beginGesture(description: String, origin: MutationOrigin): UndoResult =
-        lib.uapmd_undo_engine_begin_gesture(handle, description, origin.nativeValue).toKotlin()
-
-    override fun endGesture(completion: ((UndoResult) -> Unit)?) =
-        lib.uapmd_undo_engine_end_gesture(handle, null, completionCallback(completion))
-
-    override fun cancelGesture(completion: ((UndoResult) -> Unit)?) =
-        lib.uapmd_undo_engine_cancel_gesture(handle, null, completionCallback(completion))
-
-    override fun clear(markCurrentStateSaved: Boolean): Boolean =
-        lib.uapmd_undo_engine_clear(handle, markCurrentStateSaved)
-
-    override fun markSaved(): Boolean = lib.uapmd_undo_engine_mark_saved(handle)
-    override fun markStateSaved(stateId: Long): Boolean = lib.uapmd_undo_engine_mark_state_saved(handle, stateId)
-    override fun setMaximumHistorySizeInBytes(bytes: Long): Boolean =
-        lib.uapmd_undo_engine_set_maximum_history_size(handle, bytes)
-
-    override fun shutdown() = lib.uapmd_undo_engine_shutdown(handle)
-}
-
 // ─── JvmCommandManager ───────────────────────────────────────────────────────
 
 class JvmCommandManager internal constructor(private val handle: Pointer) : CommandManager {
     override val state: UndoState
         get() = UapmdUndoState().also { lib.uapmd_command_manager_get_state(handle, it) }.toKotlin()
-
-    override val history: UndoEngine
-        get() = JvmUndoEngine(lib.uapmd_command_manager_history(handle) ?: error("no history engine"))
 
     override fun undo(completion: ((UndoResult) -> Unit)?) =
         lib.uapmd_command_manager_undo(handle, null, completionCallback(completion))
@@ -192,8 +149,8 @@ class JvmCommandManager internal constructor(private val handle: Pointer) : Comm
     override fun redo(completion: ((UndoResult) -> Unit)?) =
         lib.uapmd_command_manager_redo(handle, null, completionCallback(completion))
 
-    override fun beginStep(description: String, origin: MutationOrigin): UndoResult =
-        lib.uapmd_command_manager_begin_step(handle, description, origin.nativeValue).toKotlin()
+    override fun beginStep(description: String, origin: MutationOrigin, batching: StepEventBatching): UndoResult =
+        lib.uapmd_command_manager_begin_step(handle, description, origin.nativeValue, batching.nativeValue).toKotlin()
 
     override fun endStep(completion: ((UndoResult) -> Unit)?) =
         lib.uapmd_command_manager_end_step(handle, null, completionCallback(completion))
@@ -201,14 +158,21 @@ class JvmCommandManager internal constructor(private val handle: Pointer) : Comm
     override fun cancelStep(completion: ((UndoResult) -> Unit)?) =
         lib.uapmd_command_manager_cancel_step(handle, null, completionCallback(completion))
 
-    override fun beginGesture(description: String, origin: MutationOrigin): UndoResult =
-        lib.uapmd_command_manager_begin_gesture(handle, description, origin.nativeValue).toKotlin()
+    override fun beginGesture(description: String, origin: MutationOrigin, batching: StepEventBatching): UndoResult =
+        lib.uapmd_command_manager_begin_gesture(handle, description, origin.nativeValue, batching.nativeValue).toKotlin()
 
     override fun endGesture(completion: ((UndoResult) -> Unit)?) =
         lib.uapmd_command_manager_end_gesture(handle, null, completionCallback(completion))
 
     override fun cancelGesture(completion: ((UndoResult) -> Unit)?) =
         lib.uapmd_command_manager_cancel_gesture(handle, null, completionCallback(completion))
+
+    override fun markSaved(): Boolean = lib.uapmd_command_manager_mark_saved(handle)
+    override fun markStateSaved(stateId: Long): Boolean = lib.uapmd_command_manager_mark_state_saved(handle, stateId)
+    override fun clear(markCurrentStateSaved: Boolean): Boolean =
+        lib.uapmd_command_manager_clear(handle, markCurrentStateSaved)
+    override fun setMaximumHistorySizeInBytes(bytes: Long): Boolean =
+        lib.uapmd_command_manager_set_maximum_history_size(handle, bytes)
 
     override fun shutdown() = lib.uapmd_command_manager_shutdown(handle)
 }
@@ -282,6 +246,89 @@ class JvmProjectCommands internal constructor(private val handle: Pointer) : Pro
 
     override fun setMasterTrackMarkers(markers: List<ClipMarkerData>, origin: MutationOrigin) =
         lib.uapmd_commands_set_master_track_markers(handle, markers.toJvmArray(), markers.size, origin.nativeValue)
+
+    override fun addDeviceInputToTrack(trackIndex: Int, sourceNodeId: Int, channelIndices: List<UInt>, origin: MutationOrigin) =
+        lib.uapmd_commands_add_device_input_to_track(
+            handle, trackIndex, sourceNodeId, channelIndices.toNativeIntArray(), channelIndices.size, origin.nativeValue)
+
+    override fun setDeviceInputChannels(trackIndex: Int, sourceNodeId: Int, channelIndices: List<UInt>, origin: MutationOrigin) =
+        lib.uapmd_commands_set_device_input_channels(
+            handle, trackIndex, sourceNodeId, channelIndices.toNativeIntArray(), channelIndices.size, origin.nativeValue)
+
+    override fun removeDeviceInputFromTrack(trackIndex: Int, sourceNodeId: Int, origin: MutationOrigin) =
+        lib.uapmd_commands_remove_device_input_from_track(handle, trackIndex, sourceNodeId, origin.nativeValue)
+
+    override fun connectTrackGraph(trackIndex: Int, connection: GraphConnection, origin: MutationOrigin) =
+        lib.uapmd_commands_connect_track_graph(handle, trackIndex, connection.toJvmStruct(), origin.nativeValue)
+
+    override fun disconnectTrackGraphConnection(trackIndex: Int, connectionId: Long, origin: MutationOrigin) =
+        lib.uapmd_commands_disconnect_track_graph_connection(handle, trackIndex, connectionId, origin.nativeValue)
+
+    override val lastGraphError: String
+        get() = lib.uapmd_commands_last_graph_error() ?: ""
+
+    override fun replaceTrackGraphType(trackIndex: Int, graphTypeId: String, eventBufferSizeInBytes: Long, origin: MutationOrigin) =
+        lib.uapmd_commands_replace_track_graph_type(handle, trackIndex, graphTypeId, eventBufferSizeInBytes, origin.nativeValue)
+
+    override fun setLatencyCompensationSettings(settings: LatencyCompensationSettings, origin: MutationOrigin): Boolean {
+        // Every array the struct points at has to outlive the call, so they are
+        // held in locals rather than built inline.
+        val monitored = settings.monitoredTrackIndexes.toNativeMemory()
+        val armed = settings.recordArmedTrackIndexes.toNativeMemory()
+        val properties = settings.implementationProperties.toNativeStringPairs()
+        val native = UapmdLatencyCompensationSettings().also {
+            it.implementation_id = settings.implementationId
+            it.playback_compensation_mode = settings.playbackCompensationMode.nativeValue
+            it.input_monitoring_policy = settings.inputMonitoringPolicy.nativeValue
+            it.monitored_track_indexes = monitored
+            it.monitored_track_count = settings.monitoredTrackIndexes.size
+            it.record_armed_track_indexes = armed
+            it.record_armed_track_count = settings.recordArmedTrackIndexes.size
+            it.implementation_properties = properties
+            it.property_count = settings.implementationProperties.size
+        }
+        return lib.uapmd_commands_set_latency_compensation_settings(handle, native, origin.nativeValue)
+    }
+}
+
+/** JNA has no unsigned int array; the C side reads the same 32 bits either way. */
+private fun List<UInt>.toNativeIntArray(): IntArray? =
+    if (isEmpty()) null else IntArray(size) { this[it].toInt() }
+
+private fun List<Int>.toNativeMemory(): com.sun.jna.Memory? {
+    if (isEmpty()) return null
+    val memory = com.sun.jna.Memory(size.toLong() * Int.SIZE_BYTES)
+    forEachIndexed { i, v -> memory.setInt(i.toLong() * Int.SIZE_BYTES, v) }
+    return memory
+}
+
+/**
+ * A flat key, value, key, value... array of NUL-terminated strings. The
+ * per-string allocations are kept alive by the returned Memory holding them:
+ * dropping them would leave the pointer array aimed at freed text.
+ */
+private fun Map<String, String>.toNativeStringPairs(): com.sun.jna.Memory? {
+    if (isEmpty()) return null
+    val pointerSize = com.sun.jna.Native.POINTER_SIZE.toLong()
+    val strings = ArrayList<com.sun.jna.Memory>(size * 2)
+    entries.forEach { (key, value) ->
+        strings.add(nativeUtf8(key))
+        strings.add(nativeUtf8(value))
+    }
+    val array = object : com.sun.jna.Memory(strings.size * pointerSize) {
+        @Suppress("unused")
+        val keepAlive = strings
+    }
+    strings.forEachIndexed { i, m -> array.setPointer(i * pointerSize, m) }
+    return array
+}
+
+private fun nativeUtf8(s: String): com.sun.jna.Memory {
+    val bytes = s.toByteArray(Charsets.UTF_8)
+    val memory = com.sun.jna.Memory(bytes.size + 1L)
+    memory.write(0, bytes, 0, bytes.size)
+    memory.setByte(bytes.size.toLong(), 0)
+    return memory
 }
 
 // ─── JvmProjectAddressBook ───────────────────────────────────────────────────
@@ -437,9 +484,6 @@ class JvmTrackFragment internal constructor(internal val handle: Pointer) : Trac
 // one file rather than doubling the size of JvmTimeline.kt.
 
 internal class JvmTimelineHistory(private val handle: Pointer) {
-    val undoEngine: UndoEngine
-        get() = JvmUndoEngine(lib.uapmd_tl_undo_engine(handle) ?: error("no undo engine"))
-
     val commands: ProjectCommands
         get() = JvmProjectCommands(lib.uapmd_tl_commands(handle) ?: error("no project commands"))
 
@@ -493,6 +537,13 @@ internal class JvmTimelineHistory(private val handle: Pointer) {
     fun attachClipFragment(trackIndex: Int, fragment: ClipFragment, idPolicy: ObjectIdPolicy): ClipAddResult {
         val r = lib.uapmd_tl_attach_clip_fragment(
             handle, trackIndex, (fragment as JvmClipFragment).handle, idPolicy.nativeValue
+        )
+        return ClipAddResult(r.clip_id, r.source_node_id, r.success != 0.toByte(), r.error)
+    }
+
+    fun pasteClipFragment(trackIndex: Int, fragment: ClipFragment): ClipAddResult {
+        val r = lib.uapmd_tl_paste_clip_fragment(
+            handle, trackIndex, (fragment as JvmClipFragment).handle
         )
         return ClipAddResult(r.clip_id, r.source_node_id, r.success != 0.toByte(), r.error)
     }

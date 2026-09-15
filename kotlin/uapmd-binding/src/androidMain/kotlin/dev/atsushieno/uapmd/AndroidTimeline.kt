@@ -131,6 +131,14 @@ class AndroidTimelineFacade internal constructor(
         return ProjectResult(arr[0] == "1", arr[1])
     }
 
+    override fun newProject(): ProjectResult {
+        val arr = JniBridge.uapmdTlNewProject(handle)
+        return ProjectResult(arr[0] == "1", arr[1])
+    }
+
+    override val masterTempoMap: TempoMap
+        get() = AndroidTempoMap(JniBridge.uapmdTlMasterTempoMap(handle))
+
     override fun calculateContentBounds(): ContentBounds {
         val d = JniBridge.uapmdTlCalculateContentBounds(handle)
         return ContentBounds(
@@ -156,7 +164,6 @@ class AndroidTimelineFacade internal constructor(
 
     // ─── Project history (uapmd 0.5.6) ──────────────────────────────────────
 
-    override val undoEngine get() = history.undoEngine
     override val commands get() = history.commands
     override val addresses get() = history.addresses
 
@@ -184,6 +191,9 @@ class AndroidTimelineFacade internal constructor(
 
     override fun attachClipFragment(trackIndex: Int, fragment: ClipFragment, idPolicy: ObjectIdPolicy) =
         history.attachClipFragment(trackIndex, fragment, idPolicy)
+
+    override fun pasteClipFragment(trackIndex: Int, fragment: ClipFragment) =
+        history.pasteClipFragment(trackIndex, fragment)
 
     override fun captureTrackFragment(trackIndex: Int, callback: (TrackFragment?, String?) -> Unit) =
         history.captureTrackFragment(trackIndex, callback)
@@ -214,4 +224,24 @@ class AndroidTimelineFacade internal constructor(
         history.removePluginInstance(instanceId, origin, completion)
 
     override val hasPendingPluginMutations get() = history.hasPendingPluginMutations
+}
+
+/**
+ * Borrows the timeline's own map: the handle is only valid until the project
+ * changes, so this is fetched fresh from [TimelineFacade.masterTempoMap] rather
+ * than cached.
+ */
+class AndroidTempoMap internal constructor(private val handle: Long) : TempoMap {
+    override val hasTempoData: Boolean get() = JniBridge.uapmdTempoMapHasTempoData(handle)
+    override val isEmpty: Boolean get() = JniBridge.uapmdTempoMapIsEmpty(handle)
+
+    override fun secondsToBeats(seconds: Double): Double = JniBridge.uapmdTempoMapSecondsToBeats(handle, seconds)
+    override fun beatsToSeconds(beats: Double): Double = JniBridge.uapmdTempoMapBeatsToSeconds(handle, beats)
+
+    override val effectiveSignatures: List<EffectiveSignature>
+        get() = (0 until JniBridge.uapmdTempoMapEffectiveSignatureCount(handle)).mapNotNull { i ->
+            JniBridge.uapmdTempoMapGetEffectiveSignature(handle, i)?.let { d ->
+                EffectiveSignature(d[0], d[1], d[2].toInt(), d[3].toInt())
+            }
+        }
 }
