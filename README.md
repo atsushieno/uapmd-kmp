@@ -44,17 +44,20 @@ cd ../../kotlin
 ./gradlew assembleDebug
 ```
 
-The debug APK is written to `composeApp/build/outputs/apk/debug/`.
+The debug APK is written to `uapmd-cmp/build/outputs/apk/debug/`.
 
 ### JVM desktop (macOS / Linux / Windows)
 
 ```sh
 # Run directly
-./gradlew :composeApp:run
+./gradlew :uapmd-cmp:run
 
-# Or build a distributable (DMG on macOS, MSI on Windows, deb/rpm on Linux)
-./gradlew :composeApp:createDistributable
+# Or build an installable package (DMG on macOS, MSI on Windows, deb on Linux)
+./gradlew :uapmd-cmp:packageDistributionForCurrentOS
 ```
+
+The package is written to `uapmd-cmp/build/compose/binaries/main/{dmg,msi,deb}/`; this is
+what the `build dist` workflow uploads as a per-OS build artifact.
 
 The native shared library (`libuapmd-c-api`) is compiled by CMake as part of the Gradle build and bundled into the JAR via JNE resource paths.
 

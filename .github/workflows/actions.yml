@@ -38,22 +38,26 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          # macOS: JVM + iOS only
+          # macOS: JVM + iOS, and the .dmg desktop package.
           - os: macos-15
             name: macos-jvm-ios
-            gradle_tasks: jvmTest compileKotlinJvm compileKotlinIosArm64 compileKotlinIosSimulatorArm64
+            gradle_tasks: jvmTest compileKotlinJvm compileKotlinIosArm64 compileKotlinIosSimulatorArm64 :uapmd-cmp:packageDistributionForCurrentOS
+            artifacts: kotlin/uapmd-cmp/build/compose/binaries/main/dmg/*.dmg
           # macOS: Android (NDK cross-compile)
           - os: macos-15
             name: android
-            gradle_tasks: assembleDebug
-          # Linux: JVM only (no Android NDK cross-compile, no iOS)
+            gradle_tasks: :uapmd-cmp:assembleDebug
+            artifacts: kotlin/uapmd-cmp/build/outputs/apk/debug/*.apk
+          # Linux: JVM only (no Android NDK cross-compile, no iOS), plus the .deb.
           - os: ubuntu-24.04
             name: linux-jvm
-            gradle_tasks: jvmTest compileKotlinJvm
-          # Windows: JVM only
+            gradle_tasks: jvmTest compileKotlinJvm :uapmd-cmp:packageDistributionForCurrentOS
+            artifacts: kotlin/uapmd-cmp/build/compose/binaries/main/deb/*.deb
+          # Windows: JVM only, plus the .msi.
           - os: windows-2025-vs2026
             name: windows-jvm
-            gradle_tasks: jvmTest compileKotlinJvm
+            gradle_tasks: jvmTest compileKotlinJvm :uapmd-cmp:packageDistributionForCurrentOS
+            artifacts: kotlin/uapmd-cmp/build/compose/binaries/main/msi/*.msi
     steps:
     - name: checkout
       uses: actions/checkout@v4
@@ -64,11 +68,28 @@ jobs:
       if: matrix.name == 'linux-jvm'
       run: |
         sudo apt-get update
-        sudo apt install gcc-14 ninja-build libgtk-3-dev libwebkit2gtk-4.1-dev libadwaita-1-dev libsdl2-dev
+        # fakeroot is what jpackage shells out to when it builds the .deb.
+        sudo apt install gcc-14 ninja-build libgtk-3-dev libwebkit2gtk-4.1-dev libadwaita-1-dev libsdl2-dev fakeroot
 
     - name: brew install
       if: matrix.name == 'macos-jvm-ios'
       run: brew install sdl3 ninja
+
+    # jpackage builds the MSI by invoking WiX 3's candle.exe/light.exe from
+    # PATH. The runner image ships WiX 3.14, but not necessarily on PATH.
+    - name: put WiX 3 on PATH
+      if: matrix.name == 'windows-jvm'
+      shell: pwsh
+      run: |
+        $wix = Get-ChildItem 'C:\Program Files (x86)' -Filter 'WiX Toolset v3.*' -Directory -ErrorAction SilentlyContinue |
+          Sort-Object Name -Descending | Select-Object -First 1
+        if (-not $wix) {
+          choco install wixtoolset --version=3.14.1 --no-progress -y
+          $wix = Get-ChildItem 'C:\Program Files (x86)' -Filter 'WiX Toolset v3.*' -Directory |
+            Sort-Object Name -Descending | Select-Object -First 1
+        }
+        Write-Host "using $($wix.FullName)"
+        "$($wix.FullName)\bin" | Out-File -FilePath $env:GITHUB_PATH -Append -Encoding utf8
 
     - name: prepare dependency cache directories on Windows
       if: matrix.name == 'windows-jvm'
@@ -102,6 +123,13 @@ jobs:
       working-directory: external/aap-core
       run: ./gradlew :androidaudioplugin:publishToMavenLocal
 
+    - name: bump Android versionCode
+      if: matrix.name == 'android'
+      uses: chkfung/android-version-actions@v1.2.1
+      with:
+        gradlePath: kotlin/uapmd-cmp/build.gradle.kts
+        versionCode: ${{ github.run_number }}
+
     - name: build
       working-directory: kotlin
       shell: bash
@@ -112,21 +140,21 @@ jobs:
       uses: actions/upload-artifact@v4
       with:
         name: test-failure-logs-${{ matrix.name }}
-        path: kotlin/**/build/reports/
+        path: |
+          kotlin/**/build/reports/
+          kotlin/**/.cxx/**/*.log
+        if-no-files-found: ignore
 
-    - name: upload artifact (macOS DMG)
-      if: success() && matrix.name == 'macos-jvm-ios'
+    # if-no-files-found: error on purpose. These paths went stale once already
+    # (they still named the removed composeApp module), and a silently empty
+    # artifact looks exactly like a green build.
+    - name: upload artifact
+      if: success()
       uses: actions/upload-artifact@v4
       with:
         name: uapmd-kmp-${{ matrix.name }}
-        path: kotlin/composeApp/build/compose/binaries/main/dmg/*.dmg
-
-    - name: upload artifact (Android APK)
-      if: success() && matrix.name == 'android'
-      uses: actions/upload-artifact@v4
-      with:
-        name: uapmd-kmp-${{ matrix.name }}
-        path: kotlin/composeApp/build/outputs/apk/debug/*.apk
+        path: ${{ matrix.artifacts }}
+        if-no-files-found: error
 
   build-wasm:
     name: 'build Wasm (Emscripten / macOS)'
