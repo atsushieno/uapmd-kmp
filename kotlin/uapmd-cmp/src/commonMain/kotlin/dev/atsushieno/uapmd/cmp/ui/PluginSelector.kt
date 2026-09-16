@@ -47,9 +47,14 @@ private enum class SortColumn { Format, Name, Vendor, Id }
  * uapmd-app's Plugin Selector: scan controls, a filterable and sortable catalog
  * table, a destination selector and the device-name/API fields used when the
  * instance becomes a virtual MIDI 2.0 device.
+ *
+ * [onInstantiated] is called once a plug-in has actually been created, so the
+ * caller can dismiss the selector the way uapmd-app does
+ * (`TimelineEditor.cpp:731` clears `showPluginSelectorWindow_`). A failed
+ * instantiation leaves it open — the error is reported in this window.
  */
 @Composable
-fun PluginSelector(host: UapmdHost) {
+fun PluginSelector(host: UapmdHost, onInstantiated: () -> Unit = {}) {
     var filter by remember { mutableStateOf("") }
     var sortBy by remember { mutableStateOf(SortColumn.Name) }
     var ascending by remember { mutableStateOf(true) }
@@ -88,6 +93,17 @@ fun PluginSelector(host: UapmdHost) {
     }
 
     val blockedByAudioEngine = platformNeedsAudioEngineForScan && !host.isAudioEngineEnabled
+
+    // Only dismiss for an instantiation this window asked for: `lastInstantiation`
+    // outlives the request, so reacting to it alone would close the selector the
+    // moment it is reopened after an earlier success.
+    var awaitingInstantiation by remember { mutableStateOf(false) }
+    LaunchedEffect(awaitingInstantiation, host.isInstantiating, host.lastInstantiation) {
+        if (awaitingInstantiation && !host.isInstantiating) {
+            awaitingInstantiation = false
+            if (host.lastInstantiation?.error == null) onInstantiated()
+        }
+    }
 
     Column(Modifier.fillMaxWidth()) {
         // ── Scan controls ────────────────────────────────────────────────────
@@ -224,7 +240,16 @@ fun PluginSelector(host: UapmdHost) {
         // ── Destination + instantiate ────────────────────────────────────────
         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
             Button(
-                onClick = { selected?.let { host.instantiate(it, destinationTrack, PluginInstanceConfig(apiName = apiName, deviceName = deviceName)) } },
+                onClick = {
+                    selected?.let {
+                        awaitingInstantiation = true
+                        host.instantiate(
+                            it,
+                            destinationTrack,
+                            PluginInstanceConfig(apiName = apiName, deviceName = deviceName)
+                        )
+                    }
+                },
                 enabled = selected != null && !host.isInstantiating
             ) { Text(if (host.isInstantiating) "Instantiating…" else "Instantiate Plugin") }
 

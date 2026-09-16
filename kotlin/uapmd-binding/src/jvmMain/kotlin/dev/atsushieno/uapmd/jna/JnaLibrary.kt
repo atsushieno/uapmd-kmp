@@ -1055,6 +1055,12 @@ interface UapmdLibrary : Library {
         host: Pointer?,
         instanceId: Int
     )
+    /**
+     * Runs [taskFn] on the main thread's run loop, not on the main dispatch
+     * queue. See `perform_on_main_run_loop` in `c-api/src/uapmd-c-api.cpp` for
+     * why the difference decides whether AUv3 instantiation can complete.
+     */
+    fun uapmd_internal_enqueue_on_main_thread(taskFn: Pointer?, taskCtx: Pointer?)
     fun uapmd_instance_create_ui(
         inst: Pointer?,
         isFloating: Boolean,

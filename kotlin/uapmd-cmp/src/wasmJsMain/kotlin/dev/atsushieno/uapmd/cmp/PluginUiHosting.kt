@@ -6,25 +6,26 @@ import dev.atsushieno.uapmd.PluginInstance
 import dev.atsushieno.uapmd.PluginUiHost
 
 /**
- * Web plugins (WCLAP) present their UI as web content, so the binding's
- * `PluginUiHost.WebEmbedded(containerId)` is the right target: the plugin
- * attaches into a DOM element we name.
+ * Web plugin UIs go through the floating-window path, not an embedded one.
  *
- * Compose renders to a canvas and cannot host that element itself, so the
- * container has to be a real DOM node positioned over the canvas. That part is
- * not built yet; the target below names the element uapmd-cmp will create.
+ * remidy-gui's ContainerWindow has an Emscripten implementation
+ * (`ContainerWindow_Emscripten.cpp`) that builds a draggable DOM window per
+ * presentation, with a title bar, a close button and resize callbacks — so
+ * several plugin UIs can be open at once and each can be moved, resized and
+ * closed. The C API takes that path for `UAPMD_UI_HOST_FLOATING_WINDOW` and
+ * hands the plugin the window's body element.
+ *
+ * Returning no embedded target is what routes us there: a WebEmbedded target
+ * would instead drop the plugin into a bare div with no chrome of any kind.
  */
-private const val PluginUiContainerId = "uapmd-plugin-ui"
+actual fun defaultPluginUiPresentationTarget(instanceId: Int): PluginUiPresentationTarget? = null
 
-actual fun defaultPluginUiPresentationTarget(instanceId: Int): PluginUiPresentationTarget? =
-    PluginUiPresentationTarget(
-        PluginUiHost.WebEmbedded("$PluginUiContainerId-$instanceId"),
-        "web plugin UI container"
-    )
+actual fun supportsFloatingPluginUiPresentations(): Boolean = true
 
-actual fun supportsFloatingPluginUiPresentations(): Boolean = false
-actual fun unsupportedFloatingPluginUiMessage(): String? =
-    "Web plugin UIs need a DOM container over the Compose canvas, which uapmd-cmp does not create yet."
+actual fun unsupportedFloatingPluginUiMessage(): String? = null
+
+// WCLAP UIs come from remidy through createUiPresentation, not from a platform
+// view system, so there is nothing for the hosted-UI layer to draw.
 actual fun supportsPlatformHostedPluginUi(instance: PluginInstance): Boolean = false
 
 @Composable

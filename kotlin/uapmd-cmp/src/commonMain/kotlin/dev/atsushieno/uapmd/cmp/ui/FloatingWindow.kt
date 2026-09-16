@@ -120,6 +120,28 @@ class FloatingWindowManager {
     }
 }
 
+private const val DetailsWindowKeyPrefix = "details:"
+
+/** The window key for one instance's Details window. */
+fun detailsWindowKey(instanceId: Int): String = "$DetailsWindowKeyPrefix$instanceId"
+
+/**
+ * Closes every Details window whose instance is no longer live.
+ *
+ * Deleting an instance has to take its Details window with it, and there are
+ * four buttons that delete one. Rather than have each remember to close the
+ * window, the open windows are pruned against the instances that still exist —
+ * which also covers removals no button performed, such as a project load
+ * replacing every instance at once.
+ */
+fun FloatingWindowManager.closeDetailsWindowsExcept(liveInstanceIds: Set<Int>) {
+    closeWhere { key ->
+        if (!key.startsWith(DetailsWindowKeyPrefix)) return@closeWhere false
+        val id = key.removePrefix(DetailsWindowKeyPrefix).toIntOrNull()
+        id != null && id !in liveInstanceIds
+    }
+}
+
 class FloatingWindowEntry internal constructor(
     val key: String,
     val title: String,

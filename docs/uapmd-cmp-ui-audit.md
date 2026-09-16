@@ -23,6 +23,7 @@ rather than silently absent. They belong in `uapmd-binding-missing-api.md` §2 a
 | Piano roll: per-note automation, NRPN picker | piano roll | deliberately deferred |
 | Rendering to a file on web | Project ▸ Render To File | The output path and the delivery are wired, but the render itself never finishes: the button stays on "Rendering…" with no progress and no file, on an empty project, for as long as it was left. Untested beyond that — it is the render, not the file handling |
 | Loading a packed project on the Kotlin/JS target | `jsMain`'s `prepareProjectLoad` is still the pass-through that wasmJs used to be, so a `.uapmdz` would reach the engine as a ZIP. Dormant — uapmd-cmp builds wasmJs, not js — but it is the same defect, and `jsMain` has no archive helper bound yet |
+| Details window opens for a newly created instance | after Instantiate Plugin | uapmd-app's `MainWindow::handleInstantiatePlugin` passes a completion that calls `instanceDetails().showWindow(result.instanceId)` on success, so creating a plug-in leaves its Details window open. uapmd-cmp now dismisses the selector on success (2026-09-16) but does not open Details — the other half of the same gesture, left out because it was not asked for |
 | File pickers on iOS | — | `pickProjectFileToOpen`, `pickMidiFileToOpen` and `pickAudioFileToOpen` all return null on iOS; uapmd has `DocumentProviderIOS.mm`, so this is binding work, not new C API |
 
 ## Intentional divergences

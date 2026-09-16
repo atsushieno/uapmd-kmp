@@ -1423,7 +1423,9 @@ private fun TrackLegend(
 
     fun openSelectorForTrack() {
         host.targetPluginDestination(trackIndex)
-        windows.open("plugins", "Plugin Selector", DpSize(560.dp, 430.dp)) { PluginSelector(host) }
+        windows.open("plugins", "Plugin Selector", DpSize(560.dp, 430.dp)) {
+            PluginSelector(host) { windows.close("plugins") }
+        }
     }
 
     Column(Modifier.height(trackHeight).fillMaxWidth().padding(4.dp)) {
@@ -1579,7 +1581,7 @@ private fun TrackLegend(
                 }
                 DropdownMenu(expanded = pluginMenu, onDismissRequest = { pluginMenu = false }) {
                     instances.forEachIndexed { i, instance ->
-                        val detailsKey = "details:${instance.instanceId}"
+                        val detailsKey = detailsWindowKey(instance.instanceId)
                         val detailsOpen = windows.isOpen(detailsKey)
                         DropdownMenuItem(
                             text = { Text("${if (detailsOpen) "Hide" else "Show"} ${instance.displayName} Details") },
@@ -1598,7 +1600,7 @@ private fun TrackLegend(
                             text = { Text("${if (uiVisible) "Hide" else "Show"} ${instance.displayName} GUI") },
                             onClick = {
                                 pluginMenu = false
-                                if (uiVisible) host.closePluginUi(instance.instanceId)
+                                if (uiVisible) host.hidePluginUi(instance.instanceId)
                                 else host.showPluginUi(instance.instanceId)
                             }
                         )
@@ -1606,7 +1608,6 @@ private fun TrackLegend(
                             text = { Text("Delete ${instance.displayName} (at [${i + 1}])") },
                             onClick = {
                                 pluginMenu = false
-                                windows.close("details:${instance.instanceId}")
                                 host.removeInstance(instance.instanceId)
                             }
                         )
@@ -1719,7 +1720,9 @@ private fun MasterTrackLegend(host: UapmdHost, windows: FloatingWindowManager, t
                     onClick = {
                         if (instances.isEmpty()) {
                             host.targetPluginDestination(MasterTrackIndex)
-                            windows.open("plugins", "Plugin Selector", DpSize(560.dp, 430.dp)) { PluginSelector(host) }
+                            windows.open("plugins", "Plugin Selector", DpSize(560.dp, 430.dp)) {
+                                PluginSelector(host) { windows.close("plugins") }
+                            }
                         } else pluginMenu = true
                     },
                     contentPadding = TightPadding
@@ -1731,7 +1734,7 @@ private fun MasterTrackLegend(host: UapmdHost, windows: FloatingWindowManager, t
                 }
                 DropdownMenu(expanded = pluginMenu, onDismissRequest = { pluginMenu = false }) {
                     instances.forEachIndexed { i, instance ->
-                        val key = "details:${instance.instanceId}"
+                        val key = detailsWindowKey(instance.instanceId)
                         DropdownMenuItem(
                             text = { Text("${if (windows.isOpen(key)) "Hide" else "Show"} ${instance.displayName} Details") },
                             onClick = {
@@ -1751,7 +1754,9 @@ private fun MasterTrackLegend(host: UapmdHost, windows: FloatingWindowManager, t
                     DropdownMenuItem(text = { Text("Add Master Plugin") }, onClick = {
                         pluginMenu = false
                         host.targetPluginDestination(MasterTrackIndex)
-                        windows.open("plugins", "Plugin Selector", DpSize(560.dp, 430.dp)) { PluginSelector(host) }
+                        windows.open("plugins", "Plugin Selector", DpSize(560.dp, 430.dp)) {
+                            PluginSelector(host) { windows.close("plugins") }
+                        }
                     })
                 }
             }

@@ -63,7 +63,7 @@ fun PluginInstances(host: UapmdHost, windows: FloatingWindowManager) {
                             horizontalArrangement = Arrangement.spacedBy(4.dp)
                         ) {
                             Button(onClick = {
-                                val key = "details:${inst.instanceId}"
+                                val key = detailsWindowKey(inst.instanceId)
                                 if (windows.isOpen(key)) windows.close(key)
                                 else windows.open(
                                     key,
@@ -83,10 +83,7 @@ fun PluginInstances(host: UapmdHost, windows: FloatingWindowManager) {
                                 host.model.enableUmpDevice(inst.instanceId, deviceNames[inst.instanceId] ?: "")
                             }) { Text("Enable") }
                             Button(onClick = { host.model.disableUmpDevice(inst.instanceId) }) { Text("Disable") }
-                            Button(onClick = {
-                                windows.close("details:${inst.instanceId}")
-                                host.removeInstance(inst.instanceId)
-                            }) { Text("×") }
+                            Button(onClick = { host.removeInstance(inst.instanceId) }) { Text("×") }
                         }
                         HorizontalDivider()
                     }

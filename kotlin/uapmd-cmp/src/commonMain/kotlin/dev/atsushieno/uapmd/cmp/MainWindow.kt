@@ -44,6 +44,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.DpSize
 import androidx.compose.ui.unit.dp
 import dev.atsushieno.uapmd.cmp.ui.FloatingWindowLayer
+import dev.atsushieno.uapmd.cmp.ui.closeDetailsWindowsExcept
 import dev.atsushieno.uapmd.cmp.ui.AddinManagerWindow
 import dev.atsushieno.uapmd.cmp.ui.AudioImportWindow
 import dev.atsushieno.uapmd.cmp.ui.DeviceSettings
@@ -127,6 +128,24 @@ fun MainWindow() {
                         }
                     }
             ) {
+                // A deleted instance must take its Details window with it, whichever
+                // path deleted it: the track menu, the master track menu, the
+                // Plugin Instances window, or the window's own Delete button. Two
+                // of those four used to close it by hand and two did not, so this
+                // prunes against the live instance list instead — which also
+                // catches the removals no button performed at all, such as a
+                // project load replacing every instance at once.
+                //
+                // uapmd-app does the same thing from one place, in its
+                // `instanceRemoved` handler (MainWindow.cpp).
+                val liveInstanceIds = remember(host.trackInstances, host.masterInstances) {
+                    (host.trackInstances.flatten() + host.masterInstances)
+                        .mapTo(mutableSetOf()) { it.instanceId }
+                }
+                LaunchedEffect(liveInstanceIds) {
+                    windows.closeDetailsWindowsExcept(liveInstanceIds)
+                }
+
                 FloatingWindowLayer(windows) {
                     Column(Modifier.fillMaxSize()) {
                         Toolbar(
@@ -155,7 +174,7 @@ fun MainWindow() {
                             onTogglePlugins = {
                                 host.targetPluginDestination(-1)
                                 windows.toggle("plugins", "Plugin Selector", DpSize(560.dp, 430.dp)) {
-                                    PluginSelector(host)
+                                    PluginSelector(host) { windows.close("plugins") }
                                 }
                             },
                             onToggleAudioImport = {

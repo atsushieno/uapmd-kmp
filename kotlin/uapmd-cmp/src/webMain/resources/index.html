@@ -31,10 +31,23 @@
     }
 
     if (crossOriginIsolated) {
+        sessionStorage.removeItem('uapmd-coop-coep-reloaded');
         loadApp();
     } else if ('serviceWorker' in navigator) {
         isolationMessage.textContent = 'Preparing WebAssembly runtime...';
-        navigator.serviceWorker.register('./coop-coep-sw.js').then(() => {
+        // Registration resolves before activation and clients.claim(). Reload
+        // only after this page is controlled, so the next navigation receives
+        // the isolation headers. A premature reload consumes the one retry and
+        // leaves first-time visitors stuck at the SharedArrayBuffer message.
+        if (!navigator.serviceWorker.controller) {
+            sessionStorage.removeItem('uapmd-coop-coep-reloaded');
+        }
+        navigator.serviceWorker.register('./coop-coep-sw.js').then(async () => {
+            if (!navigator.serviceWorker.controller) {
+                await new Promise((resolve) => {
+                    navigator.serviceWorker.addEventListener('controllerchange', resolve, { once: true });
+                });
+            }
             if (sessionStorage.getItem('uapmd-coop-coep-reloaded') !== 'true') {
                 sessionStorage.setItem('uapmd-coop-coep-reloaded', 'true');
                 window.location.reload();

@@ -66,7 +66,7 @@ internal fun AndroidPlatformHostedPluginUiLayer(
         hostedInfos.forEach { info ->
             AapPluginUiPopup(
                 info = info,
-                onClose = { host.closePluginUi(info.instanceId) },
+                onClose = { host.hidePluginUi(info.instanceId) },
                 onError = { host.reportPluginUiStatus(it) }
             )
         }

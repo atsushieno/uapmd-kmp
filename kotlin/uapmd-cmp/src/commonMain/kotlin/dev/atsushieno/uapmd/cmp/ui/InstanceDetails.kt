@@ -69,14 +69,18 @@ fun InstanceDetails(host: UapmdHost, inst: TrackInstance) {
 
     Column(Modifier.fillMaxWidth()) {
         Row(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalAlignment = Alignment.CenterVertically) {
+            // One button, as uapmd-app has it (InstanceDetails.cpp:356): the
+            // label follows the UI's visibility and the two actions are the
+            // same control, so there is never a "Hide" to press for a UI that
+            // was never shown.
+            val uiVisible = host.isPluginUiVisible(inst.instanceId)
             Button(
-                onClick = { host.showPluginUi(inst.instanceId) },
+                onClick = {
+                    if (uiVisible) host.hidePluginUi(inst.instanceId)
+                    else host.showPluginUi(inst.instanceId)
+                },
                 enabled = instance.hasUiSupport
-            ) { Text("Show UI") }
-            Button(
-                onClick = { host.closePluginUi(inst.instanceId) },
-                enabled = host.isPluginUiVisible(inst.instanceId)
-            ) { Text("Hide UI") }
+            ) { Text(if (uiVisible) "Hide UI" else "Show UI") }
             Button(onClick = { host.removeInstance(inst.instanceId) }) { Text("Delete") }
         }
 

@@ -470,9 +470,14 @@ class UapmdHost private constructor(val model: AppModel) {
     }
 
     /** Tears down an out-of-process plug-in on Android, so not on the UI thread. */
-    fun removeInstance(instanceId: Int) = offUiThread {
-        model.removePluginInstance(instanceId)
-        onUiThread { refresh() }
+    fun removeInstance(instanceId: Int) {
+        // The presentation holds the plug-in's UI; letting it outlive the
+        // instance leaves a window on screen that nothing can reach any more.
+        destroyPluginUi(instanceId)
+        offUiThread {
+            model.removePluginInstance(instanceId)
+            onUiThread { refresh() }
+        }
     }
 
     // ── Project I/O ─────────────────────────────────────────────────────────
@@ -568,6 +573,7 @@ class UapmdHost private constructor(val model: AppModel) {
         // timeline reset. Detach Compose-owned state on its dispatcher, then
         // perform native teardown on this background load coroutine.
         val presentationsToClose = withContext(uiDispatcher) {
+            nativeUiVisibleInstanceIds = emptySet()
             nativeUiPresentations.values.toList().also {
                 nativeUiPresentations.clear()
             }
@@ -633,6 +639,7 @@ class UapmdHost private constructor(val model: AppModel) {
         }
 
         val presentationsToClose = withContext(uiDispatcher) {
+            nativeUiVisibleInstanceIds = emptySet()
             nativeUiPresentations.values.toList().also {
                 nativeUiPresentations.clear()
             }
@@ -691,10 +698,45 @@ class UapmdHost private constructor(val model: AppModel) {
     var pluginUiStatusMessage by mutableStateOf<String?>(null)
         private set
 
+    /**
+     * Which native plug-in UIs are on screen.
+     *
+     * A snapshot rather than a live `presentation.isVisible` read, because the
+     * presentations live in a plain map: Compose has nothing to subscribe to
+     * there, so the Show/Hide labels on the track menu and in Instance Details
+     * never changed after a toggle. [refresh] re-reads it so a plug-in window
+     * closed by its own title bar is noticed too.
+     */
+    private var nativeUiVisibleInstanceIds by mutableStateOf<Set<Int>>(emptySet())
+
     fun reportPluginUiStatus(message: String?) { pluginUiStatusMessage = message }
 
     fun isPluginUiVisible(instanceId: Int): Boolean =
-        nativeUiPresentations[instanceId]?.isVisible == true || instanceId in platformHostedUiInstanceIds
+        instanceId in nativeUiVisibleInstanceIds || instanceId in platformHostedUiInstanceIds
+
+    /**
+     * Re-reads visibility from the presentations themselves. Called from
+     * [refresh] on the structural cadence.
+     *
+     * Only the UIs believed to be on screen are read: a UI never appears
+     * without [showPluginUi], so the one transition this has to catch is a
+     * plug-in window closed from its own title bar — and each read is a
+     * blocking hop to the native UI thread, so an idle project costs nothing.
+     */
+    private fun syncNativeUiVisibility() {
+        if (nativeUiVisibleInstanceIds.isEmpty())
+            return
+        val stillVisible = nativeUiVisibleInstanceIds.filterTo(mutableSetOf()) { id ->
+            nativeUiPresentations[id]?.let { runCatching { it.isVisible }.getOrDefault(false) } == true
+        }
+        if (stillVisible != nativeUiVisibleInstanceIds) nativeUiVisibleInstanceIds = stillVisible
+    }
+
+    private fun markNativeUiVisible(instanceId: Int, visible: Boolean) {
+        nativeUiVisibleInstanceIds =
+            if (visible) nativeUiVisibleInstanceIds + instanceId
+            else nativeUiVisibleInstanceIds - instanceId
+    }
 
     fun showPluginUi(instanceId: Int) {
         if (isLoadingProject) {
@@ -710,9 +752,15 @@ class UapmdHost private constructor(val model: AppModel) {
             return
         }
 
+        // An existing presentation is shown again, never rebuilt: uapmd-app
+        // keeps the plug-in's UI and its container alive across Hide/Show
+        // (MainWindow::handleHideUI), and destroying it here is what threw the
+        // plug-in's own UI state away on every toggle.
         nativeUiPresentations[instanceId]?.let { existing ->
+            val shown = existing.show()
+            markNativeUiVisible(instanceId, shown)
             pluginUiStatusMessage =
-                if (!existing.show()) "Failed to show the UI for ${inst.displayName}." else null
+                if (!shown) "Failed to show the UI for ${inst.displayName}." else null
             return
         }
 
@@ -744,16 +792,31 @@ class UapmdHost private constructor(val model: AppModel) {
             return
         }
         nativeUiPresentations[instanceId] = presentation
+        val shown = presentation.show()
+        markNativeUiVisible(instanceId, shown)
         pluginUiStatusMessage = when {
-            !presentation.show() -> "Created the UI for ${inst.displayName}, but show() failed."
+            !shown -> "Created the UI for ${inst.displayName}, but show() failed."
             request.host is PluginUiHost.FloatingWindow -> null
             else -> "Attached ${inst.displayName} to the ${target?.description ?: "embedded surface"}."
         }
     }
 
-    fun closePluginUi(instanceId: Int) {
+    /**
+     * Hides the UI, keeping it instantiated — the counterpart of [showPluginUi]
+     * and what uapmd-app's single Show UI / Hide UI button does. Use
+     * [destroyPluginUi] to actually tear the UI down.
+     */
+    fun hidePluginUi(instanceId: Int) {
         platformHostedUiInstanceIds = platformHostedUiInstanceIds - instanceId
-        nativeUiPresentations.remove(instanceId)?.close()
+        nativeUiPresentations[instanceId]?.hide()
+        markNativeUiVisible(instanceId, false)
+    }
+
+    /** Destroys the UI. For teardown — removing the instance, replacing the project. */
+    fun destroyPluginUi(instanceId: Int) {
+        platformHostedUiInstanceIds = platformHostedUiInstanceIds - instanceId
+        nativeUiPresentations.remove(instanceId)?.let { runCatching { it.close() } }
+        markNativeUiVisible(instanceId, false)
     }
 
     // ── Offline render ──────────────────────────────────────────────────────
@@ -1504,6 +1567,7 @@ class UapmdHost private constructor(val model: AppModel) {
                 }
             }.getOrDefault(emptyList())
         }
+        if (structural) syncNativeUiVisibility()
         if (structural) trackClips = (0 until count).map { ti ->
             runCatching { model.getTimelineTrack(ti.toUInt()).getClips() }.getOrDefault(emptyList())
         }
@@ -1535,6 +1599,7 @@ class UapmdHost private constructor(val model: AppModel) {
         scope.cancel()
         val presentationsToClose = nativeUiPresentations.values.toList()
         nativeUiPresentations.clear()
+        nativeUiVisibleInstanceIds = emptySet()
         presentationsToClose.forEach { runCatching { it.close() } }
         addins?.shutdown()
         addins?.close()

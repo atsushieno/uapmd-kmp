@@ -11,8 +11,10 @@
 #include <string>
 #include <type_traits>
 #include <utility>
+#include <variant>
 #include <vector>
 #if defined(__APPLE__)
+#include <CoreFoundation/CoreFoundation.h>
 #include <dispatch/dispatch.h>
 #include <pthread.h>
 #endif
@@ -53,6 +55,49 @@ static uapmd_plugin_hosting::AudioPluginInstanceAPI* presentation_instance(UiPre
     return current == presentation->instance ? current : nullptr;
 }
 
+#if defined(__APPLE__)
+// Main-thread work goes on the main **run loop**, never on the main dispatch
+// queue -- the distinction that AUv3 instantiation turns on.
+//
+// The main queue is serial and non-reentrant: while it is draining one item,
+// nothing else on it can run, not even from a nested CFRunLoopRunInMode. remidy
+// leans on exactly that nesting -- PluginFormatAU.mm's createInstance spins
+// `while (!instantiationCompleted) CFRunLoopRunInMode(...)` waiting for a
+// completion that AVAudioUnit delivers through the main queue. Reached from
+// inside a dispatch_sync/dispatch_async block, that wait can never finish and
+// the app is dead -- reproduced with Mela, both the AppKit thread and the
+// caller parked forever.
+//
+// A block performed on the run loop is a run-loop callout instead, so a nested
+// run loop inside it still drains the queue and the completion arrives. It
+// keeps the identity too: this runs on the AppKit main thread either way, which
+// is what a JUCE-based plug-in needs -- it binds its MessageManager to whatever
+// thread creates it, and takes a MessageManagerLock when its UI is created.
+//
+// kCFRunLoopCommonModes includes the default mode, so blocks scheduled here run
+// in remidy's nested CFRunLoopRunInMode(kCFRunLoopDefaultMode, ...) as well.
+static void perform_on_main_run_loop(void (*fn)(void*), void* context) {
+    CFRunLoopRef main_loop = CFRunLoopGetMain();
+    CFRunLoopPerformBlock(main_loop, kCFRunLoopCommonModes, ^{ fn(context); });
+    CFRunLoopWakeUp(main_loop);
+}
+#endif
+
+// Private bridge for the JVM binding's event loop: its "enqueue on the main
+// thread" callback routes here rather than calling dispatch_async itself, for
+// the reason above. Not in the public header -- this is binding plumbing, not a
+// client-facing operation.
+extern "C" UAPMD_C_EXPORT void uapmd_internal_enqueue_on_main_thread(
+        void (*fn)(void*), void* context) {
+    if (!fn)
+        return;
+#if defined(__APPLE__)
+    perform_on_main_run_loop(fn, context);
+#else
+    fn(context);
+#endif
+}
+
 // JVM/AWT and Cocoa do not share a UI thread. Keep the cross-thread hop native:
 // dispatching a JNA callback to Cocoa and then invoking JNA again from that
 // callback can deadlock after a plug-in view has attached. A native trampoline
@@ -63,20 +108,27 @@ static auto on_native_ui_thread(F&& operation) -> std::invoke_result_t<F&> {
     using Result = std::invoke_result_t<F&>;
     if (pthread_main_np() != 0)
         return operation();
-    if constexpr (std::is_void_v<Result>) {
-        dispatch_sync_f(dispatch_get_main_queue(), &operation, [](void* context) {
-            (*static_cast<std::remove_reference_t<F>*>(context))();
-        });
-    } else {
+
+    // Waiting happens here, on a thread that is never the main one, so blocking
+    // is safe; the main thread stays free to run its run loop.
+    struct Context {
+        std::remove_reference_t<F>* operation;
+        dispatch_semaphore_t done;
+        std::conditional_t<std::is_void_v<Result>, std::monostate, std::optional<Result>> result;
+    };
+    Context context{&operation, dispatch_semaphore_create(0), {}};
+    perform_on_main_run_loop([](void* raw) {
+        auto* ctx = static_cast<Context*>(raw);
+        if constexpr (std::is_void_v<Result>)
+            (*ctx->operation)();
+        else
+            ctx->result.emplace((*ctx->operation)());
+        dispatch_semaphore_signal(ctx->done);
+    }, &context);
+    dispatch_semaphore_wait(context.done, DISPATCH_TIME_FOREVER);
+    dispatch_release(context.done);
+    if constexpr (!std::is_void_v<Result>) {
         static_assert(!std::is_reference_v<Result>);
-        struct Context {
-            std::remove_reference_t<F>* operation;
-            std::optional<Result> result;
-        } context{&operation, std::nullopt};
-        dispatch_sync_f(dispatch_get_main_queue(), &context, [](void* raw) {
-            auto* context = static_cast<Context*>(raw);
-            context->result.emplace((*context->operation)());
-        });
         return std::move(*context.result);
     }
 #else
@@ -312,41 +364,50 @@ uapmd_ui_presentation_t uapmd_instance_create_ui_presentation(
     if (request->web_container_id)
         presentation->web_container_id = request->web_container_id;
 
-    bool is_floating = request->host_kind == UAPMD_UI_HOST_FLOATING;
+    // A floating request is served by a container window of our own, never by
+    // remidy's floating path -- for every format, with no per-format rule.
+    //
+    // This is uapmd-app's policy: MainWindow::handleShowUI always creates a
+    // remidy::gui::ContainerWindow and calls showPluginUI() with
+    // isFloating=false, whatever the format is. It is also why uapmd-app meets
+    // none of remidy's floating-path defects -- CLAP falls back to
+    // guiCreate(nullptr, true) and clap-helpers strlen()s that null api string;
+    // an LV2 UI is a bare widget that, given no parent, is created unattached
+    // and reports success while showing nothing. Neither is reachable from a
+    // host that never asks to float. The client still gets what it asked for
+    // -- the UI in a window of its own -- so the public contract is unchanged.
     void* parent_handle = nullptr;
-    bool uses_hosted_window = false;
-    // VST3 exposes an embeddable IPlugView, not a plug-in-owned floating
-    // window. Supply the same native container that uapmd-app uses while
-    // preserving the public floating-presentation contract for the client.
-    if (is_floating && presentation->instance->formatName() == "VST3") {
-        auto* raw = presentation.get();
-        const auto title = presentation->instance->displayName() + " (VST3)";
-        presentation->hosted_window = remidy::gui::ContainerWindow::create(
-            title.c_str(), 800, 600, [raw] {
-                if (auto* instance = presentation_instance(raw))
-                    instance->hideUI();
-            });
-        if (!presentation->hosted_window)
-            return nullptr;
-        presentation->hosted_window->setResizeCallback([raw](int width, int height) {
-            if (raw->applying_plugin_resize) {
-                raw->applying_plugin_resize = false;
-                return;
-            }
-            if (auto* instance = presentation_instance(raw); instance && width > 0 && height > 0)
-                instance->setUISize(
-                    static_cast<uint32_t>(width), static_cast<uint32_t>(height));
-        });
-        presentation->hosted_window->show(true);
-        parent_handle = presentation->hosted_window->getHandle();
-        is_floating = false;
-        uses_hosted_window = true;
-    }
     switch (request->host_kind) {
-        case UAPMD_UI_HOST_FLOATING:
-            if (!uses_hosted_window)
-                parent_handle = nullptr;
+        case UAPMD_UI_HOST_FLOATING: {
+            auto* raw = presentation.get();
+            const auto title = presentation->instance->displayName()
+                + " (" + presentation->instance->formatName() + ")";
+            presentation->hosted_window = remidy::gui::ContainerWindow::create(
+                title.c_str(), 800, 600, [raw] {
+                    // The window's own close button has to do what
+                    // uapmd_ui_presentation_hide() does, or the plug-in's UI
+                    // goes away while its window stays on screen and the button
+                    // reads as dead.
+                    if (auto* instance = presentation_instance(raw))
+                        instance->hideUI();
+                    if (raw->hosted_window)
+                        raw->hosted_window->show(false);
+                });
+            if (!presentation->hosted_window)
+                return nullptr;
+            presentation->hosted_window->setResizeCallback([raw](int width, int height) {
+                if (raw->applying_plugin_resize) {
+                    raw->applying_plugin_resize = false;
+                    return;
+                }
+                if (auto* instance = presentation_instance(raw); instance && width > 0 && height > 0)
+                    instance->setUISize(
+                        static_cast<uint32_t>(width), static_cast<uint32_t>(height));
+            });
+            presentation->hosted_window->show(true);
+            parent_handle = presentation->hosted_window->getHandle();
             break;
+        }
         case UAPMD_UI_HOST_NATIVE_EMBEDDED:
             parent_handle = request->parent_handle;
             break;
@@ -359,7 +420,7 @@ uapmd_ui_presentation_t uapmd_instance_create_ui_presentation(
 
     auto* raw = presentation.get();
     const bool created = presentation->instance->createUI(
-        is_floating,
+        false,
         parent_handle,
         [raw, resize_handler, resize_user_data](uint32_t w, uint32_t h) -> bool {
             if (raw->hosted_window && w > 0 && h > 0) {

@@ -245,6 +245,8 @@ tasks.register("buildUapmdCApiWasm") {
 
     inputs.dir(wasmSrcDir)
     inputs.dir(repoRoot.resolve("c-api"))
+    inputs.dir(repoRoot.resolve("external/uapmd/source"))
+    inputs.dir(repoRoot.resolve("cmake"))
     outputs.file(File(wasmOutputDir, "uapmd-c-api.js"))
     outputs.file(File(wasmOutputDir, "uapmd-c-api.wasm"))
 

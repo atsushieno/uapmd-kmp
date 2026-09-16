@@ -112,6 +112,35 @@ remidy marshals engine completions through an `EventLoop`. A host must install o
 async completions silently never fire — `addEmptyTrack` still creates the track, but its callback
 never runs. On Android the loop must also not be the main looper; see `AndroidEventLoop.kt`.
 
+**On macOS the loop's main thread must be the AppKit main thread, not the AWT event queue**
+(`JvmEventLoop.kt`). remidy marshals `clap_plugin_factory.create_plugin` to whatever the loop
+calls the main thread, and a JUCE-based plug-in binds its MessageManager to the thread that runs
+it. With the AWT event queue in that role, the plug-in's message thread is a thread with no
+CFRunLoop — and one AWT retires when it goes idle — so the `MessageManagerLock` the same plug-in
+takes in `guiCreate` is never granted: creating a CLAP UI hangs, permanently, with the AppKit
+thread blocked inside `juce::MessageManager::Lock::tryAcquire`. This was originally hidden behind
+6.2: the floating path crashed before ever reaching `guiCreate`.
+
+**And it must reach that thread through the main *run loop*, not the main *dispatch queue*.**
+Running on the main thread and running inside the main queue are not the same thing, and remidy
+depends on the difference. The main queue is serial and non-reentrant: while it drains one item
+nothing else on it runs, not even from a nested run loop. `PluginFormatAU.mm`'s `createInstance`
+spins `while (!instantiationCompleted) CFRunLoopRunInMode(...)` waiting for a completion
+`AVAudioUnit` delivers *through the main queue*, so a task that got there by `dispatch_async` or
+`dispatch_sync` deadlocks it outright — the AppKit thread parked in `mach_msg` forever and the
+caller parked in `EventLoop::runTaskOnMainThread`. Reproduced with Mela; remidy's own comment at
+`PluginFormatAU.mm:277` says AUv3 instantiation "relies on the main run loop".
+
+uapmd-app is immune only by accident of shape: choc's `postMessage` is the same
+`dispatch_async_f(dispatch_get_main_queue(), ...)`, but uapmd-app calls `createInstance` from the
+main thread already (ImGui frame under `[NSApp run]`), so `runningOnMainThread()` is true and the
+work runs *inline* as a run-loop callout. A host that always calls in from a background thread
+always takes the enqueue path, so the enqueue mechanism has to be run-loop based:
+`uapmd_internal_enqueue_on_main_thread` in the C API does `CFRunLoopPerformBlock` +
+`CFRunLoopWakeUp` with `kCFRunLoopCommonModes`, which is the mode set remidy's nested
+`CFRunLoopRunInMode(kCFRunLoopDefaultMode, ...)` will run. `on_native_ui_thread` uses the same
+mechanism for the same reason.
+
 
 ### 2.4 Fallback rule: where AppModel is unreachable, do what `composeApp` does
 
@@ -175,6 +204,7 @@ before reporting a UI change as working.
 | Task | What it does |
 |---|---|
 | `:uapmd-cmp:renderUiSnapshot` | Renders a view off-screen to a PNG at device density. `-Duapmd.cmp.snapshotView=` picks `timeline` (default), `selector`, `graph`, `instance` or `pianoroll`; `-Duapmd.cmp.snapshotSize=WxH` and `-Duapmd.cmp.snapshotDensity=` set the frame. This is how a clipped legend, an unreadable label or a link that never draws gets caught. |
+| `:uapmd-cmp:runPluginUiProbe` | Creates one plug-in's UI, shows it, hides it and shows it again, reporting visibility at each step. `-Duapmd.probe.uiPlugin=<name substring>` and `-Duapmd.probe.uiFormat=<CLAP\|LV2\|VST3\|AU>` pick the plug-in, by exact display name — a substring is only accepted when it names one plug-in, because `ADLplug` and `ADLplug-AE` are different plug-ins sharing a prefix. Not headless — the UI is a real native window — but unattended, and the only coverage the per-format UI paths have. |
 | `:uapmd-cmp:runBootstrapProbe` | Drives AppModel headlessly - audio start/stop, tracks, plug-ins, clips, graph, tempo map, piano-roll edits - and fails on the first broken check. |
 | Serving the wasm build | The dev server injects COOP/COEP itself, so the service-worker path in `index.html` never runs there and a dev-server load proves nothing about a static deploy. To exercise what users get, build `:uapmd-cmp:wasmJsBrowserDistribution` and serve `build/dist/wasmJs/productionExecutable` with COOP/COEP headers of your own; the two builds have already differed in practice. |
 | `:uapmd-cmp:runPianoRollScrollProbe` | Scrolls the piano roll with the wheel through `ImageComposeScene` and compares renders. One notch versus twelve: a viewport that moves once and stops renders them the same. |
@@ -450,6 +480,26 @@ under `clap::helpers::Plugin<...>::clapGuiCreate`. Reproduced with Dexed.
 
 Plug-in dependent — plug-ins that tolerate a null api do not crash, which is why `composeApp`
 looked fine on desktop with VST3/AU. Reproduce with `-Duapmd.probe.pluginUi=1`.
+
+**Unreachable from this host, not fixed (2026-09-16).** `uapmd_instance_create_ui_presentation`
+never asks remidy for a floating UI, for any format: a floating request gets a
+`remidy::gui::ContainerWindow` of our own and the embedded path, which only ever passes a real api
+name. That is uapmd-app's policy too, which is why uapmd-app never hit this. The null-api fallback
+is untouched and still bites anyone who calls `uapmd_instance_create_ui()` with `is_floating=true`.
+
+### 6.6 An LV2 UI asked to float is created and never shown
+
+`remidy/src/lv2/PluginInstanceLV2.UI.cpp`
+
+An LV2 UI is a bare widget — `CocoaUI`, `X11UI`, `WindowsUI`. `UISupport::create()` embeds it only
+on the `!is_floating && parent_widget` path; asked to float, it instantiates the widget, parents it
+to nothing, and returns true. `show()` then also returns true (`show_interface` is null for a
+widget UI, so there is nothing to call), and no window ever appears. Nothing reports a failure at
+any point.
+
+Out of reach for the same reason as 6.2, and by the same single rule: no floating request ever
+leaves `uapmd_instance_create_ui_presentation`. Still a defect on remidy's floating path — an LV2
+UI that cannot be embedded should report that, not succeed silently.
 
 ### 6.3 A graph connection naming a built-in node is always refused
 

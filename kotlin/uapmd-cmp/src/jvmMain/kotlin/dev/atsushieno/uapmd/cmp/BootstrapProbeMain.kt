@@ -222,10 +222,9 @@ fun main() {
         // ── plugin UI presentation (the path composeApp proved) ──────────────
         val caps = inst2Caps(host, succeeded.instanceId)
         println("   ui: hasUiSupport=${caps.first} floating=${caps.second}")
-        // Opt-in: creating a CLAP plugin UI crashes in remidy, which calls
-        // guiCreate(nullptr, ...) as a fallback (PluginInstanceCLAP.UI.cpp:72)
-        // while tryCreateWith only null-guards guiIsApiSupported. clap-helpers
-        // then strlen()s the null api. Upstream bug, plugin-dependent.
+        // Opt-in because a plugin UI is a real native window, which this
+        // otherwise-headless probe has no business opening. For the UI paths
+        // themselves see :uapmd-cmp:runPluginUiProbe.
         if (caps.first && System.getProperty("uapmd.probe.pluginUi") != null) {
             val presentation = host.getInstance(succeeded.instanceId)!!.createUiPresentation()
             check("createUiPresentation returned a presentation", presentation != null)
@@ -238,7 +237,7 @@ fun main() {
                 println("   ui: closed")
             }
         } else if (caps.first) {
-            println("NOTE  UI path skipped; pass -Duapmd.probe.pluginUi=1 (may crash on CLAP plugins)")
+            println("NOTE  UI path skipped; pass -Duapmd.probe.pluginUi=1 to open a real window")
         } else {
             println("NOTE  this plugin reports no UI support; UI path not exercised")
         }

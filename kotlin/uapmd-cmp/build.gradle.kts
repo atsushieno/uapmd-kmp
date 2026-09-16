@@ -224,6 +224,22 @@ tasks.register<JavaExec>("runClipMoveProbe") {
     jvmArgs("-Dapple.awt.application.name=uapmd-cmp", "-Xdock:name=uapmd-cmp")
 }
 
+tasks.register<JavaExec>("runPluginUiProbe") {
+    group = "verification"
+    description = "Shows one plug-in's UI, hides it and shows it again, reporting visibility at each step."
+    dependsOn("jvmJar")
+    mainClass.set("dev.atsushieno.uapmd.cmp.PluginUiProbeMainKt")
+    forwardScannerExecutable()
+    classpath(
+        files(tasks.named("jvmJar")),
+        jvmMainCompilation.runtimeDependencyFiles
+    )
+    jvmArgs("-Dapple.awt.application.name=uapmd-cmp", "-Xdock:name=uapmd-cmp")
+    listOf("uapmd.probe.uiPlugin", "uapmd.probe.uiFormat").forEach { key ->
+        System.getProperty(key)?.let { systemProperty(key, it) }
+    }
+}
+
 tasks.register<JavaExec>("runBootstrapProbe") {
     group = "verification"
     description = "Headless check that the AppModel bootstrap starts, cleanly stops, and restarts audio."

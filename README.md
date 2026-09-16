@@ -72,10 +72,18 @@ Open `iosApp/` in Xcode and run from there, or compile the Kotlin framework dire
 Requires Emscripten activated in the shell environment:
 
 ```sh
-./gradlew buildUapmdCApiWasm compileKotlinWasmJs
+# Run the browser app locally (includes the native Emscripten build)
+./gradlew :uapmd-cmp:wasmJsBrowserDevelopmentRun
+
+# Build the release bundle used by the Pages workflow
+./gradlew :uapmd-cmp:wasmJsBrowserDistribution
 ```
 
-The Wasm build is currently disabled in CI while `libremidi` API alignment across platforms is being resolved.
+The release bundle is written to `uapmd-cmp/build/dist/wasmJs/productionExecutable/`.
+Serve it over HTTP on localhost or HTTPS; opening `index.html` directly will not
+work. The development server supplies the COOP/COEP headers required by
+SharedArrayBuffer. Static hosts such as GitHub Pages use the bundled service
+worker to supply those headers, with one automatic reload on the first visit.
 
 ---
 
