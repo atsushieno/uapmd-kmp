@@ -453,9 +453,6 @@ object JniBridge {
 
     // ══ Project history: ProjectCommandManager ══════════════════════════════
     //
-    // uapmd 0.5.7 withdrew the ProjectUndoEngine handle; the command manager
-    // carries the whole history contract now, so the uapmdUndoEngine* family is
-    // gone and its calls live here.
 
     @JvmStatic external fun uapmdCommandManagerGetState(h: Long): Array<Any>?
     @JvmStatic external fun uapmdCommandManagerUndo(h: Long, cb: Any?)
@@ -710,6 +707,10 @@ object JniBridge {
     @JvmStatic external fun uapmdAppUnblockPlugin(app: Long, entryId: String): Boolean
 
     /** cb: (trackIndex: Int, error: String?) -> Unit */
+    @JvmStatic external fun uapmdAppIsTrackMuted(app: Long, trackIndex: Int): Boolean
+    @JvmStatic external fun uapmdAppIsTrackSolo(app: Long, trackIndex: Int): Boolean
+    @JvmStatic external fun uapmdAppSetTrackMuted(app: Long, trackIndex: Int, muted: Boolean): Boolean
+    @JvmStatic external fun uapmdAppSetTrackSolo(app: Long, trackIndex: Int, solo: Boolean): Boolean
     @JvmStatic external fun uapmdAppAddTrack(app: Long, cb: Any)
     /** cb: (trackIndex: Int, error: String?) -> Unit */
     @JvmStatic external fun uapmdAppRemoveTrack(app: Long, trackIndex: Int, cb: Any)
@@ -749,6 +750,120 @@ object JniBridge {
     @JvmStatic external fun uapmdAppLoadProjectFromHandleToken(app: Long, token: String): Array<Any>?
     @JvmStatic external fun uapmdAppNewProject(app: Long): Array<Any>?
     @JvmStatic external fun uapmdAppMasterTempoMap(app: Long): Long
+
+    // ══ Timeline clip selection and clipboard ═══════════════════════════════
+    //
+    // Targets cross as a flat int[] of {trackIndex, clipId} pairs.
+
+    @JvmStatic external fun uapmdAppIsTimelineClipSelected(app: Long, t: Int, c: Int): Boolean
+    @JvmStatic external fun uapmdAppSelectedTimelineClips(app: Long): IntArray
+    @JvmStatic external fun uapmdAppSelectTimelineClips(app: Long, pairs: IntArray, additive: Boolean, toggle: Boolean)
+    @JvmStatic external fun uapmdAppClearTimelineClipSelection(app: Long)
+    @JvmStatic external fun uapmdAppSelectTimelineMidiClip(app: Long, t: Int, c: Int): Boolean
+    @JvmStatic external fun uapmdAppSelectedTimelineMidiClip(app: Long): IntArray?
+    @JvmStatic external fun uapmdAppTimelineClipboardCount(app: Long): Int
+    @JvmStatic external fun uapmdAppClearTimelineClipboard(app: Long)
+    @JvmStatic external fun uapmdAppCopySelectedTimelineClips(app: Long): Boolean
+    /** Deletes and reports in one call; returns the changed-track count, or -1 on failure. */
+    @JvmStatic external fun uapmdAppDeleteSelectedTimelineClips(app: Long, cut: Boolean, outTracks: IntArray): Int
+    @JvmStatic external fun uapmdAppTimelinePasteDestinations(app: Long, t: Int, originalTracks: Boolean): IntArray
+    /** int[1 + 2n]: success flag, then {trackIndex, clipId} per pasted clip. */
+    @JvmStatic external fun uapmdAppPasteTimelineClips(app: Long, t: Int, positionSeconds: Double, originalTracks: Boolean): IntArray
+    @JvmStatic external fun uapmdAppLastTimelineClipError(): String
+
+    // ══ Piano roll editing session ══════════════════════════════════════════
+    //
+    // A note crosses as double[3] {startSeconds, durationSeconds, velocity} plus
+    // long[9] {note, channel, deleted, editId, umpGroup, releaseVelocity,
+    // attributeType, attributeValue, automationEventCount}.
+
+    @JvmStatic external fun uapmdAppPianoRollClipSnapshot(app: Long, t: Int, c: Int, fallbackDurationSeconds: Double): Long
+    @JvmStatic external fun uapmdPianoRollSnapshotDestroy(h: Long)
+    @JvmStatic external fun uapmdPianoRollSnapshotReady(h: Long): Boolean
+    @JvmStatic external fun uapmdPianoRollSnapshotError(h: Long): String
+    @JvmStatic external fun uapmdPianoRollSnapshotDurationSeconds(h: Long): Double
+    @JvmStatic external fun uapmdPianoRollSnapshotMinNote(h: Long): Int
+    @JvmStatic external fun uapmdPianoRollSnapshotMaxNote(h: Long): Int
+    @JvmStatic external fun uapmdPianoRollSnapshotNoteCount(h: Long): Int
+    @JvmStatic external fun uapmdPianoRollSnapshotGetNote(h: Long, index: Int, outDoubles: DoubleArray, outLongs: LongArray): Boolean
+
+    @JvmStatic external fun uapmdAppOpenPianoRollSession(app: Long, t: Int, c: Int): Long
+    @JvmStatic external fun uapmdAppFindPianoRollSession(app: Long, t: Int, c: Int): Long
+    @JvmStatic external fun uapmdAppClosePianoRollSession(app: Long, t: Int, c: Int)
+
+    @JvmStatic external fun uapmdPianoRollSessionMatchesSource(session: Long, snapshot: Long): Boolean
+    @JvmStatic external fun uapmdPianoRollSessionLoadNotes(session: Long, snapshot: Long)
+    @JvmStatic external fun uapmdPianoRollSessionNoteCount(h: Long): Int
+    @JvmStatic external fun uapmdPianoRollSessionGetNote(h: Long, index: Int, outDoubles: DoubleArray, outLongs: LongArray): Boolean
+    @JvmStatic external fun uapmdPianoRollSessionIsNoteSelected(h: Long, index: Int): Boolean
+    @JvmStatic external fun uapmdPianoRollSessionSelectedNoteCount(h: Long): Int
+    @JvmStatic external fun uapmdPianoRollSessionFocusedNote(h: Long): Int
+    @JvmStatic external fun uapmdPianoRollSessionSetFocusedNote(h: Long, index: Int)
+    @JvmStatic external fun uapmdPianoRollSessionDurationSeconds(h: Long): Double
+    @JvmStatic external fun uapmdPianoRollSessionMinNote(h: Long): Int
+    @JvmStatic external fun uapmdPianoRollSessionMaxNote(h: Long): Int
+    @JvmStatic external fun uapmdPianoRollSessionClipboardCount(h: Long): Int
+    @JvmStatic external fun uapmdPianoRollSessionDirty(h: Long): Boolean
+    @JvmStatic external fun uapmdPianoRollSessionError(h: Long): String
+    @JvmStatic external fun uapmdPianoRollSessionSelectNote(h: Long, index: Int, additive: Boolean, toggle: Boolean)
+    @JvmStatic external fun uapmdPianoRollSessionPerformAction(h: Long, action: Int, pasteSeconds: Double)
+    @JvmStatic external fun uapmdPianoRollSessionCreateNote(h: Long, start: Double, duration: Double, note: Int, velocity: Float)
+    @JvmStatic external fun uapmdPianoRollSessionDeleteNote(h: Long, index: Int)
+    @JvmStatic external fun uapmdPianoRollSessionResizeNote(h: Long, index: Int, start: Double, duration: Double, note: Int)
+    @JvmStatic external fun uapmdPianoRollSessionBeginDrag(h: Long)
+    @JvmStatic external fun uapmdPianoRollSessionMoveSelection(h: Long, timeDelta: Double, pitchDelta: Int)
+    @JvmStatic external fun uapmdPianoRollSessionCancelDrag(h: Long)
+    @JvmStatic external fun uapmdPianoRollSessionFinishDrag(h: Long, index: Int, origStart: Double, origEnd: Double, origNote: Int)
+    @JvmStatic external fun uapmdPianoRollSessionCommit(h: Long, app: Long): Boolean
+    @JvmStatic external fun uapmdAppRecordPianoRollCommitSource(app: Long, t: Int, c: Int)
+    @JvmStatic external fun uapmdAppPianoRollSourceMatchesLastEdit(app: Long): Boolean
+    @JvmStatic external fun uapmdAppClearPianoRollCommitSource(app: Long)
+    @JvmStatic external fun uapmdTransportJump(tc: Long, positionSeconds: Double)
+
+    // ══ Assorted AppModel accessors ═════════════════════════════════════════
+    //
+    // Ports cross as String[2n] {id, displayName}; devices as String[3n]
+    // {label, apiName, statusMessage} plus int[4n] {id, running, instantiating,
+    // hasError}; a state result as int[2] {instanceId, success} plus
+    // String[2] {error, filepath}.
+
+    @JvmStatic external fun uapmdAppGetMidiInputPorts(app: Long): Array<String?>
+    @JvmStatic external fun uapmdAppGetMidiOutputPorts(app: Long): Array<String?>
+    @JvmStatic external fun uapmdAppIsTrackHidden(app: Long, t: Int): Boolean
+    @JvmStatic external fun uapmdAppTimelineContentBounds(app: Long): DoubleArray
+    @JvmStatic external fun uapmdAppGetDeviceCount(app: Long): Int
+    @JvmStatic external fun uapmdAppGetDevices(app: Long, outInts: IntArray): Array<String?>
+    @JvmStatic external fun uapmdAppGetDeviceForInstance(app: Long, instanceId: Int, outInts: IntArray): Array<String?>?
+    @JvmStatic external fun uapmdAppUpdateDeviceLabel(app: Long, instanceId: Int, label: String)
+    @JvmStatic external fun uapmdAppLoadPluginState(app: Long, instanceId: Int, filepath: String, cb: Any)
+    @JvmStatic external fun uapmdAppSavePluginState(app: Long, instanceId: Int, filepath: String, cb: Any)
+    @JvmStatic external fun uapmdAppLoadPluginStateSync(app: Long, instanceId: Int, filepath: String, outStrings: Array<String?>): IntArray
+    @JvmStatic external fun uapmdAppSavePluginStateSync(app: Long, instanceId: Int, filepath: String, outStrings: Array<String?>): IntArray
+    @JvmStatic external fun uapmdAppMarkPluginInstanceTrackDirty(app: Long, instanceId: Int)
+
+    // ══ Clip adding, master markers, render-to-file ═════════════════════════
+    //
+    // Positions cross as (samples, legacyBeats). Clip-add results come back as
+    // Object[]{ long[3] clipId/sourceNodeId/success, String? error }.
+
+    @JvmStatic external fun uapmdAppAddClipToTrack(app: Long, t: Int, posSamples: Long, posBeats: Double, reader: Long, filepath: String): Array<Any?>?
+    @JvmStatic external fun uapmdAppAddMidiClipToTrack(app: Long, t: Int, posSamples: Long, posBeats: Double, filepath: String): Array<Any?>?
+    @JvmStatic external fun uapmdAppAddMidiClipFromData(
+        app: Long, t: Int, posSamples: Long, posBeats: Double,
+        umpEvents: IntArray?, tickTimestamps: LongArray?,
+        tickResolution: Int, clipTempo: Double,
+        tempoNums: DoubleArray?, sigTicks: LongArray?, sigNums: IntArray?,
+        clipName: String, needsFileSave: Boolean
+    ): Array<Any?>?
+    @JvmStatic external fun uapmdAppAddDeviceInputToTrack(app: Long, t: Int, channels: IntArray?): Int
+    @JvmStatic external fun uapmdAppMasterMarkerCount(app: Long): Int
+    @JvmStatic external fun uapmdAppGetMasterMarkers(app: Long, outOffsets: DoubleArray, outRefTypes: IntArray): Array<String?>
+    @JvmStatic external fun uapmdAppSetMasterTrackMarkersWithValidation(app: Long, mStr: Array<String>, mNum: DoubleArray, mRef: IntArray): Array<Any>
+    @JvmStatic external fun uapmdAppStartRenderToFile(app: Long, outputPath: String, nums: DoubleArray, flags: BooleanArray): Boolean
+    @JvmStatic external fun uapmdAppCancelRenderToFile(app: Long)
+    @JvmStatic external fun uapmdAppGetRenderToFileStatus(app: Long): Array<Any?>
+    @JvmStatic external fun uapmdAppClearCompletedRenderStatus(app: Long)
+    @JvmStatic external fun uapmdAppRequestShowTrackGraph(app: Long, trackIndex: Int)
 
     /** Object[]{ long[1] success, String? error, long[] ticks, int[][] words } */
     @JvmStatic external fun uapmdAppGetMidiClipUmpEvents(app: Long, trackIndex: Int, clipId: Int): Array<Any>?

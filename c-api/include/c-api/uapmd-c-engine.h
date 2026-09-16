@@ -192,7 +192,7 @@ UAPMD_C_EXPORT uint8_t uapmd_track_find_available_group(uapmd_sequencer_track_t 
 UAPMD_C_EXPORT void    uapmd_track_remove_instance(uapmd_sequencer_track_t track, int32_t instance_id);
 
 /* ═══════════════════════════════════════════════════════════════════════════
- *  Project / track dirty state (uapmd 0.5.6)
+ *  Project / track dirty state
  * ═══════════════════════════════════════════════════════════════════════════ */
 
 /* True when the project document differs from its saved history node, or an
@@ -512,9 +512,9 @@ UAPMD_C_EXPORT bool uapmd_midi_recorder_is_recording(uapmd_midi_recorder_t rec);
  *  remidy's EventLoop::runTaskOnMainThread() blocks the calling thread until
  *  the designated main thread executes the task, which is how plugin
  *  initialisation on GUI frameworks (Cocoa, Win32, GTK, …) is serialised.
- *  The default implementation uses choc::messageloop, which requires a
- *  native Cocoa/Win32 run-loop; that loop is absent in JVM/Compose apps, so
- *  plugin loading deadlocks.  Registering a custom loop fixes the freeze.
+ *  remidy's default implementation uses an internal message-loop backend that
+ *  requires a native Cocoa/Win32 run-loop; that loop is absent in JVM/Compose
+ *  apps, so plugin loading deadlocks.  Registering a custom loop fixes it.
  * ═══════════════════════════════════════════════════════════════════════════ */
 
 typedef void (*uapmd_event_loop_task_fn_t)(void* task_ctx);

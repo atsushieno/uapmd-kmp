@@ -160,7 +160,7 @@ tasks.register<JavaExec>("renderUiSnapshot") {
     jvmArgs("-Djava.awt.headless=true")
     listOf(
         "uapmd.cmp.snapshot", "uapmd.cmp.snapshotSize", "uapmd.cmp.snapshotDensity", "uapmd.cmp.snapshotView",
-        "uapmd.cmp.rollScrollTicks"
+        "uapmd.cmp.snapshotProject", "uapmd.cmp.rollScrollSeconds"
     ).forEach { key -> System.getProperty(key)?.let { systemProperty(key, it) } }
 }
 

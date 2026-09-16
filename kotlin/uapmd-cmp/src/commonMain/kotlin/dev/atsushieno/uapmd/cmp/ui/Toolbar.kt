@@ -47,7 +47,7 @@ private val EngineOff = Color(0xFF944536)
 private val RecordActive = Color(0xFFE03333)
 
 /**
- * uapmd-app 0.5.6's toolbar is two rows: there is no `SameLine()` after the theme
+ * uapmd-app's toolbar is two rows: there is no `SameLine()` after the theme
  * toggle (`MainWindow.cpp:576-581`), so `Plugins` starts a second line, and the
  * toolbar child is `90.0f * uiScale_` tall. Row 1 is engine / Command / transport
  * / scale / theme; row 2 is Plugins / Import / Project / In+Out meters. Device
@@ -62,6 +62,8 @@ fun Toolbar(
     onToggleExporter: () -> Unit,
     onToggleDeviceSettings: () -> Unit,
     onTogglePlugins: () -> Unit,
+    onToggleAudioImport: () -> Unit,
+    onNewProject: () -> Unit,
     uiScale: Float = 1f,
     onUiScaleChange: (Float) -> Unit = {},
     darkTheme: Boolean = true,
@@ -123,12 +125,31 @@ fun Toolbar(
                     // C API that does not exist yet (UapmdJSRuntime, McpServer).
                     DropdownMenuItem(text = { Text("Show Script") }, enabled = false, onClick = {})
                     DropdownMenuItem(text = { Text("Show MCP Settings") }, enabled = false, onClick = {})
+
+                    // Commands contributed by addins, in the same place
+                    // uapmd-app puts them (MainWindow.cpp:498-513): after a
+                    // separator, in the order the registry reports.
+                    // Re-read while the menu is open: a running command keeps
+                    // its progress in its own title.
+                    val commandTick = rememberTicker(commandOpen)
+                    val addinCommands = remember(host.addinRevision, commandOpen, commandTick) {
+                        host.addinCommands()
+                    }
+                    if (addinCommands.isNotEmpty()) {
+                        HorizontalDivider()
+                        addinCommands.forEach { command ->
+                            DropdownMenuItem(
+                                text = { Text(command.title) },
+                                enabled = command.enabled,
+                                onClick = { commandOpen = false; host.invokeAddinCommand(command.id) }
+                            )
+                        }
+                    }
                 }
             }
 
-            Button(onClick = { host.playOrStop() }, enabled = host.isAudioEngineEnabled, contentPadding = Compact) {
-                if (host.isPlaying) StopIcon(LocalContentColor.current) else PlayIcon(LocalContentColor.current)
-            }
+            // Record first, then Play/Stop, as uapmd-app orders them: the
+            // destructive button is not the one under the thumb.
             Button(
                 onClick = { recordStatus = host.toggleRecording() },
                 enabled = host.isAudioEngineEnabled,
@@ -137,6 +158,9 @@ fun Toolbar(
                     containerColor = if (host.isRecording) RecordActive else MaterialTheme.colorScheme.primary
                 )
             ) { RecordIcon(LocalContentColor.current) }
+            Button(onClick = { host.playOrStop() }, enabled = host.isAudioEngineEnabled, contentPadding = Compact) {
+                if (host.isPlaying) StopIcon(LocalContentColor.current) else PlayIcon(LocalContentColor.current)
+            }
             Button(
                 onClick = { host.pauseOrResume() },
                 enabled = host.isAudioEngineEnabled && host.isPlaying,
@@ -179,14 +203,24 @@ fun Toolbar(
                         importOpen = false
                         scope.launch { pickMidiFileToOpen()?.let { host.importMidiTracks(it) } }
                     })
-                    // Still needs a C entry point for the Demucs separation path.
-                    DropdownMenuItem(text = { Text("Import Split Audio Tracks (Demucs)") }, enabled = false, onClick = {})
+                    // The backend is whichever separator addin is enabled, so
+                    // the item is live only when at least one is.
+                    val separators = remember(host.addinRevision, importOpen) { host.stemSeparators() }
+                    DropdownMenuItem(
+                        text = { Text("Import Split Audio Tracks") },
+                        enabled = separators.isNotEmpty(),
+                        onClick = { importOpen = false; onToggleAudioImport() }
+                    )
                 }
             }
 
             Box {
                 Button(onClick = { projectOpen = true }, contentPadding = Compact) { Text("Project") }
                 DropdownMenu(expanded = projectOpen, onDismissRequest = { projectOpen = false }) {
+                    DropdownMenuItem(text = { Text("New Project") }, onClick = {
+                        projectOpen = false
+                        onNewProject()
+                    })
                     DropdownMenuItem(text = { Text("Load Project") }, onClick = {
                         projectOpen = false
                         scope.launch { pickProjectFileToOpen()?.let { host.loadProject(it) } }

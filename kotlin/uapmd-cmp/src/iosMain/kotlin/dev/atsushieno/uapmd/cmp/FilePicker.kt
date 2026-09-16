@@ -10,6 +10,12 @@ actual fun deliverSavedFile(path: String) = Unit
 actual suspend fun pickMidiFileToOpen(): String? = null
 actual suspend fun pickAudioFileToOpen(): String? = null
 
+actual suspend fun pickStemModelFileToOpen(extensions: List<String>): String? = null
+
+/** No picker here yet, so the sandbox's temp directory. */
+actual fun defaultStemOutputDirectory(audioFilePath: String): String =
+    platform.Foundation.NSTemporaryDirectory()
+
 actual fun startupImportPath(): String? = null
 
 actual fun startupInstantiateFormat(): String? = null

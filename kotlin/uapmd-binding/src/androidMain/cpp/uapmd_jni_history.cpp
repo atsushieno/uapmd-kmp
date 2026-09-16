@@ -1,5 +1,5 @@
 /**
- * uapmd JNI bridge — project history and addins (uapmd 0.5.6)
+ * uapmd JNI bridge — project history and addins
  *
  * Split out from uapmd_jni.cpp because the history surface is large and
  * self-contained. Same conventions apply: opaque C pointers travel as jlong,
@@ -287,9 +287,6 @@ extern "C" {
 /* ═══════════════════════════════════════════════════════════════════════════
  *  ProjectCommandManager
  *
- *  uapmd 0.5.7 withdrew the ProjectUndoEngine handle; the command manager
- *  carries the whole history contract now, so the uapmdUndoEngine* family is
- *  gone and its calls live here.
  * ═══════════════════════════════════════════════════════════════════════════ */
 
 JNI_FN(jobjectArray, uapmdCommandManagerGetState)(JNIEnv* env, jclass, jlong h) {

@@ -158,7 +158,7 @@ class JvmTimelineFacade internal constructor(
         }
     }
 
-    // ─── Project history (uapmd 0.5.6) ──────────────────────────────────────
+    // ─── Project history ────────────────────────────────────────────────────
 
     override val commands get() = history.commands
     override val addresses get() = history.addresses

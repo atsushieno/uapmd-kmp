@@ -314,3 +314,18 @@ internal fun freeScanObserverPtrs(ptrs: ScanCbPtrs) {
     removeJsCallback(ptrs.error)
     removeJsCallback(ptrs.cancel)
 }
+
+/**
+ * uapmd_timeline_position_t = { int64_t samples (+0), double legacy_beats (+8) }.
+ *
+ * wasm32 passes this struct byval, i.e. as a pointer - the flattened
+ * (samples, legacyBeats) argument pair that reads naturally from Kotlin is not
+ * what the exported function expects.
+ */
+internal const val JsTimelinePositionSize = 16
+
+internal fun jsWritePosition(ptr: Int, pos: TimelinePosition) {
+    jsSetI32(ptr, (pos.samples and 0xFFFFFFFFL).toInt())
+    jsSetI32(ptr + 4, (pos.samples ushr 32).toInt())
+    jsMod.setValue(ptr + 8, pos.legacyBeats, "double")
+}

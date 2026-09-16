@@ -76,6 +76,10 @@ fun AddinManagerWindow(host: UapmdHost) {
                             onCheckedChange = { enabled ->
                                 manager.setEnabled(addin.packageId, addin.addinId, enabled)
                                 revision++
+                                // The Command menu and the split-import backend
+                                // list are built from the registries this just
+                                // added to or withdrew from.
+                                host.notifyAddinsChanged()
                             }
                         )
                     }

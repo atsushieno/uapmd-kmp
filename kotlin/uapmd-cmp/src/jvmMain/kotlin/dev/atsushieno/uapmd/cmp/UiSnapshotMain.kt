@@ -11,6 +11,7 @@ import dev.atsushieno.uapmd.initJvmEventLoop
 import dev.atsushieno.uapmd.getAppModel
 import dev.atsushieno.uapmd.instantiateAppModel
 import dev.atsushieno.uapmd.cmp.ui.PluginSelector
+import dev.atsushieno.uapmd.cmp.ui.StepSequencerEditor
 import dev.atsushieno.uapmd.cmp.ui.Timeline
 import dev.atsushieno.uapmd.cmp.ui.InstanceDetails
 import dev.atsushieno.uapmd.cmp.ui.PianoRollEditor
@@ -59,7 +60,47 @@ fun main() {
     // whether links render.
     var graphTrack = 0
     var pianoRollClip = -1
+    var stepClip = -1
+
+    // Renders a real project rather than an empty timeline, which is the only way
+    // to see a layout that depends on what the clips actually are — overlapping
+    // clips stacking into lanes, say. A .uapmdz is an archive and has to be
+    // extracted first; handing one straight to loadProject() crashes.
+    System.getProperty("uapmd.cmp.snapshotProject")?.let { path ->
+        val prepared = dev.atsushieno.uapmd.prepareProjectLoad(path)
+        if (!prepared.success) {
+            println("snapshot project: could not prepare '$path': ${prepared.error}")
+        } else {
+            val loaded = model.loadProject(prepared.path)
+            println("snapshot project: $path -> success=${loaded.success} error=${loaded.error}")
+            java.awt.EventQueue.invokeAndWait { }
+            val timeline = model.sequencer.engine.timeline
+            (0 until timeline.trackCount.toInt()).forEach { t ->
+                val clips = timeline.getTrack(t.toUInt()).getClips()
+                val lanes = assignClipLanes(clips.map {
+                    Triple(it.clipId, it.positionSamples, it.positionSamples + it.durationSamples)
+                })
+                println("   track $t: ${clips.size} clip(s) -> ${lanes.laneCount} lane(s)")
+            }
+        }
+    }
+
     val view = System.getProperty("uapmd.cmp.snapshotView")
+    if (view == "steps") {
+        val added = model.createEmptyMidiClip(0, 0L, tickResolution = 480u, bpm = 120.0)
+        stepClip = added.clipId
+        // Bake a pattern in, or the editor opens on its "this clip did not come
+        // from here" confirmation instead of the grid.
+        val setupHost = UapmdHost.attach(model)
+        var pattern = dev.atsushieno.uapmd.cmp.StepSequencerModel
+            .emptyPattern(setupHost.clipTickResolution(0, stepClip))
+        listOf(0, 4, 8, 12).forEach { pattern = pattern.toggle(36, it, 0.95f, 0.5f) }
+        listOf(4, 12).forEach { pattern = pattern.toggle(38, it, 0.8f, 0.4f) }
+        listOf(0, 2, 4, 6, 8, 10, 12, 14).forEach { pattern = pattern.toggle(42, it, 0.45f, 0.25f) }
+        val err = setupHost.applyStepPattern(0, stepClip, pattern)
+        println("step sequencer snapshot: clip ${added.clipId} ok=${added.success} apply=${err ?: "ok"}")
+        java.awt.EventQueue.invokeAndWait { }
+    }
     if (view == "pianoroll") {
         val midi = System.getProperty("uapmd.probe.midi")
             ?: "/Users/atsushi/sources/uapmd-kmp/external/uapmd/cmake-build-debug/_deps/" +
@@ -68,6 +109,18 @@ fun main() {
             .addMidiClipFromFile(0, dev.atsushieno.uapmd.TimelinePosition(0L, 0.0), midi)
         pianoRollClip = added.clipId
         println("piano roll snapshot: clip ${added.clipId} ok=${added.success} err=${added.error}")
+        // What the session actually makes of the clip, so an empty-looking grid can
+        // be told from a grid scrolled away from its notes.
+        model.pianoRollClipSnapshot(0, added.clipId, 4.0)?.use { snap ->
+            val ns = snap.notes
+            println("piano roll snapshot: ready=${snap.isReady} err='${snap.error}' " +
+                "notes=${ns.size} pitch=${snap.minNote}..${snap.maxNote} dur=${snap.durationSeconds}s")
+            ns.take(5).forEach { n ->
+                println("   note ${n.note} @ ${n.startSeconds}s for ${n.durationSeconds}s vel=${n.velocity}")
+            }
+            if (ns.isNotEmpty())
+                println("   start range ${ns.minOf { it.startSeconds }}..${ns.maxOf { it.startSeconds }}s")
+        }
         java.awt.EventQueue.invokeAndWait { }
     }
     if (view == "graph" || view == "instance") {
@@ -108,11 +161,12 @@ fun main() {
                     // timeline otherwise.
                     when (view) {
                         "selector" -> PluginSelector(host)
+                        "steps" -> StepSequencerEditor(host, 0, stepClip)
                         "graph" -> TrackGraphEditor(host, graphTrack)
                         "pianoroll" -> PianoRollEditor(
                             host, 0, pianoRollClip,
-                            initialScrollTicks =
-                                System.getProperty("uapmd.cmp.rollScrollTicks")?.toFloatOrNull() ?: 0f
+                            initialScrollSeconds =
+                                System.getProperty("uapmd.cmp.rollScrollSeconds")?.toFloatOrNull() ?: 0f
                         )
                         "instance" -> host.trackInstances.flatten().firstOrNull()
                             ?.let { InstanceDetails(host, it) }

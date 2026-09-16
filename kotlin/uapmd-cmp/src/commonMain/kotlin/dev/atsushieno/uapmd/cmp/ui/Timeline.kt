@@ -6,6 +6,9 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.detectDragGestures
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.ui.input.pointer.PointerEventType
+import androidx.compose.ui.input.pointer.isCtrlPressed
+import androidx.compose.ui.input.pointer.isMetaPressed
+import androidx.compose.ui.input.pointer.isShiftPressed
 import androidx.compose.ui.input.pointer.isSecondaryPressed
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
@@ -50,6 +53,9 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.drawscope.DrawScope
+import androidx.compose.ui.text.rememberTextMeasurer
+import androidx.compose.ui.text.drawText
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import androidx.compose.foundation.text.BasicTextField
@@ -66,7 +72,12 @@ import dev.atsushieno.uapmd.ClipData
 import dev.atsushieno.uapmd.FreezePolicy
 import dev.atsushieno.uapmd.FreezeRuntimeState
 import dev.atsushieno.uapmd.ClipType
+import dev.atsushieno.uapmd.cmp.ClipLaneAssignment
+import dev.atsushieno.uapmd.cmp.LaneGeometry
 import dev.atsushieno.uapmd.cmp.TempoMap
+import dev.atsushieno.uapmd.cmp.assignClipLanes
+import dev.atsushieno.uapmd.ClipCommandTarget
+import dev.atsushieno.uapmd.TimelineClipTarget
 import dev.atsushieno.uapmd.cmp.UapmdHost
 import dev.atsushieno.uapmd.cmp.pickAudioFileToOpen
 import dev.atsushieno.uapmd.cmp.pickMidiFileToOpen
@@ -94,7 +105,6 @@ internal fun fixed(value: Double, decimals: Int): String {
  * this converts at the project tempo — exact for projects without tempo
  * changes, and the axis is labelled so the assumption is visible.
  */
-private enum class TimeUnit { Seconds, Beats }
 
 /**
  * uapmd-app's legend uses icon buttons sized to one glyph plus frame padding.
@@ -153,6 +163,9 @@ private const val ResizeGripPx = 6f
  * pixels-per-second rather than its scale factor, but the law is the same one, and
  * the bounds are the zoom slider's so the slider and the navigator cannot disagree.
  */
+/** Beats the timeline shows when a project finishes loading. */
+private const val InitialViewBeats = 32.0
+
 private const val MinPixelsPerSecond = 8f
 private const val MaxPixelsPerSecond = 240f
 private const val ZoomWheelSensitivity = 0.2f
@@ -401,6 +414,23 @@ fun Timeline(
         pixelsPerSecond = next
     }
 
+    // A freshly loaded project opens on the first 32 quarter-note beats rather
+    // than fitted to the whole song: a four-minute song fitted to the window
+    // leaves every clip a few pixels wide and nothing editable. The span is
+    // taken through the tempo map, so 32 beats means 32 beats at any tempo.
+    var appliedInitialViewFor by remember { mutableStateOf(-1) }
+    LaunchedEffect(host.projectRevision, hScroll.viewportSize) {
+        val viewport = hScroll.viewportSize
+        if (viewport <= 0 || appliedInitialViewFor == host.projectRevision) return@LaunchedEffect
+        appliedInitialViewFor = host.projectRevision
+        val spanSeconds = host.tempoMap.beatsToSeconds(InitialViewBeats)
+        if (spanSeconds <= 0.0) return@LaunchedEffect
+        pixelsPerSecond = (viewport / density / spanSeconds).toFloat()
+            .coerceIn(MinPixelsPerSecond, MaxPixelsPerSecond)
+        recentreSeconds = null
+        hScroll.scrollTo(0)
+    }
+
     // Show at least a minute, or the content plus a margin.
     val contentSeconds = remember(host.trackClips, host.model.sampleRate) {
         val sr = host.model.sampleRate.takeIf { it > 0 } ?: 48000
@@ -454,8 +484,11 @@ fun Timeline(
                 if (timeUnit == TimeUnit.Seconds)
                     "${fixed(contentSeconds, 1)}s · playhead ${fixed(host.playheadSeconds, 2)}s"
                 else
+                    // bar:beat, both from 1 — the position a musician reads,
+                    // rather than the raw quarter-note count.
                     "${fixed(host.tempoMap.secondsToBeats(contentSeconds), 1)} beats · playhead " +
-                        "${fixed(host.tempoMap.secondsToBeats(host.playheadSeconds), 2)} · " +
+                        TimelineAxis.positionLabel(timeUnit, host.playheadSeconds, host.tempoMap) +
+                        " · " +
                         (if (host.tempoMap.hasTempoData) "tempo map" else "${fixed(tempo, 1)} BPM") +
                         " ${host.timeline?.timeSignatureNumerator ?: 4}/${host.timeline?.timeSignatureDenominator ?: 4}",
                 style = MaterialTheme.typography.bodySmall
@@ -475,15 +508,36 @@ fun Timeline(
         HorizontalDivider()
 
         Row(Modifier.fillMaxSize()) {
+            // A track whose clips overlap is drawn as several stacked lanes, so
+            // its height is a multiple of the base one. The legend column has to
+            // use the very same heights or the two columns drift apart as you
+            // scroll — they share one vertical scroll state.
+            val masterLanes = remember(host.masterClips) {
+                assignClipLanes(host.masterClips.map {
+                    Triple(it.clipId, it.positionSamples, it.positionSamples + it.durationSamples)
+                })
+            }
+            val trackLanes = remember(host.trackClips) {
+                host.trackClips.map { clips ->
+                    assignClipLanes(clips.map {
+                        Triple(it.clipId, it.positionSamples, it.positionSamples + it.durationSamples)
+                    })
+                }
+            }
+            fun heightFor(lanes: ClipLaneAssignment) = trackHeight * lanes.laneCount
+
             // ── Legend column ────────────────────────────────────────────────
             Column(Modifier.width(legendWidth).verticalScroll(vScroll)) {
                 Box(Modifier.height(RulerHeight).fillMaxWidth()) {
                     Text("Header", Modifier.padding(start = 4.dp), style = MaterialTheme.typography.labelSmall)
                 }
-                MasterTrackLegend(host, windows, trackHeight)
+                MasterTrackLegend(host, windows, heightFor(masterLanes))
                 HorizontalDivider()
                 host.trackInstances.indices.forEach { trackIndex ->
-                    TrackLegend(host, windows, trackIndex, isNarrow, trackHeight)
+                    TrackLegend(
+                        host, windows, trackIndex, isNarrow,
+                        heightFor(trackLanes.getOrElse(trackIndex) { ClipLaneAssignment.Single })
+                    )
                     HorizontalDivider()
                 }
             }
@@ -492,12 +546,28 @@ fun Timeline(
             // ── Lanes ────────────────────────────────────────────────────────
             Column(Modifier.fillMaxSize().horizontalScroll(hScroll).verticalScroll(vScroll)) {
                 val laneWidth = (contentSeconds * pixelsPerSecond).dp
-                Ruler(contentSeconds, pixelsPerSecond, laneWidth, timeUnit, host.tempoMap,
-                    host.timeline?.timeSignatureNumerator ?: 4)
-                MasterTrackLane(host, pixelsPerSecond, laneWidth, trackHeight)
+                val fallbackBeatsPerBar = host.timeline?.timeSignatureNumerator ?: 4
+                // One tick list for the strip and every lane, so a bar line and
+                // the bar number above it can never disagree.
+                val ticks = remember(
+                    contentSeconds, pixelsPerSecond, timeUnit, host.tempoMap, fallbackBeatsPerBar, density
+                ) {
+                    TimelineAxis.ticks(
+                        timeUnit, 0.0, contentSeconds, pixelsPerSecond,
+                        host.tempoMap, density, fallbackBeatsPerBar
+                    )
+                }
+                Ruler(ticks, pixelsPerSecond, laneWidth)
+                MasterTrackLane(
+                    host, pixelsPerSecond, laneWidth, heightFor(masterLanes), ticks, masterLanes
+                )
                 HorizontalDivider()
                 host.trackClips.indices.forEach { trackIndex ->
-                    TrackLane(host, windows, trackIndex, pixelsPerSecond, laneWidth, trackHeight)
+                    val lanes = trackLanes.getOrElse(trackIndex) { ClipLaneAssignment.Single }
+                    TrackLane(
+                        host, windows, trackIndex, pixelsPerSecond, laneWidth,
+                        heightFor(lanes), ticks, lanes
+                    )
                     HorizontalDivider()
                 }
             }
@@ -508,57 +578,51 @@ fun Timeline(
 
 @Composable
 private fun Ruler(
-    contentSeconds: Double,
+    ticks: List<RulerTick>,
     pixelsPerSecond: Float,
-    laneWidth: Dp,
-    timeUnit: TimeUnit,
-    tempoMap: TempoMap,
-    fallbackBeatsPerBar: Int
+    laneWidth: Dp
 ) {
+    val c = editorPalette
+    val textMeasurer = rememberTextMeasurer()
+    val labelStyle = MaterialTheme.typography.labelSmall
+    val uiScale = LocalDensity.current.density
     Canvas(Modifier.height(RulerHeight).width(laneWidth)) {
-        if (timeUnit == TimeUnit.Seconds) {
-            val step = when {
-                pixelsPerSecond >= 120f -> 1
-                pixelsPerSecond >= 40f -> 5
-                pixelsPerSecond >= 16f -> 10
-                else -> 30
-            }
-            var t = 0
-            while (t <= contentSeconds) {
-                val x = t * pixelsPerSecond
-                drawLine(Color.Gray, Offset(x, 0f), Offset(x, size.height), 1f)
-                t += step
-            }
-        } else {
-            // Each beat's x comes from the tempo map, so a tempo change moves the
-            // lines rather than the whole ruler sharing one spacing. Bars are
-            // counted from the signature in force at each beat, so a meter change
-            // restarts the bar count from that point.
-            val totalBeats = tempoMap.secondsToBeats(contentSeconds).toInt()
-            var beatInBar = 0
-            var currentSignatureStart = 0.0
-            for (beat in 0..totalBeats) {
-                val beatD = beat.toDouble()
-                val (numerator, _) = tempoMap.signatureAtBeat(beatD)
-                val bars = if (tempoMap.signatures.isEmpty()) fallbackBeatsPerBar.coerceAtLeast(1)
-                           else numerator.coerceAtLeast(1)
-                val signatureStart =
-                    tempoMap.signatures.lastOrNull { beatD >= it.startBeat }?.startBeat ?: 0.0
-                if (signatureStart != currentSignatureStart) {
-                    currentSignatureStart = signatureStart
-                    beatInBar = 0
-                }
-                val isBar = beatInBar % bars == 0
-                val x = (tempoMap.beatsToSeconds(beatD) * pixelsPerSecond).toFloat()
-                drawLine(
-                    if (isBar) Color.LightGray else Color.Gray,
-                    Offset(x, if (isBar) 0f else size.height * 0.4f),
-                    Offset(x, size.height),
-                    if (isBar) 1.5f else 1f
-                )
-                beatInBar++
-            }
+        ticks.forEach { tick ->
+            val x = TimelineAxis.xOf(tick.seconds, pixelsPerSecond)
+            if (x < 0f || x > size.width) return@forEach
+            // Major ticks reach half way up the strip, minor ones a quarter.
+            val top = size.height * (if (tick.major) 0.5f else 0.75f)
+            drawLine(
+                if (tick.major) c.rulerMajorTick else c.rulerMinorTick,
+                Offset(x, top), Offset(x, size.height),
+                if (tick.major) 1.5f else 1f
+            )
+            val label = tick.label ?: return@forEach
+            drawText(
+                textMeasurer,
+                label,
+                topLeft = Offset(x + 3f * uiScale, 0f),
+                style = labelStyle.copy(color = c.rulerMajorTick)
+            )
         }
+    }
+}
+
+/**
+ * The ruler's lines continued down a lane, so a clip can be read against the
+ * grid rather than against the strip at the top of a tall timeline. uapmd-app
+ * issues these from the same `TimelineAxis::drawRuler` pass that draws the
+ * ticks; here the caller shares the tick list instead.
+ */
+private fun DrawScope.drawLaneGrid(ticks: List<RulerTick>, pixelsPerSecond: Float, c: EditorPalette) {
+    ticks.forEach { tick ->
+        val x = TimelineAxis.xOf(tick.seconds, pixelsPerSecond)
+        if (x < 0f || x > size.width) return@forEach
+        drawLine(
+            if (tick.major) c.gridMajorLine else c.gridMinorLine,
+            Offset(x, 0f), Offset(x, size.height),
+            if (tick.major) 1.5f else 1f
+        )
     }
 }
 
@@ -569,7 +633,9 @@ private fun TrackLane(
     trackIndex: Int,
     pixelsPerSecond: Float,
     laneWidth: Dp,
-    trackHeight: Dp
+    trackHeight: Dp,
+    ticks: List<RulerTick>,
+    lanes: ClipLaneAssignment
 ) {
     val c = editorPalette
     val clips = host.trackClips.getOrNull(trackIndex).orEmpty()
@@ -595,10 +661,41 @@ private fun TrackLane(
     var rangeStart by remember { mutableStateOf(0.0) }
     var rangeEnd by remember { mutableStateOf(0.0) }
 
-    fun clipAt(seconds: Double): ClipData? = clips.firstOrNull { c ->
-        val start = c.positionSamples / sampleRate
-        seconds >= start && seconds <= start + c.durationSamples / sampleRate
+    // Overlapping clips live in different lanes, so a hit needs the y as well —
+    // without it a click on the upper clip would select whichever of the two
+    // happens to come first in the list (SequenceEditor.cpp:548 makes the same point).
+    fun clipAt(seconds: Double, y: Float, height: Float): ClipData? {
+        val geometry = LaneGeometry(lanes.laneCount, height)
+        val lane = geometry.laneAt(y)
+        return clips.firstOrNull { c ->
+            val start = c.positionSamples / sampleRate
+            lanes.laneOf(c.clipId) == lane &&
+                seconds >= start && seconds <= start + c.durationSamples / sampleRate
+        }
     }
+
+    // Marquee state. uapmd-app shares one drag between "rubber-band select" and
+    // "range action": a drag that catches clips selects them, one that catches
+    // none offers the range menu instead, and never both
+    // (`TimelineClipMarquee::render` returns the count for exactly this).
+    // Whether the band in progress extends the selection (shift held at its start).
+    var marqueeAdditive by remember { mutableStateOf(false) }
+    // detectDragGestures sees no keyboard modifiers, so the press handler below —
+    // which runs first, for the same press that becomes the drag — records them.
+    var shiftHeld by remember { mutableStateOf(false) }
+
+    // Read once per recomposition rather than per clip per frame: each lookup is
+    // an FFI call, and the canvas draws every clip on every frame.
+    val selectedClipIds = remember(host.selectionRevision, clips, trackIndex) {
+        host.selectedClips().filter { it.trackIndex == trackIndex }.map { it.clipId }.toSet()
+    }
+
+    /** The clips a rubber band over [a]..[b] seconds covers. */
+    fun clipsInRange(a: Double, b: Double): List<TimelineClipTarget> = clips.filter { clip ->
+        val start = clip.positionSamples / sampleRate
+        val end = start + clip.durationSamples / sampleRate
+        end > a && start < b
+    }.map { TimelineClipTarget(trackIndex, it.clipId) }
 
     Box(
         Modifier.height(trackHeight).width(laneWidth)
@@ -610,7 +707,7 @@ private fun TrackLane(
                     menuAnchor = with(density) { DpOffset(offset.x.toDp(), 0.dp) }
                     // On a clip it is that clip's menu, on empty lane the add menu —
                     // the two popups uapmd-app opens from the same right-click.
-                    val hit = clipAt(seconds)
+                    val hit = clipAt(seconds, offset.y, size.height.toFloat())
                     if (hit != null) contextMenuClipId = hit.clipId else addMenuOpen = true
                 }
                 detectTapGestures(
@@ -618,6 +715,31 @@ private fun TrackLane(
                     // Touch has no right button; a long press is its context click.
                     onLongPress = { openMenuAt(it) }
                 )
+            }
+            // Left press selects, with the modifier rules uapmd-app uses: plain
+            // click replaces the selection, ctrl/cmd toggles, shift extends. A
+            // press on an already-selected clip leaves the selection alone so a
+            // multi-clip drag does not collapse to one.
+            .pointerInput(clips, pixelsPerSecond, host.selectionRevision) {
+                awaitPointerEventScope {
+                    while (true) {
+                        val event = awaitPointerEvent()
+                        if (event.type != PointerEventType.Press) continue
+                        if (event.buttons.isSecondaryPressed) continue
+                        val position = event.changes.firstOrNull()?.position ?: continue
+                        val toggle = event.keyboardModifiers.isCtrlPressed ||
+                            event.keyboardModifiers.isMetaPressed
+                        val extend = event.keyboardModifiers.isShiftPressed
+                        // Recorded for every press, clip or not: an empty-lane
+                        // press is the one that starts a marquee.
+                        shiftHeld = extend
+                        val seconds = (position.x / pixelsPerSecond).toDouble().coerceAtLeast(0.0)
+                        val hit = clipAt(seconds, position.y, size.height.toFloat()) ?: continue
+                        val target = TimelineClipTarget(trackIndex, hit.clipId)
+                        if (toggle || extend || !host.isClipSelected(trackIndex, hit.clipId))
+                            host.selectClips(listOf(target), additive = extend || toggle, toggle = toggle)
+                    }
+                }
             }
             .pointerInput(clips, pixelsPerSecond) {
                 // detectTapGestures fires for any button, so the right-click uapmd-app
@@ -631,7 +753,7 @@ private fun TrackLane(
                         val seconds = (position.x / pixelsPerSecond).toDouble().coerceAtLeast(0.0)
                         clickedSeconds = seconds
                         menuAnchor = with(density) { DpOffset(position.x.toDp(), 0.dp) }
-                        val hit = clipAt(seconds)
+                        val hit = clipAt(seconds, position.y, size.height.toFloat())
                         if (hit != null) contextMenuClipId = hit.clipId else addMenuOpen = true
                         event.changes.forEach { it.consume() }
                     }
@@ -643,7 +765,7 @@ private fun TrackLane(
                 detectDragGestures(
                     onDragStart = { offset ->
                         val seconds = (offset.x / pixelsPerSecond).toDouble()
-                        val hit = clipAt(seconds)
+                        val hit = clipAt(seconds, offset.y, size.height.toFloat())
                         // Within the grip of a clip's right edge the drag resizes
                         // it instead of moving it.
                         val grip = ResizeGripPx / pixelsPerSecond
@@ -658,6 +780,7 @@ private fun TrackLane(
                         if (draggingClipId == null && resizingClipId == null) {
                             rangeAnchorSeconds = seconds.coerceAtLeast(0.0)
                             rangeCurrentSeconds = seconds.coerceAtLeast(0.0)
+                            marqueeAdditive = shiftHeld
                         }
                     },
                     onDragEnd = {
@@ -684,10 +807,17 @@ private fun TrackLane(
                             // uapmd-app needs a few pixels of travel before a drag
                             // counts as a range rather than a stray click.
                             if ((b - a) * pixelsPerSecond >= 4.0) {
-                                rangeStart = a
-                                rangeEnd = b
-                                menuAnchor = with(density) { DpOffset((a * pixelsPerSecond).toFloat().toDp(), 0.dp) }
-                                rangeMenuOpen = true
+                                // One gesture, two meanings: a band over clips is a
+                                // selection, a band over empty lane is a range action.
+                                val caught = clipsInRange(a, b)
+                                if (caught.isNotEmpty()) {
+                                    host.selectClips(caught, additive = marqueeAdditive, toggle = false)
+                                } else {
+                                    rangeStart = a
+                                    rangeEnd = b
+                                    menuAnchor = with(density) { DpOffset((a * pixelsPerSecond).toFloat().toDp(), 0.dp) }
+                                    rangeMenuOpen = true
+                                }
                             }
                         }
                         rangeAnchorSeconds = null
@@ -709,26 +839,43 @@ private fun TrackLane(
             }
     ) {
         Canvas(Modifier.fillMaxSize()) {
+            drawLaneGrid(ticks, pixelsPerSecond, c)
+            val geometry = LaneGeometry(lanes.laneCount, size.height)
             clips.forEach { clip ->
                 val shift = if (clip.clipId == draggingClipId) dragSeconds else 0.0
                 val stretch = if (clip.clipId == resizingClipId) dragSeconds else 0.0
                 val x = ((clip.positionSamples / sampleRate + shift) * pixelsPerSecond).toFloat()
                 val w = ((clip.durationSamples / sampleRate + stretch) * pixelsPerSecond)
                     .toFloat().coerceAtLeast(2f)
+                // Overlapping clips are stacked rather than drawn over one another;
+                // a track with no overlap has one lane and looks exactly as before.
+                val y = geometry.clipTop(lanes.laneOf(clip.clipId))
+                val h = geometry.clipHeight
                 val isMidi = clip.clipType == ClipType.Midi
                 val base = if (isMidi) c.midiClip else c.audioClip
                 drawRect(
                     color = if (clip.muted) base.copy(alpha = 0.35f) else base,
-                    topLeft = Offset(x, 4f),
-                    size = Size(w, size.height - 8f)
+                    topLeft = Offset(x, y),
+                    size = Size(w, h)
                 )
                 drawRect(
                     color = if (clip.clipId == draggingClipId) c.playhead else c.clipBorder,
-                    topLeft = Offset(x, 4f),
-                    size = Size(w, size.height - 8f),
+                    topLeft = Offset(x, y),
+                    size = Size(w, h),
                     style = androidx.compose.ui.graphics.drawscope.Stroke(if (clip.clipId == draggingClipId) 2f else 1f)
                 )
-                if (isMidi) drawMidiNotes(host, trackIndex, clip, x, w, pixelsPerSecond, c.note)
+                // Selected clips get a wash and a heavier border on top of their
+                // own colours, as uapmd-app draws them over the clip content.
+                if (selectedClipIds.contains(clip.clipId)) {
+                    drawRect(c.selectionFill, Offset(x, y), Size(w, h))
+                    drawRect(
+                        color = c.selectionBorder,
+                        topLeft = Offset(x, y),
+                        size = Size(w, h),
+                        style = androidx.compose.ui.graphics.drawscope.Stroke(2f)
+                    )
+                }
+                if (isMidi) drawMidiNotes(host, trackIndex, clip, x, w, y, h, pixelsPerSecond, c.note)
             }
             rangeAnchorSeconds?.let { anchor ->
                 val a = minOf(anchor, rangeCurrentSeconds).toFloat() * pixelsPerSecond
@@ -755,6 +902,8 @@ private fun TrackLane(
             val x = with(density) {
                 ((clip.positionSamples / sampleRate + shift) * pixelsPerSecond).toFloat().toDp()
             }
+            // The label belongs to its clip, so it rides the same lane offset.
+            val labelY = trackHeight / lanes.laneCount.coerceAtLeast(1) * lanes.laneOf(clip.clipId)
             val isMidi = clip.clipType == ClipType.Midi
             // offset, not padding: padding requires a non-negative value and throws
             // otherwise, and `x` follows the clip's position, which can be negative —
@@ -762,7 +911,7 @@ private fun TrackLane(
             // desktop that exception surfaced as a Java error dialog and a window
             // that never drew again. offset takes negatives and simply places the
             // label off to the left, with the clip it belongs to.
-            Box(Modifier.offset(x = x + 3.dp, y = 5.dp)) {
+            Box(Modifier.offset(x = x + 3.dp, y = labelY + 5.dp)) {
                 Text(
                     clip.name.ifEmpty { if (isMidi) "MIDI clip" else "audio clip" },
                     Modifier.clickable {
@@ -850,6 +999,19 @@ private fun ClipContextMenu(
                 ) { PianoRollEditor(host, trackIndex, clip.clipId) }
             }
         )
+        DropdownMenuItem(
+            text = { Text("Open Step Sequencer") },
+            enabled = isMidi,
+            onClick = {
+                onDismiss()
+                host.selectedMidiClip = trackIndex to clip.clipId
+                windows.open(
+                    // uapmd-app opens it at 900x620 (StepSequencerEditor.cpp:360);
+                    // the grid plus the velocity panel do not fit in less.
+                    "steps:$trackIndex:${clip.clipId}", "$title - Step Sequencer", DpSize(900.dp, 620.dp)
+                ) { StepSequencerEditor(host, trackIndex, clip.clipId) }
+            }
+        )
         // Ours, not uapmd-app's — see the note on ClipProperties itself.
         DropdownMenuItem(text = { Text("Clip Properties…") }, onClick = {
             onDismiss()
@@ -859,7 +1021,7 @@ private fun ClipContextMenu(
         })
         DropdownMenuItem(text = { Text("Delete") }, onClick = {
             onDismiss()
-            listOf("pianoroll", "dump", "events", "clipprops").forEach {
+            listOf("pianoroll", "steps", "dump", "events", "clipprops").forEach {
                 windows.close("$it:$trackIndex:${clip.clipId}")
             }
             host.removeClip(trackIndex, clip.clipId)
@@ -868,6 +1030,72 @@ private fun ClipContextMenu(
             onDismiss()
             host.setClipEnabled(trackIndex, clip.clipId, !enabled)
         })
+
+        // Selection clipboard. uapmd-app offers these on the clip menu once
+        // multi-clip selection exists; they act on the whole selection, so a
+        // right-click on an unselected clip selects it first.
+        HorizontalDivider()
+        val selectedCount = host.selectedClips().size
+        val selectionSuffix = if (selectedCount > 1) " ($selectedCount clips)" else ""
+        DropdownMenuItem(text = { Text("Copy$selectionSuffix") }, onClick = {
+            onDismiss()
+            if (!host.isClipSelected(trackIndex, clip.clipId))
+                host.selectClips(listOf(TimelineClipTarget(trackIndex, clip.clipId)))
+            host.copySelectedClips()
+        })
+        DropdownMenuItem(text = { Text("Cut$selectionSuffix") }, onClick = {
+            onDismiss()
+            if (!host.isClipSelected(trackIndex, clip.clipId))
+                host.selectClips(listOf(TimelineClipTarget(trackIndex, clip.clipId)))
+            host.deleteSelectedClips(cut = true)
+        })
+        DropdownMenuItem(
+            text = { Text("Paste Here") },
+            enabled = host.canPasteOnto(trackIndex),
+            onClick = { onDismiss(); host.pasteClips(trackIndex, addAtSeconds) }
+        )
+        DropdownMenuItem(
+            text = { Text("Paste to Original Tracks") },
+            enabled = host.canPasteOnto(trackIndex, originalTracks = true),
+            onClick = { onDismiss(); host.pasteClips(trackIndex, addAtSeconds, originalTracks = true) }
+        )
+        if (selectedCount > 1) {
+            DropdownMenuItem(text = { Text("Delete Selected ($selectedCount clips)") }, onClick = {
+                onDismiss()
+                host.deleteSelectedClips()
+            })
+        }
+
+        // Clip-scoped commands contributed by addins — the transcription
+        // entries that Basic Pitch, DrumScript and pitch-detection register.
+        // Only those that apply to this clip are listed, which is what
+        // appliesTo() is for; one that applies but is not available right now
+        // shows greyed out, as it does in uapmd-app.
+        val target = ClipCommandTarget(
+            trackIndex = trackIndex,
+            clipId = clip.clipId,
+            isMidiClip = isMidi,
+            isMasterTrack = isMaster
+        )
+        // A running command reports its progress inside its own title, so the
+        // list has to be re-read while the menu is open rather than once when it
+        // opens — otherwise the elapsed time freezes at whatever it said then.
+        val commandTick = rememberTicker(expanded)
+        val clipCommands = remember(
+            host.addinRevision, trackIndex, clip.clipId, isMidi, isMaster, commandTick
+        ) {
+            host.clipCommandsFor(target)
+        }
+        if (clipCommands.isNotEmpty()) {
+            HorizontalDivider()
+            clipCommands.forEach { (index, info) ->
+                DropdownMenuItem(
+                    text = { Text(info.title) },
+                    enabled = info.enabled,
+                    onClick = { onDismiss(); host.invokeClipCommand(index, target) }
+                )
+            }
+        }
 
         if (!isMaster) {
             HorizontalDivider()
@@ -984,16 +1212,18 @@ private fun androidx.compose.ui.graphics.drawscope.DrawScope.drawMidiNotes(
     clip: ClipData,
     clipX: Float,
     clipW: Float,
-    pixelsPerSecond: Float
-,
+    clipY: Float,
+    clipH: Float,
+    pixelsPerSecond: Float,
     noteColor: Color) {
     val notes = host.midiNotes(trackIndex, clip.clipId)
     if (notes.isEmpty()) return
     val lo = notes.minOf { it.note }
     val hi = notes.maxOf { it.note }
     val span = (hi - lo).coerceAtLeast(1)
-    val top = 6f
-    val usable = size.height - 12f
+    // Notes stay inside the clip's own lane rather than spanning the whole track.
+    val top = clipY + 2f
+    val usable = (clipH - 4f).coerceAtLeast(1f)
     notes.forEach { n ->
         val nx = clipX + (n.startSeconds * pixelsPerSecond).toFloat()
         val nw = (n.durationSeconds * pixelsPerSecond).toFloat().coerceAtLeast(1.5f)
@@ -1188,8 +1418,6 @@ private fun TrackLegend(
     // uapmd-app disables the graph button and the plugin popup while a freeze
     // render is in flight (TimelineEditor.cpp:1217-1240).
     val trackBusy = host.isTrackBusy(trackIndex)
-    // uapmd-app treats Ctrl/Cmd-click on Solo as additive.
-    var additiveSolo by remember { mutableStateOf(false) }
     var emptyAudioNotice by remember { mutableStateOf<String?>(null) }
     val scope = rememberCoroutineScope()
 
@@ -1280,13 +1508,16 @@ private fun TrackLegend(
                     onClick = { host.setTrackMuted(trackIndex, !muted) },
                     contentPadding = TightPadding,
                     modifier = Modifier.size(IconButtonSize),
+                    // M shows one thing only: this track's own mute flag.
                     colors = if (muted) ButtonDefaults.buttonColors(containerColor = c.muted)
                     else ButtonDefaults.buttonColors()
                 ) { Text("M", style = MaterialTheme.typography.labelSmall) }
                 Button(
-                    onClick = { host.setTrackSolo(trackIndex, !solo, additive = additiveSolo) },
+                    onClick = { host.setTrackSolo(trackIndex, !solo) },
                     contentPadding = TightPadding,
                     modifier = Modifier.size(IconButtonSize),
+                    // Lit when soloed, plain otherwise — the two states
+                    // uapmd-app draws (TimelineEditor.cpp:1576).
                     colors = if (solo) ButtonDefaults.buttonColors(containerColor = c.solo)
                     else ButtonDefaults.buttonColors()
                 ) { Text("S", style = MaterialTheme.typography.labelSmall) }
@@ -1529,7 +1760,10 @@ private fun MasterTrackLegend(host: UapmdHost, windows: FloatingWindowManager, t
 }
 
 @Composable
-private fun MasterTrackLane(host: UapmdHost, pixelsPerSecond: Float, laneWidth: Dp, trackHeight: Dp) {
+private fun MasterTrackLane(
+    host: UapmdHost, pixelsPerSecond: Float, laneWidth: Dp, trackHeight: Dp,
+    ticks: List<RulerTick>, lanes: ClipLaneAssignment
+) {
     val c = editorPalette
     val sampleRate = (host.model.sampleRate.takeIf { it > 0 } ?: 48000).toDouble()
     val density = LocalDensity.current
@@ -1560,11 +1794,15 @@ private fun MasterTrackLane(host: UapmdHost, pixelsPerSecond: Float, laneWidth: 
             onDismiss = { addMenuOpen = false }
         )
         Canvas(Modifier.fillMaxSize()) {
+            drawLaneGrid(ticks, pixelsPerSecond, c)
+            val geometry = LaneGeometry(lanes.laneCount, size.height)
             host.masterClips.forEach { clip ->
                 val x = (clip.positionSamples / sampleRate * pixelsPerSecond).toFloat()
                 val w = (clip.durationSamples / sampleRate * pixelsPerSecond).toFloat().coerceAtLeast(2f)
-                drawRect(c.midiClip, Offset(x, 4f), Size(w, size.height - 8f))
-                drawRect(c.clipBorder, Offset(x, 4f), Size(w, size.height - 8f),
+                val y = geometry.clipTop(lanes.laneOf(clip.clipId))
+                val h = geometry.clipHeight
+                drawRect(c.midiClip, Offset(x, y), Size(w, h))
+                drawRect(c.clipBorder, Offset(x, y), Size(w, h),
                     style = androidx.compose.ui.graphics.drawscope.Stroke(1f))
             }
             val px = (host.playheadSeconds * pixelsPerSecond).toFloat()

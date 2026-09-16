@@ -3,3 +3,9 @@ hs_err_*.log
 .claude
 cmake-build-*
 .DS_Store
+
+# Emscripten's compiler-check output. `emcmake cmake` runs with
+# kotlin/uapmd-binding as its working directory, so CMake's "can the compiler
+# make an executable?" probe drops these there on every fresh wasm configure.
+a.out.js
+a.out.wasm

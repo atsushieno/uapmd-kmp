@@ -42,12 +42,24 @@ import androidx.compose.ui.text.drawText
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.rememberTextMeasurer
 import androidx.compose.ui.unit.dp
-import dev.atsushieno.uapmd.UmpEvent
+import androidx.compose.runtime.DisposableEffect
+import androidx.compose.ui.input.pointer.PointerEventType
+import androidx.compose.ui.input.pointer.isCtrlPressed
+import androidx.compose.ui.input.pointer.isMetaPressed
+import androidx.compose.ui.input.pointer.isSecondaryPressed
+import androidx.compose.ui.input.pointer.isShiftPressed
+import dev.atsushieno.uapmd.PianoRollAction
+import dev.atsushieno.uapmd.PianoRollNote
 import dev.atsushieno.uapmd.cmp.UapmdHost
+import kotlin.math.log2
+import kotlin.math.pow
+import kotlin.math.roundToInt
 
 
 
 private val SnapOptions = listOf("Free", "1/1", "1/2", "1/4", "1/8", "1/16", "1/32")
+/** Beat fractions matching [SnapOptions]; index 0 is Free. uapmd-app's kSnapValues. */
+private val SnapBeats = listOf(0f, 1f, 0.5f, 0.25f, 0.125f, 0.0625f, 0.03125f)
 private val BlackKeys = setOf(1, 3, 6, 8, 10)
 
 private val KeyColumnWidth = 44.dp
@@ -59,8 +71,8 @@ private const val NoteCount = 128
 /** uapmd-app inserts a quarter note at ~100/127 (`PianoRollEditor.cpp:1141`). */
 private const val DefaultNoteVelocity = 0.787f
 
-/** A note may not be resized shorter than this. */
-private const val MinNoteTicks = 8L
+/** uapmd-app's kMinNoteDuration. */
+private const val MinNoteSeconds = 0.01
 
 /** uapmd-app's `kResizeEdgePx`. */
 private const val ResizeEdgePx = 8f
@@ -68,102 +80,168 @@ private const val ResizeEdgePx = 8f
 /** Below this row height a label cannot be drawn legibly, so none is. */
 private const val MinLabelRowPx = 14f
 
+/** One bar of 4/4 at the tight end, a long song at the loose end. */
+private const val MinVisibleBeats = 1f
+private const val MaxVisibleBeats = 512f
+
 /**
  * Piano roll for a MIDI clip, following uapmd-app's editor
  * (`PianoRollEditor.cpp`) in both layout and interaction.
  *
+ * The editing model is `uapmd_app::PianoRollSession`, bound from uapmd-app-model
+ * rather than reimplemented, so every host shares one interpretation of what a
+ * clip's UMP stream means as notes, including the MIDI2 attributes and per-note
+ * automation a plain note-on/note-off pairing loses. This file draws and
+ * gestures; it does not decide what a note is.
+ *
+ * Positions are in **seconds**, as the session holds them (uapmd-app's editor is
+ * `pxPerSec`-based for the same reason). The clip's own tempo only sets where the
+ * snap lines fall.
+ *
  * Layout: a fixed key column on the left and the note grid to its right, the two
  * scrolling vertically together (`renderPianoKeys`, :815). The keys are not
- * decoration — they name the row a note sits on, which a bare grid cannot, and
- * clicking one previews that pitch.
+ * decoration - they name the row a note sits on, and clicking one previews it.
  *
  * Interaction, from `:941-1155`:
- *  - drag a note's middle to move it in *both* time and pitch;
+ *  - click selects; ctrl/cmd toggles; shift extends;
+ *  - drag a note's middle to move the whole selection in time and pitch;
  *  - drag within the resize zone at either end to change its length;
  *  - double-click empty space to insert a quarter note at the snapped position;
  *  - double-click a note to delete it;
- *  - the selected note's velocity is editable.
+ *  - copy/cut/paste/select-all act on the selection, through the session.
  *
- * Notes are parsed straight from the clip's UMP stream and written back through
- * `replaceMidiClipContent()`, one tick entry per UMP word, so every edit carries
- * the clip's non-note events through untouched. Working in ticks throughout avoids
- * a lossy seconds↔ticks conversion on every edit.
+ * Every edit is applied to the session and then committed, which writes the clip
+ * back through the undo history. The commit source is recorded so the timeline's
+ * own change notification does not bounce back and reload the editor mid-edit.
  */
 @Composable
 fun PianoRollEditor(
     host: UapmdHost,
     trackIndex: Int,
     clipId: Int,
-    /** Starting scroll, for headless rendering; the user's drags take over after. */
-    initialScrollTicks: Float = 0f
+    /**
+     * Starting horizontal scroll in seconds, for headless rendering; the user's
+     * drags take over after. Seconds, not ticks: the editor works in the same
+     * unit the session does.
+     */
+    initialScrollSeconds: Float = 0f
 ) {
     val c = editorPalette
-    var dpPerTick by remember { mutableStateOf(0.25f) }
+    // The horizontal zoom is how many beats fit across the grid, on a
+    // logarithmic control: "16 beats in view" is a thing a musician can ask for,
+    // where "137 px/s" is not. Pixels per second is derived from the viewport,
+    // so the same setting means the same span on any window size.
+    var visibleBeats by remember { mutableStateOf(16f) }
+    var lastPixelsPerSecond by remember { mutableStateOf(0f) }
     var rowHeightDp by remember { mutableStateOf(11f) }
     var snapIndex by remember { mutableStateOf(3) }
     var snapMenu by remember { mutableStateOf(false) }
-    var selected by remember { mutableStateOf<UmpNote?>(null) }
-    // Real scroll state, not a hand-rolled pan offset. This is what makes the wheel,
-    // a trackpad and a scrollbar work at all, and it keeps the key column locked to
-    // the grid because both read the same vertical state. Panning by dragging the
-    // canvas is not scrolling: in an editor a drag belongs to the notes.
-    val hScroll = rememberScrollState()
-    val vScroll = rememberScrollState()
+    // Bumped after every edit so the note list is re-read from the session.
     var revision by remember { mutableStateOf(0) }
     var status by remember { mutableStateOf<String?>(null) }
-    var dragTicks by remember { mutableStateOf(0L) }
-    var dragPitch by remember { mutableStateOf(0) }
-    var dragMode by remember { mutableStateOf(DragMode.None) }
     var previewNote by remember { mutableStateOf<Int?>(null) }
 
-    // The canvas measures in pixels while these are densities-independent, so the
-    // conversion happens once here rather than at every use.
+    // Drag state. The session owns the note positions; these only describe the
+    // gesture in progress so the canvas can draw it before it is committed.
+    var dragMode by remember { mutableStateOf(DragMode.None) }
+    var dragIndex by remember { mutableStateOf(-1) }
+    var dragOriginStart by remember { mutableStateOf(0.0) }
+    var dragOriginEnd by remember { mutableStateOf(0.0) }
+    var dragOriginNote by remember { mutableStateOf(0) }
+
+    val hScroll = rememberScrollState()
+    val vScroll = rememberScrollState()
+
     val density = LocalDensity.current.density
-    val pixelsPerTick = dpPerTick * density
     val noteHeight = rowHeightDp * density
 
-    val events = remember(trackIndex, clipId, revision) {
-        host.model.getMidiClipUmpEvents(trackIndex, clipId).events
+    val model = host.model
+
+    // The clip's own tempo decides how wide a beat is. The viewport width is 0
+    // until the grid has been laid out once, so fall back to the whole window
+    // for that first frame rather than dividing by zero.
+    val clipTempo = remember(trackIndex, clipId, host.projectRevision) {
+        host.clipTempo(trackIndex, clipId)
     }
-    val notes = remember(events) { parseUmpNotes(events) }
-    // The grid spans the whole MIDI range, as uapmd-app's does, so a note can be
-    // dragged anywhere rather than only within the range the clip happens to use.
+    val gridWidthPx = hScroll.viewportSize.takeIf { it > 0 }?.toFloat()
+        ?: (240f * density)
+    val pixelsPerSecond =
+        (gridWidthPx * clipTempo.toFloat() / (60f * visibleBeats.coerceAtLeast(0.01f)))
+            .coerceAtLeast(1f)
+
+    // Changing the zoom must leave the same music under the pointer, so the
+    // scroll offset is rescaled by however much the scale just moved.
+    LaunchedEffect(pixelsPerSecond) {
+        val previous = lastPixelsPerSecond
+        lastPixelsPerSecond = pixelsPerSecond
+        if (previous > 0f && previous != pixelsPerSecond && hScroll.value > 0)
+            hScroll.scrollTo((hScroll.value * pixelsPerSecond / previous).roundToInt())
+    }
+
+    // The session is the editing model; the snapshot is how a clip becomes one.
+    // Reloading only when the session does not already match the clip is what
+    // lets an edit survive the timeline change its own commit provoked.
+    val session = remember(trackIndex, clipId, host.projectRevision) {
+        val snapshot = model.pianoRollClipSnapshot(trackIndex, clipId, 4.0)
+        val opened = model.openPianoRollSession(trackIndex, clipId)
+        if (opened != null && snapshot != null && !opened.matchesSource(snapshot))
+            opened.loadNotes(snapshot)
+        snapshot?.close()
+        opened
+    }
+
+    // Closing releases the session the model is holding for this clip.
+    DisposableEffect(trackIndex, clipId) {
+        onDispose { model.closePianoRollSession(trackIndex, clipId) }
+    }
+
+    // `deleted` notes keep their slot so indexes stay stable across an edit, so
+    // the visible list carries its own index along for every session call.
+    val notes: List<IndexedNote> = remember(session, revision) {
+        session?.notes.orEmpty()
+            .mapIndexed { index, note -> IndexedNote(index, note) }
+            .filter { !it.note.deleted }
+    }
+    val selectedCount = remember(session, revision) { session?.selectedNoteCount ?: 0 }
+
     val highest = TopNote
-    // Ticks per quarter is not exposed; 480 is the usual SMF resolution and only
-    // affects grid spacing, not the data.
-    val ticksPerQuarter = 480L
-
-    /** Content width in ticks: the clip's own span, plus a bar to add notes past it. */
-    val contentTicks = remember(notes, ticksPerQuarter) {
-        ((notes.maxOfOrNull { it.endTick } ?: 0L) + ticksPerQuarter * 4).coerceAtLeast(ticksPerQuarter * 8).toFloat()
+    val clipSeconds = remember(session, revision) { session?.durationSeconds ?: 4.0 }
+    // Only sets where the snap lines fall; the session itself is in seconds.
+    val bpm = remember(host.timeline?.tempo) {
+        host.timeline?.tempo?.takeIf { it > 0.0 } ?: 120.0
+    }
+    val snapSeconds = remember(snapIndex, bpm) {
+        val beats = SnapBeats[snapIndex.coerceIn(0, SnapBeats.lastIndex)]
+        if (beats > 0f) beats * 60.0 / bpm else 0.0
     }
 
-    // The grid spans all 128 notes so a note can be dragged anywhere, but opening at
-    // note 127 would show empty air above the music. Scroll to the clip's own range
-    // once, then leave the view where the user puts it.
-    var scrolledToContent by remember(clipId) { mutableStateOf(false) }
-    LaunchedEffect(notes, clipId, noteHeight) {
-        if (!scrolledToContent && notes.isNotEmpty()) {
-            val top = notes.maxOf { it.note }
-            vScroll.scrollTo((((highest - top - 2).coerceAtLeast(0)) * noteHeight).toInt())
-            if (initialScrollTicks > 0f)
-                hScroll.scrollTo((initialScrollTicks * pixelsPerTick).toInt())
-            scrolledToContent = true
-        }
+    /** Content width: the clip's span plus a bar to add notes past the end. */
+    val contentSeconds = remember(notes, clipSeconds, bpm) {
+        val last = notes.maxOfOrNull { it.note.startSeconds + it.note.durationSeconds } ?: 0.0
+        (maxOf(last, clipSeconds) + 4.0 * 60.0 / bpm).coerceAtLeast(2.0)
     }
 
-    fun apply(
-        edits: Map<Int, EventEdit> = emptyMap(),
-        removed: Set<Int> = emptySet(),
-        added: List<UmpEvent> = emptyList(),
-        what: String
-    ) {
-        val (words, ticks) = editClipContent(events, edits, removed, added)
-        val ok = host.model.sequencer.engine.timeline
-            .replaceMidiClipContent(trackIndex, clipId, words, ticks)
-        status = if (ok) null else "The engine rejected the $what."
+    fun snap(seconds: Double): Double =
+        if (snapSeconds > 0.0) kotlin.math.round(seconds / snapSeconds) * snapSeconds else seconds
+
+    /**
+     * Writes the session back to the clip. Recording the commit source first is
+     * what stops the timeline's resulting change notification from being read as
+     * someone else's edit and reloading the editor out from under the user.
+     */
+    fun commit(what: String) {
+        val s = session ?: return
+        model.recordPianoRollCommitSource(trackIndex, clipId)
+        val ok = s.commit(model)
+        status = if (ok) null else s.error.ifEmpty { "The engine rejected the $what." }
         host.invalidateMidiCache()
         revision++
+    }
+
+    fun act(action: PianoRollAction, pasteSeconds: Double = 0.0, what: String) {
+        val s = session ?: return
+        s.performAction(action, pasteSeconds)
+        commit(what)
     }
 
     /**
@@ -183,40 +261,36 @@ fun PianoRollEditor(
         }
     }
 
-    fun commitDrag(note: UmpNote) {
-        val snap = snapTicks(snapIndex, ticksPerQuarter)
-        val delta = if (snap > 0) (dragTicks / snap) * snap else dragTicks
-        when (dragMode) {
-            DragMode.Move -> {
-                if (delta == 0L && dragPitch == 0) return
-                val pitch = (note.note + dragPitch).coerceIn(0, 127)
-                apply(
-                    edits = mapOf(
-                        note.onIndex to EventEdit(tickDelta = delta, note = pitch),
-                        note.offIndex to EventEdit(tickDelta = delta, note = pitch)
-                    ),
-                    what = "move"
-                )
-            }
-            // Resizing moves one end only, so the other stays put.
-            DragMode.ResizeRight -> {
-                if (delta == 0L) return
-                val end = (note.endTick + delta).coerceAtLeast(note.startTick + MinNoteTicks)
-                apply(edits = mapOf(note.offIndex to EventEdit(tickDelta = end - note.endTick)), what = "resize")
-            }
-            DragMode.ResizeLeft -> {
-                if (delta == 0L) return
-                val start = (note.startTick + delta).coerceIn(0L, note.endTick - MinNoteTicks)
-                apply(edits = mapOf(note.onIndex to EventEdit(tickDelta = start - note.startTick)), what = "resize")
-            }
-            DragMode.None -> Unit
+    // Opens centred on the clip's own pitch range, as uapmd-app does
+    // (`showClip`, :180): the midpoint of min..max, backed off eight rows. Scrolling
+    // to the *top* note instead opens a whole song on its highest outlier, with the
+    // bulk of the music below the viewport.
+    var scrolledToContent by remember(clipId) { mutableStateOf(false) }
+    LaunchedEffect(notes, clipId, noteHeight, session) {
+        if (!scrolledToContent && notes.isNotEmpty()) {
+            val s = session
+            val mid = if (s != null && s.maxNote >= s.minNote) (s.minNote + s.maxNote) * 0.5f else 60f
+            val midRow = (NoteCount - 1) - mid
+            vScroll.scrollTo(((midRow - 8f).coerceAtLeast(0f) * noteHeight).toInt())
+            if (initialScrollSeconds > 0f)
+                hScroll.scrollTo((initialScrollSeconds * pixelsPerSecond).toInt())
+            scrolledToContent = true
         }
     }
 
     Column(Modifier.fillMaxSize()) {
         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-            Text("Zoom", style = MaterialTheme.typography.bodySmall)
-            Slider(dpPerTick, { dpPerTick = it }, valueRange = 0.02f..2f, modifier = Modifier.width(120.dp))
+            Text("Beats", style = MaterialTheme.typography.bodySmall)
+            // Compose has no logarithmic slider, so the control carries log2 of
+            // the beat count: each step doubles, which is what makes the range
+            // from one bar to a whole song usable on one short slider.
+            Slider(
+                value = log2(visibleBeats.coerceIn(MinVisibleBeats, MaxVisibleBeats)),
+                onValueChange = { visibleBeats = (2f).pow(it).coerceIn(MinVisibleBeats, MaxVisibleBeats) },
+                valueRange = log2(MinVisibleBeats)..log2(MaxVisibleBeats),
+                modifier = Modifier.width(120.dp)
+            )
+            Text(fixed(visibleBeats.toDouble(), 1), style = MaterialTheme.typography.labelSmall)
             Text("Rows", style = MaterialTheme.typography.bodySmall)
             Slider(rowHeightDp, { rowHeightDp = it }, valueRange = 5f..22f, modifier = Modifier.width(90.dp))
             Box {
@@ -228,29 +302,49 @@ fun PianoRollEditor(
                 }
             }
         }
-        // The selected note's velocity, which uapmd-app edits in its side panel (:1363).
-        selected?.let { note ->
+
+        // Clipboard row. These act on the selection through the session, which is
+        // where the note clipboard lives, so they behave as uapmd-app's do.
+        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+            Button(
+                onClick = { act(PianoRollAction.Copy, what = "copy") },
+                enabled = selectedCount > 0
+            ) { Text("Copy") }
+            Button(
+                onClick = { act(PianoRollAction.Cut, what = "cut") },
+                enabled = selectedCount > 0
+            ) { Text("Cut") }
+            Button(
+                onClick = { act(PianoRollAction.Paste, host.playheadSeconds, what = "paste") },
+                enabled = (session?.clipboardCount ?: 0) > 0
+            ) { Text("Paste") }
+            Button(onClick = { act(PianoRollAction.SelectAll, what = "select all") }) { Text("Select All") }
+            Button(
+                onClick = { act(PianoRollAction.Delete, what = "delete") },
+                enabled = selectedCount > 0
+            ) { Text("Delete") }
+        }
+
+        // The focused note's detail, which uapmd-app edits in its side panel (:1363).
+        val focused = session?.focusedNote?.takeIf { it >= 0 }
+            ?.let { idx -> notes.firstOrNull { it.index == idx } }
+        focused?.let { entry ->
+            val note = entry.note
             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                 Text(
-                    "${noteName(note.note)} · vel ${(note.velocity * 127).toInt()}",
+                    "${noteName(note.note)} · vel ${(note.velocity * 127).toInt()}" +
+                        (if (note.attributeType != 0) " · attr ${note.attributeType}/${note.attributeValue}" else "") +
+                        (if (note.automationEventCount > 0) " · ${note.automationEventCount} automation" else ""),
                     style = MaterialTheme.typography.bodySmall
                 )
-                Slider(
-                    value = note.velocity,
-                    onValueChange = { v ->
-                        apply(edits = mapOf(note.onIndex to EventEdit(velocity = v)), what = "velocity change")
-                        selected = null
-                    },
-                    modifier = Modifier.width(140.dp)
-                )
-                Button(onClick = {
-                    apply(removed = setOf(note.onIndex, note.offIndex), what = "delete")
-                    selected = null
-                }) { Text("Delete") }
+                Text("ch ${note.channel} · grp ${note.umpGroup}", style = MaterialTheme.typography.labelSmall)
             }
         }
+
         Text(
-            "${notes.size} notes · double-tap empty space to add, a note to delete · drag to move, edges to resize",
+            "${notes.size} notes" +
+                (if (selectedCount > 0) " · $selectedCount selected" else "") +
+                " · double-tap empty space to add, a note to delete · drag to move, edges to resize",
             style = MaterialTheme.typography.bodySmall
         )
         status?.let { Text(it, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.error) }
@@ -261,7 +355,7 @@ fun PianoRollEditor(
         // and it leaves pointer coordinates in content space so hit testing needs no
         // scroll arithmetic at all.
         val contentWidth = with(LocalDensity.current) {
-            ((contentTicks * pixelsPerTick).coerceAtLeast(1f)).toDp()
+            ((contentSeconds * pixelsPerSecond).toFloat().coerceAtLeast(1f)).toDp()
         }
         val contentHeight = with(LocalDensity.current) { (NoteCount * noteHeight).toDp() }
 
@@ -280,78 +374,142 @@ fun PianoRollEditor(
             )
             Box(Modifier.weight(1f).fillMaxHeight().horizontalScroll(hScroll).verticalScroll(vScroll)) {
                 Box(Modifier.size(contentWidth, contentHeight)
-                    .pointerInput(notes, pixelsPerTick, noteHeight) {
+                    // Press selects, with uapmd-app's modifier rules: plain click
+                    // replaces unless the note is already selected (so a multi-note
+                    // drag does not collapse to one), ctrl/cmd toggles, shift extends.
+                    .pointerInput(notes, pixelsPerSecond, noteHeight, session) {
+                        awaitPointerEventScope {
+                            while (true) {
+                                val event = awaitPointerEvent()
+                                if (event.type != PointerEventType.Press) continue
+                                if (event.buttons.isSecondaryPressed) continue
+                                val position = event.changes.firstOrNull()?.position ?: continue
+                                val s = session ?: continue
+                                val hit = noteAtPoint(notes, position, pixelsPerSecond, noteHeight, highest)
+                                    ?: continue
+                                val toggle = event.keyboardModifiers.isCtrlPressed ||
+                                    event.keyboardModifiers.isMetaPressed
+                                val extend = event.keyboardModifiers.isShiftPressed
+                                if (toggle || extend || !s.isNoteSelected(hit.index))
+                                    s.selectNote(hit.index, extend || toggle, toggle)
+                                else
+                                    s.focusedNote = hit.index
+                                revision++
+                            }
+                        }
+                    }
+                    .pointerInput(notes, pixelsPerSecond, noteHeight, session) {
                         detectDragGestures(
                             onDragStart = { offset ->
-                                val hit = noteAtPoint(notes, offset, pixelsPerTick, noteHeight, highest)
-                                selected = hit
-                                dragTicks = 0L
-                                dragPitch = 0
-                                dragMode = if (hit == null) DragMode.None else {
-                                    // Edge zones, as uapmd-app sizes them: 8px, but
-                                    // never more than 30% of the note, so a short note
-                                    // still has a middle you can grab to move it (:1045).
-                                    val width = (hit.durationTicks * pixelsPerTick).coerceAtLeast(2f)
-                                    val edge = minOf(ResizeEdgePx, width * 0.3f)
-                                    val x0 = hit.startTick * pixelsPerTick
-                                    when {
-                                        offset.x >= x0 + width - edge -> DragMode.ResizeRight
-                                        offset.x <= x0 + edge -> DragMode.ResizeLeft
-                                        else -> DragMode.Move
-                                    }
+                                val s = session
+                                val hit = noteAtPoint(notes, offset, pixelsPerSecond, noteHeight, highest)
+                                if (s == null || hit == null) {
+                                    dragMode = DragMode.None
+                                    dragIndex = -1
+                                    return@detectDragGestures
+                                }
+                                dragIndex = hit.index
+                                dragOriginStart = hit.note.startSeconds
+                                dragOriginEnd = hit.note.startSeconds + hit.note.durationSeconds
+                                dragOriginNote = hit.note.note
+                                // Edge zones, as uapmd-app sizes them: 8px, but never
+                                // more than 30% of the note, so a short note still has
+                                // a middle you can grab to move it (:1045).
+                                val width = (hit.note.durationSeconds * pixelsPerSecond).toFloat().coerceAtLeast(2f)
+                                val edge = minOf(ResizeEdgePx, width * 0.3f)
+                                val x0 = (hit.note.startSeconds * pixelsPerSecond).toFloat()
+                                // A multi-note selection always moves: resizing one
+                                // edge of many notes at once is not a gesture.
+                                dragMode = when {
+                                    s.selectedNoteCount > 1 -> DragMode.Move
+                                    offset.x >= x0 + width - edge -> DragMode.ResizeRight
+                                    offset.x <= x0 + edge -> DragMode.ResizeLeft
+                                    else -> DragMode.Move
+                                }
+                                if (dragMode == DragMode.Move) {
+                                    // The session snapshots the selection here, so
+                                    // each update applies one delta from the start
+                                    // rather than accumulating rounding.
+                                    if (!s.isNoteSelected(hit.index))
+                                        s.selectNote(hit.index, false, false)
+                                    s.beginDrag()
                                 }
                             },
                             onDragEnd = {
-                                selected?.let { commitDrag(it) }
-                                dragTicks = 0L
-                                dragPitch = 0
+                                val s = session
+                                if (s != null && dragIndex >= 0 && dragMode != DragMode.None) {
+                                    s.finishDrag(dragIndex, dragOriginStart, dragOriginEnd, dragOriginNote)
+                                    commit(if (dragMode == DragMode.Move) "move" else "resize")
+                                }
                                 dragMode = DragMode.None
+                                dragIndex = -1
+                            },
+                            onDragCancel = {
+                                if (dragMode == DragMode.Move) session?.cancelDrag()
+                                dragMode = DragMode.None
+                                dragIndex = -1
+                                revision++
                             }
-                        ) { change, delta ->
-                            val note = selected
-                            if (note == null || dragMode == DragMode.None) return@detectDragGestures
+                        ) { change, _ ->
+                            val s = session
+                            if (s == null || dragMode == DragMode.None || dragIndex < 0)
+                                return@detectDragGestures
                             // Only consumed when it is a note edit, so a drag that
                             // grabbed nothing still reaches the scroll containers.
                             change.consume()
-                            dragTicks += (delta.x / pixelsPerTick).toLong()
-                            if (dragMode == DragMode.Move)
-                                dragPitch = -((change.position.y - (highest - note.note) * noteHeight)
-                                    / noteHeight).toInt()
+                            val dx = (change.position.x - (dragOriginStart * pixelsPerSecond).toFloat())
+                            when (dragMode) {
+                                DragMode.Move -> {
+                                    val rawStart = change.position.x / pixelsPerSecond
+                                    val timeDelta = snap(rawStart.toDouble()) - dragOriginStart
+                                    val pitch = (highest - (change.position.y / noteHeight).toInt())
+                                        .coerceIn(0, 127)
+                                    s.moveSelection(timeDelta, pitch - dragOriginNote)
+                                }
+                                DragMode.ResizeRight -> {
+                                    val newEnd = snap((change.position.x / pixelsPerSecond).toDouble())
+                                    s.resizeNote(
+                                        dragIndex, dragOriginStart,
+                                        maxOf(MinNoteSeconds, newEnd - dragOriginStart), dragOriginNote
+                                    )
+                                }
+                                DragMode.ResizeLeft -> {
+                                    val newStart = snap((change.position.x / pixelsPerSecond).toDouble())
+                                        .coerceIn(0.0, dragOriginEnd - MinNoteSeconds)
+                                    s.resizeNote(
+                                        dragIndex, newStart, dragOriginEnd - newStart, dragOriginNote
+                                    )
+                                }
+                                DragMode.None -> Unit
+                            }
+                            revision++
                         }
                     }
-                    .pointerInput(notes, pixelsPerTick, noteHeight) {
+                    .pointerInput(notes, pixelsPerSecond, noteHeight, session) {
                         detectTapGestures(
                             onPress = { offset ->
                                 // Audition on press and release on lift, so a preview
                                 // cannot leave a note sounding.
-                                val hit = noteAtPoint(notes, offset, pixelsPerTick, noteHeight, highest)
+                                val hit = noteAtPoint(notes, offset, pixelsPerSecond, noteHeight, highest)
                                 if (hit != null) {
-                                    previewOn(hit.note)
+                                    previewOn(hit.note.note)
                                     tryAwaitRelease()
-                                    previewOff(hit.note)
+                                    previewOff(hit.note.note)
                                 }
                             },
-                            onTap = { offset ->
-                                selected = noteAtPoint(notes, offset, pixelsPerTick, noteHeight, highest)
-                            },
                             onDoubleTap = { offset ->
-                                val hit = noteAtPoint(notes, offset, pixelsPerTick, noteHeight, highest)
+                                val s = session ?: return@detectTapGestures
+                                val hit = noteAtPoint(notes, offset, pixelsPerSecond, noteHeight, highest)
                                 if (hit != null) {
-                                    apply(removed = setOf(hit.onIndex, hit.offIndex), what = "delete")
-                                    selected = null
+                                    s.deleteNote(hit.index)
+                                    commit("delete")
                                 } else {
-                                    val snap = snapTicks(snapIndex, ticksPerQuarter)
-                                    val raw = (offset.x / pixelsPerTick).toLong().coerceAtLeast(0L)
-                                    val startTick = if (snap > 0) ((raw + snap / 2) / snap) * snap else raw
+                                    val start = snap((offset.x / pixelsPerSecond).toDouble())
+                                        .coerceAtLeast(0.0)
                                     val pitch = (highest - (offset.y / noteHeight).toInt()).coerceIn(0, 127)
-                                    apply(
-                                        added = midi2NotePair(
-                                            group = 0, channel = 0, note = pitch,
-                                            velocity = DefaultNoteVelocity,
-                                            startTick = startTick, durationTicks = ticksPerQuarter
-                                        ),
-                                        what = "insert"
-                                    )
+                                    val quarter = 60.0 / bpm
+                                    s.createNote(start, quarter, pitch, DefaultNoteVelocity)
+                                    commit("insert")
                                 }
                             }
                         )
@@ -365,26 +523,25 @@ fun PianoRollEditor(
                                 Offset(0f, y), Size(size.width, noteHeight - 0.5f)
                             )
                         }
-                        val snap = snapTicks(snapIndex, ticksPerQuarter)
-                        if (snap > 0 && snap * pixelsPerTick >= 3f) {
-                            var t = 0L
-                            while (t * pixelsPerTick < size.width) {
-                                val x = t * pixelsPerTick
+                        if (snapSeconds > 0.0 && snapSeconds * pixelsPerSecond >= 3.0) {
+                            var t = 0.0
+                            while (t * pixelsPerSecond < size.width) {
+                                val x = (t * pixelsPerSecond).toFloat()
                                 drawLine(c.gridLine, Offset(x, 0f), Offset(x, size.height), 1f)
-                                t += snap
+                                t += snapSeconds
                             }
                         }
-                        notes.forEach { n ->
-                            val isSelected = n == selected
-                            val shiftTicks = if (isSelected && dragMode == DragMode.Move) dragTicks else 0L
-                            val shiftPitch = if (isSelected && dragMode == DragMode.Move) dragPitch else 0
-                            val growLeft = if (isSelected && dragMode == DragMode.ResizeLeft) dragTicks else 0L
-                            val growRight = if (isSelected && dragMode == DragMode.ResizeRight) dragTicks else 0L
-                            val x = (n.startTick + shiftTicks + growLeft) * pixelsPerTick
-                            val w = ((n.durationTicks - growLeft + growRight) * pixelsPerTick).coerceAtLeast(2f)
-                            val y = (highest - (n.note + shiftPitch)) * noteHeight
+                        // Drawn straight from the session: a drag has already been
+                        // applied to it, so there is no pending offset to add here.
+                        notes.forEach { entry ->
+                            val n = entry.note
+                            val isSelected = session?.isNoteSelected(entry.index) == true
+                            val x = (n.startSeconds * pixelsPerSecond).toFloat()
+                            val w = (n.durationSeconds * pixelsPerSecond).toFloat().coerceAtLeast(2f)
+                            val y = (highest - n.note) * noteHeight
                             drawRect(
-                                if (isSelected) c.noteSelected else c.noteFill.copy(alpha = 0.4f + 0.6f * n.velocity),
+                                if (isSelected) c.noteSelected
+                                else c.noteFill.copy(alpha = 0.4f + 0.6f * n.velocity),
                                 Offset(x, y + 1f), Size(w, noteHeight - 2f)
                             )
                         }
@@ -480,20 +637,26 @@ private val NoteNames = listOf("C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", 
 /** uapmd-app's `fullNoteName`: name plus octave, numbering octaves as note / 12. */
 private fun noteName(midi: Int) = "${NoteNames[((midi % 12) + 12) % 12]}${midi / 12}"
 
-/** Snap in ticks; index 0 is Free. 1/1 is a whole note = 4 quarters. */
-private fun snapTicks(snapIndex: Int, ticksPerQuarter: Long): Long =
-    if (snapIndex == 0) 0L else (ticksPerQuarter * 4) / (1L shl (snapIndex - 1))
+/**
+ * A session note with the index it sits at.
+ *
+ * Every session call addresses a note by its position in `editNotes`, which keeps
+ * deleted notes so that indexes stay stable across an edit. The drawn list skips
+ * those, so each visible note has to carry its real index along.
+ */
+private data class IndexedNote(val index: Int, val note: PianoRollNote)
 
 /** [offset] is in content coordinates, which is what the scrolled canvas reports. */
 private fun noteAtPoint(
-    notes: List<UmpNote>,
+    notes: List<IndexedNote>,
     offset: Offset,
-    pixelsPerTick: Float,
+    pixelsPerSecond: Float,
     noteHeight: Float,
     highest: Int
-): UmpNote? = notes.firstOrNull { n ->
-    val x = n.startTick * pixelsPerTick
-    val w = (n.durationTicks * pixelsPerTick).coerceAtLeast(2f)
+): IndexedNote? = notes.firstOrNull { entry ->
+    val n = entry.note
+    val x = (n.startSeconds * pixelsPerSecond).toFloat()
+    val w = (n.durationSeconds * pixelsPerSecond).toFloat().coerceAtLeast(2f)
     val y = (highest - n.note) * noteHeight
     offset.x in x..(x + w) && offset.y in y..(y + noteHeight)
 }

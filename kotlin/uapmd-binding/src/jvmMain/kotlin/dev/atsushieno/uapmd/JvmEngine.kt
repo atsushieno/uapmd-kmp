@@ -138,7 +138,7 @@ class JvmSequencerEngine internal constructor(
     override val timeline: TimelineFacade
         get() = JvmTimelineFacade(lib.uapmd_engine_timeline(handle) ?: error("uapmd_engine_timeline returned null"))
 
-    // ─── Project / track dirty state (uapmd 0.5.6) ──────────────────────────
+    // ─── Project / track dirty state ────────────────────────────────────────
 
     override val isProjectDirty: Boolean get() = lib.uapmd_engine_is_project_dirty(handle)
     override fun isTrackDirty(trackIndex: Int) = lib.uapmd_engine_is_track_dirty(handle, trackIndex)

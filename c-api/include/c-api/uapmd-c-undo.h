@@ -1,8 +1,7 @@
 /* uapmd C API — project history: command manager, commands, fragments
  *
- * Introduced by uapmd 0.5.6. Reading the document goes through the timeline
- * facade (uapmd-c-engine.h); changing it as a user action goes through
- * uapmd_commands_* here, so that every edit lands in the undo history.
+ * Reading the document goes through the timeline facade (uapmd-c-engine.h);
+ * changing it goes through uapmd_commands_* here.
  */
 #ifndef UAPMD_C_UNDO_H
 #define UAPMD_C_UNDO_H
@@ -17,13 +16,6 @@ extern "C" {
 
 /* ── Opaque handles ──────────────────────────────────────────────────────── */
 
-/* The project's history. uapmd 0.5.7 turned the history into an interface
- * (uapmd::ProjectHistory) that the project chooses an implementation of, and
- * withdrew every direct handle on the engine behind it: what used to be
- * reachable as ProjectUndoEngine is now reached through the command manager,
- * which carries the whole contract -- undo/redo, steps, gestures, save points
- * and retention. The uapmd_undo_engine_* family that mirrored the old engine is
- * gone with it; its calls live on here under uapmd_command_manager_*. */
 typedef struct uapmd_command_manager*  uapmd_command_manager_t;
 typedef struct uapmd_project_commands* uapmd_project_commands_t;
 typedef struct uapmd_address_book*     uapmd_address_book_t;
@@ -270,9 +262,6 @@ typedef struct uapmd_graph_connection {
     uapmd_graph_endpoint_t target;
 } uapmd_graph_connection_t;
 
-/* Device inputs. Adding one, rerouting it and removing it all write the same
- * per-input value, so undoing an add is a removal. Moved here from the timeline
- * facade in uapmd 0.5.7, which is why they are undoable at all. */
 UAPMD_C_EXPORT bool uapmd_commands_add_device_input_to_track(uapmd_project_commands_t cmd,
                                                                 int32_t track_index,
                                                                 int32_t source_node_id,

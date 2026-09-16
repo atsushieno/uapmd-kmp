@@ -190,6 +190,61 @@ open class UapmdTimelineState : Structure() {
     @JvmField var sample_rate: Int = 0
 }
 
+@FieldOrder("tick_position", "bpm")
+open class UapmdMidiTempoChange : Structure {
+    constructor() : super()
+    constructor(p: Pointer) : super(p) { read() }
+
+    @JvmField var tick_position: Long = 0L
+    @JvmField var bpm: Double = 120.0
+}
+
+@FieldOrder("tick_position", "numerator", "denominator", "clocks_per_click", "thirty_seconds_per_quarter")
+open class UapmdMidiTimeSigChange : Structure {
+    constructor() : super()
+    constructor(p: Pointer) : super(p) { read() }
+
+    @JvmField var tick_position: Long = 0L
+    @JvmField var numerator: Byte = 4
+    @JvmField var denominator: Byte = 4
+    @JvmField var clocks_per_click: Byte = 24
+    @JvmField var thirty_seconds_per_quarter: Byte = 8
+}
+
+@FieldOrder(
+    "output_path", "start_seconds", "end_seconds", "has_end_seconds",
+    "use_content_fallback", "content_bounds_valid",
+    "content_start_seconds", "content_end_seconds", "tail_seconds",
+    "enable_silence_stop", "silence_duration_seconds", "silence_threshold_db"
+)
+open class UapmdAppRenderSettings : Structure() {
+    @JvmField var output_path: String? = null
+    @JvmField var start_seconds: Double = 0.0
+    @JvmField var end_seconds: Double = 0.0
+    @JvmField var has_end_seconds: Byte = 0
+    @JvmField var use_content_fallback: Byte = 0
+    @JvmField var content_bounds_valid: Byte = 0
+    @JvmField var content_start_seconds: Double = 0.0
+    @JvmField var content_end_seconds: Double = 0.0
+    @JvmField var tail_seconds: Double = 0.0
+    @JvmField var enable_silence_stop: Byte = 0
+    @JvmField var silence_duration_seconds: Double = 0.0
+    @JvmField var silence_threshold_db: Double = 0.0
+}
+
+@FieldOrder("running", "completed", "success", "progress", "rendered_seconds", "message", "output_path")
+open class UapmdAppRenderStatus : Structure() {
+    @JvmField var running: Byte = 0
+    @JvmField var completed: Byte = 0
+    @JvmField var success: Byte = 0
+    @JvmField var progress: Double = 0.0
+    @JvmField var rendered_seconds: Double = 0.0
+    @JvmField var message: String? = null
+    @JvmField var output_path: String? = null
+
+    class ByVal : UapmdAppRenderStatus(), Structure.ByValue
+}
+
 @FieldOrder("clip_id", "source_node_id", "success", "error")
 open class UapmdClipAddResult : Structure() {
     @JvmField var clip_id: Int = 0
@@ -397,7 +452,7 @@ open class UapmdScanObserver : Structure() {
 // ─── Library interface ───────────────────────────────────────────────────────
 
 
-// ─── Project history structs (uapmd 0.5.6) ───────────────────────────────────
+// ─── Project history structs ─────────────────────────────────────────────────
 
 @FieldOrder("status", "error")
 open class UapmdUndoResult : Structure() {
@@ -561,12 +616,14 @@ open class UapmdUmpEvent : Structure {
     @JvmField var words: Pointer? = null
 }
 
-@FieldOrder("success", "error", "event_count", "events")
+@FieldOrder("success", "error", "event_count", "events", "tick_resolution", "clip_tempo")
 open class UapmdUmpEventsResult : Structure() {
     @JvmField var success: Byte = 0
     @JvmField var error: String? = null
     @JvmField var event_count: Int = 0
     @JvmField var events: Pointer? = null
+    @JvmField var tick_resolution: Int = 0
+    @JvmField var clip_tempo: Double = 0.0
 
     class ByVal : UapmdUmpEventsResult(), Structure.ByValue
 }
@@ -768,6 +825,75 @@ open class UapmdAudioImportResult : Structure() {
 /** Return false to cancel the import. Called from the worker thread. */
 interface ImportProgressCb : Callback {
     fun invoke(progress: Float, message: String?, userData: Pointer?): Boolean
+}
+
+@FieldOrder(
+    "start_seconds", "duration_seconds", "velocity", "note", "channel", "deleted",
+    "edit_id", "ump_group", "release_velocity", "attribute_type", "attribute_value",
+    "automation_event_count"
+)
+open class UapmdPianoRollNote : Structure() {
+    @JvmField var start_seconds: Double = 0.0
+    @JvmField var duration_seconds: Double = 0.0
+    @JvmField var velocity: Float = 0f
+    @JvmField var note: Byte = 0
+    @JvmField var channel: Byte = 0
+    @JvmField var deleted: Byte = 0
+    @JvmField var edit_id: Long = 0
+    @JvmField var ump_group: Byte = 0
+    @JvmField var release_velocity: Short = 0
+    @JvmField var attribute_type: Byte = 0
+    @JvmField var attribute_value: Short = 0
+    @JvmField var automation_event_count: Int = 0
+}
+
+@FieldOrder("instance_id", "success", "error", "filepath")
+open class UapmdPluginStateResult : Structure() {
+    @JvmField var instance_id: Int = 0
+    @JvmField var success: Byte = 0
+    @JvmField var error: String? = null
+    @JvmField var filepath: String? = null
+
+    class ByVal : UapmdPluginStateResult(), Structure.ByValue
+}
+
+interface PluginStateCb : Callback {
+    fun invoke(result: UapmdPluginStateResult.ByVal, userData: Pointer?)
+}
+
+@FieldOrder("id", "display_name")
+open class UapmdMidiPortInfo : Structure() {
+    @JvmField var id: String? = null
+    @JvmField var display_name: String? = null
+}
+
+@FieldOrder("has_content", "start_seconds", "end_seconds", "duration_seconds")
+open class UapmdTimelineContentBounds : Structure() {
+    @JvmField var has_content: Byte = 0
+    @JvmField var start_seconds: Double = 0.0
+    @JvmField var end_seconds: Double = 0.0
+    @JvmField var duration_seconds: Double = 0.0
+
+    class ByVal : UapmdTimelineContentBounds(), Structure.ByValue
+}
+
+@FieldOrder("id", "label", "api_name", "status_message", "running", "instantiating", "has_error")
+open class UapmdDeviceEntry : Structure() {
+    @JvmField var id: Int = 0
+    @JvmField var label: String? = null
+    @JvmField var api_name: String? = null
+    @JvmField var status_message: String? = null
+    @JvmField var running: Byte = 0
+    @JvmField var instantiating: Byte = 0
+    @JvmField var has_error: Byte = 0
+}
+
+@FieldOrder("track_index", "clip_id")
+open class UapmdTimelineClipTarget : Structure {
+    constructor() : super()
+    constructor(p: Pointer) : super(p) { read() }
+    @JvmField var track_index: Int = 0
+    @JvmField var clip_id: Int = 0
 }
 
 @FieldOrder("success", "error")
@@ -1318,10 +1444,6 @@ interface UapmdLibrary : Library {
     )
 
     // ══ Project history: ProjectCommandManager ══════════════════════════════
-    //
-    // uapmd 0.5.7 withdrew the ProjectUndoEngine handle; the command manager
-    // carries the whole history contract now, so the uapmd_undo_engine_* family
-    // is gone and its calls live here.
 
     fun uapmd_command_manager_get_state(cm: Pointer?, out: UapmdUndoState): Boolean
     fun uapmd_command_manager_undo(cm: Pointer?, userData: Pointer?, callback: UndoCompletionCb?)
@@ -1553,18 +1675,22 @@ interface UapmdLibrary : Library {
     fun uapmd_app_master_time_signature_count(app: Pointer?): Int
     fun uapmd_app_get_master_time_signature(app: Pointer?, index: Int, out: UapmdTimeSignaturePoint): Boolean
     fun uapmd_app_get_blocklist_entry(app: Pointer?, index: Int, out: UapmdBlocklistEntry): Boolean
-    fun uapmd_app_unblock_plugin(app: Pointer?, entryId: String): Boolean
+    fun uapmd_app_unblock_plugin_from_blocklist(app: Pointer?, entryId: String): Boolean
 
+    fun uapmd_app_is_track_muted(app: Pointer?, trackIndex: Int): Boolean
+    fun uapmd_app_is_track_solo(app: Pointer?, trackIndex: Int): Boolean
+    fun uapmd_app_set_track_muted(app: Pointer?, trackIndex: Int, muted: Boolean): Boolean
+    fun uapmd_app_set_track_solo(app: Pointer?, trackIndex: Int, solo: Boolean): Boolean
     fun uapmd_app_add_track(app: Pointer?, userData: Pointer?, callback: TrackMutationCb?)
     fun uapmd_app_remove_track(app: Pointer?, trackIndex: Int, userData: Pointer?, callback: TrackMutationCb?)
     fun uapmd_app_remove_all_tracks(app: Pointer?, userData: Pointer?, callback: TrackClearCb?)
 
     fun uapmd_app_timeline_track_count(app: Pointer?): Int
     fun uapmd_app_get_timeline_track(app: Pointer?, index: Int): Pointer?
-    fun uapmd_app_master_timeline_track(app: Pointer?): Pointer?
+    fun uapmd_app_get_master_timeline_track(app: Pointer?): Pointer?
     fun uapmd_app_get_timeline_state(app: Pointer?, out: UapmdTimelineState): Boolean
 
-    fun uapmd_app_get_history_state(app: Pointer?, out: UapmdUndoState): Boolean
+    fun uapmd_app_history_state(app: Pointer?, out: UapmdUndoState): Boolean
     fun uapmd_app_undo(app: Pointer?, userData: Pointer?, callback: HistoryMutationCb?)
     fun uapmd_app_redo(app: Pointer?, userData: Pointer?, callback: HistoryMutationCb?)
 
@@ -1583,12 +1709,108 @@ interface UapmdLibrary : Library {
     fun uapmd_app_save_project(app: Pointer?, filePath: String?, userData: Pointer?, callback: ProjectSaveCb?)
     fun uapmd_app_load_project_from_handle_token(app: Pointer?, token: String?): UapmdAppProjectResult.ByVal
     fun uapmd_app_new_project(app: Pointer?): UapmdAppProjectResult.ByVal
+
+    // ══ Timeline clip selection and clipboard ═══════════════════════════════
+
+    fun uapmd_app_is_timeline_clip_selected(app: Pointer?, trackIndex: Int, clipId: Int): Boolean
+    fun uapmd_app_selected_timeline_clips(app: Pointer?, out: UapmdTimelineClipTarget?, outCount: Int): Int
+    fun uapmd_app_select_timeline_clips(app: Pointer?, clips: UapmdTimelineClipTarget?, clipCount: Int, additive: Boolean, toggle: Boolean)
+    fun uapmd_app_clear_timeline_clip_selection(app: Pointer?)
+    fun uapmd_app_select_timeline_midi_clip(app: Pointer?, trackIndex: Int, clipId: Int): Boolean
+    fun uapmd_app_selected_timeline_midi_clip(app: Pointer?, out: UapmdTimelineClipTarget): Boolean
+    fun uapmd_app_timeline_clipboard_count(app: Pointer?): Int
+    fun uapmd_app_clear_timeline_clipboard(app: Pointer?)
+    fun uapmd_app_copy_selected_timeline_clips(app: Pointer?): Boolean
+    fun uapmd_app_delete_selected_timeline_clips(app: Pointer?, cut: Boolean, changedTracks: IntArray?, changedTrackCount: IntArray): Boolean
+    fun uapmd_app_timeline_paste_destinations(app: Pointer?, trackIndex: Int, originalTracks: Boolean, out: IntArray?, outCount: Int): Int
+    fun uapmd_app_paste_timeline_clips(app: Pointer?, trackIndex: Int, positionSeconds: Double, originalTracks: Boolean, pasted: UapmdTimelineClipTarget?, pastedCount: IntArray): Boolean
+    fun uapmd_app_last_timeline_clip_error(): String?
+
+    // ══ Piano roll editing session ══════════════════════════════════════════
+
+    fun uapmd_app_piano_roll_clip_snapshot(app: Pointer?, trackIndex: Int, clipId: Int, fallbackDurationSeconds: Double): Pointer?
+    fun uapmd_piano_roll_snapshot_destroy(snapshot: Pointer?)
+    fun uapmd_piano_roll_snapshot_ready(snapshot: Pointer?): Boolean
+    fun uapmd_piano_roll_snapshot_error(snapshot: Pointer?): String?
+    fun uapmd_piano_roll_snapshot_duration_seconds(snapshot: Pointer?): Double
+    fun uapmd_piano_roll_snapshot_min_note(snapshot: Pointer?): Byte
+    fun uapmd_piano_roll_snapshot_max_note(snapshot: Pointer?): Byte
+    fun uapmd_piano_roll_snapshot_note_count(snapshot: Pointer?): Int
+    fun uapmd_piano_roll_snapshot_get_note(snapshot: Pointer?, index: Int, out: UapmdPianoRollNote): Boolean
+
+    fun uapmd_app_open_piano_roll_session(app: Pointer?, trackIndex: Int, clipId: Int): Pointer?
+    fun uapmd_app_find_piano_roll_session(app: Pointer?, trackIndex: Int, clipId: Int): Pointer?
+    fun uapmd_app_close_piano_roll_session(app: Pointer?, trackIndex: Int, clipId: Int)
+
+    fun uapmd_piano_roll_session_matches_source(session: Pointer?, snapshot: Pointer?): Boolean
+    fun uapmd_piano_roll_session_load_notes(session: Pointer?, snapshot: Pointer?)
+    fun uapmd_piano_roll_session_note_count(session: Pointer?): Int
+    fun uapmd_piano_roll_session_get_note(session: Pointer?, index: Int, out: UapmdPianoRollNote): Boolean
+    fun uapmd_piano_roll_session_is_note_selected(session: Pointer?, index: Int): Boolean
+    fun uapmd_piano_roll_session_selected_note_count(session: Pointer?): Int
+    fun uapmd_piano_roll_session_focused_note(session: Pointer?): Int
+    fun uapmd_piano_roll_session_set_focused_note(session: Pointer?, index: Int)
+    fun uapmd_piano_roll_session_duration_seconds(session: Pointer?): Double
+    fun uapmd_piano_roll_session_min_note(session: Pointer?): Byte
+    fun uapmd_piano_roll_session_max_note(session: Pointer?): Byte
+    fun uapmd_piano_roll_session_clipboard_count(session: Pointer?): Int
+    fun uapmd_piano_roll_session_dirty(session: Pointer?): Boolean
+    fun uapmd_piano_roll_session_error(session: Pointer?): String?
+    fun uapmd_piano_roll_session_select_note(session: Pointer?, index: Int, additive: Boolean, toggle: Boolean)
+    fun uapmd_piano_roll_session_perform_action(session: Pointer?, action: Int, pasteSeconds: Double)
+    fun uapmd_piano_roll_session_create_note(session: Pointer?, startSeconds: Double, durationSeconds: Double, note: Byte, velocity: Float)
+    fun uapmd_piano_roll_session_delete_note(session: Pointer?, index: Int)
+    fun uapmd_piano_roll_session_resize_note(session: Pointer?, index: Int, startSeconds: Double, durationSeconds: Double, note: Byte)
+    fun uapmd_piano_roll_session_begin_drag(session: Pointer?)
+    fun uapmd_piano_roll_session_move_selection(session: Pointer?, timeDeltaSeconds: Double, pitchDelta: Int)
+    fun uapmd_piano_roll_session_cancel_drag(session: Pointer?)
+    fun uapmd_piano_roll_session_finish_drag(session: Pointer?, index: Int, originalStart: Double, originalEnd: Double, originalNote: Byte)
+    fun uapmd_piano_roll_session_commit(session: Pointer?, app: Pointer?): Boolean
+    fun uapmd_app_record_piano_roll_commit_source(app: Pointer?, trackIndex: Int, clipId: Int)
+    fun uapmd_app_piano_roll_source_matches_last_edit(app: Pointer?): Boolean
+    fun uapmd_app_clear_piano_roll_commit_source(app: Pointer?)
+
+    // ══ Assorted AppModel accessors ═════════════════════════════════════════
+
+    fun uapmd_app_get_midi_input_ports(app: Pointer?, out: UapmdMidiPortInfo?, outCount: Int): Int
+    fun uapmd_app_get_midi_output_ports(app: Pointer?, out: UapmdMidiPortInfo?, outCount: Int): Int
+    fun uapmd_app_is_track_hidden(app: Pointer?, trackIndex: Int): Boolean
+    fun uapmd_transport_jump(tc: Pointer?, positionSeconds: Double)
+    fun uapmd_app_timeline_content_bounds(app: Pointer?): UapmdTimelineContentBounds.ByVal
+    fun uapmd_app_get_devices(app: Pointer?, out: UapmdDeviceEntry?, outCount: Int): Int
+    fun uapmd_app_get_device_for_instance(app: Pointer?, instanceId: Int, out: UapmdDeviceEntry): Boolean
+    fun uapmd_app_update_device_label(app: Pointer?, instanceId: Int, label: String?)
+    fun uapmd_app_load_plugin_state_sync(app: Pointer?, instanceId: Int, filepath: String?): UapmdPluginStateResult.ByVal
+    fun uapmd_app_save_plugin_state_sync(app: Pointer?, instanceId: Int, filepath: String?): UapmdPluginStateResult.ByVal
+    fun uapmd_app_mark_plugin_instance_track_dirty(app: Pointer?, instanceId: Int)
+    fun uapmd_app_load_plugin_state(app: Pointer?, instanceId: Int, filepath: String?, userData: Pointer?, callback: PluginStateCb?)
+    fun uapmd_app_save_plugin_state(app: Pointer?, instanceId: Int, filepath: String?, userData: Pointer?, callback: PluginStateCb?)
     fun uapmd_app_master_tempo_map(app: Pointer?): Pointer?
 
     fun uapmd_app_get_midi_clip_ump_events(app: Pointer?, trackIndex: Int, clipId: Int): UapmdUmpEventsResult.ByVal
     fun uapmd_app_add_ump_event_to_clip(app: Pointer?, trackIndex: Int, clipId: Int, tick: Long, words: IntArray?, wordCount: Int): Boolean
     fun uapmd_app_remove_ump_event_from_clip(app: Pointer?, trackIndex: Int, clipId: Int, eventIndex: Int): Boolean
     fun uapmd_app_remove_clip_from_track(app: Pointer?, trackIndex: Int, clipId: Int): Boolean
+    fun uapmd_app_add_clip_to_track(app: Pointer?, trackIndex: Int, position: UapmdTimelinePosition.ByVal, reader: Pointer?, filepath: String?): UapmdClipAddResult.ByVal
+    fun uapmd_app_add_midi_clip_to_track(app: Pointer?, trackIndex: Int, position: UapmdTimelinePosition.ByVal, filepath: String?): UapmdClipAddResult.ByVal
+    fun uapmd_app_add_midi_clip_from_data(
+        app: Pointer?, trackIndex: Int, position: UapmdTimelinePosition.ByVal,
+        umpEvents: IntArray?, umpEventCount: Int,
+        tickTimestamps: LongArray?, tickCount: Int,
+        tickResolution: Int, clipTempo: Double,
+        tempoChanges: UapmdMidiTempoChange?, tempoChangeCount: Int,
+        timeSigChanges: UapmdMidiTimeSigChange?, timeSigChangeCount: Int,
+        clipName: String?, needsFileSave: Boolean
+    ): UapmdClipAddResult.ByVal
+    fun uapmd_app_add_device_input_to_track(app: Pointer?, trackIndex: Int, channelIndices: IntArray?, channelCount: Int): Int
+    fun uapmd_app_master_marker_count(app: Pointer?): Int
+    fun uapmd_app_get_master_marker(app: Pointer?, index: Int, out: UapmdClipMarker): Boolean
+    fun uapmd_app_set_master_track_markers_with_validation(app: Pointer?, markers: UapmdClipMarker?, count: Int): UapmdOpResult.ByVal
+    fun uapmd_app_start_render_to_file(app: Pointer?, settings: UapmdAppRenderSettings): Boolean
+    fun uapmd_app_cancel_render_to_file(app: Pointer?)
+    fun uapmd_app_get_render_to_file_status(app: Pointer?): UapmdAppRenderStatus.ByVal
+    fun uapmd_app_clear_completed_render_status(app: Pointer?)
+    fun uapmd_app_request_show_track_graph(app: Pointer?, trackIndex: Int)
     fun uapmd_app_create_empty_midi_clip(app: Pointer?, trackIndex: Int, positionSamples: Long, tickResolution: Int, bpm: Double): UapmdClipAddResult.ByVal
 
     fun uapmd_app_ensure_track_uses_editor_graph(app: Pointer?, trackIndex: Int): Boolean

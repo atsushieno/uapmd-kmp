@@ -34,6 +34,12 @@ private class AppMidiTracksImportCallback(private val callback: (Boolean, String
         callback(success, error, importedTrackCount)
 }
 
+private class PluginStateCallback(private val callback: (Int, Boolean, String?, String?) -> Unit) {
+    @Suppress("unused")
+    fun invoke(instanceId: Int, success: Boolean, error: String?, filepath: String?) =
+        callback(instanceId, success, error, filepath)
+}
+
 private class AppProjectSaveCallback(private val callback: (Boolean, String?) -> Unit) {
     @Suppress("unused")
     fun invoke(success: Boolean, error: String?) = callback(success, error)
@@ -120,6 +126,13 @@ class AndroidAppModel internal constructor(internal val handle: Long) : AppModel
         }
 
     // ── Tracks ──────────────────────────────────────────────────────────────
+
+    override fun isTrackMuted(trackIndex: Int) = JniBridge.uapmdAppIsTrackMuted(handle, trackIndex)
+    override fun isTrackSolo(trackIndex: Int) = JniBridge.uapmdAppIsTrackSolo(handle, trackIndex)
+    override fun setTrackMuted(trackIndex: Int, muted: Boolean) =
+        JniBridge.uapmdAppSetTrackMuted(handle, trackIndex, muted)
+    override fun setTrackSolo(trackIndex: Int, solo: Boolean) =
+        JniBridge.uapmdAppSetTrackSolo(handle, trackIndex, solo)
 
     override fun addTrack(callback: (Int, String?) -> Unit) =
         JniBridge.uapmdAppAddTrack(handle, AppTrackMutationCallback(callback))
@@ -213,6 +226,156 @@ class AndroidAppModel internal constructor(internal val handle: Long) : AppModel
     override fun newProject(): AppProjectResult =
         JniBridge.uapmdAppNewProject(handle).toProjectResult()
 
+    // ── Timeline clip selection and clipboard ───────────────────────────────
+
+    override fun isTimelineClipSelected(trackIndex: Int, clipId: Int): Boolean =
+        JniBridge.uapmdAppIsTimelineClipSelected(handle, trackIndex, clipId)
+
+    override val selectedTimelineClips: List<TimelineClipTarget>
+        get() = JniBridge.uapmdAppSelectedTimelineClips(handle).toClipTargets()
+
+    override fun selectTimelineClips(clips: List<TimelineClipTarget>, additive: Boolean, toggle: Boolean) =
+        JniBridge.uapmdAppSelectTimelineClips(handle, clips.toFlatPairs(), additive, toggle)
+
+    override fun clearTimelineClipSelection() = JniBridge.uapmdAppClearTimelineClipSelection(handle)
+
+    override fun selectTimelineMidiClip(trackIndex: Int, clipId: Int): Boolean =
+        JniBridge.uapmdAppSelectTimelineMidiClip(handle, trackIndex, clipId)
+
+    override val selectedTimelineMidiClip: TimelineClipTarget?
+        get() = JniBridge.uapmdAppSelectedTimelineMidiClip(handle)
+            ?.let { TimelineClipTarget(it[0], it[1]) }
+
+    override val timelineClipboardCount: Int
+        get() = JniBridge.uapmdAppTimelineClipboardCount(handle)
+
+    override fun clearTimelineClipboard() = JniBridge.uapmdAppClearTimelineClipboard(handle)
+
+    override fun copySelectedTimelineClips(): Boolean =
+        JniBridge.uapmdAppCopySelectedTimelineClips(handle)
+
+    override fun deleteSelectedTimelineClips(cut: Boolean): TimelineClipDeleteResult {
+        // One call only: this both deletes and reports. A track can lose several
+        // clips but appears once, so the selection size bounds the changed-track
+        // list — measured before the call, which clears the selection.
+        val capacity = selectedTimelineClips.size
+        val tracks = IntArray(capacity)
+        val count = JniBridge.uapmdAppDeleteSelectedTimelineClips(handle, cut, tracks)
+        val error = lastTimelineClipError
+        return TimelineClipDeleteResult(
+            success = count >= 0,
+            changedTracks = if (count > 0) tracks.take(minOf(capacity, count)) else emptyList(),
+            error = error.ifEmpty { null }
+        )
+    }
+
+    override fun timelinePasteDestinations(trackIndex: Int, originalTracks: Boolean): List<Int> =
+        JniBridge.uapmdAppTimelinePasteDestinations(handle, trackIndex, originalTracks).toList()
+
+    override fun pasteTimelineClips(
+        trackIndex: Int,
+        positionSeconds: Double,
+        originalTracks: Boolean
+    ): TimelinePasteResult {
+        val flat = JniBridge.uapmdAppPasteTimelineClips(handle, trackIndex, positionSeconds, originalTracks)
+        if (flat.isEmpty())
+            return TimelinePasteResult(false, emptyList(), lastTimelineClipError.ifEmpty { null })
+        val pasted = flat.drop(1).toIntArray().toClipTargets()
+        return TimelinePasteResult(flat[0] != 0, pasted, lastTimelineClipError.ifEmpty { null })
+    }
+
+    override val lastTimelineClipError: String
+        get() = JniBridge.uapmdAppLastTimelineClipError()
+
+    // ── Piano roll editing session ──────────────────────────────────────────
+
+    override fun pianoRollClipSnapshot(
+        trackIndex: Int,
+        clipId: Int,
+        fallbackDurationSeconds: Double
+    ): PianoRollSnapshot? =
+        JniBridge.uapmdAppPianoRollClipSnapshot(handle, trackIndex, clipId, fallbackDurationSeconds)
+            .takeIf { it != 0L }?.let { AndroidPianoRollSnapshot(it) }
+
+    override fun openPianoRollSession(trackIndex: Int, clipId: Int): PianoRollSession? =
+        JniBridge.uapmdAppOpenPianoRollSession(handle, trackIndex, clipId)
+            .takeIf { it != 0L }?.let { AndroidPianoRollSession(it) }
+
+    override fun findPianoRollSession(trackIndex: Int, clipId: Int): PianoRollSession? =
+        JniBridge.uapmdAppFindPianoRollSession(handle, trackIndex, clipId)
+            .takeIf { it != 0L }?.let { AndroidPianoRollSession(it) }
+
+    override fun closePianoRollSession(trackIndex: Int, clipId: Int) =
+        JniBridge.uapmdAppClosePianoRollSession(handle, trackIndex, clipId)
+
+    override fun recordPianoRollCommitSource(trackIndex: Int, clipId: Int) =
+        JniBridge.uapmdAppRecordPianoRollCommitSource(handle, trackIndex, clipId)
+
+    override fun pianoRollSourceMatchesLastEdit(): Boolean =
+        JniBridge.uapmdAppPianoRollSourceMatchesLastEdit(handle)
+
+    override fun clearPianoRollCommitSource() = JniBridge.uapmdAppClearPianoRollCommitSource(handle)
+
+    // ── Assorted accessors ──────────────────────────────────────────────────
+
+    override val midiInputPorts: List<MidiPortInfo>
+        get() = JniBridge.uapmdAppGetMidiInputPorts(handle).toMidiPorts()
+
+    override val midiOutputPorts: List<MidiPortInfo>
+        get() = JniBridge.uapmdAppGetMidiOutputPorts(handle).toMidiPorts()
+
+    override fun isTrackHidden(trackIndex: Int) = JniBridge.uapmdAppIsTrackHidden(handle, trackIndex)
+
+    override val timelineContentBounds: TimelineContentBounds
+        get() = JniBridge.uapmdAppTimelineContentBounds(handle).let {
+            TimelineContentBounds(it[0] != 0.0, it[1], it[2], it[3])
+        }
+
+    override val devices: List<DeviceEntry>
+        get() {
+            val count = JniBridge.uapmdAppGetDeviceCount(handle)
+            if (count <= 0) return emptyList()
+            val ints = IntArray(count * 4)
+            val strings = JniBridge.uapmdAppGetDevices(handle, ints)
+            return (0 until count).map { i -> decodeDevice(strings, ints, i) }
+        }
+
+    override fun deviceForInstance(instanceId: Int): DeviceEntry? {
+        val ints = IntArray(4)
+        val strings = JniBridge.uapmdAppGetDeviceForInstance(handle, instanceId, ints) ?: return null
+        return decodeDevice(strings, ints, 0)
+    }
+
+    override fun updateDeviceLabel(instanceId: Int, label: String) =
+        JniBridge.uapmdAppUpdateDeviceLabel(handle, instanceId, label)
+
+    override fun loadPluginState(instanceId: Int, filepath: String, callback: (PluginStateResult) -> Unit) =
+        JniBridge.uapmdAppLoadPluginState(handle, instanceId, filepath,
+            PluginStateCallback { id, ok, error, path ->
+                callback(PluginStateResult(id, ok, error ?: "", path ?: ""))
+            })
+
+    override fun savePluginState(instanceId: Int, filepath: String, callback: (PluginStateResult) -> Unit) =
+        JniBridge.uapmdAppSavePluginState(handle, instanceId, filepath,
+            PluginStateCallback { id, ok, error, path ->
+                callback(PluginStateResult(id, ok, error ?: "", path ?: ""))
+            })
+
+    override fun loadPluginStateSync(instanceId: Int, filepath: String): PluginStateResult {
+        val strings = arrayOfNulls<String>(2)
+        val ints = JniBridge.uapmdAppLoadPluginStateSync(handle, instanceId, filepath, strings)
+        return PluginStateResult(ints[0], ints[1] != 0, strings[0] ?: "", strings[1] ?: "")
+    }
+
+    override fun savePluginStateSync(instanceId: Int, filepath: String): PluginStateResult {
+        val strings = arrayOfNulls<String>(2)
+        val ints = JniBridge.uapmdAppSavePluginStateSync(handle, instanceId, filepath, strings)
+        return PluginStateResult(ints[0], ints[1] != 0, strings[0] ?: "", strings[1] ?: "")
+    }
+
+    override fun markPluginInstanceTrackDirty(instanceId: Int) =
+        JniBridge.uapmdAppMarkPluginInstanceTrackDirty(handle, instanceId)
+
     override val masterTempoMap: TempoMap
         get() = AndroidTempoMap(JniBridge.uapmdAppMasterTempoMap(handle))
 
@@ -221,14 +384,19 @@ class AndroidAppModel internal constructor(internal val handle: Long) : AppModel
     override fun getMidiClipUmpEvents(trackIndex: Int, clipId: Int): UmpEventsResult {
         val packed = JniBridge.uapmdAppGetMidiClipUmpEvents(handle, trackIndex, clipId)
             ?: return UmpEventsResult(false, "native call returned null", emptyList())
-        val ok = (packed[0] as LongArray)[0] != 0L
+        // long[2] { success, tickResolution }, String? error, long[] ticks,
+        // int[][] words, double[1] clipTempo.
+        val head = packed[0] as LongArray
+        val ok = head[0] != 0L
+        val tickRes = head[1].toUInt()
+        val tempo = (packed.getOrNull(4) as? DoubleArray)?.getOrNull(0) ?: 0.0
         val error = packed.getOrNull(1) as? String
         val ticks = packed[2] as LongArray
         @Suppress("UNCHECKED_CAST")
         val words = packed[3] as Array<IntArray>
         return UmpEventsResult(ok, error, ticks.indices.map { i ->
             UmpEvent(ticks[i], UIntArray(words[i].size) { w -> words[i][w].toUInt() })
-        })
+        }, tickRes, tempo)
     }
 
     override fun addUmpEventToClip(trackIndex: Int, clipId: Int, tick: Long, words: UIntArray): Boolean =
@@ -255,6 +423,126 @@ class AndroidAppModel internal constructor(internal val handle: Long) : AppModel
         val nums = packed[0] as LongArray
         return ClipAddResult(nums[0].toInt(), nums[1].toInt(), nums[2] != 0L, packed.getOrNull(1) as? String)
     }
+
+    override fun addClipToTrack(
+        trackIndex: Int, position: TimelinePosition, reader: AudioFileReader, filepath: String
+    ): ClipAddResult = JniBridge.uapmdAppAddClipToTrack(
+        handle, trackIndex, position.samples, position.legacyBeats,
+        (reader as AndroidAudioFileReader).handle, filepath
+    ).toClipAddResult()
+
+    override fun addMidiClipToTrack(trackIndex: Int, position: TimelinePosition, filepath: String): ClipAddResult =
+        JniBridge.uapmdAppAddMidiClipToTrack(
+            handle, trackIndex, position.samples, position.legacyBeats, filepath
+        ).toClipAddResult()
+
+    override fun addMidiClipFromData(
+        trackIndex: Int, position: TimelinePosition,
+        umpEvents: List<UInt>, tickTimestamps: List<ULong>,
+        tickResolution: UInt, clipTempo: Double,
+        tempoChanges: List<MidiTempoChange>, timeSignatureChanges: List<MidiTimeSignatureChange>,
+        clipName: String, needsFileSave: Boolean
+    ): ClipAddResult = JniBridge.uapmdAppAddMidiClipFromData(
+        handle, trackIndex, position.samples, position.legacyBeats,
+        umpEvents.takeIf { it.isNotEmpty() }?.let { l -> IntArray(l.size) { l[it].toInt() } },
+        tickTimestamps.takeIf { it.isNotEmpty() }?.let { l -> LongArray(l.size) { l[it].toLong() } },
+        tickResolution.toInt(), clipTempo,
+        tempoChanges.takeIf { it.isNotEmpty() }?.let { l ->
+            DoubleArray(l.size * 2) { i ->
+                if (i % 2 == 0) l[i / 2].tickPosition.toDouble() else l[i / 2].bpm
+            }
+        },
+        timeSignatureChanges.takeIf { it.isNotEmpty() }?.let { l -> LongArray(l.size) { l[it].tickPosition.toLong() } },
+        timeSignatureChanges.takeIf { it.isNotEmpty() }?.let { l ->
+            IntArray(l.size * 4) { i ->
+                val c = l[i / 4]
+                when (i % 4) {
+                    0 -> c.numerator.toInt()
+                    1 -> c.denominator.toInt()
+                    2 -> c.clocksPerClick.toInt()
+                    else -> c.thirtySecondsPerQuarter.toInt()
+                }
+            }
+        },
+        clipName, needsFileSave
+    ).toClipAddResult()
+
+    override fun addDeviceInputToTrack(trackIndex: Int, channelIndices: List<UInt>): Int =
+        JniBridge.uapmdAppAddDeviceInputToTrack(
+            handle, trackIndex,
+            channelIndices.takeIf { it.isNotEmpty() }?.let { l -> IntArray(l.size) { l[it].toInt() } }
+        )
+
+    // ── Master track markers ────────────────────────────────────────────────
+
+    override val masterMarkers: List<ClipMarkerData>
+        get() {
+            val n = JniBridge.uapmdAppMasterMarkerCount(handle)
+            if (n == 0) return emptyList()
+            val offsets = DoubleArray(n)
+            val refTypes = IntArray(n)
+            val strings = JniBridge.uapmdAppGetMasterMarkers(handle, offsets, refTypes)
+            return (0 until n).map { i ->
+                ClipMarkerData(
+                    markerId = strings.getOrNull(i * 4) ?: "",
+                    clipPositionOffset = offsets[i],
+                    referenceType = WarpReferenceType.fromNative(refTypes[i]),
+                    referenceClipId = strings.getOrNull(i * 4 + 1) ?: "",
+                    referenceMarkerId = strings.getOrNull(i * 4 + 2) ?: "",
+                    name = strings.getOrNull(i * 4 + 3) ?: ""
+                )
+            }
+        }
+
+    override fun setMasterTrackMarkersWithValidation(markers: List<ClipMarkerData>): OpResult =
+        JniBridge.uapmdAppSetMasterTrackMarkersWithValidation(
+            handle,
+            Array(markers.size * 4) { i ->
+                val m = markers[i / 4]
+                when (i % 4) {
+                    0 -> m.markerId; 1 -> m.referenceClipId; 2 -> m.referenceMarkerId; else -> m.name
+                }
+            },
+            DoubleArray(markers.size) { markers[it].clipPositionOffset },
+            IntArray(markers.size) { markers[it].referenceType.nativeValue }
+        ).toOpResult()
+
+    // ── Offline render to file ──────────────────────────────────────────────
+
+    override fun startRenderToFile(settings: RenderToFileSettings): Boolean =
+        JniBridge.uapmdAppStartRenderToFile(
+            handle, settings.outputPath,
+            doubleArrayOf(
+                settings.startSeconds, settings.endSeconds,
+                settings.contentStartSeconds, settings.contentEndSeconds,
+                settings.tailSeconds, settings.silenceDurationSeconds,
+                settings.silenceThresholdDb, 0.0
+            ),
+            booleanArrayOf(
+                settings.hasEndSeconds, settings.useContentFallback,
+                settings.contentBoundsValid, settings.enableSilenceStop
+            )
+        )
+
+    override fun cancelRenderToFile() = JniBridge.uapmdAppCancelRenderToFile(handle)
+
+    override val renderToFileStatus: RenderToFileStatus
+        get() {
+            val packed = JniBridge.uapmdAppGetRenderToFileStatus(handle)
+            val nums = packed[0] as DoubleArray
+            val flags = packed[1] as BooleanArray
+            return RenderToFileStatus(
+                running = flags[0], completed = flags[1], success = flags[2],
+                progress = nums[0], renderedSeconds = nums[1],
+                message = packed.getOrNull(2) as? String ?: "",
+                outputPath = packed.getOrNull(3) as? String ?: ""
+            )
+        }
+
+    override fun clearCompletedRenderStatus() = JniBridge.uapmdAppClearCompletedRenderStatus(handle)
+
+    override fun requestShowTrackGraph(trackIndex: Int) =
+        JniBridge.uapmdAppRequestShowTrackGraph(handle, trackIndex)
 
     // ── Track graph ─────────────────────────────────────────────────────────
 
@@ -439,6 +727,8 @@ class AndroidTransportController internal constructor(internal val handle: Long)
     override fun pause() = JniBridge.uapmdTransportPause(handle)
     override fun resume() = JniBridge.uapmdTransportResume(handle)
     override fun record() = JniBridge.uapmdTransportRecord(handle)
+
+    override fun jump(positionSeconds: Double) = JniBridge.uapmdTransportJump(handle, positionSeconds)
 }
 
 actual fun instantiateAppModel() = JniBridge.uapmdAppInstantiate()
@@ -450,3 +740,130 @@ actual fun getAppModel(): AppModel {
 }
 
 actual fun cleanupAppModel() = JniBridge.uapmdAppCleanup()
+
+/** The flat {trackIndex, clipId} pair encoding the JNI layer uses. */
+private fun IntArray.toClipTargets(): List<TimelineClipTarget> =
+    (0 until size / 2).map { TimelineClipTarget(this[it * 2], this[it * 2 + 1]) }
+
+private fun List<TimelineClipTarget>.toFlatPairs(): IntArray {
+    val out = IntArray(size * 2)
+    forEachIndexed { i, t ->
+        out[i * 2] = t.trackIndex
+        out[i * 2 + 1] = t.clipId
+    }
+    return out
+}
+
+/** The double[3] / long[9] note encoding the JNI layer uses. */
+private fun decodePianoRollNote(d: DoubleArray, l: LongArray) = PianoRollNote(
+    startSeconds = d[0],
+    durationSeconds = d[1],
+    velocity = d[2].toFloat(),
+    note = l[0].toInt(),
+    channel = l[1].toInt(),
+    deleted = l[2] != 0L,
+    editId = l[3],
+    umpGroup = l[4].toInt(),
+    releaseVelocity = l[5].toInt(),
+    attributeType = l[6].toInt(),
+    attributeValue = l[7].toInt(),
+    automationEventCount = l[8].toInt()
+)
+
+class AndroidPianoRollSnapshot internal constructor(internal val handle: Long) : PianoRollSnapshot {
+    override val isReady: Boolean get() = JniBridge.uapmdPianoRollSnapshotReady(handle)
+    override val error: String get() = JniBridge.uapmdPianoRollSnapshotError(handle)
+    override val durationSeconds: Double get() = JniBridge.uapmdPianoRollSnapshotDurationSeconds(handle)
+    override val minNote: Int get() = JniBridge.uapmdPianoRollSnapshotMinNote(handle)
+    override val maxNote: Int get() = JniBridge.uapmdPianoRollSnapshotMaxNote(handle)
+
+    override val notes: List<PianoRollNote>
+        get() {
+            val d = DoubleArray(3)
+            val l = LongArray(9)
+            return (0 until JniBridge.uapmdPianoRollSnapshotNoteCount(handle)).mapNotNull { i ->
+                if (!JniBridge.uapmdPianoRollSnapshotGetNote(handle, i, d, l)) null
+                else decodePianoRollNote(d, l)
+            }
+        }
+
+    override fun close() = JniBridge.uapmdPianoRollSnapshotDestroy(handle)
+}
+
+class AndroidPianoRollSession internal constructor(private val handle: Long) : PianoRollSession {
+    override val notes: List<PianoRollNote>
+        get() {
+            val d = DoubleArray(3)
+            val l = LongArray(9)
+            return (0 until JniBridge.uapmdPianoRollSessionNoteCount(handle)).mapNotNull { i ->
+                if (!JniBridge.uapmdPianoRollSessionGetNote(handle, i, d, l)) null
+                else decodePianoRollNote(d, l)
+            }
+        }
+
+    override fun isNoteSelected(index: Int) = JniBridge.uapmdPianoRollSessionIsNoteSelected(handle, index)
+    override val selectedNoteCount: Int get() = JniBridge.uapmdPianoRollSessionSelectedNoteCount(handle)
+
+    override var focusedNote: Int
+        get() = JniBridge.uapmdPianoRollSessionFocusedNote(handle)
+        set(value) { JniBridge.uapmdPianoRollSessionSetFocusedNote(handle, value) }
+
+    override val durationSeconds: Double get() = JniBridge.uapmdPianoRollSessionDurationSeconds(handle)
+    override val minNote: Int get() = JniBridge.uapmdPianoRollSessionMinNote(handle)
+    override val maxNote: Int get() = JniBridge.uapmdPianoRollSessionMaxNote(handle)
+    override val clipboardCount: Int get() = JniBridge.uapmdPianoRollSessionClipboardCount(handle)
+    override val isDirty: Boolean get() = JniBridge.uapmdPianoRollSessionDirty(handle)
+    override val error: String get() = JniBridge.uapmdPianoRollSessionError(handle)
+
+    override fun matchesSource(snapshot: PianoRollSnapshot) =
+        JniBridge.uapmdPianoRollSessionMatchesSource(handle, (snapshot as AndroidPianoRollSnapshot).handle)
+
+    override fun loadNotes(snapshot: PianoRollSnapshot?) =
+        JniBridge.uapmdPianoRollSessionLoadNotes(handle, (snapshot as AndroidPianoRollSnapshot?)?.handle ?: 0L)
+
+    override fun selectNote(index: Int, additive: Boolean, toggle: Boolean) =
+        JniBridge.uapmdPianoRollSessionSelectNote(handle, index, additive, toggle)
+
+    override fun performAction(action: PianoRollAction, pasteSeconds: Double) =
+        JniBridge.uapmdPianoRollSessionPerformAction(handle, action.nativeValue, pasteSeconds)
+
+    override fun createNote(startSeconds: Double, durationSeconds: Double, note: Int, velocity: Float) =
+        JniBridge.uapmdPianoRollSessionCreateNote(handle, startSeconds, durationSeconds, note, velocity)
+
+    override fun deleteNote(index: Int) = JniBridge.uapmdPianoRollSessionDeleteNote(handle, index)
+
+    override fun resizeNote(index: Int, startSeconds: Double, durationSeconds: Double, note: Int) =
+        JniBridge.uapmdPianoRollSessionResizeNote(handle, index, startSeconds, durationSeconds, note)
+
+    override fun beginDrag() = JniBridge.uapmdPianoRollSessionBeginDrag(handle)
+    override fun moveSelection(timeDeltaSeconds: Double, pitchDelta: Int) =
+        JniBridge.uapmdPianoRollSessionMoveSelection(handle, timeDeltaSeconds, pitchDelta)
+    override fun cancelDrag() = JniBridge.uapmdPianoRollSessionCancelDrag(handle)
+    override fun finishDrag(index: Int, originalStart: Double, originalEnd: Double, originalNote: Int) =
+        JniBridge.uapmdPianoRollSessionFinishDrag(handle, index, originalStart, originalEnd, originalNote)
+
+    override fun commit(app: AppModel) =
+        JniBridge.uapmdPianoRollSessionCommit(handle, (app as AndroidAppModel).handle)
+}
+
+/** The flat {id, displayName} pair encoding the JNI layer uses for ports. */
+private fun Array<String?>.toMidiPorts(): List<MidiPortInfo> =
+    (0 until size / 2).map { MidiPortInfo(this[it * 2] ?: "", this[it * 2 + 1] ?: "") }
+
+/** String[3n] {label, apiName, statusMessage} + int[4n] {id, flags...}. */
+private fun decodeDevice(strings: Array<String?>, ints: IntArray, i: Int) = DeviceEntry(
+    id = ints[i * 4],
+    label = strings.getOrNull(i * 3) ?: "",
+    apiName = strings.getOrNull(i * 3 + 1) ?: "",
+    statusMessage = strings.getOrNull(i * 3 + 2) ?: "",
+    running = ints[i * 4 + 1] != 0,
+    instantiating = ints[i * 4 + 2] != 0,
+    hasError = ints[i * 4 + 3] != 0
+)
+
+/** Object[]{ long[3] clipId/sourceNodeId/success, String? error }. */
+private fun Array<Any?>?.toClipAddResult(): ClipAddResult {
+    val packed = this ?: return ClipAddResult(-1, -1, false, "native call returned null")
+    val nums = packed[0] as LongArray
+    return ClipAddResult(nums[0].toInt(), nums[1].toInt(), nums[2] != 0L, packed.getOrNull(1) as? String)
+}

@@ -30,7 +30,7 @@ import kotlinx.coroutines.launch
  * Per-clip properties, every field going through `ProjectCommands` so each edit
  * is one undoable step: name, position, length, gain, mute, enable, source file.
  *
- * uapmd-app 0.5.6 has no equivalent window — its GUI never calls `setClipGain` or
+ * uapmd-app has no equivalent window — its GUI never calls `setClipGain` or
  * `setClipMuted`, and name/file editing lives in the Sequence Editor table. This is
  * deliberately ahead of it rather than a divergence to correct: the same features
  * are wanted in uapmd-app. Do not delete it in the name of parity.

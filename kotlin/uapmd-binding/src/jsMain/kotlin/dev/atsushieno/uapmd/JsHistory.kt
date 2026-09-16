@@ -3,7 +3,7 @@
 package dev.atsushieno.uapmd
 
 /**
- * K/JS bindings for the uapmd 0.5.6 project history.
+ * K/JS bindings for the uapmd project history.
  *
  * Two Emscripten ABI rules drive everything here:
  *  - a function returning a struct takes a hidden result pointer as its FIRST
@@ -106,6 +106,26 @@ internal object Off {
     const val IMPORT_STEM_COUNT = 16
     const val IMPORT_STEMS = 20
     const val IMPORT_RESULT_SIZE = 24
+
+    // uapmd_piano_roll_note_t, sizeof 40 (wasm32)
+    const val PR_NOTE_START = 0
+    const val PR_NOTE_DURATION = 8
+    const val PR_NOTE_VELOCITY = 16
+    const val PR_NOTE_NOTE = 20
+    const val PR_NOTE_CHANNEL = 21
+    const val PR_NOTE_DELETED = 22
+    const val PR_NOTE_EDIT_ID = 24
+    const val PR_NOTE_UMP_GROUP = 32
+    const val PR_NOTE_RELEASE_VELOCITY = 34
+    const val PR_NOTE_ATTRIBUTE_TYPE = 36
+    const val PR_NOTE_ATTRIBUTE_VALUE = 38
+    const val PR_NOTE_AUTOMATION_COUNT = 40
+    const val PR_NOTE_SIZE = 48
+
+    // uapmd_timeline_clip_target_t, sizeof 8
+    const val CLIP_TARGET_TRACK = 0
+    const val CLIP_TARGET_CLIP = 4
+    const val CLIP_TARGET_STRIDE = 8
 
     // uapmd_effective_signature_t, sizeof 24
     const val SIGNATURE_START_BEAT = 0
@@ -329,9 +349,6 @@ private fun makeJsTrackFragment(callback: (TrackFragment?, String?) -> Unit): In
 
 // ─── JsCommandManager ────────────────────────────────────────────────────────
 //
-// uapmd 0.5.7 withdrew the ProjectUndoEngine handle; the command manager
-// carries the whole history contract now, so the JsUndoEngine that mirrored it
-// is gone and its calls live here.
 
 class JsCommandManager internal constructor(private val handle: Int) : CommandManager {
     override val state: UndoState

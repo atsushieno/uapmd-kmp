@@ -7,11 +7,17 @@ import kotlin.math.max
 /**
  * Seconds ⇄ quarter-note beats over a piecewise-constant tempo map.
  *
- * A port of `uapmd::TempoMap` (`uapmd-data/…/timeline/TempoMap.hpp`). The C API
- * exposes the master track's tempo and time-signature *points*, not the class, so
- * the arithmetic lives here — and it has to: the beats ruler converts on every
- * frame, and a JNI round trip per conversion would be absurd. This is derived
- * logic, so by the layering rule it belongs in the app rather than the binding.
+ * A port of `uapmd::TempoMap` (`uapmd-data/…/timeline/TempoMap.hpp`), kept in
+ * Kotlin because the beats ruler converts on every frame and an FFI round trip
+ * per conversion would be absurd. This is derived logic, so by the layering rule
+ * it belongs in the app rather than the binding.
+ *
+ * The engine's map is the single source of truth, exposed by the binding as
+ * `TimelineFacade.masterTempoMap` — the same curve playback is scheduled
+ * against. That one is authoritative: if this port and it ever disagree, this
+ * port is wrong. Keep `build()` in step with `TempoMap::rebuild`,
+ * in particular the implicit bar-one signature and the restatement dedup below,
+ * which are what make bar lines land in the right place across a meter change.
  *
  * "Beat" is always a quarter note, matching BPM and ticks-per-quarter elsewhere.
  */
@@ -72,6 +78,13 @@ class TempoMap private constructor(
         return signatures.lastOrNull()?.let { it.numerator to it.denominator } ?: (4 to 4)
     }
 
+    /** How many quarter notes one bar of this meter spans (3.5 for 7/8). */
+    fun barLengthBeats(signature: EffectiveSignature): Double {
+        val numerator = if (signature.numerator > 0) signature.numerator else 4
+        val denominator = if (signature.denominator > 0) signature.denominator else 4
+        return numerator * 4.0 / denominator
+    }
+
     companion object {
         const val DefaultBpm = 120.0
 
@@ -109,15 +122,46 @@ class TempoMap private constructor(
             val map = TempoMap(segments, emptyList(), tempoPoints.isNotEmpty())
             // Signature ranges are expressed in beats, so they need the tempo
             // segments above to convert their seconds positions first.
-            val sorted = signaturePoints.sortedBy { it.timeSeconds }
-            val sigs = sorted.mapIndexed { i, p ->
-                EffectiveSignature(
-                    startBeat = map.secondsToBeats(max(0.0, p.timeSeconds)),
-                    endBeat = if (i + 1 < sorted.size)
-                        map.secondsToBeats(max(0.0, sorted[i + 1].timeSeconds))
-                    else Double.POSITIVE_INFINITY,
-                    numerator = p.numerator.coerceAtLeast(1),
-                    denominator = p.denominator.coerceAtLeast(1)
+            val started = signaturePoints
+                .sortedBy { it.timeSeconds }
+                .map { p ->
+                    EffectiveSignature(
+                        startBeat = map.secondsToBeats(max(0.0, p.timeSeconds)),
+                        endBeat = Double.POSITIVE_INFINITY,
+                        numerator = p.numerator.coerceAtLeast(1),
+                        denominator = p.denominator.coerceAtLeast(1)
+                    )
+                }
+                .sortedBy { it.startBeat }
+                .toMutableList()
+
+            // Bar one starts at beat zero. Without a signature there, the bars
+            // before the first change have no meter to be counted in — and
+            // signatureAtBeat() would fall through to the *last* signature,
+            // reporting the final meter for the opening bars.
+            if (started.isEmpty() || started.first().startBeat > 1e-9)
+                started.add(0, EffectiveSignature(0.0, Double.POSITIVE_INFINITY, 4, 4))
+
+            // A meta event restating the meter already in force does not start a
+            // new region. It is the region's start that sets where its bars
+            // fall, so honouring a restatement would re-phase the bar grid onto
+            // whatever beat that event happens to sit on — moving every later
+            // bar line, and every genuine meter change with it.
+            val deduped = mutableListOf<EffectiveSignature>()
+            for (sig in started) {
+                val previous = deduped.lastOrNull()
+                if (previous != null &&
+                    previous.numerator == sig.numerator &&
+                    previous.denominator == sig.denominator
+                ) continue
+                deduped += sig
+            }
+
+            // Each region runs to the next one's start.
+            val sigs = deduped.mapIndexed { i, sig ->
+                sig.copy(
+                    endBeat = if (i + 1 < deduped.size) deduped[i + 1].startBeat
+                    else Double.POSITIVE_INFINITY
                 )
             }
             return TempoMap(segments, sigs, tempoPoints.isNotEmpty())

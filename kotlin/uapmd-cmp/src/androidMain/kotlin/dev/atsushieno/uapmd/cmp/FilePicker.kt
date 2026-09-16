@@ -20,6 +20,7 @@ import kotlin.coroutines.resume
 private const val KIND_PROJECT = 0
 private const val KIND_AUDIO = 1
 private const val KIND_MIDI = 2
+private const val KIND_ANY = 0
 
 private fun interface PickPathCallback {
     fun onResult(success: Boolean, path: String?, error: String?)
@@ -77,6 +78,28 @@ actual fun deliverSavedFile(path: String) = Unit
 actual suspend fun pickMidiFileToOpen(): String? = AndroidDocumentPicker.pickOpen(KIND_MIDI)
 
 actual suspend fun pickAudioFileToOpen(): String? = AndroidDocumentPicker.pickOpen(KIND_AUDIO)
+
+/**
+ * SAF has no MIME type for a neural-network model file, so this opens the
+ * generic chooser rather than filtering — the same thing the project picker
+ * does for `.uapmdz`.
+ */
+actual suspend fun pickStemModelFileToOpen(extensions: List<String>): String? =
+    AndroidDocumentPicker.pickOpen(KIND_ANY)
+
+/**
+ * The app's own files directory. A SAF path is not a filesystem path the
+ * separator could write next to, and external storage needs a permission this
+ * app does not ask for.
+ */
+actual fun defaultStemOutputDirectory(audioFilePath: String): String =
+    androidAppContext?.filesDir?.absolutePath ?: "/data/local/tmp"
+
+/**
+ * Set by MainActivity, for the few places that need a real filesystem path
+ * (stem separation writes files; SAF gives content URIs, not paths).
+ */
+internal var androidAppContext: android.content.Context? = null
 
 // Set by MainActivity from launch-intent extras; see MainActivity.onCreate.
 internal var androidStartupImportPath: String? = null

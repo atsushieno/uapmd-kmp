@@ -5,8 +5,11 @@
 #include <uapmd-app-model/uapmd-app-model.hpp>
 #include <uapmd-midi-service/uapmd-midi-service.hpp>
 #include <uapmd-plugin-hosting/uapmd-plugin-hosting.hpp>
+#include <algorithm>
 #include <cstring>
 #include <deque>
+#include <mutex>
+#include <unordered_map>
 #include <filesystem>
 #include <future>
 #include <string>
@@ -229,7 +232,7 @@ bool uapmd_app_get_blocklist_entry(uapmd_app_model_t app, uint32_t index,
     return true;
 }
 
-bool uapmd_app_unblock_plugin(uapmd_app_model_t app, const char* entry_id) {
+bool uapmd_app_unblock_plugin_from_blocklist(uapmd_app_model_t app, const char* entry_id) {
     if (!app || !entry_id) return false;
     return AM(app)->unblockPluginFromBlocklist(entry_id);
 }
@@ -463,6 +466,22 @@ bool uapmd_app_remove_clip_from_track(uapmd_app_model_t app, int32_t track_index
  *  Track management
  * ═══════════════════════════════════════════════════════════════════════════ */
 
+bool uapmd_app_is_track_muted(uapmd_app_model_t app, int32_t track_index) {
+    return app && AM(app)->isTrackMuted(track_index);
+}
+
+bool uapmd_app_is_track_solo(uapmd_app_model_t app, int32_t track_index) {
+    return app && AM(app)->isTrackSolo(track_index);
+}
+
+bool uapmd_app_set_track_muted(uapmd_app_model_t app, int32_t track_index, bool muted) {
+    return app && AM(app)->setTrackMuted(track_index, muted);
+}
+
+bool uapmd_app_set_track_solo(uapmd_app_model_t app, int32_t track_index, bool solo) {
+    return app && AM(app)->setTrackSolo(track_index, solo);
+}
+
 void uapmd_app_add_track(uapmd_app_model_t app, void* user_data, uapmd_track_mutation_cb_t callback) {
     if (!callback) return;
     AM(app)->addTrack([user_data, callback](int32_t track_index, std::string error) {
@@ -503,13 +522,570 @@ uapmd_timeline_track_t uapmd_app_get_timeline_track(uapmd_app_model_t app, uint3
     return reinterpret_cast<uapmd_timeline_track_t>(tracks[index]);
 }
 
-uapmd_timeline_track_t uapmd_app_master_timeline_track(uapmd_app_model_t app) {
+uapmd_timeline_track_t uapmd_app_get_master_timeline_track(uapmd_app_model_t app) {
     return reinterpret_cast<uapmd_timeline_track_t>(AM(app)->getMasterTimelineTrack());
 }
 
 /* ═══════════════════════════════════════════════════════════════════════════
  *  Timeline state
  * ═══════════════════════════════════════════════════════════════════════════ */
+
+/* ═══════════════════════════════════════════════════════════════════════════
+ *  Assorted AppModel accessors
+ * ═══════════════════════════════════════════════════════════════════════════ */
+
+namespace {
+/* Strings handed back by pointer need somewhere to live that outlives the call. */
+thread_local std::deque<std::string> tl_misc_strings;
+thread_local std::vector<uapmd_midi_port_info_t> tl_midi_ports;
+thread_local std::vector<uapmd_device_entry_t> tl_device_entries;
+thread_local std::string tl_state_error;
+thread_local std::string tl_state_path;
+
+const char* intern_misc(const std::string& v) {
+    tl_misc_strings.push_back(v);
+    return tl_misc_strings.back().c_str();
+}
+
+uint32_t copy_ports(const std::vector<uapmd::MidiPortInfo>& ports,
+                    uapmd_midi_port_info_t* out, uint32_t out_count) {
+    tl_misc_strings.clear();
+    tl_midi_ports.clear();
+    for (const auto& p : ports)
+        tl_midi_ports.push_back({intern_misc(p.id), intern_misc(p.displayName)});
+    if (!out || out_count == 0)
+        return static_cast<uint32_t>(tl_midi_ports.size());
+    const uint32_t n = static_cast<uint32_t>(
+        tl_midi_ports.size() < out_count ? tl_midi_ports.size() : out_count);
+    for (uint32_t i = 0; i < n; i++) out[i] = tl_midi_ports[i];
+    return n;
+}
+
+uapmd_device_entry_t device_entry_from(int32_t id, const uapmd_app::AppModel::DeviceState& st) {
+    return {
+        id,
+        intern_misc(st.label),
+        intern_misc(st.apiName),
+        intern_misc(st.statusMessage),
+        st.running,
+        st.instantiating,
+        st.hasError
+    };
+}
+} // namespace
+
+uint32_t uapmd_app_get_midi_input_ports(uapmd_app_model_t app, uapmd_midi_port_info_t* out, uint32_t out_count) {
+    if (!app) return 0;
+    return copy_ports(AM(app)->getMidiInputPorts(), out, out_count);
+}
+
+uint32_t uapmd_app_get_midi_output_ports(uapmd_app_model_t app, uapmd_midi_port_info_t* out, uint32_t out_count) {
+    if (!app) return 0;
+    return copy_ports(AM(app)->getMidiOutputPorts(), out, out_count);
+}
+
+bool uapmd_app_is_track_hidden(uapmd_app_model_t app, int32_t track_index) {
+    return app && AM(app)->isTrackHidden(track_index);
+}
+
+void uapmd_transport_jump(uapmd_transport_controller_t tc, double position_seconds) {
+    if (tc) TC(tc)->jump(position_seconds);
+}
+
+uapmd_timeline_content_bounds_t uapmd_app_timeline_content_bounds(uapmd_app_model_t app) {
+    if (!app) return {false, 0.0, 0.0, 0.0};
+    const auto b = AM(app)->timelineContentBounds();
+    return {b.hasContent, b.startSeconds, b.endSeconds, b.durationSeconds};
+}
+
+uint32_t uapmd_app_get_devices(uapmd_app_model_t app, uapmd_device_entry_t* out, uint32_t out_count) {
+    if (!app) return 0;
+    tl_misc_strings.clear();
+    tl_device_entries.clear();
+    for (const auto& entry : AM(app)->getDevices()) {
+        if (!entry.state) continue;
+        /* DeviceState carries a mutex guarding these fields. */
+        std::scoped_lock lock(entry.state->mutex);
+        tl_device_entries.push_back(device_entry_from(entry.id, *entry.state));
+    }
+    if (!out || out_count == 0)
+        return static_cast<uint32_t>(tl_device_entries.size());
+    const uint32_t n = static_cast<uint32_t>(
+        tl_device_entries.size() < out_count ? tl_device_entries.size() : out_count);
+    for (uint32_t i = 0; i < n; i++) out[i] = tl_device_entries[i];
+    return n;
+}
+
+bool uapmd_app_get_device_for_instance(uapmd_app_model_t app, int32_t instance_id, uapmd_device_entry_t* out) {
+    if (!app || !out) return false;
+    const auto found = AM(app)->getDeviceForInstance(instance_id);
+    if (!found.has_value() || !*found) return false;
+    tl_misc_strings.clear();
+    auto state = *found;
+    std::scoped_lock lock(state->mutex);
+    /* The entry id is not carried on the state, so it is looked up by identity. */
+    int32_t id = -1;
+    for (const auto& entry : AM(app)->getDevices())
+        if (entry.state == state) { id = entry.id; break; }
+    *out = device_entry_from(id, *state);
+    return true;
+}
+
+void uapmd_app_update_device_label(uapmd_app_model_t app, int32_t instance_id, const char* label) {
+    if (app) AM(app)->updateDeviceLabel(instance_id, label ? label : "");
+}
+
+namespace {
+uapmd_plugin_state_result_t to_c_state_result(const uapmd_app::AppModel::PluginStateResult& r) {
+    tl_state_error = r.error;
+    tl_state_path = r.filepath;
+    return {r.instanceId, r.success, tl_state_error.c_str(), tl_state_path.c_str()};
+}
+} // namespace
+
+uapmd_plugin_state_result_t uapmd_app_load_plugin_state_sync(uapmd_app_model_t app, int32_t instance_id, const char* filepath) {
+    if (!app) return {instance_id, false, "", ""};
+    return to_c_state_result(AM(app)->loadPluginStateSync(instance_id, filepath ? filepath : ""));
+}
+
+uapmd_plugin_state_result_t uapmd_app_save_plugin_state_sync(uapmd_app_model_t app, int32_t instance_id, const char* filepath) {
+    if (!app) return {instance_id, false, "", ""};
+    return to_c_state_result(AM(app)->savePluginStateSync(instance_id, filepath ? filepath : ""));
+}
+
+void uapmd_app_mark_plugin_instance_track_dirty(uapmd_app_model_t app, int32_t instance_id) {
+    if (app) AM(app)->markPluginInstanceTrackDirty(instance_id);
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════
+ *  Piano roll editing session
+ * ═══════════════════════════════════════════════════════════════════════════ */
+
+namespace {
+
+/* The snapshot is handed out by value from AppModel, so the C side owns a copy
+ * and keeps it alive for as long as the caller holds the handle. */
+struct PianoRollSnapshotBox {
+    uapmd_app::PianoRollClipSnapshot snapshot;
+};
+
+/* The drag originals moveNotes()/restoreNotes() replay from. uapmd-app keeps
+ * these in its own window state; a C caller has nowhere to put them, so they
+ * are held here, keyed by session. */
+std::mutex s_piano_roll_drag_mutex;
+std::unordered_map<uapmd_app::PianoRollSession*,
+                   std::vector<std::pair<int, uapmd_app::PianoRollEditNote>>> s_piano_roll_drags;
+
+uapmd_app::PianoRollSession* PRS(uapmd_piano_roll_session_t h) {
+    return reinterpret_cast<uapmd_app::PianoRollSession*>(h);
+}
+PianoRollSnapshotBox* PRB(uapmd_piano_roll_snapshot_t h) {
+    return reinterpret_cast<PianoRollSnapshotBox*>(h);
+}
+
+thread_local std::string tl_piano_roll_error;
+
+void fill_note(const uapmd_app::PianoRollMidiNote& note, uapmd_piano_roll_note_t* out) {
+    out->start_seconds = note.startSeconds;
+    out->duration_seconds = note.durationSeconds;
+    out->velocity = note.velocity;
+    out->note = note.note;
+    out->channel = note.channel;
+    out->deleted = note.deleted;
+    out->edit_id = 0;
+    out->ump_group = 0;
+    out->release_velocity = 0;
+    out->attribute_type = 0;
+    out->attribute_value = 0;
+    out->automation_event_count = 0;
+}
+
+void fill_edit_note(const uapmd_app::PianoRollEditNote& note, uapmd_piano_roll_note_t* out) {
+    fill_note(note, out);
+    out->edit_id = note.edit_id;
+    out->ump_group = note.ump_group;
+    out->release_velocity = note.release_velocity;
+    out->attribute_type = note.attributeType;
+    out->attribute_value = note.attributeValue;
+    out->automation_event_count = static_cast<uint32_t>(note.automationEvents.size());
+}
+
+} // namespace
+
+uapmd_piano_roll_snapshot_t uapmd_app_piano_roll_clip_snapshot(uapmd_app_model_t app,
+                                                                 int32_t track_index,
+                                                                 int32_t clip_id,
+                                                                 double fallback_duration_seconds) {
+    if (!app) return nullptr;
+    /* The snapshot is taken against the clip as the document holds it, so the
+     * clip has to be looked up rather than passed in: a caller holding a stale
+     * copy would parse notes that are no longer there. */
+    auto tracks = AM(app)->getTimelineTracks();
+    /* The master track is addressed by a sentinel index, not by position. */
+    auto* track = track_index == UAPMD_MASTER_TRACK_INDEX
+        ? AM(app)->getMasterTimelineTrack()
+        : (track_index >= 0 && static_cast<size_t>(track_index) < tracks.size()
+            ? tracks[static_cast<size_t>(track_index)] : nullptr);
+    if (!track) return nullptr;
+    const auto clips = track->clipManager().getAllClips();
+    const auto it = std::find_if(clips.begin(), clips.end(),
+        [clip_id](const auto& c) { return c.clipId == clip_id; });
+    if (it == clips.end()) return nullptr;
+    auto* box = new PianoRollSnapshotBox{
+        AM(app)->pianoRollClipSnapshot(track_index, *it, fallback_duration_seconds)};
+    return reinterpret_cast<uapmd_piano_roll_snapshot_t>(box);
+}
+
+void uapmd_piano_roll_snapshot_destroy(uapmd_piano_roll_snapshot_t snapshot) {
+    delete PRB(snapshot);
+}
+
+bool uapmd_piano_roll_snapshot_ready(uapmd_piano_roll_snapshot_t snapshot) {
+    return snapshot && PRB(snapshot)->snapshot.ready;
+}
+
+const char* uapmd_piano_roll_snapshot_error(uapmd_piano_roll_snapshot_t snapshot) {
+    if (!snapshot) return "";
+    tl_piano_roll_error = PRB(snapshot)->snapshot.error;
+    return tl_piano_roll_error.c_str();
+}
+
+double uapmd_piano_roll_snapshot_duration_seconds(uapmd_piano_roll_snapshot_t snapshot) {
+    return snapshot ? PRB(snapshot)->snapshot.durationSeconds : 0.0;
+}
+
+uint8_t uapmd_piano_roll_snapshot_min_note(uapmd_piano_roll_snapshot_t snapshot) {
+    return snapshot ? PRB(snapshot)->snapshot.minNote : 0;
+}
+
+uint8_t uapmd_piano_roll_snapshot_max_note(uapmd_piano_roll_snapshot_t snapshot) {
+    return snapshot ? PRB(snapshot)->snapshot.maxNote : 0;
+}
+
+uint32_t uapmd_piano_roll_snapshot_note_count(uapmd_piano_roll_snapshot_t snapshot) {
+    return snapshot ? static_cast<uint32_t>(PRB(snapshot)->snapshot.notes.size()) : 0;
+}
+
+bool uapmd_piano_roll_snapshot_get_note(uapmd_piano_roll_snapshot_t snapshot, uint32_t index, uapmd_piano_roll_note_t* out) {
+    if (!snapshot || !out) return false;
+    const auto& notes = PRB(snapshot)->snapshot.notes;
+    if (index >= notes.size()) return false;
+    fill_note(notes[index], out);
+    return true;
+}
+
+uapmd_piano_roll_session_t uapmd_app_open_piano_roll_session(uapmd_app_model_t app, int32_t track_index, int32_t clip_id) {
+    if (!app) return nullptr;
+    /* The model owns the session and keeps the shared_ptr alive; the handle is
+     * the raw pointer into it. */
+    return reinterpret_cast<uapmd_piano_roll_session_t>(
+        AM(app)->openPianoRollSession(track_index, clip_id).get());
+}
+
+uapmd_piano_roll_session_t uapmd_app_find_piano_roll_session(uapmd_app_model_t app, int32_t track_index, int32_t clip_id) {
+    if (!app) return nullptr;
+    return reinterpret_cast<uapmd_piano_roll_session_t>(
+        AM(app)->findPianoRollSession(track_index, clip_id));
+}
+
+void uapmd_app_close_piano_roll_session(uapmd_app_model_t app, int32_t track_index, int32_t clip_id) {
+    if (!app) return;
+    if (auto* session = AM(app)->findPianoRollSession(track_index, clip_id)) {
+        std::scoped_lock lock(s_piano_roll_drag_mutex);
+        s_piano_roll_drags.erase(session);
+    }
+    AM(app)->closePianoRollSession(track_index, clip_id);
+}
+
+bool uapmd_piano_roll_session_matches_source(uapmd_piano_roll_session_t session,
+                                               uapmd_piano_roll_snapshot_t snapshot) {
+    if (!session || !snapshot) return false;
+    const auto& raw = PRB(snapshot)->snapshot.rawMidiData;
+    return raw && PRS(session)->matchesSource(*raw);
+}
+
+void uapmd_piano_roll_session_load_notes(uapmd_piano_roll_session_t session,
+                                            uapmd_piano_roll_snapshot_t snapshot) {
+    if (!session) return;
+    if (!snapshot) {
+        PRS(session)->loadNotes({}, nullptr, 0.01);
+        return;
+    }
+    const auto& s = PRB(snapshot)->snapshot;
+    PRS(session)->loadNotes(s.notes, s.rawMidiData, s.durationSeconds);
+}
+
+uint32_t uapmd_piano_roll_session_note_count(uapmd_piano_roll_session_t session) {
+    return session ? static_cast<uint32_t>(PRS(session)->editNotes.size()) : 0;
+}
+
+bool uapmd_piano_roll_session_get_note(uapmd_piano_roll_session_t session, uint32_t index, uapmd_piano_roll_note_t* out) {
+    if (!session || !out) return false;
+    const auto& notes = PRS(session)->editNotes;
+    if (index >= notes.size()) return false;
+    fill_edit_note(notes[index], out);
+    return true;
+}
+
+bool uapmd_piano_roll_session_is_note_selected(uapmd_piano_roll_session_t session, uint32_t index) {
+    if (!session) return false;
+    const auto& notes = PRS(session)->editNotes;
+    if (index >= notes.size()) return false;
+    return PRS(session)->selected_notes.contains(notes[index].edit_id);
+}
+
+uint32_t uapmd_piano_roll_session_selected_note_count(uapmd_piano_roll_session_t session) {
+    return session ? static_cast<uint32_t>(PRS(session)->selected_notes.size()) : 0;
+}
+
+int32_t uapmd_piano_roll_session_focused_note(uapmd_piano_roll_session_t session) {
+    return session ? PRS(session)->selectedNoteIdx : -1;
+}
+
+void uapmd_piano_roll_session_set_focused_note(uapmd_piano_roll_session_t session, int32_t index) {
+    if (session) PRS(session)->selectedNoteIdx = index;
+}
+
+double uapmd_piano_roll_session_duration_seconds(uapmd_piano_roll_session_t session) {
+    return session ? PRS(session)->clipDurationSeconds : 0.0;
+}
+
+uint8_t uapmd_piano_roll_session_min_note(uapmd_piano_roll_session_t session) {
+    return session ? PRS(session)->minNote : 0;
+}
+
+uint8_t uapmd_piano_roll_session_max_note(uapmd_piano_roll_session_t session) {
+    return session ? PRS(session)->maxNote : 0;
+}
+
+uint32_t uapmd_piano_roll_session_clipboard_count(uapmd_piano_roll_session_t session) {
+    return session ? static_cast<uint32_t>(PRS(session)->clipboard.size()) : 0;
+}
+
+bool uapmd_piano_roll_session_dirty(uapmd_piano_roll_session_t session) {
+    return session && PRS(session)->dirtyAfterEdit;
+}
+
+const char* uapmd_piano_roll_session_error(uapmd_piano_roll_session_t session) {
+    if (!session) return "";
+    tl_piano_roll_error = PRS(session)->edit_error;
+    return tl_piano_roll_error.c_str();
+}
+
+void uapmd_piano_roll_session_select_note(uapmd_piano_roll_session_t session, int32_t index, bool additive, bool toggle) {
+    if (session) PRS(session)->selectNote(index, additive, toggle);
+}
+
+void uapmd_piano_roll_session_perform_action(uapmd_piano_roll_session_t session, uapmd_piano_roll_action_t action, double paste_seconds) {
+    if (session)
+        PRS(session)->performAction(static_cast<uapmd_app::PianoRollSession::Action>(action), paste_seconds);
+}
+
+void uapmd_piano_roll_session_create_note(uapmd_piano_roll_session_t session, double start_seconds, double duration_seconds, uint8_t note, float velocity) {
+    if (session) PRS(session)->createNote(start_seconds, duration_seconds, note, velocity);
+}
+
+void uapmd_piano_roll_session_delete_note(uapmd_piano_roll_session_t session, uint32_t index) {
+    if (session) PRS(session)->deleteNote(static_cast<int>(index));
+}
+
+void uapmd_piano_roll_session_resize_note(uapmd_piano_roll_session_t session, uint32_t index, double start_seconds, double duration_seconds, uint8_t note) {
+    if (session) PRS(session)->resizeNote(static_cast<int>(index), start_seconds, duration_seconds, note);
+}
+
+void uapmd_piano_roll_session_begin_drag(uapmd_piano_roll_session_t session) {
+    if (!session) return;
+    auto* s = PRS(session);
+    std::vector<std::pair<int, uapmd_app::PianoRollEditNote>> originals;
+    for (int i = 0; i < static_cast<int>(s->editNotes.size()); i++)
+        if (!s->editNotes[i].deleted && s->selected_notes.contains(s->editNotes[i].edit_id))
+            originals.emplace_back(i, s->editNotes[i]);
+    std::scoped_lock lock(s_piano_roll_drag_mutex);
+    s_piano_roll_drags[s] = std::move(originals);
+}
+
+void uapmd_piano_roll_session_move_selection(uapmd_piano_roll_session_t session, double time_delta_seconds, int32_t pitch_delta) {
+    if (!session) return;
+    std::scoped_lock lock(s_piano_roll_drag_mutex);
+    const auto it = s_piano_roll_drags.find(PRS(session));
+    if (it == s_piano_roll_drags.end()) return;
+    PRS(session)->moveNotes(it->second, time_delta_seconds, pitch_delta);
+}
+
+void uapmd_piano_roll_session_cancel_drag(uapmd_piano_roll_session_t session) {
+    if (!session) return;
+    std::scoped_lock lock(s_piano_roll_drag_mutex);
+    const auto it = s_piano_roll_drags.find(PRS(session));
+    if (it == s_piano_roll_drags.end()) return;
+    PRS(session)->restoreNotes(it->second);
+    s_piano_roll_drags.erase(it);
+}
+
+void uapmd_piano_roll_session_finish_drag(uapmd_piano_roll_session_t session, uint32_t index, double original_start, double original_end, uint8_t original_note) {
+    if (!session) return;
+    PRS(session)->finishNoteDrag(static_cast<int>(index), original_start, original_end, original_note);
+    std::scoped_lock lock(s_piano_roll_drag_mutex);
+    s_piano_roll_drags.erase(PRS(session));
+}
+
+bool uapmd_piano_roll_session_commit(uapmd_piano_roll_session_t session, uapmd_app_model_t app) {
+    if (!session || !app) return false;
+    return PRS(session)->commit(*AM(app));
+}
+
+void uapmd_app_record_piano_roll_commit_source(uapmd_app_model_t app, int32_t track_index, int32_t clip_id) {
+    if (app) AM(app)->recordPianoRollCommitSource(track_index, clip_id);
+}
+
+bool uapmd_app_piano_roll_source_matches_last_edit(uapmd_app_model_t app) {
+    return app && AM(app)->pianoRollSourceMatchesLastEdit();
+}
+
+void uapmd_app_clear_piano_roll_commit_source(uapmd_app_model_t app) {
+    if (app) AM(app)->clearPianoRollCommitSource();
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════
+ *  Timeline clip selection and clipboard
+ * ═══════════════════════════════════════════════════════════════════════════ */
+
+namespace {
+/* Per-thread, like every other string this API hands back by pointer. */
+thread_local std::string tl_clip_selection_error;
+
+std::vector<uapmd_app::AppModel::TimelineClipTarget> targets_from_c(
+        const uapmd_timeline_clip_target_t* clips, uint32_t count) {
+    std::vector<uapmd_app::AppModel::TimelineClipTarget> result;
+    if (!clips) return result;
+    result.reserve(count);
+    for (uint32_t i = 0; i < count; i++)
+        result.push_back({clips[i].track_index, clips[i].clip_id});
+    return result;
+}
+
+/* Copies out under the usual convention: a null buffer asks for the count. */
+template<typename T, typename Convert>
+uint32_t copy_out_vector(const std::vector<T>& source, Convert convert,
+                         decltype(convert(source.front()))* out, uint32_t out_count) {
+    if (!out || out_count == 0)
+        return static_cast<uint32_t>(source.size());
+    const uint32_t n = static_cast<uint32_t>(
+        source.size() < out_count ? source.size() : out_count);
+    for (uint32_t i = 0; i < n; i++)
+        out[i] = convert(source[i]);
+    return n;
+}
+} // namespace
+
+bool uapmd_app_is_timeline_clip_selected(uapmd_app_model_t app, int32_t track_index, int32_t clip_id) {
+    if (!app) return false;
+    return AM(app)->isTimelineClipSelected(track_index, clip_id);
+}
+
+uint32_t uapmd_app_selected_timeline_clips(uapmd_app_model_t app,
+                                             uapmd_timeline_clip_target_t* out,
+                                             uint32_t out_count) {
+    if (!app) return 0;
+    const auto selected = AM(app)->selectedTimelineClips();
+    return copy_out_vector(selected,
+        [](const uapmd_app::AppModel::TimelineClipTarget& t) {
+            return uapmd_timeline_clip_target_t{t.track_index, t.clip_id};
+        },
+        out, out_count);
+}
+
+void uapmd_app_select_timeline_clips(uapmd_app_model_t app,
+                                       const uapmd_timeline_clip_target_t* clips,
+                                       uint32_t clip_count,
+                                       bool additive,
+                                       bool toggle) {
+    if (!app) return;
+    AM(app)->selectTimelineClips(targets_from_c(clips, clip_count), additive, toggle);
+}
+
+void uapmd_app_clear_timeline_clip_selection(uapmd_app_model_t app) {
+    if (app) AM(app)->clearTimelineClipSelection();
+}
+
+bool uapmd_app_select_timeline_midi_clip(uapmd_app_model_t app, int32_t track_index, int32_t clip_id) {
+    if (!app) return false;
+    return AM(app)->selectTimelineMidiClip(track_index, clip_id);
+}
+
+bool uapmd_app_selected_timeline_midi_clip(uapmd_app_model_t app, uapmd_timeline_clip_target_t* out) {
+    if (!app || !out) return false;
+    const auto selected = AM(app)->selectedTimelineMidiClip();
+    if (!selected.has_value()) return false;
+    out->track_index = selected->first;
+    out->clip_id = selected->second;
+    return true;
+}
+
+uint32_t uapmd_app_timeline_clipboard_count(uapmd_app_model_t app) {
+    return app ? static_cast<uint32_t>(AM(app)->timelineClipboard().size()) : 0;
+}
+
+void uapmd_app_clear_timeline_clipboard(uapmd_app_model_t app) {
+    if (app) AM(app)->clearTimelineClipboard();
+}
+
+bool uapmd_app_copy_selected_timeline_clips(uapmd_app_model_t app) {
+    tl_clip_selection_error.clear();
+    if (!app) return false;
+    return AM(app)->copySelectedTimelineClips(tl_clip_selection_error);
+}
+
+bool uapmd_app_delete_selected_timeline_clips(uapmd_app_model_t app,
+                                                bool cut,
+                                                int32_t* changed_tracks,
+                                                uint32_t* changed_track_count) {
+    tl_clip_selection_error.clear();
+    if (!app) return false;
+    std::vector<int32_t> changed;
+    const bool ok = AM(app)->deleteSelectedTimelineClips(cut, tl_clip_selection_error, changed);
+    if (changed_track_count) {
+        const uint32_t capacity = changed_tracks ? *changed_track_count : 0;
+        *changed_track_count = copy_out_vector(changed,
+            [](int32_t v) { return v; }, changed_tracks, capacity);
+    }
+    return ok;
+}
+
+uint32_t uapmd_app_timeline_paste_destinations(uapmd_app_model_t app,
+                                                 int32_t track_index,
+                                                 bool original_tracks,
+                                                 int32_t* out,
+                                                 uint32_t out_count) {
+    tl_clip_selection_error.clear();
+    if (!app) return 0;
+    const auto destinations =
+        AM(app)->timelinePasteDestinations(track_index, original_tracks, tl_clip_selection_error);
+    return copy_out_vector(destinations, [](int32_t v) { return v; }, out, out_count);
+}
+
+bool uapmd_app_paste_timeline_clips(uapmd_app_model_t app,
+                                      int32_t track_index,
+                                      double position_seconds,
+                                      bool original_tracks,
+                                      uapmd_timeline_clip_target_t* pasted,
+                                      uint32_t* pasted_count) {
+    tl_clip_selection_error.clear();
+    if (!app) return false;
+    std::vector<uapmd_app::AppModel::TimelineClipTarget> created;
+    const bool ok = AM(app)->pasteTimelineClips(
+        track_index, position_seconds, original_tracks, created, tl_clip_selection_error);
+    if (pasted_count) {
+        const uint32_t capacity = pasted ? *pasted_count : 0;
+        *pasted_count = copy_out_vector(created,
+            [](const uapmd_app::AppModel::TimelineClipTarget& t) {
+                return uapmd_timeline_clip_target_t{t.track_index, t.clip_id};
+            },
+            pasted, capacity);
+    }
+    return ok;
+}
+
+const char* uapmd_app_last_timeline_clip_error(void) { return tl_clip_selection_error.c_str(); }
 
 bool uapmd_app_get_timeline_state(uapmd_app_model_t app, uapmd_timeline_state_t* out) {
     auto& st = AM(app)->timeline();
@@ -846,7 +1422,7 @@ bool uapmd_app_get_master_marker(uapmd_app_model_t app, uint32_t index, uapmd_cl
     return true;
 }
 
-uapmd_op_result_t uapmd_app_set_master_markers(uapmd_app_model_t app,
+uapmd_op_result_t uapmd_app_set_master_track_markers_with_validation(uapmd_app_model_t app,
                                                  const uapmd_clip_marker_t* markers,
                                                  uint32_t count) {
     tl_clip_events_error.clear();
@@ -859,9 +1435,9 @@ uapmd_op_result_t uapmd_app_set_master_markers(uapmd_app_model_t app,
  * ═══════════════════════════════════════════════════════════════════════════ */
 
 /*
- * getMidiClipUmpEvents returns a choc::value::Value (JSON-like). We convert it
- * into a flat C-friendly array of uapmd_ump_event_t. The choc::value contains
- * an "events" array of { tick, words: [...] } objects.
+ * A straight copy of AppModel::MidiClipUmpEvents into the flat
+ * uapmd_ump_event_t array the C surface exposes. The event's own event_index
+ * just counts events, so it is not carried across: it is the array position.
  */
 static thread_local std::vector<uapmd_ump_event_t> tl_ump_events;
 static thread_local std::vector<std::vector<uint32_t>> tl_ump_words_storage;
@@ -874,31 +1450,33 @@ uapmd_ump_events_result_t uapmd_app_get_midi_clip_ump_events(uapmd_app_model_t a
     tl_ump_words_storage.clear();
     tl_ump_error.clear();
 
-    auto val = AM(app)->getMidiClipUmpEvents(track_index, clip_id);
-    if (!val.isObject() || !val.hasObjectMember("events"))
-        return { false, "invalid result", 0, nullptr };
+    uapmd_app::AppModel::MidiClipUmpEvents val;
+    try {
+        val = AM(app)->getMidiClipUmpEvents(track_index, clip_id);
+    } catch (const std::exception& e) {
+        /* The app model throws for a missing track, a missing clip, or a clip
+         * that is not MIDI; none of those may cross the C boundary. */
+        tl_ump_error = e.what();
+        return { false, tl_ump_error.c_str(), 0, nullptr, 0, 0.0 };
+    } catch (...) {
+        tl_ump_error = "failed to read MIDI clip events";
+        return { false, tl_ump_error.c_str(), 0, nullptr, 0, 0.0 };
+    }
 
-    auto events = val["events"];
-    auto count = events.size();
-    tl_ump_events.reserve(count);
-    tl_ump_words_storage.reserve(count);
-
-    for (uint32_t i = 0; i < count; ++i) {
-        auto ev = events[i];
-        uint64_t tick = ev.hasObjectMember("tick") ? static_cast<uint64_t>(ev["tick"].getInt64()) : 0;
-        auto wordsVal = ev["words"];
-        std::vector<uint32_t> words;
-        for (uint32_t j = 0; j < wordsVal.size(); ++j)
-            words.push_back(static_cast<uint32_t>(wordsVal[j].getInt64()));
-        tl_ump_words_storage.push_back(std::move(words));
+    tl_ump_events.reserve(val.events.size());
+    tl_ump_words_storage.reserve(val.events.size());
+    for (const auto& event : val.events) {
+        tl_ump_words_storage.push_back(event.words);
         auto& stored = tl_ump_words_storage.back();
-        tl_ump_events.push_back({ tick, static_cast<uint32_t>(stored.size()), stored.data() });
+        tl_ump_events.push_back({ event.tick, static_cast<uint32_t>(stored.size()), stored.data() });
     }
 
     return {
         true, nullptr,
         static_cast<uint32_t>(tl_ump_events.size()),
-        tl_ump_events.data()
+        tl_ump_events.data(),
+        val.tick_resolution,
+        val.bpm
     };
 }
 
@@ -922,14 +1500,14 @@ bool uapmd_app_remove_ump_event_from_clip(uapmd_app_model_t app,
 }
 
 /* ═══════════════════════════════════════════════════════════════════════════
- *  Undo history (uapmd 0.5.6)
+ *  Undo history
  * ═══════════════════════════════════════════════════════════════════════════ */
 
 static thread_local std::string tl_history_compound_desc;
 static thread_local std::string tl_history_undo_desc;
 static thread_local std::string tl_history_redo_desc;
 
-bool uapmd_app_get_history_state(uapmd_app_model_t app, uapmd_undo_state_t* out) {
+bool uapmd_app_history_state(uapmd_app_model_t app, uapmd_undo_state_t* out) {
     if (!app || !out) return false;
     auto s = AM(app)->historyState();
     tl_history_compound_desc = s.compoundDescription;
@@ -1020,7 +1598,7 @@ uapmd_app_project_result_t uapmd_app_load_project_from_handle_token(uapmd_app_mo
  *  Offline rendering
  * ═══════════════════════════════════════════════════════════════════════════ */
 
-bool uapmd_app_start_render(uapmd_app_model_t app, const uapmd_app_render_settings_t* settings) {
+bool uapmd_app_start_render_to_file(uapmd_app_model_t app, const uapmd_app_render_settings_t* settings) {
     uapmd_app::AppModel::RenderToFileSettings s;
     if (settings->output_path) s.outputPath = settings->output_path;
     s.startSeconds = settings->start_seconds;
@@ -1037,12 +1615,12 @@ bool uapmd_app_start_render(uapmd_app_model_t app, const uapmd_app_render_settin
     return AM(app)->startRenderToFile(s);
 }
 
-void uapmd_app_cancel_render(uapmd_app_model_t app) { AM(app)->cancelRenderToFile(); }
+void uapmd_app_cancel_render_to_file(uapmd_app_model_t app) { AM(app)->cancelRenderToFile(); }
 
 static thread_local std::string tl_render_msg;
 static thread_local std::string tl_render_path;
 
-uapmd_app_render_status_t uapmd_app_get_render_status(uapmd_app_model_t app) {
+uapmd_app_render_status_t uapmd_app_get_render_to_file_status(uapmd_app_model_t app) {
     auto st = AM(app)->getRenderToFileStatus();
     tl_render_msg = st.message;
     tl_render_path = st.outputPath.string();
@@ -1053,7 +1631,7 @@ uapmd_app_render_status_t uapmd_app_get_render_status(uapmd_app_model_t app) {
     };
 }
 
-void uapmd_app_clear_render_status(uapmd_app_model_t app) { AM(app)->clearCompletedRenderStatus(); }
+void uapmd_app_clear_completed_render_status(uapmd_app_model_t app) { AM(app)->clearCompletedRenderStatus(); }
 
 /* ═══════════════════════════════════════════════════════════════════════════
  *  TransportController

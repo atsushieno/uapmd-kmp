@@ -23,19 +23,8 @@ data class AddinInfo(
 )
 
 /**
- * Host side of the uapmd addin system (uapmd 0.5.6). An addin is a package that
- * attaches itself to named extension points a host publishes; ARA support is
- * one such addin.
- *
- * The usual sequence is: create the manager, publish every extension point the
- * addins you want need, then [initialize] to load whatever is installed. An
- * addin attaches to exactly one extension point and fails to load when the host
- * has not published it, so a host that leaves one out simply never sees those
- * addins.
- *
- * The engine's own two go up through [SequencerEngine.registerAddinExtensionPoints];
- * the four host-owned registries go up through the `register*` calls here.
- * Together they cover every extension point the addins uapmd ships ask for:
+ * Which call publishes which extension point, since they are split between the
+ * engine and the registries here:
  *
  * | Extension point | Published by | Addins |
  * |---|---|---|

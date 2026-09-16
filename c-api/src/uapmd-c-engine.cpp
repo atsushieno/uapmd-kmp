@@ -193,9 +193,9 @@ void uapmd_engine_set_sample_rate(uapmd_sequencer_engine_t engine, int32_t sampl
 bool uapmd_engine_get_offline_rendering(uapmd_sequencer_engine_t engine)          { return E(engine)->offlineRendering(); }
 void uapmd_engine_set_offline_rendering(uapmd_sequencer_engine_t engine, bool en) { E(engine)->offlineRendering(en); }
 void uapmd_engine_set_active(uapmd_sequencer_engine_t engine, bool active)        { E(engine)->setEngineActive(active); }
-/* SequencerEngine::setExternalPump() was removed in uapmd 0.5.5 (the engine no
- * longer runs an inline pump that a separate pump thread could race with).
- * Kept as a no-op so the C ABI and the Kotlin bindings stay source-compatible. */
+/* SequencerEngine has no external pump: it runs no inline pump that a separate
+ * pump thread could race with. Kept as a no-op so the C ABI and the Kotlin
+ * bindings still have something to call. */
 void uapmd_engine_set_external_pump(uapmd_sequencer_engine_t engine, bool en)     { (void) engine; (void) en; }
 
 /* Playback */
@@ -219,9 +219,9 @@ void uapmd_engine_set_parameter_value(uapmd_sequencer_engine_t e, int32_t id, in
 
 /* Audio analysis */
 
-/* uapmd 0.5.5 replaced SequencerEngine::get{Input,Output}Spectrum() with
- * AnalyserNode accessors. The C API keeps its "average magnitude per bar"
- * contract (values in 0..1), so bucket the analyser's time-domain data here. */
+/* The engine exposes spectra as AnalyserNode accessors, while the C API
+ * promises "average magnitude per bar" (values in 0..1), so bucket the
+ * analyser's time-domain data here. */
 static void fill_spectrum_bars(uapmd_graph::webaudio_compat::AnalyserNode* analyser, float* out, int numBars) {
     if (!out || numBars <= 0)
         return;
@@ -250,7 +250,7 @@ uapmd_timeline_facade_t uapmd_engine_timeline(uapmd_sequencer_engine_t engine) {
 }
 
 /* ═══════════════════════════════════════════════════════════════════════════
- *  Project / track dirty state (uapmd 0.5.6)
+ *  Project / track dirty state
  * ═══════════════════════════════════════════════════════════════════════════ */
 
 bool uapmd_engine_is_project_dirty(uapmd_sequencer_engine_t engine) { return E(engine)->isProjectDirty(); }
@@ -678,8 +678,8 @@ uapmd_audio_io_device_t uapmd_audio_device_mgr_open(uapmd_audio_io_device_mgr_t 
  * ═══════════════════════════════════════════════════════════════════════════ */
 
 double   uapmd_audio_device_sample_rate(uapmd_audio_io_device_t dev)      { return AD(dev)->sampleRate(); }
-/* AudioIODevice::channels() was removed in uapmd 0.5.5; it always returned the
- * output channel count, so keep that meaning for this C entry point. */
+/* AudioIODevice has no single channel count; this entry point means the output
+ * channel count. */
 uint32_t uapmd_audio_device_channels(uapmd_audio_io_device_t dev)         { return AD(dev)->outputChannels(); }
 uint32_t uapmd_audio_device_input_channels(uapmd_audio_io_device_t dev)   { return AD(dev)->inputChannels(); }
 uint32_t uapmd_audio_device_output_channels(uapmd_audio_io_device_t dev)  { return AD(dev)->outputChannels(); }

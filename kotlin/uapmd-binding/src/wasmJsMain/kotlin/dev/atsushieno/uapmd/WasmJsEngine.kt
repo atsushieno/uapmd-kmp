@@ -8,7 +8,7 @@ class WasmJsSequencerEngine internal constructor(
 
     private val engineHistory = WasmJsEngineHistory(handle)
 
-    // ─── Project / track dirty state (uapmd 0.5.6) ──────────────────────────
+    // ─── Project / track dirty state ────────────────────────────────────────
 
     override val isProjectDirty get() = engineHistory.isProjectDirty
     override fun isTrackDirty(trackIndex: Int) = engineHistory.isTrackDirty(trackIndex)

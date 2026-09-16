@@ -99,7 +99,7 @@ class JsAppModel internal constructor(internal val handle: Int) : AppModel {
         }
 
     override fun unblockPlugin(entryId: String): Boolean =
-        withJsCString(entryId) { p -> jsMod._uapmd_app_unblock_plugin(handle, p) as Boolean }
+        withJsCString(entryId) { p -> jsMod._uapmd_app_unblock_plugin_from_blocklist(handle, p) as Boolean }
 
     override fun refreshMasterTempoMap(): Double =
         jsMod._uapmd_app_refresh_master_tempo_map(handle) as Double
@@ -139,6 +139,15 @@ class JsAppModel internal constructor(internal val handle: Int) : AppModel {
 
     // ── Tracks ──────────────────────────────────────────────────────────────
 
+    override fun isTrackMuted(trackIndex: Int) =
+        jsMod._uapmd_app_is_track_muted(handle, trackIndex) as Boolean
+    override fun isTrackSolo(trackIndex: Int) =
+        jsMod._uapmd_app_is_track_solo(handle, trackIndex) as Boolean
+    override fun setTrackMuted(trackIndex: Int, muted: Boolean) =
+        jsMod._uapmd_app_set_track_muted(handle, trackIndex, muted) as Boolean
+    override fun setTrackSolo(trackIndex: Int, solo: Boolean) =
+        jsMod._uapmd_app_set_track_solo(handle, trackIndex, solo) as Boolean
+
     override fun addTrack(callback: (Int, String?) -> Unit) {
         jsMod._uapmd_app_add_track(handle, 0, makeJsTrackMutation(callback))
     }
@@ -157,7 +166,7 @@ class JsAppModel internal constructor(internal val handle: Int) : AppModel {
         JsTimelineTrack(jsMod._uapmd_app_get_timeline_track(handle, index.toInt()) as Int)
 
     override val masterTimelineTrack: TimelineTrack
-        get() = JsTimelineTrack(jsMod._uapmd_app_master_timeline_track(handle) as Int)
+        get() = JsTimelineTrack(jsMod._uapmd_app_get_master_timeline_track(handle) as Int)
 
     override fun getTimelineState(): TimelineState? =
         withWasmMem(80) { ptr ->
@@ -169,7 +178,7 @@ class JsAppModel internal constructor(internal val handle: Int) : AppModel {
 
     override val historyState: UndoState
         get() = withWasmMem(Off.STATE_SIZE) { p ->
-            jsMod._uapmd_app_get_history_state(handle, p)
+            jsMod._uapmd_app_history_state(handle, p)
             decodeUndoState(p)
         }
 
@@ -272,19 +281,240 @@ class JsAppModel internal constructor(internal val handle: Int) : AppModel {
     override val masterTempoMap: TempoMap
         get() = JsTempoMap(jsMod._uapmd_app_master_tempo_map(handle) as Int)
 
+    // ── Timeline clip selection and clipboard ───────────────────────────────
+
+    override fun isTimelineClipSelected(trackIndex: Int, clipId: Int): Boolean =
+        jsMod._uapmd_app_is_timeline_clip_selected(handle, trackIndex, clipId) as Boolean
+
+    override val selectedTimelineClips: List<TimelineClipTarget>
+        get() {
+            val count = jsMod._uapmd_app_selected_timeline_clips(handle, 0, 0) as Int
+            if (count <= 0) return emptyList()
+            return withWasmMem(count * Off.CLIP_TARGET_STRIDE) { buf ->
+                val filled = jsMod._uapmd_app_selected_timeline_clips(handle, buf, count) as Int
+                readJsClipTargets(buf, minOf(count, filled))
+            }
+        }
+
+    override fun selectTimelineClips(clips: List<TimelineClipTarget>, additive: Boolean, toggle: Boolean) {
+        if (clips.isEmpty()) {
+            jsMod._uapmd_app_select_timeline_clips(handle, 0, 0, additive, toggle)
+            return
+        }
+        withWasmMem(clips.size * Off.CLIP_TARGET_STRIDE) { buf ->
+            clips.forEachIndexed { i, t ->
+                val entry = buf + i * Off.CLIP_TARGET_STRIDE
+                jsSetI32(entry + Off.CLIP_TARGET_TRACK, t.trackIndex)
+                jsSetI32(entry + Off.CLIP_TARGET_CLIP, t.clipId)
+            }
+            jsMod._uapmd_app_select_timeline_clips(handle, buf, clips.size, additive, toggle)
+        }
+    }
+
+    override fun clearTimelineClipSelection() {
+        jsMod._uapmd_app_clear_timeline_clip_selection(handle)
+    }
+
+    override fun selectTimelineMidiClip(trackIndex: Int, clipId: Int): Boolean =
+        jsMod._uapmd_app_select_timeline_midi_clip(handle, trackIndex, clipId) as Boolean
+
+    override val selectedTimelineMidiClip: TimelineClipTarget?
+        get() = withWasmMem(Off.CLIP_TARGET_STRIDE) { out ->
+            if (!(jsMod._uapmd_app_selected_timeline_midi_clip(handle, out) as Boolean)) null
+            else TimelineClipTarget(
+                jsGetI32(out + Off.CLIP_TARGET_TRACK),
+                jsGetI32(out + Off.CLIP_TARGET_CLIP)
+            )
+        }
+
+    override val timelineClipboardCount: Int
+        get() = jsMod._uapmd_app_timeline_clipboard_count(handle) as Int
+
+    override fun clearTimelineClipboard() {
+        jsMod._uapmd_app_clear_timeline_clipboard(handle)
+    }
+
+    override fun copySelectedTimelineClips(): Boolean =
+        jsMod._uapmd_app_copy_selected_timeline_clips(handle) as Boolean
+
+    override fun deleteSelectedTimelineClips(cut: Boolean): TimelineClipDeleteResult {
+        // One call only: this both deletes and reports. A track can lose several
+        // clips but appears once, so the selection size bounds the changed-track
+        // list — measured before the call, which clears the selection.
+        val capacity = selectedTimelineClips.size
+        return withWasmMem(maxOf(capacity, 1) * 4) { tracks ->
+            withWasmMem(4) { countPtr ->
+                jsSetI32(countPtr, capacity)
+                val ok = jsMod._uapmd_app_delete_selected_timeline_clips(
+                    handle, cut, if (capacity > 0) tracks else 0, countPtr) as Boolean
+                val count = minOf(capacity, jsGetI32(countPtr))
+                TimelineClipDeleteResult(
+                    ok,
+                    (0 until count).map { jsGetI32(tracks + it * 4) },
+                    lastTimelineClipError.ifEmpty { null }
+                )
+            }
+        }
+    }
+
+    override fun timelinePasteDestinations(trackIndex: Int, originalTracks: Boolean): List<Int> {
+        val count = jsMod._uapmd_app_timeline_paste_destinations(handle, trackIndex, originalTracks, 0, 0) as Int
+        if (count <= 0) return emptyList()
+        return withWasmMem(count * 4) { buf ->
+            val filled = jsMod._uapmd_app_timeline_paste_destinations(
+                handle, trackIndex, originalTracks, buf, count) as Int
+            (0 until minOf(count, filled)).map { jsGetI32(buf + it * 4) }
+        }
+    }
+
+    override fun pasteTimelineClips(
+        trackIndex: Int,
+        positionSeconds: Double,
+        originalTracks: Boolean
+    ): TimelinePasteResult {
+        // A paste creates at most one clip per clipboard entry, which bounds it.
+        val capacity = timelineClipboardCount
+        return withWasmMem(maxOf(capacity, 1) * Off.CLIP_TARGET_STRIDE) { buf ->
+            withWasmMem(4) { countPtr ->
+                jsSetI32(countPtr, capacity)
+                val ok = jsMod._uapmd_app_paste_timeline_clips(
+                    handle, trackIndex, positionSeconds, originalTracks,
+                    if (capacity > 0) buf else 0, countPtr) as Boolean
+                val count = minOf(capacity, jsGetI32(countPtr))
+                TimelinePasteResult(ok, readJsClipTargets(buf, count), lastTimelineClipError.ifEmpty { null })
+            }
+        }
+    }
+
+    override val lastTimelineClipError: String
+        get() = (jsMod._uapmd_app_last_timeline_clip_error() as Int)
+            .let { if (it != 0) jsMod.UTF8ToString(it) as String else "" }
+
+    // ── Piano roll editing session ──────────────────────────────────────────
+
+    override fun pianoRollClipSnapshot(
+        trackIndex: Int,
+        clipId: Int,
+        fallbackDurationSeconds: Double
+    ): PianoRollSnapshot? =
+        (jsMod._uapmd_app_piano_roll_clip_snapshot(handle, trackIndex, clipId, fallbackDurationSeconds) as Int)
+            .takeIf { it != 0 }?.let { JsPianoRollSnapshot(it) }
+
+    override fun openPianoRollSession(trackIndex: Int, clipId: Int): PianoRollSession? =
+        (jsMod._uapmd_app_open_piano_roll_session(handle, trackIndex, clipId) as Int)
+            .takeIf { it != 0 }?.let { JsPianoRollSession(it) }
+
+    override fun findPianoRollSession(trackIndex: Int, clipId: Int): PianoRollSession? =
+        (jsMod._uapmd_app_find_piano_roll_session(handle, trackIndex, clipId) as Int)
+            .takeIf { it != 0 }?.let { JsPianoRollSession(it) }
+
+    override fun closePianoRollSession(trackIndex: Int, clipId: Int) {
+        jsMod._uapmd_app_close_piano_roll_session(handle, trackIndex, clipId)
+    }
+
+    override fun recordPianoRollCommitSource(trackIndex: Int, clipId: Int) {
+        jsMod._uapmd_app_record_piano_roll_commit_source(handle, trackIndex, clipId)
+    }
+
+    override fun pianoRollSourceMatchesLastEdit(): Boolean =
+        jsMod._uapmd_app_piano_roll_source_matches_last_edit(handle) as Boolean
+
+    override fun clearPianoRollCommitSource() {
+        jsMod._uapmd_app_clear_piano_roll_commit_source(handle)
+    }
+
+    // ── Assorted accessors ──────────────────────────────────────────────────
+    //
+    // wasm32 layouts, checked with _Static_assert under emcc:
+    //   uapmd_midi_port_info_t          char* @0, char* @4                      (8)
+    //   uapmd_timeline_content_bounds_t bool @0, double @8, @16, @24           (32)
+    //   uapmd_device_entry_t            i32 @0, char* @4 @8 @12, bool @16 @17 @18 (20)
+    //   uapmd_plugin_state_result_t     i32 @0, bool @4, char* @8, char* @12   (16)
+
+    override val midiInputPorts: List<MidiPortInfo>
+        get() = jsMidiPorts { out, n -> jsMod._uapmd_app_get_midi_input_ports(handle, out, n) }
+
+    override val midiOutputPorts: List<MidiPortInfo>
+        get() = jsMidiPorts { out, n -> jsMod._uapmd_app_get_midi_output_ports(handle, out, n) }
+
+    override fun isTrackHidden(trackIndex: Int): Boolean =
+        jsMod._uapmd_app_is_track_hidden(handle, trackIndex) as Boolean
+
+    override val timelineContentBounds: TimelineContentBounds
+        get() = withWasmMem(JsTimelineContentBoundsSize) { out ->
+            jsMod._uapmd_app_timeline_content_bounds(out, handle)
+            TimelineContentBounds(
+                hasContent = jsGetBool(out),
+                startSeconds = jsMod.getValue(out + 8, "double") as Double,
+                endSeconds = jsMod.getValue(out + 16, "double") as Double,
+                durationSeconds = jsMod.getValue(out + 24, "double") as Double
+            )
+        }
+
+    override val devices: List<DeviceEntry>
+        get() {
+            val n = jsMod._uapmd_app_get_devices(handle, 0, 0) as Int
+            if (n == 0) return emptyList()
+            return withWasmMem(n * JsDeviceEntrySize) { out ->
+                val filled = jsMod._uapmd_app_get_devices(handle, out, n) as Int
+                (0 until filled).map { jsReadDeviceEntry(out + it * JsDeviceEntrySize) }
+            }
+        }
+
+    override fun deviceForInstance(instanceId: Int): DeviceEntry? =
+        withWasmMem(JsDeviceEntrySize) { out ->
+            if (jsMod._uapmd_app_get_device_for_instance(handle, instanceId, out) != true) null
+            else jsReadDeviceEntry(out)
+        }
+
+    override fun updateDeviceLabel(instanceId: Int, label: String) {
+        withJsCString(label) { p -> jsMod._uapmd_app_update_device_label(handle, instanceId, p) }
+    }
+
+    override fun loadPluginState(instanceId: Int, filepath: String, callback: (PluginStateResult) -> Unit) {
+        withJsCString(filepath) { p ->
+            jsMod._uapmd_app_load_plugin_state(handle, instanceId, p, 0, makeJsPluginState(callback))
+        }
+    }
+
+    override fun savePluginState(instanceId: Int, filepath: String, callback: (PluginStateResult) -> Unit) {
+        withJsCString(filepath) { p ->
+            jsMod._uapmd_app_save_plugin_state(handle, instanceId, p, 0, makeJsPluginState(callback))
+        }
+    }
+
+    override fun loadPluginStateSync(instanceId: Int, filepath: String): PluginStateResult =
+        withWasmMem(JsPluginStateResultSize) { out ->
+            withJsCString(filepath) { p -> jsMod._uapmd_app_load_plugin_state_sync(out, handle, instanceId, p) }
+            jsReadPluginStateResult(out)
+        }
+
+    override fun savePluginStateSync(instanceId: Int, filepath: String): PluginStateResult =
+        withWasmMem(JsPluginStateResultSize) { out ->
+            withJsCString(filepath) { p -> jsMod._uapmd_app_save_plugin_state_sync(out, handle, instanceId, p) }
+            jsReadPluginStateResult(out)
+        }
+
+    override fun markPluginInstanceTrackDirty(instanceId: Int) {
+        jsMod._uapmd_app_mark_plugin_instance_track_dirty(handle, instanceId)
+    }
+
     // ── MIDI clip UMP events ────────────────────────────────────────────────
     // uapmd_ump_events_result_t: bool @0, char* @4, uint32 @8, ptr @12 (16 bytes)
     // uapmd_ump_event_t:         uint64 @0, uint32 @8, ptr @12 (16 bytes)
 
     override fun getMidiClipUmpEvents(trackIndex: Int, clipId: Int): UmpEventsResult =
-        withWasmMem(16) { out ->
+        // uapmd_ump_events_result_t: ok@0 err@4 count@8 events@12 tickRes@16 tempo@24, size 32
+        withWasmMem(32) { out ->
             jsMod._uapmd_app_get_midi_clip_ump_events(out, handle, trackIndex, clipId)
             val ok = (jsMod.getValue(out, "i8") as Int) != 0
             val errPtr = jsMod.getValue(out + 4, "i32") as Int
             val error = if (errPtr != 0) jsMod.UTF8ToString(errPtr) as String else null
             val count = jsMod.getValue(out + 8, "i32") as Int
             val eventsPtr = jsMod.getValue(out + 12, "i32") as Int
-            if (!ok || eventsPtr == 0 || count == 0) UmpEventsResult(ok, error, emptyList())
+            val tickRes = (jsMod.getValue(out + 16, "i32") as Int).toUInt()
+            val tempo = jsMod.getValue(out + 24, "double") as Double
+            if (!ok || eventsPtr == 0 || count == 0) UmpEventsResult(ok, error, emptyList(), tickRes, tempo)
             else UmpEventsResult(ok, error, (0 until count).map { i ->
                 val base = eventsPtr + i * 16
                 val lo = (jsMod.getValue(base, "i32") as Int).toLong() and 0xFFFFFFFFL
@@ -294,7 +524,7 @@ class JsAppModel internal constructor(internal val handle: Int) : AppModel {
                 UmpEvent(hi * 4294967296L + lo, UIntArray(wordCount) { w ->
                     (jsMod.getValue(wordsPtr + w * 4, "i32") as Int).toUInt()
                 })
-            })
+            }, tickRes, tempo)
         }
 
     override fun addUmpEventToClip(trackIndex: Int, clipId: Int, tick: Long, words: UIntArray): Boolean =
@@ -332,6 +562,179 @@ class JsAppModel internal constructor(internal val handle: Int) : AppModel {
             (jsMod.getValue(out + 8, "i8") as Int) != 0,
             if (errPtr != 0) jsMod.UTF8ToString(errPtr) as String else null
         )
+    }
+
+    override fun addClipToTrack(
+        trackIndex: Int, position: TimelinePosition, reader: AudioFileReader, filepath: String
+    ): ClipAddResult = withWasmMem(JsClipAddResultSize) { out ->
+        withWasmMem(JsTimelinePositionSize) { pos ->
+            jsWritePosition(pos, position)
+            withJsCString(filepath) { fp ->
+                jsMod._uapmd_app_add_clip_to_track(
+                    out, handle, trackIndex, pos, (reader as JsAudioFileReader).handle, fp
+                )
+            }
+        }
+        jsDecodeClipAddResult(out)
+    }
+
+    override fun addMidiClipToTrack(trackIndex: Int, position: TimelinePosition, filepath: String): ClipAddResult =
+        withWasmMem(JsClipAddResultSize) { out ->
+            withWasmMem(JsTimelinePositionSize) { pos ->
+                jsWritePosition(pos, position)
+                withJsCString(filepath) { fp ->
+                    jsMod._uapmd_app_add_midi_clip_to_track(out, handle, trackIndex, pos, fp)
+                }
+            }
+            jsDecodeClipAddResult(out)
+        }
+
+    override fun addMidiClipFromData(
+        trackIndex: Int, position: TimelinePosition,
+        umpEvents: List<UInt>, tickTimestamps: List<ULong>,
+        tickResolution: UInt, clipTempo: Double,
+        tempoChanges: List<MidiTempoChange>, timeSignatureChanges: List<MidiTimeSignatureChange>,
+        clipName: String, needsFileSave: Boolean
+    ): ClipAddResult {
+        val owned = mutableListOf<Int>()
+        fun alloc(size: Int): Int = (jsMod._malloc(size) as Int).also { owned += it }
+        try {
+            val umpBuf = if (umpEvents.isEmpty()) 0 else alloc(umpEvents.size * 4).also { b ->
+                umpEvents.forEachIndexed { i, v -> jsSetI32(b + i * 4, v.toInt()) }
+            }
+            val tickBuf = if (tickTimestamps.isEmpty()) 0 else alloc(tickTimestamps.size * 8).also { b ->
+                tickTimestamps.forEachIndexed { i, v -> jsSetI64(b + i * 8, v.toLong()) }
+            }
+            // uapmd_midi_tempo_change_t: uint64 @0, double @8 (16 bytes)
+            val tempoBuf = if (tempoChanges.isEmpty()) 0 else alloc(tempoChanges.size * 16).also { b ->
+                tempoChanges.forEachIndexed { i, t ->
+                    jsSetI64(b + i * 16, t.tickPosition.toLong())
+                    jsMod.setValue(b + i * 16 + 8, t.bpm, "double")
+                }
+            }
+            // uapmd_midi_time_sig_change_t: uint64 @0, four uint8 @8..11 (16 bytes)
+            val sigBuf = if (timeSignatureChanges.isEmpty()) 0 else alloc(timeSignatureChanges.size * 16).also { b ->
+                timeSignatureChanges.forEachIndexed { i, t ->
+                    jsSetI64(b + i * 16, t.tickPosition.toLong())
+                    jsSetI8(b + i * 16 + 8, t.numerator.toInt())
+                    jsSetI8(b + i * 16 + 9, t.denominator.toInt())
+                    jsSetI8(b + i * 16 + 10, t.clocksPerClick.toInt())
+                    jsSetI8(b + i * 16 + 11, t.thirtySecondsPerQuarter.toInt())
+                }
+            }
+            return withWasmMem(JsClipAddResultSize) { out ->
+                withWasmMem(JsTimelinePositionSize) { pos ->
+                    jsWritePosition(pos, position)
+                    withJsCString(clipName) { name ->
+                        jsMod._uapmd_app_add_midi_clip_from_data(
+                            out, handle, trackIndex, pos,
+                            umpBuf, umpEvents.size, tickBuf, tickTimestamps.size,
+                            tickResolution.toInt(), clipTempo,
+                            tempoBuf, tempoChanges.size, sigBuf, timeSignatureChanges.size,
+                            name, needsFileSave
+                        )
+                    }
+                }
+                jsDecodeClipAddResult(out)
+            }
+        } finally { owned.forEach { jsMod._free(it) } }
+    }
+
+    override fun addDeviceInputToTrack(trackIndex: Int, channelIndices: List<UInt>): Int {
+        if (channelIndices.isEmpty())
+            return jsMod._uapmd_app_add_device_input_to_track(handle, trackIndex, 0, 0) as Int
+        return withWasmMem(channelIndices.size * 4) { buf ->
+            channelIndices.forEachIndexed { i, v -> jsSetI32(buf + i * 4, v.toInt()) }
+            jsMod._uapmd_app_add_device_input_to_track(handle, trackIndex, buf, channelIndices.size) as Int
+        }
+    }
+
+    // ── Master track markers ────────────────────────────────────────────────
+
+    override val masterMarkers: List<ClipMarkerData>
+        get() {
+            val n = jsMod._uapmd_app_master_marker_count(handle) as Int
+            if (n == 0) return emptyList()
+            return withWasmMem(JsClipMarkerSize) { out ->
+                (0 until n).mapNotNull { i ->
+                    if (jsMod._uapmd_app_get_master_marker(handle, i, out) != true) null
+                    else jsReadClipMarker(out)
+                }
+            }
+        }
+
+    override fun setMasterTrackMarkersWithValidation(markers: List<ClipMarkerData>): OpResult {
+        val owned = mutableListOf<Int>()
+        fun cstr(v: String): Int {
+            val size = jsMod.lengthBytesUTF8(v) as Int + 1
+            val p = jsMod._malloc(size) as Int
+            jsMod.stringToUTF8(v, p, size)
+            owned += p
+            return p
+        }
+        val buf = if (markers.isEmpty()) 0 else (jsMod._malloc(markers.size * JsClipMarkerSize) as Int).also { owned += it }
+        return try {
+            markers.forEachIndexed { i, m ->
+                val b = buf + i * JsClipMarkerSize
+                jsSetI32(b, cstr(m.markerId))
+                jsMod.setValue(b + 8, m.clipPositionOffset, "double")
+                jsSetI32(b + 16, m.referenceType.nativeValue)
+                jsSetI32(b + 20, cstr(m.referenceClipId))
+                jsSetI32(b + 24, cstr(m.referenceMarkerId))
+                jsSetI32(b + 28, cstr(m.name))
+            }
+            withWasmMem(8) { out ->
+                jsMod._uapmd_app_set_master_track_markers_with_validation(out, handle, buf, markers.size)
+                jsReadOpResult(out)
+            }
+        } finally { owned.forEach { jsMod._free(it) } }
+    }
+
+    // ── Offline render to file ──────────────────────────────────────────────
+
+    override fun startRenderToFile(settings: RenderToFileSettings): Boolean =
+        withWasmMem(JsAppRenderSettingsSize) { p ->
+            withJsCString(settings.outputPath) { path ->
+                jsSetI32(p, path)
+                jsMod.setValue(p + 8, settings.startSeconds, "double")
+                jsMod.setValue(p + 16, settings.endSeconds, "double")
+                jsSetI8(p + 24, if (settings.hasEndSeconds) 1 else 0)
+                jsSetI8(p + 25, if (settings.useContentFallback) 1 else 0)
+                jsSetI8(p + 26, if (settings.contentBoundsValid) 1 else 0)
+                jsMod.setValue(p + 32, settings.contentStartSeconds, "double")
+                jsMod.setValue(p + 40, settings.contentEndSeconds, "double")
+                jsMod.setValue(p + 48, settings.tailSeconds, "double")
+                jsSetI8(p + 56, if (settings.enableSilenceStop) 1 else 0)
+                jsMod.setValue(p + 64, settings.silenceDurationSeconds, "double")
+                jsMod.setValue(p + 72, settings.silenceThresholdDb, "double")
+                jsMod._uapmd_app_start_render_to_file(handle, p) as Boolean
+            }
+        }
+
+    override fun cancelRenderToFile() {
+        jsMod._uapmd_app_cancel_render_to_file(handle)
+    }
+
+    override val renderToFileStatus: RenderToFileStatus
+        get() = withWasmMem(JsAppRenderStatusSize) { out ->
+            jsMod._uapmd_app_get_render_to_file_status(out, handle)
+            RenderToFileStatus(
+                running = jsGetBool(out),
+                completed = jsGetBool(out + 1),
+                success = jsGetBool(out + 2),
+                progress = jsMod.getValue(out + 8, "double") as Double,
+                renderedSeconds = jsMod.getValue(out + 16, "double") as Double,
+                message = jsStrAt(out + 24),
+                outputPath = jsStrAt(out + 28)
+            )
+        }
+
+    override fun clearCompletedRenderStatus() {
+        jsMod._uapmd_app_clear_completed_render_status(handle)
+    }
+
+    override fun requestShowTrackGraph(trackIndex: Int) {
+        jsMod._uapmd_app_request_show_track_graph(handle, trackIndex)
     }
 
     // ── Track graph ─────────────────────────────────────────────────────────
@@ -527,6 +930,67 @@ private const val JsGraphAudioBusSize = 20
 private const val JsClipMarkerSize = 32
 private const val JsWarpPointSize = 32
 
+private const val JsClipAddResultSize = 16
+private const val JsAppRenderSettingsSize = 80
+private const val JsAppRenderStatusSize = 32
+
+private fun jsReadClipMarker(p: Int) = ClipMarkerData(
+    markerId = jsStrAt(p),
+    clipPositionOffset = jsMod.getValue(p + 8, "double") as Double,
+    referenceType = WarpReferenceType.fromNative(jsMod.getValue(p + 16, "i32") as Int),
+    referenceClipId = jsStrAt(p + 20),
+    referenceMarkerId = jsStrAt(p + 24),
+    name = jsStrAt(p + 28)
+)
+
+private const val JsMidiPortInfoSize = 8
+private const val JsTimelineContentBoundsSize = 32
+private const val JsDeviceEntrySize = 20
+private const val JsPluginStateResultSize = 16
+
+/**
+ * Both port getters answer the count for a null `out`, and neither mutates
+ * anything, so the count-then-fill call pair is safe here.
+ */
+private fun jsMidiPorts(call: (out: Int, count: Int) -> dynamic): List<MidiPortInfo> {
+    val n = call(0, 0) as Int
+    if (n == 0) return emptyList()
+    return withWasmMem(n * JsMidiPortInfoSize) { out ->
+        val filled = call(out, n) as Int
+        (0 until filled).map { i ->
+            val p = out + i * JsMidiPortInfoSize
+            MidiPortInfo(jsStrAt(p), jsStrAt(p + 4))
+        }
+    }
+}
+
+private fun jsReadDeviceEntry(p: Int) = DeviceEntry(
+    id = jsMod.getValue(p, "i32") as Int,
+    label = jsStrAt(p + 4),
+    apiName = jsStrAt(p + 8),
+    statusMessage = jsStrAt(p + 12),
+    running = jsGetBool(p + 16),
+    instantiating = jsGetBool(p + 17),
+    hasError = jsGetBool(p + 18)
+)
+
+private fun jsReadPluginStateResult(p: Int) = PluginStateResult(
+    instanceId = jsMod.getValue(p, "i32") as Int,
+    success = jsGetBool(p + 4),
+    error = jsStrAt(p + 8),
+    filepath = jsStrAt(p + 12)
+)
+
+/** uapmd_plugin_state_result_t arrives by value, i.e. as a pointer. */
+private fun makeJsPluginState(callback: (PluginStateResult) -> Unit): Int {
+    var slot = 0
+    val fn: (dynamic, dynamic) -> Unit = { resultPtr, _ ->
+        try { callback(jsReadPluginStateResult(resultPtr as Int)) } finally { removeJsCallback(slot) }
+    }
+    slot = addJsCallback(fn.asDynamic(), "vii")
+    return slot
+}
+
 private fun jsStrAt(ptr: Int): String {
     val p = jsMod.getValue(ptr, "i32") as Int
     return if (p != 0) jsMod.UTF8ToString(p) as String else ""
@@ -624,6 +1088,8 @@ class JsTransportController internal constructor(internal val handle: Int) : Tra
     override fun pause() { jsMod._uapmd_transport_pause(handle) }
     override fun resume() { jsMod._uapmd_transport_resume(handle) }
     override fun record() { jsMod._uapmd_transport_record(handle) }
+
+    override fun jump(positionSeconds: Double) { jsMod._uapmd_transport_jump(handle, positionSeconds) }
 }
 
 actual fun instantiateAppModel() {
@@ -638,4 +1104,116 @@ actual fun getAppModel(): AppModel {
 
 actual fun cleanupAppModel() {
     jsMod._uapmd_app_cleanup()
+}
+
+private fun readJsClipTargets(base: Int, count: Int): List<TimelineClipTarget> =
+    (0 until count).map {
+        val entry = base + it * Off.CLIP_TARGET_STRIDE
+        TimelineClipTarget(
+            jsGetI32(entry + Off.CLIP_TARGET_TRACK),
+            jsGetI32(entry + Off.CLIP_TARGET_CLIP)
+        )
+    }
+
+private fun readJsPianoRollNote(p: Int) = PianoRollNote(
+    startSeconds = jsGetF64(p + Off.PR_NOTE_START),
+    durationSeconds = jsGetF64(p + Off.PR_NOTE_DURATION),
+    velocity = (jsMod.getValue(p + Off.PR_NOTE_VELOCITY, "float") as Number).toFloat(),
+    note = jsGetI8(p + Off.PR_NOTE_NOTE) and 0xFF,
+    channel = jsGetI8(p + Off.PR_NOTE_CHANNEL) and 0xFF,
+    deleted = jsGetBool(p + Off.PR_NOTE_DELETED),
+    editId = jsGetI64(p + Off.PR_NOTE_EDIT_ID),
+    umpGroup = jsGetI8(p + Off.PR_NOTE_UMP_GROUP) and 0xFF,
+    releaseVelocity = (jsMod.getValue(p + Off.PR_NOTE_RELEASE_VELOCITY, "i16") as Int) and 0xFFFF,
+    attributeType = jsGetI8(p + Off.PR_NOTE_ATTRIBUTE_TYPE) and 0xFF,
+    attributeValue = (jsMod.getValue(p + Off.PR_NOTE_ATTRIBUTE_VALUE, "i16") as Int) and 0xFFFF,
+    automationEventCount = jsGetI32(p + Off.PR_NOTE_AUTOMATION_COUNT)
+)
+
+class JsPianoRollSnapshot internal constructor(internal val handle: Int) : PianoRollSnapshot {
+    override val isReady: Boolean get() = jsMod._uapmd_piano_roll_snapshot_ready(handle) as Boolean
+    override val error: String
+        get() = (jsMod._uapmd_piano_roll_snapshot_error(handle) as Int)
+            .let { if (it != 0) jsMod.UTF8ToString(it) as String else "" }
+    override val durationSeconds: Double
+        get() = jsMod._uapmd_piano_roll_snapshot_duration_seconds(handle) as Double
+    override val minNote: Int get() = jsMod._uapmd_piano_roll_snapshot_min_note(handle) as Int
+    override val maxNote: Int get() = jsMod._uapmd_piano_roll_snapshot_max_note(handle) as Int
+
+    override val notes: List<PianoRollNote>
+        get() = withWasmMem(Off.PR_NOTE_SIZE) { out ->
+            (0 until (jsMod._uapmd_piano_roll_snapshot_note_count(handle) as Int)).mapNotNull { i ->
+                if (!(jsMod._uapmd_piano_roll_snapshot_get_note(handle, i, out) as Boolean)) null
+                else readJsPianoRollNote(out)
+            }
+        }
+
+    override fun close() { jsMod._uapmd_piano_roll_snapshot_destroy(handle) }
+}
+
+class JsPianoRollSession internal constructor(private val handle: Int) : PianoRollSession {
+    override val notes: List<PianoRollNote>
+        get() = withWasmMem(Off.PR_NOTE_SIZE) { out ->
+            (0 until (jsMod._uapmd_piano_roll_session_note_count(handle) as Int)).mapNotNull { i ->
+                if (!(jsMod._uapmd_piano_roll_session_get_note(handle, i, out) as Boolean)) null
+                else readJsPianoRollNote(out)
+            }
+        }
+
+    override fun isNoteSelected(index: Int) =
+        jsMod._uapmd_piano_roll_session_is_note_selected(handle, index) as Boolean
+    override val selectedNoteCount: Int
+        get() = jsMod._uapmd_piano_roll_session_selected_note_count(handle) as Int
+
+    override var focusedNote: Int
+        get() = jsMod._uapmd_piano_roll_session_focused_note(handle) as Int
+        set(value) { jsMod._uapmd_piano_roll_session_set_focused_note(handle, value) }
+
+    override val durationSeconds: Double
+        get() = jsMod._uapmd_piano_roll_session_duration_seconds(handle) as Double
+    override val minNote: Int get() = jsMod._uapmd_piano_roll_session_min_note(handle) as Int
+    override val maxNote: Int get() = jsMod._uapmd_piano_roll_session_max_note(handle) as Int
+    override val clipboardCount: Int get() = jsMod._uapmd_piano_roll_session_clipboard_count(handle) as Int
+    override val isDirty: Boolean get() = jsMod._uapmd_piano_roll_session_dirty(handle) as Boolean
+    override val error: String
+        get() = (jsMod._uapmd_piano_roll_session_error(handle) as Int)
+            .let { if (it != 0) jsMod.UTF8ToString(it) as String else "" }
+
+    override fun matchesSource(snapshot: PianoRollSnapshot) =
+        jsMod._uapmd_piano_roll_session_matches_source(
+            handle, (snapshot as JsPianoRollSnapshot).handle) as Boolean
+
+    override fun loadNotes(snapshot: PianoRollSnapshot?) {
+        jsMod._uapmd_piano_roll_session_load_notes(handle, (snapshot as JsPianoRollSnapshot?)?.handle ?: 0)
+    }
+
+    override fun selectNote(index: Int, additive: Boolean, toggle: Boolean) {
+        jsMod._uapmd_piano_roll_session_select_note(handle, index, additive, toggle)
+    }
+
+    override fun performAction(action: PianoRollAction, pasteSeconds: Double) {
+        jsMod._uapmd_piano_roll_session_perform_action(handle, action.nativeValue, pasteSeconds)
+    }
+
+    override fun createNote(startSeconds: Double, durationSeconds: Double, note: Int, velocity: Float) {
+        jsMod._uapmd_piano_roll_session_create_note(handle, startSeconds, durationSeconds, note, velocity)
+    }
+
+    override fun deleteNote(index: Int) { jsMod._uapmd_piano_roll_session_delete_note(handle, index) }
+
+    override fun resizeNote(index: Int, startSeconds: Double, durationSeconds: Double, note: Int) {
+        jsMod._uapmd_piano_roll_session_resize_note(handle, index, startSeconds, durationSeconds, note)
+    }
+
+    override fun beginDrag() { jsMod._uapmd_piano_roll_session_begin_drag(handle) }
+    override fun moveSelection(timeDeltaSeconds: Double, pitchDelta: Int) {
+        jsMod._uapmd_piano_roll_session_move_selection(handle, timeDeltaSeconds, pitchDelta)
+    }
+    override fun cancelDrag() { jsMod._uapmd_piano_roll_session_cancel_drag(handle) }
+    override fun finishDrag(index: Int, originalStart: Double, originalEnd: Double, originalNote: Int) {
+        jsMod._uapmd_piano_roll_session_finish_drag(handle, index, originalStart, originalEnd, originalNote)
+    }
+
+    override fun commit(app: AppModel) =
+        jsMod._uapmd_piano_roll_session_commit(handle, (app as JsAppModel).handle) as Boolean
 }

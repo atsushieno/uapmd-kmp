@@ -34,9 +34,22 @@ data class EditorPalette(
     val note: Color,
     val playhead: Color,
     val rangeFill: Color,
+    /** Wash over a selected clip, and its heavier border (uapmd-app's Header colours). */
+    val selectionFill: Color,
+    val selectionBorder: Color,
     val muted: Color,
     val solo: Color,
     val frozen: Color,
+    /**
+     * Ruler ticks and the grid they continue into the lanes. uapmd-app derives
+     * these from the text colour at fixed alphas (TimelineAxis.cpp): 0.30/0.10
+     * for the seconds grid, 0.35/0.12 for bars and beats, so they read as
+     * structure rather than as content.
+     */
+    val rulerMajorTick: Color,
+    val rulerMinorTick: Color,
+    val gridMajorLine: Color,
+    val gridMinorLine: Color,
     val rendering: Color,
     // piano roll
     val rowWhite: Color,
@@ -73,7 +86,13 @@ private val DarkEditorPalette = EditorPalette(
     clipBorder           = Color(0xFF9A8FC7),
     note                 = Color(0xFFBFD8F0),
     playhead             = Color(0xFFE8C547),
+    rulerMajorTick       = Color(0xB3C8C8D4),
+    rulerMinorTick       = Color(0x66C8C8D4),
+    gridMajorLine        = Color(0x4DE4E4EC),
+    gridMinorLine        = Color(0x1FE4E4EC),
     rangeFill            = Color(0x552F6FA8),
+    selectionFill        = Color(0x593F72B8),
+    selectionBorder      = Color(0xFF6E9BE0),
     muted                = Color(0xFFB32828),
     solo                 = Color(0xFFD1850F),
     frozen               = Color(0xFF7FD4F0),
@@ -115,7 +134,13 @@ private val LightEditorPalette = EditorPalette(
     clipBorder           = Color(0xFF6E62A6),
     note                 = Color(0xFF1D3E63),
     playhead             = Color(0xFFC2410C),
+    rulerMajorTick       = Color(0xB33A3A44),
+    rulerMinorTick       = Color(0x663A3A44),
+    gridMajorLine        = Color(0x4D2A2A32),
+    gridMinorLine        = Color(0x1F2A2A32),
     rangeFill            = Color(0x552F6FA8),
+    selectionFill        = Color(0x593F72B8),
+    selectionBorder      = Color(0xFF6E9BE0),
     muted                = Color(0xFFB32828),
     solo                 = Color(0xFFA96A00),
     frozen               = Color(0xFF0E7C9E),

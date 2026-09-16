@@ -626,9 +626,6 @@ external interface UapmdCApiModule : JsAny {
     // FIRST argument (Emscripten sret), and a struct passed by value is passed
     // as a pointer in its declared position.
     //
-    // uapmd 0.5.7 withdrew the ProjectUndoEngine handle; the command manager
-    // carries the whole history contract now, so the uapmdUndoEngine* family is
-    // gone and its calls live here.
 
     @JsName("_uapmd_command_manager_get_state")
     fun uapmdCommandManagerGetState(cm: Int, outPtr: Int): Boolean
@@ -1021,11 +1018,19 @@ external interface UapmdCApiModule : JsAny {
     fun uapmdAppBlocklistCount(app: Int): Int
     @JsName("_uapmd_app_get_blocklist_entry")
     fun uapmdAppGetBlocklistEntry(app: Int, index: Int, out: Int): Boolean
-    @JsName("_uapmd_app_unblock_plugin")
+    @JsName("_uapmd_app_unblock_plugin_from_blocklist")
     fun uapmdAppUnblockPlugin(app: Int, entryIdPtr: Int): Boolean
     @JsName("_uapmd_app_clear_plugin_blocklist")
     fun uapmdAppClearPluginBlocklist(app: Int)
 
+    @JsName("_uapmd_app_is_track_muted")
+    fun uapmdAppIsTrackMuted(app: Int, trackIndex: Int): Boolean
+    @JsName("_uapmd_app_is_track_solo")
+    fun uapmdAppIsTrackSolo(app: Int, trackIndex: Int): Boolean
+    @JsName("_uapmd_app_set_track_muted")
+    fun uapmdAppSetTrackMuted(app: Int, trackIndex: Int, muted: Boolean): Boolean
+    @JsName("_uapmd_app_set_track_solo")
+    fun uapmdAppSetTrackSolo(app: Int, trackIndex: Int, solo: Boolean): Boolean
     @JsName("_uapmd_app_add_track")
     fun uapmdAppAddTrack(app: Int, userData: Int, callback: Int)
     @JsName("_uapmd_app_remove_track")
@@ -1037,12 +1042,12 @@ external interface UapmdCApiModule : JsAny {
     fun uapmdAppTimelineTrackCount(app: Int): Int
     @JsName("_uapmd_app_get_timeline_track")
     fun uapmdAppGetTimelineTrack(app: Int, index: Int): Int
-    @JsName("_uapmd_app_master_timeline_track")
+    @JsName("_uapmd_app_get_master_timeline_track")
     fun uapmdAppMasterTimelineTrack(app: Int): Int
     @JsName("_uapmd_app_get_timeline_state")
     fun uapmdAppGetTimelineState(app: Int, out: Int): Boolean
 
-    @JsName("_uapmd_app_get_history_state")
+    @JsName("_uapmd_app_history_state")
     fun uapmdAppGetHistoryState(app: Int, out: Int): Boolean
     @JsName("_uapmd_app_undo")
     fun uapmdAppUndo(app: Int, userData: Int, callback: Int)
@@ -1081,6 +1086,181 @@ external interface UapmdCApiModule : JsAny {
     fun uapmdAppNewProject(out: Int, app: Int)
     @JsName("_uapmd_app_master_tempo_map")
     fun uapmdAppMasterTempoMap(app: Int): Int
+
+    // ── Timeline clip selection and clipboard ──────────────────────────────
+
+    @JsName("_uapmd_app_is_timeline_clip_selected")
+    fun uapmdAppIsTimelineClipSelected(app: Int, t: Int, c: Int): Boolean
+    @JsName("_uapmd_app_selected_timeline_clips")
+    fun uapmdAppSelectedTimelineClips(app: Int, outPtr: Int, outCount: Int): Int
+    @JsName("_uapmd_app_select_timeline_clips")
+    fun uapmdAppSelectTimelineClips(app: Int, clipsPtr: Int, clipCount: Int, additive: Boolean, toggle: Boolean)
+    @JsName("_uapmd_app_clear_timeline_clip_selection")
+    fun uapmdAppClearTimelineClipSelection(app: Int)
+    @JsName("_uapmd_app_select_timeline_midi_clip")
+    fun uapmdAppSelectTimelineMidiClip(app: Int, t: Int, c: Int): Boolean
+    @JsName("_uapmd_app_selected_timeline_midi_clip")
+    fun uapmdAppSelectedTimelineMidiClip(app: Int, outPtr: Int): Boolean
+    @JsName("_uapmd_app_timeline_clipboard_count")
+    fun uapmdAppTimelineClipboardCount(app: Int): Int
+    @JsName("_uapmd_app_clear_timeline_clipboard")
+    fun uapmdAppClearTimelineClipboard(app: Int)
+    @JsName("_uapmd_app_copy_selected_timeline_clips")
+    fun uapmdAppCopySelectedTimelineClips(app: Int): Boolean
+    @JsName("_uapmd_app_delete_selected_timeline_clips")
+    fun uapmdAppDeleteSelectedTimelineClips(app: Int, cut: Boolean, changedTracksPtr: Int, changedTrackCountPtr: Int): Boolean
+    @JsName("_uapmd_app_timeline_paste_destinations")
+    fun uapmdAppTimelinePasteDestinations(app: Int, t: Int, originalTracks: Boolean, outPtr: Int, outCount: Int): Int
+    @JsName("_uapmd_app_paste_timeline_clips")
+    fun uapmdAppPasteTimelineClips(app: Int, t: Int, positionSeconds: Double, originalTracks: Boolean, pastedPtr: Int, pastedCountPtr: Int): Boolean
+    @JsName("_uapmd_app_last_timeline_clip_error")
+    fun uapmdAppLastTimelineClipError(): Int
+
+    // ── Piano roll editing session ─────────────────────────────────────────
+
+    @JsName("_uapmd_app_piano_roll_clip_snapshot")
+    fun uapmdAppPianoRollClipSnapshot(app: Int, t: Int, c: Int, fallbackDurationSeconds: Double): Int
+    @JsName("_uapmd_piano_roll_snapshot_destroy")
+    fun uapmdPianoRollSnapshotDestroy(h: Int)
+    @JsName("_uapmd_piano_roll_snapshot_ready")
+    fun uapmdPianoRollSnapshotReady(h: Int): Boolean
+    @JsName("_uapmd_piano_roll_snapshot_error")
+    fun uapmdPianoRollSnapshotError(h: Int): Int
+    @JsName("_uapmd_piano_roll_snapshot_duration_seconds")
+    fun uapmdPianoRollSnapshotDurationSeconds(h: Int): Double
+    @JsName("_uapmd_piano_roll_snapshot_min_note")
+    fun uapmdPianoRollSnapshotMinNote(h: Int): Int
+    @JsName("_uapmd_piano_roll_snapshot_max_note")
+    fun uapmdPianoRollSnapshotMaxNote(h: Int): Int
+    @JsName("_uapmd_piano_roll_snapshot_note_count")
+    fun uapmdPianoRollSnapshotNoteCount(h: Int): Int
+    @JsName("_uapmd_piano_roll_snapshot_get_note")
+    fun uapmdPianoRollSnapshotGetNote(h: Int, index: Int, outPtr: Int): Boolean
+
+    @JsName("_uapmd_app_open_piano_roll_session")
+    fun uapmdAppOpenPianoRollSession(app: Int, t: Int, c: Int): Int
+    @JsName("_uapmd_app_find_piano_roll_session")
+    fun uapmdAppFindPianoRollSession(app: Int, t: Int, c: Int): Int
+    @JsName("_uapmd_app_close_piano_roll_session")
+    fun uapmdAppClosePianoRollSession(app: Int, t: Int, c: Int)
+
+    @JsName("_uapmd_piano_roll_session_matches_source")
+    fun uapmdPianoRollSessionMatchesSource(session: Int, snapshot: Int): Boolean
+    @JsName("_uapmd_piano_roll_session_load_notes")
+    fun uapmdPianoRollSessionLoadNotes(session: Int, snapshot: Int)
+    @JsName("_uapmd_piano_roll_session_note_count")
+    fun uapmdPianoRollSessionNoteCount(h: Int): Int
+    @JsName("_uapmd_piano_roll_session_get_note")
+    fun uapmdPianoRollSessionGetNote(h: Int, index: Int, outPtr: Int): Boolean
+    @JsName("_uapmd_piano_roll_session_is_note_selected")
+    fun uapmdPianoRollSessionIsNoteSelected(h: Int, index: Int): Boolean
+    @JsName("_uapmd_piano_roll_session_selected_note_count")
+    fun uapmdPianoRollSessionSelectedNoteCount(h: Int): Int
+    @JsName("_uapmd_piano_roll_session_focused_note")
+    fun uapmdPianoRollSessionFocusedNote(h: Int): Int
+    @JsName("_uapmd_piano_roll_session_set_focused_note")
+    fun uapmdPianoRollSessionSetFocusedNote(h: Int, index: Int)
+    @JsName("_uapmd_piano_roll_session_duration_seconds")
+    fun uapmdPianoRollSessionDurationSeconds(h: Int): Double
+    @JsName("_uapmd_piano_roll_session_min_note")
+    fun uapmdPianoRollSessionMinNote(h: Int): Int
+    @JsName("_uapmd_piano_roll_session_max_note")
+    fun uapmdPianoRollSessionMaxNote(h: Int): Int
+    @JsName("_uapmd_piano_roll_session_clipboard_count")
+    fun uapmdPianoRollSessionClipboardCount(h: Int): Int
+    @JsName("_uapmd_piano_roll_session_dirty")
+    fun uapmdPianoRollSessionDirty(h: Int): Boolean
+    @JsName("_uapmd_piano_roll_session_error")
+    fun uapmdPianoRollSessionError(h: Int): Int
+    @JsName("_uapmd_piano_roll_session_select_note")
+    fun uapmdPianoRollSessionSelectNote(h: Int, index: Int, additive: Boolean, toggle: Boolean)
+    @JsName("_uapmd_piano_roll_session_perform_action")
+    fun uapmdPianoRollSessionPerformAction(h: Int, action: Int, pasteSeconds: Double)
+    @JsName("_uapmd_piano_roll_session_create_note")
+    fun uapmdPianoRollSessionCreateNote(h: Int, start: Double, duration: Double, note: Int, velocity: Float)
+    @JsName("_uapmd_piano_roll_session_delete_note")
+    fun uapmdPianoRollSessionDeleteNote(h: Int, index: Int)
+    @JsName("_uapmd_piano_roll_session_resize_note")
+    fun uapmdPianoRollSessionResizeNote(h: Int, index: Int, start: Double, duration: Double, note: Int)
+    @JsName("_uapmd_piano_roll_session_begin_drag")
+    fun uapmdPianoRollSessionBeginDrag(h: Int)
+    @JsName("_uapmd_piano_roll_session_move_selection")
+    fun uapmdPianoRollSessionMoveSelection(h: Int, timeDelta: Double, pitchDelta: Int)
+    @JsName("_uapmd_piano_roll_session_cancel_drag")
+    fun uapmdPianoRollSessionCancelDrag(h: Int)
+    @JsName("_uapmd_piano_roll_session_finish_drag")
+    fun uapmdPianoRollSessionFinishDrag(h: Int, index: Int, origStart: Double, origEnd: Double, origNote: Int)
+    @JsName("_uapmd_piano_roll_session_commit")
+    fun uapmdPianoRollSessionCommit(h: Int, app: Int): Boolean
+    @JsName("_uapmd_app_record_piano_roll_commit_source")
+    fun uapmdAppRecordPianoRollCommitSource(app: Int, t: Int, c: Int)
+    @JsName("_uapmd_app_piano_roll_source_matches_last_edit")
+    fun uapmdAppPianoRollSourceMatchesLastEdit(app: Int): Boolean
+    @JsName("_uapmd_app_clear_piano_roll_commit_source")
+    fun uapmdAppClearPianoRollCommitSource(app: Int)
+    @JsName("_uapmd_transport_jump")
+    fun uapmdTransportJump(tc: Int, positionSeconds: Double)
+
+    // ── Assorted AppModel accessors ────────────────────────────────────────
+    @JsName("_uapmd_app_get_midi_input_ports")
+    fun uapmdAppGetMidiInputPorts(app: Int, out: Int, outCount: Int): Int
+    @JsName("_uapmd_app_get_midi_output_ports")
+    fun uapmdAppGetMidiOutputPorts(app: Int, out: Int, outCount: Int): Int
+    @JsName("_uapmd_app_is_track_hidden")
+    fun uapmdAppIsTrackHidden(app: Int, trackIndex: Int): Boolean
+    @JsName("_uapmd_app_timeline_content_bounds")
+    fun uapmdAppTimelineContentBounds(out: Int, app: Int)
+    @JsName("_uapmd_app_get_devices")
+    fun uapmdAppGetDevices(app: Int, out: Int, outCount: Int): Int
+    @JsName("_uapmd_app_get_device_for_instance")
+    fun uapmdAppGetDeviceForInstance(app: Int, instanceId: Int, out: Int): Boolean
+    @JsName("_uapmd_app_update_device_label")
+    fun uapmdAppUpdateDeviceLabel(app: Int, instanceId: Int, label: Int)
+    /** Callback: void(uapmd_plugin_state_result_t result, void* userData) - the struct arrives as a pointer. */
+    @JsName("_uapmd_app_load_plugin_state")
+    fun uapmdAppLoadPluginState(app: Int, instanceId: Int, filepath: Int, userData: Int, callback: Int)
+    @JsName("_uapmd_app_save_plugin_state")
+    fun uapmdAppSavePluginState(app: Int, instanceId: Int, filepath: Int, userData: Int, callback: Int)
+    @JsName("_uapmd_app_load_plugin_state_sync")
+    fun uapmdAppLoadPluginStateSync(out: Int, app: Int, instanceId: Int, filepath: Int)
+    @JsName("_uapmd_app_save_plugin_state_sync")
+    fun uapmdAppSavePluginStateSync(out: Int, app: Int, instanceId: Int, filepath: Int)
+    @JsName("_uapmd_app_mark_plugin_instance_track_dirty")
+    fun uapmdAppMarkPluginInstanceTrackDirty(app: Int, instanceId: Int)
+
+    // ── Clip adding, master markers, render-to-file ────────────────────────
+    // Positions and settings cross byval, i.e. as pointers; struct returns take
+    // the result pointer first (sret).
+    @JsName("_uapmd_app_add_clip_to_track")
+    fun uapmdAppAddClipToTrack(outPtr: Int, app: Int, trackIndex: Int, posPtr: Int, reader: Int, filepathPtr: Int)
+    @JsName("_uapmd_app_add_midi_clip_to_track")
+    fun uapmdAppAddMidiClipToTrack(outPtr: Int, app: Int, trackIndex: Int, posPtr: Int, filepathPtr: Int)
+    @JsName("_uapmd_app_add_midi_clip_from_data")
+    fun uapmdAppAddMidiClipFromData(
+        outPtr: Int, app: Int, trackIndex: Int, posPtr: Int,
+        umpPtr: Int, umpCount: Int, tickPtr: Int, tickCount: Int,
+        tickResolution: Int, clipTempo: Double,
+        tempoPtr: Int, tempoCount: Int, sigPtr: Int, sigCount: Int,
+        clipNamePtr: Int, needsFileSave: Boolean
+    )
+    @JsName("_uapmd_app_add_device_input_to_track")
+    fun uapmdAppAddDeviceInputToTrack(app: Int, trackIndex: Int, channelsPtr: Int, channelCount: Int): Int
+    @JsName("_uapmd_app_master_marker_count")
+    fun uapmdAppMasterMarkerCount(app: Int): Int
+    @JsName("_uapmd_app_get_master_marker")
+    fun uapmdAppGetMasterMarker(app: Int, index: Int, out: Int): Boolean
+    @JsName("_uapmd_app_set_master_track_markers_with_validation")
+    fun uapmdAppSetMasterTrackMarkersWithValidation(outPtr: Int, app: Int, markersPtr: Int, count: Int)
+    @JsName("_uapmd_app_start_render_to_file")
+    fun uapmdAppStartRenderToFile(app: Int, settingsPtr: Int): Boolean
+    @JsName("_uapmd_app_cancel_render_to_file")
+    fun uapmdAppCancelRenderToFile(app: Int)
+    @JsName("_uapmd_app_get_render_to_file_status")
+    fun uapmdAppGetRenderToFileStatus(outPtr: Int, app: Int)
+    @JsName("_uapmd_app_clear_completed_render_status")
+    fun uapmdAppClearCompletedRenderStatus(app: Int)
+    @JsName("_uapmd_app_request_show_track_graph")
+    fun uapmdAppRequestShowTrackGraph(app: Int, trackIndex: Int)
 
     @JsName("_uapmd_app_get_midi_clip_ump_events")
     fun uapmdAppGetMidiClipUmpEvents(out: Int, app: Int, trackIndex: Int, clipId: Int)
@@ -1440,6 +1620,7 @@ internal val pendingTrackFragments    = mutableMapOf<Int, (TrackFragment?, Strin
 internal val pendingErrorOnlyCallbacks = mutableMapOf<Int, (String?) -> Unit>()
 internal val pendingInstanceCreations = mutableMapOf<Int, (PluginInstanceResult) -> Unit>()
 internal val pendingProjectSaves = mutableMapOf<Int, (AppProjectResult) -> Unit>()
+internal val pendingPluginStates = mutableMapOf<Int, (PluginStateResult) -> Unit>()
 
 /** The C callback takes uapmd_undo_result_t by value, i.e. as a pointer. */
 @JsExport
@@ -1701,6 +1882,12 @@ fun uapmdDispatchProjectSave(cbId: Int, resultPtr: Int) {
     pendingProjectSaves.remove(cbId)?.invoke(
         AppProjectResult(ok, if (errPtr != 0) mod.utf8ToString(errPtr) else null)
     )
+}
+
+/** uapmd_plugin_state_result_t by value = a pointer. wasm32: i32 @0, bool @4, char* @8, char* @12. */
+@JsExport
+fun uapmdDispatchPluginState(cbId: Int, resultPtr: Int) {
+    pendingPluginStates.remove(cbId)?.invoke(readPluginStateResult(resultPtr))
 }
 
 @JsExport

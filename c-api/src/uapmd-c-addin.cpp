@@ -1,4 +1,4 @@
-/* uapmd C API — implementation for the uapmd-addin-core bindings (uapmd 0.5.6) */
+/* uapmd C API — implementation for the uapmd-addin-core bindings */
 
 #include "c-api/uapmd-c-addin.h"
 #include <uapmd-addin-core/uapmd-addin-core.hpp>

@@ -136,7 +136,7 @@ class NativeSequencerEngine internal constructor(
     override val timeline: TimelineFacade
         get() = NativeTimelineFacade(uapmd_engine_timeline(handle)!!)
 
-    // ─── Project / track dirty state (uapmd 0.5.6) ──────────────────────────
+    // ─── Project / track dirty state ────────────────────────────────────────
 
     override val isProjectDirty: Boolean get() = uapmd_engine_is_project_dirty(handle)
     override fun isTrackDirty(trackIndex: Int) = uapmd_engine_is_track_dirty(handle, trackIndex)

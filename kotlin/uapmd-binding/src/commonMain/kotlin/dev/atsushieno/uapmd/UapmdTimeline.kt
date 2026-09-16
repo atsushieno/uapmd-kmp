@@ -83,7 +83,7 @@ interface TimelineFacade {
      *  Pass null to unregister. */
     fun setTimelineChangedCallback(callback: (() -> Unit)?)
 
-    // ─── Project history (uapmd 0.5.6) ──────────────────────────────────────
+    // ─── Project history ────────────────────────────────────────────────────
 
     /**
      * The undoable edits this project supports, and (through

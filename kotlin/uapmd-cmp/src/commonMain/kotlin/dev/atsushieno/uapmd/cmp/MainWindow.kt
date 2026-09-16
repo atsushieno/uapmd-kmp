@@ -45,6 +45,7 @@ import androidx.compose.ui.unit.DpSize
 import androidx.compose.ui.unit.dp
 import dev.atsushieno.uapmd.cmp.ui.FloatingWindowLayer
 import dev.atsushieno.uapmd.cmp.ui.AddinManagerWindow
+import dev.atsushieno.uapmd.cmp.ui.AudioImportWindow
 import dev.atsushieno.uapmd.cmp.ui.DeviceSettings
 import dev.atsushieno.uapmd.cmp.ui.ExporterWindow
 import dev.atsushieno.uapmd.cmp.ui.InstanceDetails
@@ -67,6 +68,9 @@ fun MainWindow() {
     var uiScale by remember { mutableStateOf(1f) }
     var darkTheme by remember { mutableStateOf(true) }
     var showUnsavedDialog by remember { mutableStateOf(false) }
+    // "New Project" always replaces; asking first is the host's job, and only
+    // worth doing when there is something to lose.
+    var confirmNewProject by remember { mutableStateOf(false) }
     val focus = remember { FocusRequester() }
 
     MaterialTheme(colorScheme = if (darkTheme) darkColorScheme() else lightColorScheme()) {
@@ -94,6 +98,30 @@ fun MainWindow() {
                             }
                             primary && event.key == Key.Y -> {
                                 if (h.canRedo && !h.busy) host.redo(); true
+                            }
+                            // Clipboard over the clip selection. Paste lands on
+                            // the track the selection came from, at the
+                            // playhead, which is where uapmd-app puts it when
+                            // the gesture carries no position of its own.
+                            primary && event.key == Key.C -> {
+                                if (host.selectedClips().isNotEmpty()) host.copySelectedClips()
+                                true
+                            }
+                            primary && event.key == Key.X -> {
+                                if (host.selectedClips().isNotEmpty()) host.deleteSelectedClips(cut = true)
+                                true
+                            }
+                            primary && event.key == Key.V -> {
+                                val track = host.selectedClips().firstOrNull()?.trackIndex ?: 0
+                                if (host.canPasteOnto(track))
+                                    host.pasteClips(track, host.playheadSeconds)
+                                true
+                            }
+                            event.key == Key.Delete || event.key == Key.Backspace -> {
+                                if (host.selectedClips().isNotEmpty()) { host.deleteSelectedClips(); true } else false
+                            }
+                            event.key == Key.Escape -> {
+                                if (host.selectedClips().isNotEmpty()) { host.clearClipSelection(); true } else false
                             }
                             else -> false
                         }
@@ -129,6 +157,14 @@ fun MainWindow() {
                                 windows.toggle("plugins", "Plugin Selector", DpSize(560.dp, 430.dp)) {
                                     PluginSelector(host)
                                 }
+                            },
+                            onToggleAudioImport = {
+                                windows.toggle("audioImport", "Import Split Audio Tracks", DpSize(560.dp, 400.dp)) {
+                                    AudioImportWindow(host) { windows.close("audioImport") }
+                                }
+                            },
+                            onNewProject = {
+                                if (host.history.dirty) confirmNewProject = true else host.newProject()
                             }
                         )
                         HorizontalDivider()
@@ -143,6 +179,18 @@ fun MainWindow() {
     }
 
     LaunchedEffect(Unit) { focus.requestFocus() }
+
+    if (confirmNewProject) {
+        AlertDialog(
+            onDismissRequest = { confirmNewProject = false },
+            title = { Text("New Project") },
+            text = { Text("This project has unsaved changes. Starting a new project discards them.") },
+            confirmButton = {
+                TextButton(onClick = { confirmNewProject = false; host.newProject() }) { Text("Discard and Continue") }
+            },
+            dismissButton = { TextButton(onClick = { confirmNewProject = false }) { Text("Cancel") } }
+        )
+    }
 
     // uapmd-app asks before discarding an unsaved project on quit.
     if (showUnsavedDialog) {

@@ -1,4 +1,4 @@
-/* uapmd C API — implementation for the uapmd 0.5.6 project history bindings */
+/* uapmd C API — implementation for the project history bindings */
 
 #include "c-api/uapmd-c-undo.h"
 #include "c-api-internal.h"

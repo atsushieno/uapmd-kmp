@@ -123,7 +123,7 @@ class AndroidSequencerEngine internal constructor(
 
     override val timeline: TimelineFacade get() = AndroidTimelineFacade(JniBridge.uapmdEngineTimeline(handle))
 
-    // ─── Project / track dirty state (uapmd 0.5.6) ──────────────────────────
+    // ─── Project / track dirty state ────────────────────────────────────────
 
     override val isProjectDirty: Boolean get() = JniBridge.uapmdEngineIsProjectDirty(handle)
     override fun isTrackDirty(trackIndex: Int) = JniBridge.uapmdEngineIsTrackDirty(handle, trackIndex)

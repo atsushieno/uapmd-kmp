@@ -70,8 +70,13 @@ class JsTimelineFacade internal constructor(
     override fun setTempo(tempo: Double)                        = jsMod._uapmd_tl_set_tempo(handle, tempo)
     override fun setTimeSignature(numerator: Int, denominator: Int) = jsMod._uapmd_tl_set_time_signature(handle, numerator, denominator)
 
-    override fun setLoop(enabled: Boolean, start: TimelinePosition, end: TimelinePosition) =
-        jsMod._uapmd_tl_set_loop(handle, enabled, start.samples.toDouble(), start.legacyBeats, end.samples.toDouble(), end.legacyBeats)
+    override fun setLoop(enabled: Boolean, start: TimelinePosition, end: TimelinePosition) {
+        withWasmMem(JsTimelinePositionSize * 2) { p ->
+            jsWritePosition(p, start)
+            jsWritePosition(p + JsTimelinePositionSize, end)
+            jsMod._uapmd_tl_set_loop(handle, enabled, p, p + JsTimelinePositionSize)
+        }
+    }
 
     override val trackCount: UInt   get() = (jsMod._uapmd_tl_track_count(handle) as Int).toUInt()
     override fun getTrack(index: UInt): TimelineTrack = JsTimelineTrack(jsMod._uapmd_tl_get_track(handle, index.toInt()) as Int)
@@ -82,12 +87,14 @@ class JsTimelineFacade internal constructor(
         reader: AudioFileReader, filepath: String
     ): ClipAddResult =
         withWasmMem(16) { outPtr ->
-            withJsCString(filepath) { fpPtr ->
-                jsMod._uapmd_tl_add_audio_clip(
-                    handle, trackIndex,
-                    position.samples.toDouble(), position.legacyBeats,
-                    (reader as JsAudioFileReader).handle, fpPtr, outPtr
-                )
+            withWasmMem(JsTimelinePositionSize) { posPtr ->
+                jsWritePosition(posPtr, position)
+                withJsCString(filepath) { fpPtr ->
+                    jsMod._uapmd_tl_add_audio_clip(
+                        outPtr, handle, trackIndex, posPtr,
+                        (reader as JsAudioFileReader).handle, fpPtr
+                    )
+                }
             }
             jsDecodeClipAddResult(outPtr)
         }
@@ -97,12 +104,13 @@ class JsTimelineFacade internal constructor(
         filepath: String, nrpnToParameterMapping: Boolean
     ): ClipAddResult =
         withWasmMem(16) { outPtr ->
-            withJsCString(filepath) { fpPtr ->
-                jsMod._uapmd_tl_add_midi_clip_from_file(
-                    handle, trackIndex,
-                    position.samples.toDouble(), position.legacyBeats,
-                    fpPtr, nrpnToParameterMapping, outPtr
-                )
+            withWasmMem(JsTimelinePositionSize) { posPtr ->
+                jsWritePosition(posPtr, position)
+                withJsCString(filepath) { fpPtr ->
+                    jsMod._uapmd_tl_add_midi_clip_from_file(
+                        outPtr, handle, trackIndex, posPtr, fpPtr, nrpnToParameterMapping
+                    )
+                }
             }
             jsDecodeClipAddResult(outPtr)
         }
@@ -142,7 +150,7 @@ class JsTimelineFacade internal constructor(
     override fun getMidiClipNotes(trackIndex: Int, clipId: Int): List<MidiNoteData>? = null
     override fun setTimelineChangedCallback(callback: (() -> Unit)?) {}
 
-    // ─── Project history (uapmd 0.5.6) ──────────────────────────────────────
+    // ─── Project history ────────────────────────────────────────────────────
 
     override val commands get() = history.commands
     override val addresses get() = history.addresses

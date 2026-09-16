@@ -25,6 +25,23 @@ expect suspend fun pickMidiFileToOpen(): String?
 expect suspend fun pickAudioFileToOpen(): String?
 
 /**
+ * The model file a stem separator asked for. [extensions] are the patterns it
+ * reported (`*.bin` for Demucs, `*.gguf` for BS-Roformer), so the chooser
+ * filters on what that backend can actually load rather than on a fixed list.
+ */
+expect suspend fun pickStemModelFileToOpen(extensions: List<String>): String?
+
+/**
+ * Where a split audio import writes its stems.
+ *
+ * uapmd-app lets the user type a directory; every platform here either has no
+ * directory chooser (the browser, Android's SAF) or no meaningful place for the
+ * user to put them, so the stems go beside the source audio where there is a
+ * real filesystem, and into the app's own writable area where there is not.
+ */
+expect fun defaultStemOutputDirectory(audioFilePath: String): String
+
+/**
  * Hands a file the app has just written to the user.
  *
  * On every platform with a real filesystem the picker already chose where the file

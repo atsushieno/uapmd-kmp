@@ -314,7 +314,7 @@ class WasmJsTimelineFacade internal constructor(
     }
     override fun setTimelineChangedCallback(callback: (() -> Unit)?) {}
 
-    // ─── Project history (uapmd 0.5.6) ──────────────────────────────────────
+    // ─── Project history ────────────────────────────────────────────────────
 
     override val commands get() = history.commands
     override val addresses get() = history.addresses

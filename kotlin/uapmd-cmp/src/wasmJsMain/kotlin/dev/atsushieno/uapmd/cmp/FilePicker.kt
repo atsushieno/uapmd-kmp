@@ -57,6 +57,15 @@ actual suspend fun pickMidiFileToOpen(): String? =
 actual suspend fun pickAudioFileToOpen(): String? =
     pick("Audio Files", listOf(".wav", ".flac", ".ogg", ".mp3", ".aiff"))
 
+actual suspend fun pickStemModelFileToOpen(extensions: List<String>): String? =
+    pick("Model File", extensions.map { it.removePrefix("*") })
+
+/**
+ * Emscripten's in-memory filesystem. Stems written here never reach the user's
+ * disk, but the import only needs them long enough to become clips.
+ */
+actual fun defaultStemOutputDirectory(audioFilePath: String): String = "/tmp"
+
 actual fun startupImportPath(): String? = null
 
 actual fun startupInstantiateFormat(): String? = null

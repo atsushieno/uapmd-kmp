@@ -71,7 +71,7 @@ class JvmAppModel internal constructor(
             else BlocklistEntry(out.id ?: "", out.format ?: "", out.plugin_id ?: "", out.reason ?: "")
         }
 
-    override fun unblockPlugin(entryId: String) = lib.uapmd_app_unblock_plugin(handle, entryId)
+    override fun unblockPlugin(entryId: String) = lib.uapmd_app_unblock_plugin_from_blocklist(handle, entryId)
 
     override fun refreshMasterTempoMap() = lib.uapmd_app_refresh_master_tempo_map(handle)
 
@@ -94,6 +94,13 @@ class JvmAppModel internal constructor(
 
     // ── Tracks ──────────────────────────────────────────────────────────────
 
+    override fun isTrackMuted(trackIndex: Int) = lib.uapmd_app_is_track_muted(handle, trackIndex)
+    override fun isTrackSolo(trackIndex: Int) = lib.uapmd_app_is_track_solo(handle, trackIndex)
+    override fun setTrackMuted(trackIndex: Int, muted: Boolean) =
+        lib.uapmd_app_set_track_muted(handle, trackIndex, muted)
+    override fun setTrackSolo(trackIndex: Int, solo: Boolean) =
+        lib.uapmd_app_set_track_solo(handle, trackIndex, solo)
+
     override fun addTrack(callback: (Int, String?) -> Unit) =
         lib.uapmd_app_add_track(handle, null, trackMutationCb(callback))
 
@@ -109,7 +116,7 @@ class JvmAppModel internal constructor(
         JvmTimelineTrack(lib.uapmd_app_get_timeline_track(handle, index.toInt()) ?: error("timeline track $index not found"))
 
     override val masterTimelineTrack: TimelineTrack
-        get() = JvmTimelineTrack(lib.uapmd_app_master_timeline_track(handle) ?: error("master timeline track not found"))
+        get() = JvmTimelineTrack(lib.uapmd_app_get_master_timeline_track(handle) ?: error("master timeline track not found"))
 
     override fun getTimelineState(): TimelineState? {
         val out = UapmdTimelineState()
@@ -120,7 +127,7 @@ class JvmAppModel internal constructor(
     // ── History ─────────────────────────────────────────────────────────────
 
     override val historyState: UndoState
-        get() = UapmdUndoState().also { lib.uapmd_app_get_history_state(handle, it) }.toKotlin()
+        get() = UapmdUndoState().also { lib.uapmd_app_history_state(handle, it) }.toKotlin()
 
     override fun undo(callback: ((String?) -> Unit)?) =
         lib.uapmd_app_undo(handle, null, callback?.let { historyMutationCb(it) })
@@ -196,6 +203,192 @@ class JvmAppModel internal constructor(
 
     override fun newProject(): AppProjectResult = lib.uapmd_app_new_project(handle).toKotlin()
 
+    // ── Timeline clip selection and clipboard ───────────────────────────────
+
+    override fun isTimelineClipSelected(trackIndex: Int, clipId: Int): Boolean =
+        lib.uapmd_app_is_timeline_clip_selected(handle, trackIndex, clipId)
+
+    override val selectedTimelineClips: List<TimelineClipTarget>
+        get() {
+            val count = lib.uapmd_app_selected_timeline_clips(handle, null, 0)
+            if (count <= 0) return emptyList()
+            @Suppress("UNCHECKED_CAST")
+            val arr = UapmdTimelineClipTarget().toArray(count) as Array<UapmdTimelineClipTarget>
+            val filled = lib.uapmd_app_selected_timeline_clips(handle, arr[0], count)
+            return arr.take(minOf(count, filled)).map {
+                it.read()
+                TimelineClipTarget(it.track_index, it.clip_id)
+            }
+        }
+
+    override fun selectTimelineClips(clips: List<TimelineClipTarget>, additive: Boolean, toggle: Boolean) {
+        if (clips.isEmpty()) {
+            lib.uapmd_app_select_timeline_clips(handle, null, 0, additive, toggle)
+            return
+        }
+        @Suppress("UNCHECKED_CAST")
+        val arr = UapmdTimelineClipTarget().toArray(clips.size) as Array<UapmdTimelineClipTarget>
+        clips.forEachIndexed { i, t ->
+            arr[i].track_index = t.trackIndex
+            arr[i].clip_id = t.clipId
+            arr[i].write()
+        }
+        lib.uapmd_app_select_timeline_clips(handle, arr[0], clips.size, additive, toggle)
+    }
+
+    override fun clearTimelineClipSelection() = lib.uapmd_app_clear_timeline_clip_selection(handle)
+
+    override fun selectTimelineMidiClip(trackIndex: Int, clipId: Int): Boolean =
+        lib.uapmd_app_select_timeline_midi_clip(handle, trackIndex, clipId)
+
+    override val selectedTimelineMidiClip: TimelineClipTarget?
+        get() {
+            val out = UapmdTimelineClipTarget()
+            if (!lib.uapmd_app_selected_timeline_midi_clip(handle, out)) return null
+            return TimelineClipTarget(out.track_index, out.clip_id)
+        }
+
+    override val timelineClipboardCount: Int get() = lib.uapmd_app_timeline_clipboard_count(handle)
+
+    override fun clearTimelineClipboard() = lib.uapmd_app_clear_timeline_clipboard(handle)
+
+    override fun copySelectedTimelineClips(): Boolean = lib.uapmd_app_copy_selected_timeline_clips(handle)
+
+    override fun deleteSelectedTimelineClips(cut: Boolean): TimelineClipDeleteResult {
+        // One call only: this both deletes and reports. A track can lose several
+        // clips but appears once, so the selection size bounds the changed-track
+        // list — measured before the call, which clears the selection.
+        val capacity = selectedTimelineClips.size
+        val countOut = intArrayOf(capacity)
+        val tracks = if (capacity > 0) IntArray(capacity) else null
+        val ok = lib.uapmd_app_delete_selected_timeline_clips(handle, cut, tracks, countOut)
+        val changed = tracks?.take(minOf(capacity, countOut[0])).orEmpty()
+        return TimelineClipDeleteResult(ok, changed, lastTimelineClipError.ifEmpty { null })
+    }
+
+    override fun timelinePasteDestinations(trackIndex: Int, originalTracks: Boolean): List<Int> {
+        val count = lib.uapmd_app_timeline_paste_destinations(handle, trackIndex, originalTracks, null, 0)
+        if (count <= 0) return emptyList()
+        val out = IntArray(count)
+        val filled = lib.uapmd_app_timeline_paste_destinations(handle, trackIndex, originalTracks, out, count)
+        return out.take(minOf(count, filled))
+    }
+
+    override fun pasteTimelineClips(
+        trackIndex: Int,
+        positionSeconds: Double,
+        originalTracks: Boolean
+    ): TimelinePasteResult {
+        // The clipboard bounds the result, so one call with a buffer that size
+        // is enough — a paste creates at most one clip per clipboard entry.
+        val capacity = timelineClipboardCount
+        val countOut = intArrayOf(capacity)
+        @Suppress("UNCHECKED_CAST")
+        val arr = if (capacity > 0)
+            UapmdTimelineClipTarget().toArray(capacity) as Array<UapmdTimelineClipTarget>
+        else null
+        val ok = lib.uapmd_app_paste_timeline_clips(
+            handle, trackIndex, positionSeconds, originalTracks, arr?.get(0), countOut
+        )
+        val pasted = (0 until minOf(capacity, countOut[0])).map {
+            arr!![it].read()
+            TimelineClipTarget(arr[it].track_index, arr[it].clip_id)
+        }
+        return TimelinePasteResult(ok, pasted, lastTimelineClipError.ifEmpty { null })
+    }
+
+    override val lastTimelineClipError: String
+        get() = lib.uapmd_app_last_timeline_clip_error() ?: ""
+
+    // ── Piano roll editing session ──────────────────────────────────────────
+
+    override fun pianoRollClipSnapshot(
+        trackIndex: Int,
+        clipId: Int,
+        fallbackDurationSeconds: Double
+    ): PianoRollSnapshot? =
+        lib.uapmd_app_piano_roll_clip_snapshot(handle, trackIndex, clipId, fallbackDurationSeconds)
+            ?.let { JvmPianoRollSnapshot(it) }
+
+    override fun openPianoRollSession(trackIndex: Int, clipId: Int): PianoRollSession? =
+        lib.uapmd_app_open_piano_roll_session(handle, trackIndex, clipId)?.let { JvmPianoRollSession(it) }
+
+    override fun findPianoRollSession(trackIndex: Int, clipId: Int): PianoRollSession? =
+        lib.uapmd_app_find_piano_roll_session(handle, trackIndex, clipId)?.let { JvmPianoRollSession(it) }
+
+    override fun closePianoRollSession(trackIndex: Int, clipId: Int) =
+        lib.uapmd_app_close_piano_roll_session(handle, trackIndex, clipId)
+
+    override fun recordPianoRollCommitSource(trackIndex: Int, clipId: Int) =
+        lib.uapmd_app_record_piano_roll_commit_source(handle, trackIndex, clipId)
+
+    override fun pianoRollSourceMatchesLastEdit(): Boolean =
+        lib.uapmd_app_piano_roll_source_matches_last_edit(handle)
+
+    override fun clearPianoRollCommitSource() = lib.uapmd_app_clear_piano_roll_commit_source(handle)
+
+    // ── Assorted accessors ──────────────────────────────────────────────────
+
+    override val midiInputPorts: List<MidiPortInfo>
+        get() = readMidiPorts { out, n -> lib.uapmd_app_get_midi_input_ports(handle, out, n) }
+
+    override val midiOutputPorts: List<MidiPortInfo>
+        get() = readMidiPorts { out, n -> lib.uapmd_app_get_midi_output_ports(handle, out, n) }
+
+    override fun isTrackHidden(trackIndex: Int) = lib.uapmd_app_is_track_hidden(handle, trackIndex)
+
+    override val timelineContentBounds: TimelineContentBounds
+        get() = lib.uapmd_app_timeline_content_bounds(handle).let {
+            TimelineContentBounds(
+                it.has_content != 0.toByte(), it.start_seconds, it.end_seconds, it.duration_seconds
+            )
+        }
+
+    override val devices: List<DeviceEntry>
+        get() {
+            val count = lib.uapmd_app_get_devices(handle, null, 0)
+            if (count <= 0) return emptyList()
+            @Suppress("UNCHECKED_CAST")
+            val arr = UapmdDeviceEntry().toArray(count) as Array<UapmdDeviceEntry>
+            val filled = lib.uapmd_app_get_devices(handle, arr[0], count)
+            return arr.take(minOf(count, filled)).map { it.read(); it.toKotlin() }
+        }
+
+    override fun deviceForInstance(instanceId: Int): DeviceEntry? {
+        val out = UapmdDeviceEntry()
+        if (!lib.uapmd_app_get_device_for_instance(handle, instanceId, out)) return null
+        return out.toKotlin()
+    }
+
+    override fun updateDeviceLabel(instanceId: Int, label: String) =
+        lib.uapmd_app_update_device_label(handle, instanceId, label)
+
+    override fun loadPluginState(instanceId: Int, filepath: String, callback: (PluginStateResult) -> Unit) =
+        lib.uapmd_app_load_plugin_state(handle, instanceId, filepath, null, pluginStateCallback(callback))
+
+    override fun savePluginState(instanceId: Int, filepath: String, callback: (PluginStateResult) -> Unit) =
+        lib.uapmd_app_save_plugin_state(handle, instanceId, filepath, null, pluginStateCallback(callback))
+
+    override fun loadPluginStateSync(instanceId: Int, filepath: String) =
+        lib.uapmd_app_load_plugin_state_sync(handle, instanceId, filepath).toKotlin()
+
+    override fun savePluginStateSync(instanceId: Int, filepath: String) =
+        lib.uapmd_app_save_plugin_state_sync(handle, instanceId, filepath).toKotlin()
+
+    override fun markPluginInstanceTrackDirty(instanceId: Int) =
+        lib.uapmd_app_mark_plugin_instance_track_dirty(handle, instanceId)
+
+    private fun readMidiPorts(call: (UapmdMidiPortInfo?, Int) -> Int): List<MidiPortInfo> {
+        val count = call(null, 0)
+        if (count <= 0) return emptyList()
+        @Suppress("UNCHECKED_CAST")
+        val arr = UapmdMidiPortInfo().toArray(count) as Array<UapmdMidiPortInfo>
+        val filled = call(arr[0], count)
+        return arr.take(minOf(count, filled)).map {
+            it.read(); MidiPortInfo(it.id ?: "", it.display_name ?: "")
+        }
+    }
+
     override val masterTempoMap: TempoMap
         get() = JvmTempoMap(lib.uapmd_app_master_tempo_map(handle) ?: error("no master tempo map"))
 
@@ -204,7 +397,10 @@ class JvmAppModel internal constructor(
     override fun getMidiClipUmpEvents(trackIndex: Int, clipId: Int): UmpEventsResult {
         val r = lib.uapmd_app_get_midi_clip_ump_events(handle, trackIndex, clipId)
         if (r.success == 0.toByte() || r.events == null || r.event_count == 0)
-            return UmpEventsResult(r.success != 0.toByte(), r.error, emptyList())
+            return UmpEventsResult(
+                r.success != 0.toByte(), r.error, emptyList(),
+                r.tick_resolution.toUInt(), r.clip_tempo
+            )
         // Structure.useMemory is protected, so walk the array by offset instead:
         // uapmd_ump_event_t is { uint64 tick; uint32 word_count; const uint32* words }
         // = 8 + 4 + (4 pad) + 8 on LP64.
@@ -215,7 +411,7 @@ class JvmAppModel internal constructor(
             val words = e.words?.getIntArray(0, e.word_count) ?: IntArray(0)
             UmpEvent(e.tick, UIntArray(words.size) { words[it].toUInt() })
         }
-        return UmpEventsResult(true, r.error, events)
+        return UmpEventsResult(true, r.error, events, r.tick_resolution.toUInt(), r.clip_tempo)
     }
 
     override fun addUmpEventToClip(trackIndex: Int, clipId: Int, tick: Long, words: UIntArray): Boolean =
@@ -250,6 +446,86 @@ class JvmAppModel internal constructor(
         val r = lib.uapmd_app_create_empty_midi_clip(handle, trackIndex, positionSamples, tickResolution.toInt(), bpm)
         return ClipAddResult(r.clip_id, r.source_node_id, r.success != 0.toByte(), r.error)
     }
+
+    override fun addClipToTrack(
+        trackIndex: Int, position: TimelinePosition, reader: AudioFileReader, filepath: String
+    ): ClipAddResult {
+        val r = lib.uapmd_app_add_clip_to_track(
+            handle, trackIndex, position.toJvmByVal(), (reader as JvmAudioFileReader).handle, filepath
+        )
+        return ClipAddResult(r.clip_id, r.source_node_id, r.success != 0.toByte(), r.error)
+    }
+
+    override fun addMidiClipToTrack(trackIndex: Int, position: TimelinePosition, filepath: String): ClipAddResult {
+        val r = lib.uapmd_app_add_midi_clip_to_track(handle, trackIndex, position.toJvmByVal(), filepath)
+        return ClipAddResult(r.clip_id, r.source_node_id, r.success != 0.toByte(), r.error)
+    }
+
+    override fun addMidiClipFromData(
+        trackIndex: Int, position: TimelinePosition,
+        umpEvents: List<UInt>, tickTimestamps: List<ULong>,
+        tickResolution: UInt, clipTempo: Double,
+        tempoChanges: List<MidiTempoChange>, timeSignatureChanges: List<MidiTimeSignatureChange>,
+        clipName: String, needsFileSave: Boolean
+    ): ClipAddResult {
+        val r = lib.uapmd_app_add_midi_clip_from_data(
+            handle, trackIndex, position.toJvmByVal(),
+            umpEvents.takeIf { it.isNotEmpty() }?.map { it.toInt() }?.toIntArray(), umpEvents.size,
+            tickTimestamps.takeIf { it.isNotEmpty() }?.map { it.toLong() }?.toLongArray(), tickTimestamps.size,
+            tickResolution.toInt(), clipTempo,
+            tempoChanges.toJvmArray(), tempoChanges.size,
+            timeSignatureChanges.toJvmArray(), timeSignatureChanges.size,
+            clipName, needsFileSave
+        )
+        return ClipAddResult(r.clip_id, r.source_node_id, r.success != 0.toByte(), r.error)
+    }
+
+    override fun addDeviceInputToTrack(trackIndex: Int, channelIndices: List<UInt>): Int =
+        lib.uapmd_app_add_device_input_to_track(
+            handle, trackIndex,
+            channelIndices.takeIf { it.isNotEmpty() }?.map { it.toInt() }?.toIntArray(), channelIndices.size
+        )
+
+    // ── Master track markers ────────────────────────────────────────────────
+
+    override val masterMarkers: List<ClipMarkerData>
+        get() {
+            val n = lib.uapmd_app_master_marker_count(handle)
+            return (0 until n).mapNotNull { i ->
+                val out = UapmdClipMarker()
+                if (lib.uapmd_app_get_master_marker(handle, i, out)) out.toKotlin() else null
+            }
+        }
+
+    override fun setMasterTrackMarkersWithValidation(markers: List<ClipMarkerData>): OpResult {
+        val r = lib.uapmd_app_set_master_track_markers_with_validation(handle, markers.toJvmArray(), markers.size)
+        return OpResult(r.success != 0.toByte(), r.error)
+    }
+
+    // ── Offline render to file ──────────────────────────────────────────────
+
+    override fun startRenderToFile(settings: RenderToFileSettings): Boolean =
+        lib.uapmd_app_start_render_to_file(handle, settings.toJvmSettings())
+
+    override fun cancelRenderToFile() = lib.uapmd_app_cancel_render_to_file(handle)
+
+    override val renderToFileStatus: RenderToFileStatus
+        get() = lib.uapmd_app_get_render_to_file_status(handle).let {
+            RenderToFileStatus(
+                running = it.running != 0.toByte(),
+                completed = it.completed != 0.toByte(),
+                success = it.success != 0.toByte(),
+                progress = it.progress,
+                renderedSeconds = it.rendered_seconds,
+                message = it.message ?: "",
+                outputPath = it.output_path ?: ""
+            )
+        }
+
+    override fun clearCompletedRenderStatus() = lib.uapmd_app_clear_completed_render_status(handle)
+
+    override fun requestShowTrackGraph(trackIndex: Int) =
+        lib.uapmd_app_request_show_track_graph(handle, trackIndex)
 
     // ── Track graph ─────────────────────────────────────────────────────────
 
@@ -446,6 +722,8 @@ class JvmTransportController internal constructor(
     override fun pause() = lib.uapmd_transport_pause(handle)
     override fun resume() = lib.uapmd_transport_resume(handle)
     override fun record() = lib.uapmd_transport_record(handle)
+
+    override fun jump(positionSeconds: Double) = lib.uapmd_transport_jump(handle, positionSeconds)
 }
 
 actual fun instantiateAppModel() = lib.uapmd_app_instantiate()
@@ -454,3 +732,169 @@ actual fun getAppModel(): AppModel =
     JvmAppModel(lib.uapmd_app_instance() ?: error("uapmd_app_instance returned null; call instantiateAppModel() first"))
 
 actual fun cleanupAppModel() = lib.uapmd_app_cleanup()
+
+internal fun UapmdPianoRollNote.toKotlin() = PianoRollNote(
+    startSeconds = start_seconds,
+    durationSeconds = duration_seconds,
+    velocity = velocity,
+    note = note.toInt() and 0xFF,
+    channel = channel.toInt() and 0xFF,
+    deleted = deleted != 0.toByte(),
+    editId = edit_id,
+    umpGroup = ump_group.toInt() and 0xFF,
+    releaseVelocity = release_velocity.toInt() and 0xFFFF,
+    attributeType = attribute_type.toInt() and 0xFF,
+    attributeValue = attribute_value.toInt() and 0xFFFF,
+    automationEventCount = automation_event_count
+)
+
+class JvmPianoRollSnapshot internal constructor(internal val handle: Pointer) : PianoRollSnapshot {
+    override val isReady: Boolean get() = lib.uapmd_piano_roll_snapshot_ready(handle)
+    override val error: String get() = lib.uapmd_piano_roll_snapshot_error(handle) ?: ""
+    override val durationSeconds: Double get() = lib.uapmd_piano_roll_snapshot_duration_seconds(handle)
+    override val minNote: Int get() = lib.uapmd_piano_roll_snapshot_min_note(handle).toInt() and 0xFF
+    override val maxNote: Int get() = lib.uapmd_piano_roll_snapshot_max_note(handle).toInt() and 0xFF
+
+    override val notes: List<PianoRollNote>
+        get() {
+            val out = UapmdPianoRollNote()
+            return (0 until lib.uapmd_piano_roll_snapshot_note_count(handle)).mapNotNull { i ->
+                if (!lib.uapmd_piano_roll_snapshot_get_note(handle, i, out)) null else out.toKotlin()
+            }
+        }
+
+    override fun close() = lib.uapmd_piano_roll_snapshot_destroy(handle)
+}
+
+class JvmPianoRollSession internal constructor(private val handle: Pointer) : PianoRollSession {
+    override val notes: List<PianoRollNote>
+        get() {
+            val out = UapmdPianoRollNote()
+            return (0 until lib.uapmd_piano_roll_session_note_count(handle)).mapNotNull { i ->
+                if (!lib.uapmd_piano_roll_session_get_note(handle, i, out)) null else out.toKotlin()
+            }
+        }
+
+    override fun isNoteSelected(index: Int) = lib.uapmd_piano_roll_session_is_note_selected(handle, index)
+    override val selectedNoteCount: Int get() = lib.uapmd_piano_roll_session_selected_note_count(handle)
+
+    override var focusedNote: Int
+        get() = lib.uapmd_piano_roll_session_focused_note(handle)
+        set(value) { lib.uapmd_piano_roll_session_set_focused_note(handle, value) }
+
+    override val durationSeconds: Double get() = lib.uapmd_piano_roll_session_duration_seconds(handle)
+    override val minNote: Int get() = lib.uapmd_piano_roll_session_min_note(handle).toInt() and 0xFF
+    override val maxNote: Int get() = lib.uapmd_piano_roll_session_max_note(handle).toInt() and 0xFF
+    override val clipboardCount: Int get() = lib.uapmd_piano_roll_session_clipboard_count(handle)
+    override val isDirty: Boolean get() = lib.uapmd_piano_roll_session_dirty(handle)
+    override val error: String get() = lib.uapmd_piano_roll_session_error(handle) ?: ""
+
+    override fun matchesSource(snapshot: PianoRollSnapshot) =
+        lib.uapmd_piano_roll_session_matches_source(handle, (snapshot as JvmPianoRollSnapshot).handle)
+
+    override fun loadNotes(snapshot: PianoRollSnapshot?) =
+        lib.uapmd_piano_roll_session_load_notes(handle, (snapshot as JvmPianoRollSnapshot?)?.handle)
+
+    override fun selectNote(index: Int, additive: Boolean, toggle: Boolean) =
+        lib.uapmd_piano_roll_session_select_note(handle, index, additive, toggle)
+
+    override fun performAction(action: PianoRollAction, pasteSeconds: Double) =
+        lib.uapmd_piano_roll_session_perform_action(handle, action.nativeValue, pasteSeconds)
+
+    override fun createNote(startSeconds: Double, durationSeconds: Double, note: Int, velocity: Float) =
+        lib.uapmd_piano_roll_session_create_note(handle, startSeconds, durationSeconds, note.toByte(), velocity)
+
+    override fun deleteNote(index: Int) = lib.uapmd_piano_roll_session_delete_note(handle, index)
+
+    override fun resizeNote(index: Int, startSeconds: Double, durationSeconds: Double, note: Int) =
+        lib.uapmd_piano_roll_session_resize_note(handle, index, startSeconds, durationSeconds, note.toByte())
+
+    override fun beginDrag() = lib.uapmd_piano_roll_session_begin_drag(handle)
+    override fun moveSelection(timeDeltaSeconds: Double, pitchDelta: Int) =
+        lib.uapmd_piano_roll_session_move_selection(handle, timeDeltaSeconds, pitchDelta)
+    override fun cancelDrag() = lib.uapmd_piano_roll_session_cancel_drag(handle)
+    override fun finishDrag(index: Int, originalStart: Double, originalEnd: Double, originalNote: Int) =
+        lib.uapmd_piano_roll_session_finish_drag(handle, index, originalStart, originalEnd, originalNote.toByte())
+
+    override fun commit(app: AppModel) =
+        lib.uapmd_piano_roll_session_commit(handle, (app as JvmAppModel).handle)
+}
+
+private fun UapmdDeviceEntry.toKotlin() = DeviceEntry(
+    id = id,
+    label = label ?: "",
+    apiName = api_name ?: "",
+    statusMessage = status_message ?: "",
+    running = running != 0.toByte(),
+    instantiating = instantiating != 0.toByte(),
+    hasError = has_error != 0.toByte()
+)
+
+private fun UapmdPluginStateResult.toKotlin() = PluginStateResult(
+    instanceId = instance_id,
+    success = success != 0.toByte(),
+    error = error ?: "",
+    filepath = filepath ?: ""
+)
+
+/**
+ * JNA keeps a trampoline alive only while Java references the callback, so each
+ * pending state call parks its own until the native side has fired it once.
+ */
+private val pendingPluginStateCallbacks = java.util.Collections.synchronizedSet(mutableSetOf<Any>())
+
+private fun pluginStateCallback(callback: (PluginStateResult) -> Unit): PluginStateCb {
+    lateinit var cb: PluginStateCb
+    cb = object : PluginStateCb {
+        override fun invoke(result: UapmdPluginStateResult.ByVal, userData: Pointer?) {
+            try { callback(result.toKotlin()) } finally { pendingPluginStateCallbacks.remove(cb) }
+        }
+    }
+    pendingPluginStateCallbacks.add(cb)
+    return cb
+}
+
+private fun RenderToFileSettings.toJvmSettings() = UapmdAppRenderSettings().also {
+    it.output_path = outputPath
+    it.start_seconds = startSeconds
+    it.end_seconds = endSeconds
+    it.has_end_seconds = if (hasEndSeconds) 1 else 0
+    it.use_content_fallback = if (useContentFallback) 1 else 0
+    it.content_bounds_valid = if (contentBoundsValid) 1 else 0
+    it.content_start_seconds = contentStartSeconds
+    it.content_end_seconds = contentEndSeconds
+    it.tail_seconds = tailSeconds
+    it.enable_silence_stop = if (enableSilenceStop) 1 else 0
+    it.silence_duration_seconds = silenceDurationSeconds
+    it.silence_threshold_db = silenceThresholdDb
+    it.write()
+}
+
+@JvmName("tempoChangesToJvmArray")
+private fun List<MidiTempoChange>.toJvmArray(): UapmdMidiTempoChange? {
+    if (isEmpty()) return null
+    @Suppress("UNCHECKED_CAST")
+    val arr = UapmdMidiTempoChange().toArray(size) as Array<UapmdMidiTempoChange>
+    forEachIndexed { i, t ->
+        arr[i].tick_position = t.tickPosition.toLong()
+        arr[i].bpm = t.bpm
+        arr[i].write()
+    }
+    return arr[0]
+}
+
+@JvmName("timeSigChangesToJvmArray")
+private fun List<MidiTimeSignatureChange>.toJvmArray(): UapmdMidiTimeSigChange? {
+    if (isEmpty()) return null
+    @Suppress("UNCHECKED_CAST")
+    val arr = UapmdMidiTimeSigChange().toArray(size) as Array<UapmdMidiTimeSigChange>
+    forEachIndexed { i, t ->
+        arr[i].tick_position = t.tickPosition.toLong()
+        arr[i].numerator = t.numerator.toByte()
+        arr[i].denominator = t.denominator.toByte()
+        arr[i].clocks_per_click = t.clocksPerClick.toByte()
+        arr[i].thirty_seconds_per_quarter = t.thirtySecondsPerQuarter.toByte()
+        arr[i].write()
+    }
+    return arr[0]
+}

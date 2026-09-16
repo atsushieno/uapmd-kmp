@@ -72,7 +72,7 @@ interface SequencerEngine {
      */
     val midiRecorder: MidiRecorder?
 
-    // ─── Project / track dirty state (uapmd 0.5.6) ──────────────────────────
+    // ─── Project / track dirty state ────────────────────────────────────────
 
     /**
      * True when the project document differs from its saved history node, or an

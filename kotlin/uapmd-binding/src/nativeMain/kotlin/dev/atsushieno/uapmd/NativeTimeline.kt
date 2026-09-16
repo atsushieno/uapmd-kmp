@@ -166,7 +166,7 @@ class NativeTimelineFacade internal constructor(
         // Timeline refresh is triggered manually after project load on the native target.
     }
 
-    // ─── Project history (uapmd 0.5.6) ──────────────────────────────────────
+    // ─── Project history ────────────────────────────────────────────────────
 
     override val commands get() = history.commands
     override val addresses get() = history.addresses

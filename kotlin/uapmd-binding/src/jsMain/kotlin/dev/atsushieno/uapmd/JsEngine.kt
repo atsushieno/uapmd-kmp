@@ -8,7 +8,7 @@ class JsSequencerEngine internal constructor(
 
     private val engineHistory = JsEngineHistory(handle)
 
-    // ─── Project / track dirty state (uapmd 0.5.6) ──────────────────────────
+    // ─── Project / track dirty state ────────────────────────────────────────
 
     override val isProjectDirty get() = engineHistory.isProjectDirty
     override fun isTrackDirty(trackIndex: Int) = engineHistory.isTrackDirty(trackIndex)

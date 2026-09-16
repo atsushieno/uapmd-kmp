@@ -9,7 +9,16 @@ import androidx.compose.runtime.LaunchedEffect
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import dev.atsushieno.uapmd.AddinCommandInfo
+import dev.atsushieno.uapmd.AudioImportResult
+import dev.atsushieno.uapmd.StemSeparatorInfo
+import dev.atsushieno.uapmd.TimelineClipTarget
 import dev.atsushieno.uapmd.AddinManager
+import dev.atsushieno.uapmd.ClipCommandRegistry
+import dev.atsushieno.uapmd.ClipCommandTarget
+import dev.atsushieno.uapmd.ClipEditorRegistry
+import dev.atsushieno.uapmd.CommandRegistry
+import dev.atsushieno.uapmd.StemSeparatorRegistry
 import dev.atsushieno.uapmd.AppModel
 import dev.atsushieno.uapmd.AppProjectResult
 import dev.atsushieno.uapmd.AudioIoDirection
@@ -50,7 +59,7 @@ import dev.atsushieno.uapmd.prepareProjectLoad
  *
  * The sequence follows uapmd-app's own `main_common.cpp` / `web_main.cpp`
  * (docs/uapmd-cmp-plan.md §2.5), because uapmd-cmp replaces that entry point and
- * inherits everything it used to do:
+ * inherits everything it does:
  *
  *   platform event loop  ->  instantiate  ->  UI exists  ->  notifyUiReady
  *   ->  notifyPersistentStorageReady  ->  audio engine to its per-platform
@@ -239,19 +248,97 @@ class UapmdHost private constructor(val model: AppModel) {
 
     // ── Addins ──────────────────────────────────────────────────────────────
     //
-    // The engine publishes its extension points, then the manager loads what is
-    // installed - the order uapmd-app uses.
+    // The engine publishes its extension points, the host publishes its own,
+    // then the manager loads what is installed - the order uapmd-app uses in
+    // `MainWindow::MainWindow` (MainWindow.cpp:47-72).
+    //
+    // Every extension point has to be up before initialize(): an addin attaches
+    // to exactly one path and fails to load when the host never published it.
+    // Leaving one out is how the MIR, Basic Pitch and DrumScript commands
+    // silently fail to appear.
 
     var addins: AddinManager? = null
+        private set
+
+    /** Application-wide commands addins contributed, for the Command menu. */
+    var commandRegistry: CommandRegistry? = null
+        private set
+
+    /** Clip-scoped commands, offered from a clip's context menu. */
+    var clipCommandRegistry: ClipCommandRegistry? = null
+        private set
+
+    /**
+     * Held only so that addins asking for the clip-editor extension point still
+     * load. Their editors draw through an immediate-mode UI loop that Compose
+     * does not have, so uapmd-cmp presents none of them.
+     */
+    var clipEditorRegistry: ClipEditorRegistry? = null
+        private set
+
+    /** Stem separation backends, for the split audio import. */
+    var stemSeparatorRegistry: StemSeparatorRegistry? = null
         private set
 
     private fun initAddins() {
         runCatching {
             val manager = createAddinManager()
             model.sequencer.engine.registerAddinExtensionPoints(manager)
+
+            val commands = CommandRegistry.create()
+            val clipCommands = ClipCommandRegistry.create()
+            val clipEditors = ClipEditorRegistry.create()
+            val separators = StemSeparatorRegistry.create()
+            manager.registerCommandRegistry(commands)
+            manager.registerClipCommandRegistry(clipCommands)
+            manager.registerClipEditorRegistry(clipEditors)
+            manager.registerStemSeparatorRegistry(separators)
+
             manager.initialize()
+
             addins = manager
+            commandRegistry = commands
+            clipCommandRegistry = clipCommands
+            clipEditorRegistry = clipEditors
+            stemSeparatorRegistry = separators
         }
+    }
+
+    /**
+     * Bumped whenever the addin set changes, so anything showing addin-supplied
+     * commands or separators recomposes. Enabling an addin adds its entries to
+     * the registries and disabling one withdraws them, and neither is something
+     * the registries can announce on their own.
+     */
+    var addinRevision by mutableStateOf(0)
+        private set
+
+    fun notifyAddinsChanged() {
+        addinRevision++
+    }
+
+    /**
+     * Commands addins contributed. Re-read rather than cached: enabling or
+     * disabling an addin changes the list, and an index is only good until then.
+     */
+    fun addinCommands(): List<AddinCommandInfo> = commandRegistry?.commands.orEmpty()
+
+    fun invokeAddinCommand(id: String) {
+        commandRegistry?.invokeById(id)
+        refresh()
+    }
+
+    /** The clip commands that apply to this clip, with their live indexes. */
+    fun clipCommandsFor(target: ClipCommandTarget): List<Pair<Int, AddinCommandInfo>> {
+        val registry = clipCommandRegistry ?: return emptyList()
+        return registry.commands.withIndex()
+            .filter { (index, _) -> registry.appliesTo(index, target) }
+            .map { (index, info) -> index to info.copy(enabled = registry.isEnabled(index, target)) }
+    }
+
+    fun invokeClipCommand(index: Int, target: ClipCommandTarget) {
+        clipCommandRegistry?.invoke(index, target)
+        refresh()
     }
 
     // ── Audio devices ───────────────────────────────────────────────────────
@@ -519,6 +606,69 @@ class UapmdHost private constructor(val model: AppModel) {
         }
     }
 
+    /**
+     * "New Project", as uapmd-app does it (MainWindow.cpp:750).
+     *
+     * Goes through the same stop/teardown/restart dance as a load, and for the
+     * same reason: replacing the project destroys every live plug-in instance,
+     * which must not happen with audio running or with plug-in UIs open.
+     *
+     * Whether unsaved changes may be discarded is the caller's decision — the
+     * engine asks nothing and always replaces — so the toolbar confirms first
+     * when the project is dirty.
+     */
+    fun newProject() {
+        if (isLoadingProject)
+            return
+        isLoadingProject = true
+        newProjectInternal()
+    }
+
+    private fun newProjectInternal() = offUiThread {
+        val engine = model.sequencer.engine
+        val wasRunning = model.isAudioEngineEnabled
+        if (wasRunning) {
+            engine.setActive(false)
+            sequencer.stopAudio()
+        }
+
+        val presentationsToClose = withContext(uiDispatcher) {
+            nativeUiPresentations.values.toList().also {
+                nativeUiPresentations.clear()
+            }
+        }
+        presentationsToClose.forEach { runCatching { it.close() } }
+
+        val result = try {
+            model.newProject()
+        } finally {
+            if (wasRunning) {
+                engine.setActive(true)
+                sequencer.startAudio()
+            }
+        }
+
+        // The outgoing project's unpacked archive is only safe to drop once the
+        // timeline no longer references the files inside it.
+        if (result.success) {
+            activePreparedProject?.let { runCatching { it.close() } }
+            activePreparedProject = null
+        }
+
+        onUiThread {
+            if (result.success) {
+                platformHostedUiInstanceIds = emptySet()
+                selectedMidiClip = null
+            }
+            lastProjectResult = result
+            noteCache.clear()
+            isLoadingProject = false
+            projectRevision++
+            refreshTempoMap()
+            refresh()
+        }
+    }
+
     fun saveProject(path: String) = offUiThread {
         model.saveProject(path) { result ->
             onUiThread {
@@ -691,6 +841,257 @@ class UapmdHost private constructor(val model: AppModel) {
         }
     }
 
+    // ── Timeline clip selection and clipboard ───────────────────────────────
+    //
+    // The selection and the clipboard live in AppModel, not here:
+    // upstream moved them out of its GUI precisely so every host behaves the
+    // same. This is a thin surface over that, plus a revision counter so the
+    // lanes recompose when the selection changes — the model cannot announce it.
+
+    var selectionRevision by mutableStateOf(0)
+        private set
+
+    /** Last clipboard/selection failure, shown in the toolbar's status line. */
+    var lastSelectionError by mutableStateOf<String?>(null)
+        private set
+
+    private fun selectionChanged() {
+        selectionRevision++
+        refresh()
+    }
+
+    fun isClipSelected(trackIndex: Int, clipId: Int): Boolean =
+        runCatching { model.isTimelineClipSelected(trackIndex, clipId) }.getOrDefault(false)
+
+    fun selectedClips(): List<TimelineClipTarget> =
+        runCatching { model.selectedTimelineClips }.getOrDefault(emptyList())
+
+    /**
+     * [additive] extends the selection (shift-click, shift-marquee), [toggle]
+     * flips each clip within it (ctrl/cmd-click). Both false replaces it, and an
+     * empty list with both false clears it — the three outcomes uapmd-app's
+     * marquee produces (`TimelineClipSelection.hpp`).
+     */
+    fun selectClips(clips: List<TimelineClipTarget>, additive: Boolean = false, toggle: Boolean = false) {
+        runCatching { model.selectTimelineClips(clips, additive, toggle) }
+        selectionChanged()
+    }
+
+    fun clearClipSelection() {
+        runCatching { model.clearTimelineClipSelection() }
+        selectionChanged()
+    }
+
+    val clipboardCount: Int
+        get() = runCatching { model.timelineClipboardCount }.getOrDefault(0)
+
+    fun copySelectedClips() {
+        val ok = runCatching { model.copySelectedTimelineClips() }.getOrDefault(false)
+        lastSelectionError = if (ok) null else model.lastTimelineClipError.ifEmpty { null }
+        selectionChanged()
+    }
+
+    /** [cut] copies the selection before removing it. */
+    fun deleteSelectedClips(cut: Boolean = false) {
+        val result = runCatching { model.deleteSelectedTimelineClips(cut) }.getOrNull()
+        lastSelectionError = result?.error
+        invalidateClips()
+        selectionChanged()
+    }
+
+    /**
+     * Pastes at [positionSeconds]. [originalTracks] puts each clip back on the
+     * track it came from; otherwise they land relative to [trackIndex].
+     */
+    fun pasteClips(trackIndex: Int, positionSeconds: Double, originalTracks: Boolean = false) {
+        val result = runCatching {
+            model.pasteTimelineClips(trackIndex, positionSeconds, originalTracks)
+        }.getOrNull()
+        lastSelectionError = result?.error
+        // A successful paste selects what it created, so the next action acts on
+        // the new clips rather than on the ones they came from.
+        if (result?.success == true && result.pasted.isNotEmpty())
+            runCatching { model.selectTimelineClips(result.pasted, additive = false, toggle = false) }
+        invalidateClips()
+        selectionChanged()
+    }
+
+    /** Whether a paste onto this track would succeed, for enabling the menu item. */
+    fun canPasteOnto(trackIndex: Int, originalTracks: Boolean = false): Boolean =
+        clipboardCount > 0 &&
+            runCatching { model.timelinePasteDestinations(trackIndex, originalTracks) }
+                .getOrDefault(emptyList()).isNotEmpty()
+
+    // ── Split audio import (stem separation) ────────────────────────────────
+    //
+    // uapmd-app's AudioImportWindow: pick an audio file (and a model file, for
+    // separators that need one), run the separation on a worker, then turn each
+    // stem into its own track and clip inside one history step.
+
+    /** Live progress of a running import, for the import dialog. */
+    data class StemImportStatus(
+        val running: Boolean = false,
+        val completed: Boolean = false,
+        val success: Boolean = false,
+        val canceled: Boolean = false,
+        val progress: Float = 0f,
+        val message: String = "",
+        val error: String? = null
+    )
+
+    var stemImportStatus by mutableStateOf(StemImportStatus())
+        private set
+
+    /** Backends addins contributed; empty means no separator addin is enabled. */
+    fun stemSeparators(): List<StemSeparatorInfo> = stemSeparatorRegistry?.separators.orEmpty()
+
+    /**
+     * Set while an import runs; the dialog's Cancel flips it. Read from the
+     * worker through the progress callback, which is the separator's only
+     * cancellation point.
+     */
+    private var cancelStemImport = false
+
+    fun cancelStemImport() {
+        cancelStemImport = true
+        stemImportStatus = stemImportStatus.copy(message = "Cancelling…")
+    }
+
+    fun resetStemImportStatus() {
+        stemImportStatus = StemImportStatus()
+    }
+
+    /**
+     * Separates [audioFile] into stems and adds each as a new track.
+     *
+     * The separation is a neural model over the whole file, so it runs off the
+     * UI thread; [outputDirectory] is where the stem files are written, and
+     * [modelPath] is the model file the separator asked for (null when it needs
+     * none).
+     */
+    fun importSplitAudioTracks(
+        separatorId: String,
+        audioFile: String,
+        outputDirectory: String,
+        modelPath: String?
+    ) {
+        val registry = stemSeparatorRegistry ?: return
+        if (stemImportStatus.running)
+            return
+        cancelStemImport = false
+        stemImportStatus = StemImportStatus(running = true, message = "Starting…")
+
+        offUiThread {
+            val result = runCatching {
+                registry.importAudioFile(separatorId, audioFile, outputDirectory, modelPath) { progress, message ->
+                    onUiThread {
+                        stemImportStatus = stemImportStatus.copy(
+                            progress = progress.coerceIn(0f, 1f),
+                            message = message
+                        )
+                    }
+                    !cancelStemImport
+                }
+            }.getOrElse { throwable ->
+                AudioImportResult(false, false, throwable.message ?: "Stem separation failed", emptyList(), emptyList())
+            }
+
+            onUiThread {
+                stemImportStatus = StemImportStatus(
+                    running = false,
+                    completed = true,
+                    success = result.success,
+                    canceled = result.canceled,
+                    progress = if (result.success) 1f else stemImportStatus.progress,
+                    message = when {
+                        result.canceled -> "Import cancelled."
+                        result.success -> "Import complete."
+                        else -> result.error ?: "Import failed."
+                    },
+                    error = result.error
+                )
+                if (result.success && !result.canceled)
+                    applyStemImportResult(result)
+            }
+        }
+    }
+
+    /**
+     * One track and one clip per stem, recorded as a single history step so the
+     * whole import undoes in one go (TimelineEditor::applyAudioImportResult).
+     *
+     * addTrack() is asynchronous — a track owns live plug-in instances — so the
+     * stems are applied one at a time, each from the previous one's callback,
+     * rather than in a loop.
+     */
+    private fun applyStemImportResult(result: AudioImportResult) {
+        if (result.stems.isEmpty()) {
+            lastImportStatus = "No stems were imported."
+            return
+        }
+        val warnings = result.warnings.toMutableList()
+        val history = model.sequencer.engine.timeline.commands.history
+        val ownsStep = !history.state.compoundOpen
+        if (ownsStep) {
+            val opened = history.beginStep("Import audio stems")
+            if (!opened.succeeded) {
+                lastImportStatus = "Import failed: ${opened.error ?: "could not open a history step"}"
+                return
+            }
+        }
+
+        fun finish(imported: Int) {
+            if (ownsStep)
+                history.endStep()
+            lastImportStatus = when {
+                imported == 0 -> "No stems were imported." + warningSuffix(warnings)
+                else -> "Imported $imported stem(s)." + warningSuffix(warnings)
+            }
+            invalidateClips()
+            refresh()
+        }
+
+        fun applyNext(index: Int, imported: Int) {
+            if (index >= result.stems.size) {
+                finish(imported)
+                return
+            }
+            val stem = result.stems[index]
+            model.addTrack { trackIndex, error ->
+                onUiThread {
+                    if (trackIndex < 0 || !error.isNullOrEmpty()) {
+                        warnings += "${stem.clipDisplayName}: ${error ?: "Failed to create track"}"
+                        applyNext(index + 1, imported)
+                        return@onUiThread
+                    }
+                    val reader = runCatching { createAudioFileReader(stem.filepath) }.getOrNull()
+                    if (reader == null) {
+                        warnings += "${stem.clipDisplayName}: Failed to open stem audio"
+                        applyNext(index + 1, imported)
+                        return@onUiThread
+                    }
+                    val timeline = model.sequencer.engine.timeline
+                    val clip = timeline.addAudioClip(
+                        trackIndex, TimelinePosition(0L, 0.0), reader, stem.filepath
+                    )
+                    if (!clip.success) {
+                        warnings += "${stem.clipDisplayName}: ${clip.error ?: "Failed to add clip"}"
+                        applyNext(index + 1, imported)
+                        return@onUiThread
+                    }
+                    timeline.commands.setClipName(trackIndex, clip.clipId, stem.clipDisplayName)
+                    timeline.commands.setClipNeedsFileSave(trackIndex, clip.clipId, true)
+                    applyNext(index + 1, imported + 1)
+                }
+            }
+        }
+
+        applyNext(0, 0)
+    }
+
+    private fun warningSuffix(warnings: List<String>): String =
+        if (warnings.isEmpty()) "" else " Warnings: " + warnings.joinToString("; ")
+
     /** SMF or .midi2, added at [positionSeconds] on [trackIndex]. */
     fun importMidiClip(trackIndex: Int, filePath: String, positionSeconds: Double = 0.0) {
         lastClipResult = model.sequencer.engine.timeline
@@ -741,6 +1142,63 @@ class UapmdHost private constructor(val model: AppModel) {
         noteCache.clear()
         refresh()
     }
+
+    // ── Step sequencer ───────────────────────────────────────────────────────
+
+    /**
+     * The pattern a MIDI clip was baked from, or null when the clip carries no
+     * step metadata — which is how uapmd-app tells "reopen this pattern" apart
+     * from "this clip came from somewhere else and opening it would overwrite
+     * whatever is in it".
+     */
+    fun readStepPattern(trackIndex: Int, clipId: Int): StepSequencerModel.Pattern? {
+        val result = model.getMidiClipUmpEvents(trackIndex, clipId)
+        if (!result.success) return null
+        val (words, ticks) = result.flatten()
+        return StepSequencerModel.readPattern(words, ticks, result.tickResolutionOrDefault)
+    }
+
+    /** An empty pattern on the clip's own tick grid, for a clip with no metadata. */
+    fun newStepPattern(trackIndex: Int, clipId: Int): StepSequencerModel.Pattern =
+        StepSequencerModel.emptyPattern(
+            model.getMidiClipUmpEvents(trackIndex, clipId).tickResolutionOrDefault
+        )
+
+    /** The clip's ticks per quarter note, as the engine reports it. */
+    fun clipTickResolution(trackIndex: Int, clipId: Int): Int =
+        model.getMidiClipUmpEvents(trackIndex, clipId).tickResolutionOrDefault
+
+    /** The clip's own tempo, which the piano roll's beats-in-view zoom scales by. */
+    fun clipTempo(trackIndex: Int, clipId: Int): Double =
+        model.getMidiClipUmpEvents(trackIndex, clipId).clipTempo.takeIf { it > 0.0 } ?: 120.0
+
+    /**
+     * Bakes [pattern] into the clip, keeping every event the editor does not own.
+     *
+     * Goes through the timeline facade's `replaceMidiClipContent`, which is the
+     * same call uapmd-app's `applyStepSequencerEdits` makes, so the edit lands on
+     * the history like any other.
+     */
+    fun applyStepPattern(
+        trackIndex: Int, clipId: Int, pattern: StepSequencerModel.Pattern
+    ): String? {
+        val existing = model.getMidiClipUmpEvents(trackIndex, clipId)
+        if (!existing.success)
+            return existing.error ?: "Could not read the clip's events."
+        val (words, ticks) = existing.flatten()
+        val baked = StepSequencerModel.bake(pattern, words, ticks)
+        // replaceMidiClipContent wants one tick entry per UMP *word*, not per
+        // event — see the note in UmpNotes.kt.
+        val newWords = baked.flatMap { it.words.toList() }.toUIntArray()
+        val newTicks = baked.flatMap { e -> List(e.words.size) { e.tick } }.toLongArray()
+        val ok = model.sequencer.engine.timeline
+            .replaceMidiClipContent(trackIndex, clipId, newWords, newTicks)
+        if (!ok) return "Failed to replace MIDI clip data."
+        invalidateMidiCache()
+        projectRevision++
+        return null
+    }
+
 
     // ── Clip properties (all through ProjectCommands, so every edit is undoable) ──
 
@@ -805,19 +1263,13 @@ class UapmdHost private constructor(val model: AppModel) {
         }
     }
 
-    fun setTrackMuted(trackIndex: Int, muted: Boolean) =
-        commands.setTrackMuted(trackIndex, muted).also { refresh() }
+    fun setTrackMuted(trackIndex: Int, muted: Boolean) {
+        model.setTrackMuted(trackIndex, muted)
+        refresh()
+    }
 
-    /** Ctrl/Cmd-click is additive; otherwise soloing one track clears the others. */
-    fun setTrackSolo(trackIndex: Int, solo: Boolean, additive: Boolean = false) {
-        model.sequencer.engine.timeline.documentTransaction {
-            if (solo && !additive) {
-                (0 until model.sequencer.engine.trackCount.toInt()).forEach { i ->
-                    if (i != trackIndex) commands.setTrackSolo(i, false)
-                }
-            }
-            commands.setTrackSolo(trackIndex, solo)
-        }
+    fun setTrackSolo(trackIndex: Int, solo: Boolean) {
+        model.setTrackSolo(trackIndex, solo)
         refresh()
     }
 
@@ -841,9 +1293,28 @@ class UapmdHost private constructor(val model: AppModel) {
 
     fun trackExists(trackIndex: Int) = engineTrackAt(trackIndex) != null
     fun trackGain(trackIndex: Int) = engineTrackAt(trackIndex)?.gain ?: 1.0
-    fun trackMuted(trackIndex: Int) = engineTrackAt(trackIndex)?.muted ?: false
-    fun trackSolo(trackIndex: Int) = engineTrackAt(trackIndex)?.solo ?: false
     fun trackBypassed(trackIndex: Int) = engineTrackAt(trackIndex)?.bypassed ?: false
+
+    /*
+     * Mute and solo are mirrored into Compose state for the same reason freeze
+     * is: a native read is not observable, so a legend that reads the engine
+     * directly never recomposes when the value changes.
+     *
+     * For a *toggle* that is not cosmetic but fatal: the button sends
+     * `!currentValue`, so a row that never recomposes reads the value it was
+     * first composed with and every click sends the same command — solo
+     * switches on and never off.
+     */
+    var trackMutedFlags by mutableStateOf<List<Boolean>>(emptyList())
+        private set
+    var trackSoloFlags by mutableStateOf<List<Boolean>>(emptyList())
+        private set
+
+    fun trackMuted(trackIndex: Int) =
+        trackMutedFlags.getOrNull(trackIndex) ?: model.isTrackMuted(trackIndex)
+
+    fun trackSolo(trackIndex: Int) =
+        trackSoloFlags.getOrNull(trackIndex) ?: model.isTrackSolo(trackIndex)
 
     /*
      * Freeze state is mirrored into Compose state by the poll, like every other
@@ -1011,6 +1482,14 @@ class UapmdHost private constructor(val model: AppModel) {
         trackBusyFlags = (0 until count).map {
             runCatching { engine.isTrackBusy(it) }.getOrDefault(false)
         }
+        // Every tick, not only structural ones: these back the M and S buttons,
+        // and a stale value there makes the toggle send the wrong command.
+        trackMutedFlags = (0 until count).map {
+            runCatching { model.isTrackMuted(it) }.getOrDefault(false)
+        }
+        trackSoloFlags = (0 until count).map {
+            runCatching { model.isTrackSolo(it) }.getOrDefault(false)
+        }
         // Only one track renders at a time, so stop at the first that reports.
         freezeRender = (0 until count).firstNotNullOfOrNull { i ->
             runCatching { engine.trackFreezeRenderProgress(i) }.getOrNull()?.let { (i + 1) to it }
@@ -1044,9 +1523,9 @@ class UapmdHost private constructor(val model: AppModel) {
         outputSpectrum = runCatching { engine.getOutputSpectrum(24) }.getOrDefault(outputSpectrum)
 
         // A finished scan is the moment the catalog changed, so refresh on the
-        // falling edge of `isScanning`. Refreshing only while the catalog is empty
-        // — which is what this used to do — meant a rescan never reached the list:
-        // press Scan, watch nothing happen, conclude scanning is broken.
+        // falling edge of `isScanning`. Refreshing only while the catalog is
+        // empty would mean a rescan never reaches the list: press Scan, watch
+        // nothing happen, conclude scanning is broken.
         if (wasScanning && !isScanning) refreshCatalog()
         wasScanning = isScanning
         if (catalog.isEmpty() && !isScanning) refreshCatalog()
@@ -1454,3 +1933,15 @@ private suspend fun runStartupDevHooks(host: UapmdHost) = kotlinx.coroutines.cor
             )
         }
 }
+
+/**
+ * The clip's events as one flat word array plus one tick per *word*, which is
+ * the shape `replaceMidiClipContent` reads and writes (see UmpNotes.kt).
+ */
+private fun dev.atsushieno.uapmd.UmpEventsResult.flatten(): Pair<UIntArray, LongArray> =
+    events.flatMap { it.words.toList() }.toUIntArray() to
+        events.flatMap { e -> List(e.words.size) { e.tick } }.toLongArray()
+
+/** 480 ticks per quarter is what `createEmptyMidiClip` defaults to. */
+private val dev.atsushieno.uapmd.UmpEventsResult.tickResolutionOrDefault: Int
+    get() = tickResolution.toInt().takeIf { it > 0 } ?: 480

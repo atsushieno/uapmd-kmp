@@ -1,10 +1,4 @@
-/* uapmd C API — bindings for uapmd-addin-core
- *
- * Introduced by uapmd 0.5.6. An addin is a package that attaches itself to
- * named extension points a host publishes; ARA support is one such addin.
- * Hosts own an AddinManager, publish their extension points into it, and then
- * initialize() it to load whatever is installed.
- */
+/* uapmd C API — bindings for uapmd-addin-core */
 #ifndef UAPMD_C_ADDIN_H
 #define UAPMD_C_ADDIN_H
 

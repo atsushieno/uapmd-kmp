@@ -167,11 +167,6 @@ enum class StepEventBatching(val nativeValue: Int) {
 /**
  * The project's history: thread-affine and asynchronous. Its methods are called
  * on the model thread; completions may arrive on any thread.
- *
- * uapmd 0.5.7 made the history an interface a project chooses an implementation
- * of, and withdrew every direct handle on the engine behind it. The separate
- * `UndoEngine` this binding used to expose is gone with it: everything it could
- * do lives here, because the command manager now carries the whole contract.
  */
 interface CommandManager {
     val state: UndoState
@@ -280,11 +275,6 @@ interface ProjectCommands {
      */
     fun setMasterTrackMarkers(markers: List<ClipMarkerData>, origin: MutationOrigin = MutationOrigin.User): Boolean
 
-    /**
-     * Device inputs. Adding one, rerouting it and removing it all write the
-     * same per-input value, so undoing an add is a removal. These moved off
-     * [TimelineFacade] in uapmd 0.5.7, which is what made them undoable.
-     */
     fun addDeviceInputToTrack(trackIndex: Int, sourceNodeId: Int, channelIndices: List<UInt>, origin: MutationOrigin = MutationOrigin.User): Boolean
     fun setDeviceInputChannels(trackIndex: Int, sourceNodeId: Int, channelIndices: List<UInt>, origin: MutationOrigin = MutationOrigin.User): Boolean
     fun removeDeviceInputFromTrack(trackIndex: Int, sourceNodeId: Int, origin: MutationOrigin = MutationOrigin.User): Boolean

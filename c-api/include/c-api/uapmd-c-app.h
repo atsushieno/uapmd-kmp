@@ -162,7 +162,7 @@ UAPMD_C_EXPORT bool     uapmd_app_get_master_time_signature(uapmd_app_model_t ap
 UAPMD_C_EXPORT uint32_t uapmd_app_blocklist_count(uapmd_app_model_t app);
 UAPMD_C_EXPORT bool     uapmd_app_get_blocklist_entry(uapmd_app_model_t app, uint32_t index,
                                                           uapmd_blocklist_entry_t* out);
-UAPMD_C_EXPORT bool     uapmd_app_unblock_plugin(uapmd_app_model_t app, const char* entry_id);
+UAPMD_C_EXPORT bool     uapmd_app_unblock_plugin_from_blocklist(uapmd_app_model_t app, const char* entry_id);
 
 /* ═══════════════════════════════════════════════════════════════════════════
  *  Plugin instance management
@@ -304,8 +304,12 @@ UAPMD_C_EXPORT bool uapmd_app_remove_clip_from_track(uapmd_app_model_t app, int3
  *  Track management
  * ═══════════════════════════════════════════════════════════════════════════ */
 
-/* The mutation callbacks live in uapmd-c-undo.h: track mutations became undo
- * engine operations in uapmd 0.5.6, so they complete asynchronously. */
+/* The mutation callbacks are declared in uapmd-c-undo.h. */
+
+UAPMD_C_EXPORT bool uapmd_app_is_track_muted(uapmd_app_model_t app, int32_t track_index);
+UAPMD_C_EXPORT bool uapmd_app_is_track_solo(uapmd_app_model_t app, int32_t track_index);
+UAPMD_C_EXPORT bool uapmd_app_set_track_muted(uapmd_app_model_t app, int32_t track_index, bool muted);
+UAPMD_C_EXPORT bool uapmd_app_set_track_solo(uapmd_app_model_t app, int32_t track_index, bool solo);
 
 UAPMD_C_EXPORT void uapmd_app_add_track(uapmd_app_model_t app,
                                            void* user_data,
@@ -326,7 +330,263 @@ UAPMD_C_EXPORT int32_t uapmd_app_add_device_input_to_track(uapmd_app_model_t app
 /* Timeline tracks */
 UAPMD_C_EXPORT uint32_t uapmd_app_timeline_track_count(uapmd_app_model_t app);
 UAPMD_C_EXPORT uapmd_timeline_track_t uapmd_app_get_timeline_track(uapmd_app_model_t app, uint32_t index);
-UAPMD_C_EXPORT uapmd_timeline_track_t uapmd_app_master_timeline_track(uapmd_app_model_t app);
+UAPMD_C_EXPORT uapmd_timeline_track_t uapmd_app_get_master_timeline_track(uapmd_app_model_t app);
+
+/* ═══════════════════════════════════════════════════════════════════════════
+ *  Assorted AppModel accessors
+ * ═══════════════════════════════════════════════════════════════════════════ */
+
+/* MIDI ports the engine can see. Strings point into per-thread storage that the
+ * next call of the same getter on this thread overwrites. */
+typedef struct uapmd_midi_port_info {
+    const char* id;
+    const char* display_name;
+} uapmd_midi_port_info_t;
+
+/* Pass a null `out` to ask for just the count. */
+UAPMD_C_EXPORT uint32_t uapmd_app_get_midi_input_ports(uapmd_app_model_t app, uapmd_midi_port_info_t* out, uint32_t out_count);
+UAPMD_C_EXPORT uint32_t uapmd_app_get_midi_output_ports(uapmd_app_model_t app, uapmd_midi_port_info_t* out, uint32_t out_count);
+
+/* A hidden track is skipped by paste and by the track list, but still plays. */
+UAPMD_C_EXPORT bool uapmd_app_is_track_hidden(uapmd_app_model_t app, int32_t track_index);
+
+/* Moves the playhead without starting or stopping the transport. Lives on the
+ * transport controller, as it does upstream. */
+UAPMD_C_EXPORT void uapmd_transport_jump(uapmd_transport_controller_t tc, double position_seconds);
+
+/* The span the timeline's content actually occupies. */
+typedef struct uapmd_timeline_content_bounds {
+    bool   has_content;
+    double start_seconds;
+    double end_seconds;
+    double duration_seconds;
+} uapmd_timeline_content_bounds_t;
+
+UAPMD_C_EXPORT uapmd_timeline_content_bounds_t uapmd_app_timeline_content_bounds(uapmd_app_model_t app);
+
+/* UMP devices the model has instantiated. `label` points into per-thread storage
+ * that the next call on this thread overwrites. */
+typedef struct uapmd_device_entry {
+    int32_t     id;
+    const char* label;
+    const char* api_name;
+    const char* status_message;
+    bool        running;
+    bool        instantiating;
+    bool        has_error;
+} uapmd_device_entry_t;
+
+UAPMD_C_EXPORT uint32_t uapmd_app_get_devices(uapmd_app_model_t app, uapmd_device_entry_t* out, uint32_t out_count);
+/* The device hosting a plug-in instance; false when it has none. */
+UAPMD_C_EXPORT bool uapmd_app_get_device_for_instance(uapmd_app_model_t app, int32_t instance_id, uapmd_device_entry_t* out);
+UAPMD_C_EXPORT void uapmd_app_update_device_label(uapmd_app_model_t app, int32_t instance_id, const char* label);
+
+/* Synchronous plug-in state I/O, reusing uapmd_plugin_state_result_t above. The
+ * asynchronous uapmd_app_load_plugin_state()/uapmd_app_save_plugin_state() are
+ * preferred; a plug-in's state can be slow to produce, and on Android reading it
+ * from the main thread can deadlock. These exist for tools and tests that have
+ * no loop to post a completion to. */
+UAPMD_C_EXPORT uapmd_plugin_state_result_t uapmd_app_load_plugin_state_sync(uapmd_app_model_t app, int32_t instance_id, const char* filepath);
+UAPMD_C_EXPORT uapmd_plugin_state_result_t uapmd_app_save_plugin_state_sync(uapmd_app_model_t app, int32_t instance_id, const char* filepath);
+
+/* Marks the track owning this instance dirty, so the next save rewrites it. */
+UAPMD_C_EXPORT void uapmd_app_mark_plugin_instance_track_dirty(uapmd_app_model_t app, int32_t instance_id);
+
+/* ═══════════════════════════════════════════════════════════════════════════
+ *  Piano roll editing session
+ *
+ *  Model thread only.
+ * ═══════════════════════════════════════════════════════════════════════════ */
+
+typedef struct uapmd_piano_roll_session*  uapmd_piano_roll_session_t;
+/* Owned by the caller; release with uapmd_piano_roll_snapshot_destroy(). */
+typedef struct uapmd_piano_roll_snapshot* uapmd_piano_roll_snapshot_t;
+
+/* The clipboard actions a session performs on its selection. */
+typedef enum uapmd_piano_roll_action {
+    UAPMD_PIANO_ROLL_ACTION_NONE       = 0,
+    UAPMD_PIANO_ROLL_ACTION_COPY       = 1,
+    UAPMD_PIANO_ROLL_ACTION_CUT        = 2,
+    UAPMD_PIANO_ROLL_ACTION_PASTE      = 3,
+    UAPMD_PIANO_ROLL_ACTION_DELETE     = 4,
+    UAPMD_PIANO_ROLL_ACTION_SELECT_ALL = 5
+} uapmd_piano_roll_action_t;
+
+/* One note as the session holds it. `deleted` notes stay in the list so that
+ * indexes remain stable across an edit; skip them when drawing. */
+typedef struct uapmd_piano_roll_note {
+    double   start_seconds;
+    double   duration_seconds;
+    float    velocity;          /* 0.0 - 1.0 */
+    uint8_t  note;              /* 0 - 127 */
+    uint8_t  channel;
+    bool     deleted;
+    /* MIDI2 note detail, zero on a note that carries none. */
+    uint64_t edit_id;
+    uint8_t  ump_group;
+    uint16_t release_velocity;
+    uint8_t  attribute_type;
+    uint16_t attribute_value;
+    uint32_t automation_event_count;
+} uapmd_piano_roll_note_t;
+
+/* ── Snapshot: a clip parsed into notes ──────────────────────────────────── */
+
+UAPMD_C_EXPORT uapmd_piano_roll_snapshot_t uapmd_app_piano_roll_clip_snapshot(uapmd_app_model_t app,
+                                                                                 int32_t track_index,
+                                                                                 int32_t clip_id,
+                                                                                 double fallback_duration_seconds);
+UAPMD_C_EXPORT void     uapmd_piano_roll_snapshot_destroy(uapmd_piano_roll_snapshot_t snapshot);
+UAPMD_C_EXPORT bool     uapmd_piano_roll_snapshot_ready(uapmd_piano_roll_snapshot_t snapshot);
+/* Never NULL; empty when the snapshot is ready. */
+UAPMD_C_EXPORT const char* uapmd_piano_roll_snapshot_error(uapmd_piano_roll_snapshot_t snapshot);
+UAPMD_C_EXPORT double   uapmd_piano_roll_snapshot_duration_seconds(uapmd_piano_roll_snapshot_t snapshot);
+UAPMD_C_EXPORT uint8_t  uapmd_piano_roll_snapshot_min_note(uapmd_piano_roll_snapshot_t snapshot);
+UAPMD_C_EXPORT uint8_t  uapmd_piano_roll_snapshot_max_note(uapmd_piano_roll_snapshot_t snapshot);
+UAPMD_C_EXPORT uint32_t uapmd_piano_roll_snapshot_note_count(uapmd_piano_roll_snapshot_t snapshot);
+UAPMD_C_EXPORT bool     uapmd_piano_roll_snapshot_get_note(uapmd_piano_roll_snapshot_t snapshot, uint32_t index, uapmd_piano_roll_note_t* out);
+
+/* ── Session lifecycle ───────────────────────────────────────────────────── */
+
+/* Owned by the model and shared between callers; do not destroy. */
+UAPMD_C_EXPORT uapmd_piano_roll_session_t uapmd_app_open_piano_roll_session(uapmd_app_model_t app, int32_t track_index, int32_t clip_id);
+/* NULL when no session is open for that clip. */
+UAPMD_C_EXPORT uapmd_piano_roll_session_t uapmd_app_find_piano_roll_session(uapmd_app_model_t app, int32_t track_index, int32_t clip_id);
+UAPMD_C_EXPORT void uapmd_app_close_piano_roll_session(uapmd_app_model_t app, int32_t track_index, int32_t clip_id);
+
+/* Whether the session was built from this snapshot's UMP stream. False means
+ * the clip changed underneath and the session must be reloaded -- which is what
+ * keeps an edit from being applied to a clip it was not made against. */
+UAPMD_C_EXPORT bool uapmd_piano_roll_session_matches_source(uapmd_piano_roll_session_t session,
+                                                               uapmd_piano_roll_snapshot_t snapshot);
+UAPMD_C_EXPORT void uapmd_piano_roll_session_load_notes(uapmd_piano_roll_session_t session,
+                                                           uapmd_piano_roll_snapshot_t snapshot);
+
+/* ── Reading ─────────────────────────────────────────────────────────────── */
+
+UAPMD_C_EXPORT uint32_t uapmd_piano_roll_session_note_count(uapmd_piano_roll_session_t session);
+UAPMD_C_EXPORT bool     uapmd_piano_roll_session_get_note(uapmd_piano_roll_session_t session, uint32_t index, uapmd_piano_roll_note_t* out);
+UAPMD_C_EXPORT bool     uapmd_piano_roll_session_is_note_selected(uapmd_piano_roll_session_t session, uint32_t index);
+UAPMD_C_EXPORT uint32_t uapmd_piano_roll_session_selected_note_count(uapmd_piano_roll_session_t session);
+/* The note the detail editor is on, or -1. */
+UAPMD_C_EXPORT int32_t  uapmd_piano_roll_session_focused_note(uapmd_piano_roll_session_t session);
+UAPMD_C_EXPORT void     uapmd_piano_roll_session_set_focused_note(uapmd_piano_roll_session_t session, int32_t index);
+UAPMD_C_EXPORT double   uapmd_piano_roll_session_duration_seconds(uapmd_piano_roll_session_t session);
+UAPMD_C_EXPORT uint8_t  uapmd_piano_roll_session_min_note(uapmd_piano_roll_session_t session);
+UAPMD_C_EXPORT uint8_t  uapmd_piano_roll_session_max_note(uapmd_piano_roll_session_t session);
+UAPMD_C_EXPORT uint32_t uapmd_piano_roll_session_clipboard_count(uapmd_piano_roll_session_t session);
+UAPMD_C_EXPORT bool     uapmd_piano_roll_session_dirty(uapmd_piano_roll_session_t session);
+/* Never NULL; empty when the last edit succeeded. */
+UAPMD_C_EXPORT const char* uapmd_piano_roll_session_error(uapmd_piano_roll_session_t session);
+
+/* ── Editing ─────────────────────────────────────────────────────────────── */
+
+/* `index` -1 clears the selection. */
+UAPMD_C_EXPORT void uapmd_piano_roll_session_select_note(uapmd_piano_roll_session_t session, int32_t index, bool additive, bool toggle);
+UAPMD_C_EXPORT void uapmd_piano_roll_session_perform_action(uapmd_piano_roll_session_t session, uapmd_piano_roll_action_t action, double paste_seconds);
+UAPMD_C_EXPORT void uapmd_piano_roll_session_create_note(uapmd_piano_roll_session_t session, double start_seconds, double duration_seconds, uint8_t note, float velocity);
+UAPMD_C_EXPORT void uapmd_piano_roll_session_delete_note(uapmd_piano_roll_session_t session, uint32_t index);
+UAPMD_C_EXPORT void uapmd_piano_roll_session_resize_note(uapmd_piano_roll_session_t session, uint32_t index, double start_seconds, double duration_seconds, uint8_t note);
+
+/* A move drag works from the notes as they were when it began, so that each
+ * update re-applies one delta rather than accumulating rounding. The session
+ * holds that snapshot, so a host only says when the drag starts, how far it has
+ * moved, and whether it ended or was cancelled. */
+UAPMD_C_EXPORT void uapmd_piano_roll_session_begin_drag(uapmd_piano_roll_session_t session);
+UAPMD_C_EXPORT void uapmd_piano_roll_session_move_selection(uapmd_piano_roll_session_t session, double time_delta_seconds, int32_t pitch_delta);
+/* Puts the dragged notes back as they were. */
+UAPMD_C_EXPORT void uapmd_piano_roll_session_cancel_drag(uapmd_piano_roll_session_t session);
+/* Marks the edit for write-back when the note actually moved. */
+UAPMD_C_EXPORT void uapmd_piano_roll_session_finish_drag(uapmd_piano_roll_session_t session, uint32_t index, double original_start, double original_end, uint8_t original_note);
+
+/* Writes the session back to the clip, through the undo history. */
+UAPMD_C_EXPORT bool uapmd_piano_roll_session_commit(uapmd_piano_roll_session_t session, uapmd_app_model_t app);
+
+/* ── Commit-source tracking ──────────────────────────────────────────────────
+ *
+ * A commit changes the clip, which makes the timeline announce that the clip
+ * changed, which would normally make an open piano roll reload from it. Doing
+ * that on the echo of the editor's own write throws away whatever the user has
+ * done since. These three break that loop: record the source right after a
+ * commit, and when a change arrives ask whether it is that same edit coming
+ * back before reloading.
+ *
+ * The match is by content fingerprint, not by a flag, so an edit that really
+ * did come from elsewhere still reloads. */
+UAPMD_C_EXPORT void uapmd_app_record_piano_roll_commit_source(uapmd_app_model_t app, int32_t track_index, int32_t clip_id);
+UAPMD_C_EXPORT bool uapmd_app_piano_roll_source_matches_last_edit(uapmd_app_model_t app);
+UAPMD_C_EXPORT void uapmd_app_clear_piano_roll_commit_source(uapmd_app_model_t app);
+
+/* ═══════════════════════════════════════════════════════════════════════════
+ *  Timeline clip selection and clipboard
+ *
+ *  Model thread only.
+ * ═══════════════════════════════════════════════════════════════════════════ */
+
+typedef struct uapmd_timeline_clip_target {
+    int32_t track_index;
+    int32_t clip_id;
+} uapmd_timeline_clip_target_t;
+
+UAPMD_C_EXPORT bool uapmd_app_is_timeline_clip_selected(uapmd_app_model_t app, int32_t track_index, int32_t clip_id);
+
+/* The number of selected clips; pass a null `out` to ask for just the count. */
+UAPMD_C_EXPORT uint32_t uapmd_app_selected_timeline_clips(uapmd_app_model_t app,
+                                                             uapmd_timeline_clip_target_t* out,
+                                                             uint32_t out_count);
+
+/* Replaces the selection, adds to it (`additive`), or flips each clip's state
+ * within it (`toggle`) -- the three outcomes a click, a shift-click and a
+ * ctrl-click produce. An empty list with both false clears it. */
+UAPMD_C_EXPORT void uapmd_app_select_timeline_clips(uapmd_app_model_t app,
+                                                       const uapmd_timeline_clip_target_t* clips,
+                                                       uint32_t clip_count,
+                                                       bool additive,
+                                                       bool toggle);
+UAPMD_C_EXPORT void uapmd_app_clear_timeline_clip_selection(uapmd_app_model_t app);
+
+/* The MIDI clip an editor is open on, which is tracked separately from the
+ * selection. Returns false when there is none. */
+UAPMD_C_EXPORT bool uapmd_app_select_timeline_midi_clip(uapmd_app_model_t app, int32_t track_index, int32_t clip_id);
+UAPMD_C_EXPORT bool uapmd_app_selected_timeline_midi_clip(uapmd_app_model_t app, uapmd_timeline_clip_target_t* out);
+
+/* ── Clipboard ───────────────────────────────────────────────────────────── */
+
+UAPMD_C_EXPORT uint32_t uapmd_app_timeline_clipboard_count(uapmd_app_model_t app);
+UAPMD_C_EXPORT void     uapmd_app_clear_timeline_clipboard(uapmd_app_model_t app);
+
+/* Copies the selection into the clipboard. On failure the reason is left in
+ * per-thread storage readable with uapmd_app_last_timeline_clip_error(). */
+UAPMD_C_EXPORT bool uapmd_app_copy_selected_timeline_clips(uapmd_app_model_t app);
+
+/* Deletes the selection; `cut` copies it first. `changed_tracks` receives the
+ * indexes of the tracks that lost a clip -- pass a null buffer to ask for just
+ * the count, which is returned through `changed_track_count`. */
+UAPMD_C_EXPORT bool uapmd_app_delete_selected_timeline_clips(uapmd_app_model_t app,
+                                                                bool cut,
+                                                                int32_t* changed_tracks,
+                                                                uint32_t* changed_track_count);
+
+/* Which tracks a paste would land on, without performing it. `original_tracks`
+ * pastes each clip back onto the track it was copied from instead of onto
+ * `track_index`. Returns the count; pass a null buffer to ask for just that. */
+UAPMD_C_EXPORT uint32_t uapmd_app_timeline_paste_destinations(uapmd_app_model_t app,
+                                                                 int32_t track_index,
+                                                                 bool original_tracks,
+                                                                 int32_t* out,
+                                                                 uint32_t out_count);
+
+/* Pastes at `position_seconds`. `pasted` receives the clips created -- pass a
+ * null buffer to ask for just the count through `pasted_count`. */
+UAPMD_C_EXPORT bool uapmd_app_paste_timeline_clips(uapmd_app_model_t app,
+                                                      int32_t track_index,
+                                                      double position_seconds,
+                                                      bool original_tracks,
+                                                      uapmd_timeline_clip_target_t* pasted,
+                                                      uint32_t* pasted_count);
+
+/* Never NULL; empty when the last clipboard call succeeded. */
+UAPMD_C_EXPORT const char* uapmd_app_last_timeline_clip_error(void);
 
 /* ═══════════════════════════════════════════════════════════════════════════
  *  Timeline state access
@@ -339,9 +599,9 @@ UAPMD_C_EXPORT bool uapmd_app_get_timeline_state(uapmd_app_model_t app, uapmd_ti
  * ═══════════════════════════════════════════════════════════════════════════ */
 
 /* uapmd_graph_endpoint_type_t, uapmd_graph_bus_type_t, uapmd_graph_endpoint_t
- * and uapmd_graph_connection_t are declared in uapmd-c-undo.h: uapmd 0.5.7
- * moved connection editing onto ProjectCommands, so the types have to be
- * visible there, and this header includes it. */
+ * and uapmd_graph_connection_t are declared in uapmd-c-undo.h: connection
+ * editing lives on ProjectCommands, so the types have to be visible there, and
+ * this header includes it. */
 
 typedef struct uapmd_graph_connections_result {
     bool success;
@@ -467,7 +727,7 @@ UAPMD_C_EXPORT uapmd_op_result_t uapmd_app_set_clip_audio_events(uapmd_app_model
 
 UAPMD_C_EXPORT uint32_t uapmd_app_master_marker_count(uapmd_app_model_t app);
 UAPMD_C_EXPORT bool     uapmd_app_get_master_marker(uapmd_app_model_t app, uint32_t index, uapmd_clip_marker_t* out);
-UAPMD_C_EXPORT uapmd_op_result_t uapmd_app_set_master_markers(uapmd_app_model_t app,
+UAPMD_C_EXPORT uapmd_op_result_t uapmd_app_set_master_track_markers_with_validation(uapmd_app_model_t app,
                                                                  const uapmd_clip_marker_t* markers,
                                                                  uint32_t count);
 
@@ -486,6 +746,11 @@ typedef struct uapmd_ump_events_result {
     const char* error;
     uint32_t event_count;
     const uapmd_ump_event_t* events;
+    /* The clip's own tick grid and tempo, which AppModel reports alongside the
+     * events. Appended after `events` so the offsets above stay put. Both are 0
+     * when the call failed. */
+    uint32_t tick_resolution;
+    double   clip_tempo;
 } uapmd_ump_events_result_t;
 
 UAPMD_C_EXPORT uapmd_ump_events_result_t uapmd_app_get_midi_clip_ump_events(uapmd_app_model_t app,
@@ -503,7 +768,7 @@ UAPMD_C_EXPORT bool uapmd_app_remove_ump_event_from_clip(uapmd_app_model_t app,
                                                             int32_t event_index);
 
 /* ═══════════════════════════════════════════════════════════════════════════
- *  Undo history (uapmd 0.5.6)
+ *  Undo history
  *
  *  The application-level entry points. They wrap the same history that
  *  uapmd_tl_undo_engine() exposes, and additionally reconcile the plug-in
@@ -512,7 +777,7 @@ UAPMD_C_EXPORT bool uapmd_app_remove_ump_event_from_clip(uapmd_app_model_t app,
 
 typedef void (*uapmd_history_mutation_cb_t)(const char* error, void* user_data);
 
-UAPMD_C_EXPORT bool uapmd_app_get_history_state(uapmd_app_model_t app, uapmd_undo_state_t* out);
+UAPMD_C_EXPORT bool uapmd_app_history_state(uapmd_app_model_t app, uapmd_undo_state_t* out);
 UAPMD_C_EXPORT void uapmd_app_undo(uapmd_app_model_t app, void* user_data, uapmd_history_mutation_cb_t callback);
 UAPMD_C_EXPORT void uapmd_app_redo(uapmd_app_model_t app, void* user_data, uapmd_history_mutation_cb_t callback);
 
@@ -572,10 +837,10 @@ typedef struct uapmd_app_render_status {
     const char* output_path;
 } uapmd_app_render_status_t;
 
-UAPMD_C_EXPORT bool uapmd_app_start_render(uapmd_app_model_t app, const uapmd_app_render_settings_t* settings);
-UAPMD_C_EXPORT void uapmd_app_cancel_render(uapmd_app_model_t app);
-UAPMD_C_EXPORT uapmd_app_render_status_t uapmd_app_get_render_status(uapmd_app_model_t app);
-UAPMD_C_EXPORT void uapmd_app_clear_render_status(uapmd_app_model_t app);
+UAPMD_C_EXPORT bool uapmd_app_start_render_to_file(uapmd_app_model_t app, const uapmd_app_render_settings_t* settings);
+UAPMD_C_EXPORT void uapmd_app_cancel_render_to_file(uapmd_app_model_t app);
+UAPMD_C_EXPORT uapmd_app_render_status_t uapmd_app_get_render_to_file_status(uapmd_app_model_t app);
+UAPMD_C_EXPORT void uapmd_app_clear_completed_render_status(uapmd_app_model_t app);
 
 /* ═══════════════════════════════════════════════════════════════════════════
  *  TransportController

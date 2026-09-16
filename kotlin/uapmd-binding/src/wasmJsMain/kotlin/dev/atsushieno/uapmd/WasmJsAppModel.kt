@@ -120,6 +120,13 @@ class WasmJsAppModel internal constructor(internal val handle: Int) : AppModel {
 
     // ── Tracks ──────────────────────────────────────────────────────────────
 
+    override fun isTrackMuted(trackIndex: Int) = wasmMod.uapmdAppIsTrackMuted(handle, trackIndex)
+    override fun isTrackSolo(trackIndex: Int) = wasmMod.uapmdAppIsTrackSolo(handle, trackIndex)
+    override fun setTrackMuted(trackIndex: Int, muted: Boolean) =
+        wasmMod.uapmdAppSetTrackMuted(handle, trackIndex, muted)
+    override fun setTrackSolo(trackIndex: Int, solo: Boolean) =
+        wasmMod.uapmdAppSetTrackSolo(handle, trackIndex, solo)
+
     override fun addTrack(callback: (Int, String?) -> Unit) =
         wasmMod.uapmdAppAddTrack(handle, 0, appTrackMutationPtr(callback))
 
@@ -238,13 +245,215 @@ class WasmJsAppModel internal constructor(internal val handle: Int) : AppModel {
     override val masterTempoMap: TempoMap
         get() = WasmJsTempoMap(wasmMod.uapmdAppMasterTempoMap(handle))
 
+    // ── Timeline clip selection and clipboard ───────────────────────────────
+
+    override fun isTimelineClipSelected(trackIndex: Int, clipId: Int): Boolean =
+        wasmMod.uapmdAppIsTimelineClipSelected(handle, trackIndex, clipId)
+
+    override val selectedTimelineClips: List<TimelineClipTarget>
+        get() {
+            val count = wasmMod.uapmdAppSelectedTimelineClips(handle, 0, 0)
+            if (count <= 0) return emptyList()
+            return withWasmStruct(count * WasmOff.CLIP_TARGET_STRIDE) { buf ->
+                val filled = wasmMod.uapmdAppSelectedTimelineClips(handle, buf, count)
+                readClipTargets(buf, minOf(count, filled))
+            }
+        }
+
+    override fun selectTimelineClips(clips: List<TimelineClipTarget>, additive: Boolean, toggle: Boolean) {
+        if (clips.isEmpty()) {
+            wasmMod.uapmdAppSelectTimelineClips(handle, 0, 0, additive, toggle)
+            return
+        }
+        withWasmStruct(clips.size * WasmOff.CLIP_TARGET_STRIDE) { buf ->
+            writeClipTargets(buf, clips)
+            wasmMod.uapmdAppSelectTimelineClips(handle, buf, clips.size, additive, toggle)
+        }
+    }
+
+    override fun clearTimelineClipSelection() = wasmMod.uapmdAppClearTimelineClipSelection(handle)
+
+    override fun selectTimelineMidiClip(trackIndex: Int, clipId: Int): Boolean =
+        wasmMod.uapmdAppSelectTimelineMidiClip(handle, trackIndex, clipId)
+
+    override val selectedTimelineMidiClip: TimelineClipTarget?
+        get() = withWasmStruct(WasmOff.CLIP_TARGET_STRIDE) { out ->
+            if (!wasmMod.uapmdAppSelectedTimelineMidiClip(handle, out)) null
+            else TimelineClipTarget(
+                wasmGetI32(out + WasmOff.CLIP_TARGET_TRACK),
+                wasmGetI32(out + WasmOff.CLIP_TARGET_CLIP)
+            )
+        }
+
+    override val timelineClipboardCount: Int
+        get() = wasmMod.uapmdAppTimelineClipboardCount(handle)
+
+    override fun clearTimelineClipboard() = wasmMod.uapmdAppClearTimelineClipboard(handle)
+
+    override fun copySelectedTimelineClips(): Boolean =
+        wasmMod.uapmdAppCopySelectedTimelineClips(handle)
+
+    override fun deleteSelectedTimelineClips(cut: Boolean): TimelineClipDeleteResult {
+        // One call only: this both deletes and reports. A track can lose several
+        // clips but appears once, so the selection size bounds the changed-track
+        // list — measured before the call, which clears the selection.
+        val capacity = selectedTimelineClips.size
+        return withWasmStruct(maxOf(capacity, 1) * 4) { tracks ->
+            withWasmStruct(4) { countPtr ->
+                wasmSetI32(countPtr, capacity)
+                val ok = wasmMod.uapmdAppDeleteSelectedTimelineClips(
+                    handle, cut, if (capacity > 0) tracks else 0, countPtr)
+                val count = minOf(capacity, wasmGetI32(countPtr))
+                TimelineClipDeleteResult(
+                    ok,
+                    (0 until count).map { wasmGetI32(tracks + it * 4) },
+                    lastTimelineClipError.ifEmpty { null }
+                )
+            }
+        }
+    }
+
+    override fun timelinePasteDestinations(trackIndex: Int, originalTracks: Boolean): List<Int> {
+        val count = wasmMod.uapmdAppTimelinePasteDestinations(handle, trackIndex, originalTracks, 0, 0)
+        if (count <= 0) return emptyList()
+        return withWasmStruct(count * 4) { buf ->
+            val filled = wasmMod.uapmdAppTimelinePasteDestinations(
+                handle, trackIndex, originalTracks, buf, count)
+            (0 until minOf(count, filled)).map { wasmGetI32(buf + it * 4) }
+        }
+    }
+
+    override fun pasteTimelineClips(
+        trackIndex: Int,
+        positionSeconds: Double,
+        originalTracks: Boolean
+    ): TimelinePasteResult {
+        // A paste creates at most one clip per clipboard entry, which bounds it.
+        val capacity = timelineClipboardCount
+        return withWasmStruct(maxOf(capacity, 1) * WasmOff.CLIP_TARGET_STRIDE) { buf ->
+            withWasmStruct(4) { countPtr ->
+                wasmSetI32(countPtr, capacity)
+                val ok = wasmMod.uapmdAppPasteTimelineClips(
+                    handle, trackIndex, positionSeconds, originalTracks,
+                    if (capacity > 0) buf else 0, countPtr)
+                val count = minOf(capacity, wasmGetI32(countPtr))
+                TimelinePasteResult(ok, readClipTargets(buf, count), lastTimelineClipError.ifEmpty { null })
+            }
+        }
+    }
+
+    override val lastTimelineClipError: String
+        get() = wasmMod.uapmdAppLastTimelineClipError()
+            .let { if (it != 0) wasmMod.utf8ToString(it) else "" }
+
+    // ── Piano roll editing session ──────────────────────────────────────────
+
+    override fun pianoRollClipSnapshot(
+        trackIndex: Int,
+        clipId: Int,
+        fallbackDurationSeconds: Double
+    ): PianoRollSnapshot? =
+        wasmMod.uapmdAppPianoRollClipSnapshot(handle, trackIndex, clipId, fallbackDurationSeconds)
+            .takeIf { it != 0 }?.let { WasmJsPianoRollSnapshot(it) }
+
+    override fun openPianoRollSession(trackIndex: Int, clipId: Int): PianoRollSession? =
+        wasmMod.uapmdAppOpenPianoRollSession(handle, trackIndex, clipId)
+            .takeIf { it != 0 }?.let { WasmJsPianoRollSession(it) }
+
+    override fun findPianoRollSession(trackIndex: Int, clipId: Int): PianoRollSession? =
+        wasmMod.uapmdAppFindPianoRollSession(handle, trackIndex, clipId)
+            .takeIf { it != 0 }?.let { WasmJsPianoRollSession(it) }
+
+    override fun closePianoRollSession(trackIndex: Int, clipId: Int) =
+        wasmMod.uapmdAppClosePianoRollSession(handle, trackIndex, clipId)
+
+    override fun recordPianoRollCommitSource(trackIndex: Int, clipId: Int) =
+        wasmMod.uapmdAppRecordPianoRollCommitSource(handle, trackIndex, clipId)
+
+    override fun pianoRollSourceMatchesLastEdit(): Boolean =
+        wasmMod.uapmdAppPianoRollSourceMatchesLastEdit(handle)
+
+    override fun clearPianoRollCommitSource() = wasmMod.uapmdAppClearPianoRollCommitSource(handle)
+
+    // ── Assorted accessors ──────────────────────────────────────────────────
+    //
+    // wasm32 layouts, checked with _Static_assert under emcc:
+    //   uapmd_midi_port_info_t          char* @0, char* @4                        (8)
+    //   uapmd_timeline_content_bounds_t bool @0, double @8, @16, @24             (32)
+    //   uapmd_device_entry_t            i32 @0, char* @4 @8 @12, bool @16 @17 @18 (20)
+    //   uapmd_plugin_state_result_t     i32 @0, bool @4, char* @8, char* @12     (16)
+
+    override val midiInputPorts: List<MidiPortInfo>
+        get() = wasmMidiPorts { out, n -> wasmMod.uapmdAppGetMidiInputPorts(handle, out, n) }
+
+    override val midiOutputPorts: List<MidiPortInfo>
+        get() = wasmMidiPorts { out, n -> wasmMod.uapmdAppGetMidiOutputPorts(handle, out, n) }
+
+    override fun isTrackHidden(trackIndex: Int) = wasmMod.uapmdAppIsTrackHidden(handle, trackIndex)
+
+    override val timelineContentBounds: TimelineContentBounds
+        get() = withWasmStruct(TimelineContentBoundsSize) { out ->
+            wasmMod.uapmdAppTimelineContentBounds(out, handle)
+            TimelineContentBounds(
+                hasContent = wasmMod.getValue(out, "i8").toInt() != 0,
+                startSeconds = wasmMod.getValue(out + 8, "double"),
+                endSeconds = wasmMod.getValue(out + 16, "double"),
+                durationSeconds = wasmMod.getValue(out + 24, "double")
+            )
+        }
+
+    override val devices: List<DeviceEntry>
+        get() {
+            val n = wasmMod.uapmdAppGetDevices(handle, 0, 0)
+            if (n == 0) return emptyList()
+            return withWasmStruct(n * DeviceEntrySize) { out ->
+                val filled = wasmMod.uapmdAppGetDevices(handle, out, n)
+                (0 until filled).map { readDeviceEntry(out + it * DeviceEntrySize) }
+            }
+        }
+
+    override fun deviceForInstance(instanceId: Int): DeviceEntry? =
+        withWasmStruct(DeviceEntrySize) { out ->
+            if (!wasmMod.uapmdAppGetDeviceForInstance(handle, instanceId, out)) null
+            else readDeviceEntry(out)
+        }
+
+    override fun updateDeviceLabel(instanceId: Int, label: String) =
+        withCStringKt(label) { p -> wasmMod.uapmdAppUpdateDeviceLabel(handle, instanceId, p) }
+
+    override fun loadPluginState(instanceId: Int, filepath: String, callback: (PluginStateResult) -> Unit) =
+        withCStringKt(filepath) { p ->
+            wasmMod.uapmdAppLoadPluginState(handle, instanceId, p, 0, pluginStatePtr(callback))
+        }
+
+    override fun savePluginState(instanceId: Int, filepath: String, callback: (PluginStateResult) -> Unit) =
+        withCStringKt(filepath) { p ->
+            wasmMod.uapmdAppSavePluginState(handle, instanceId, p, 0, pluginStatePtr(callback))
+        }
+
+    override fun loadPluginStateSync(instanceId: Int, filepath: String): PluginStateResult =
+        withWasmStruct(PluginStateResultSize) { out ->
+            withCStringKt(filepath) { p -> wasmMod.uapmdAppLoadPluginStateSync(out, handle, instanceId, p) }
+            readPluginStateResult(out)
+        }
+
+    override fun savePluginStateSync(instanceId: Int, filepath: String): PluginStateResult =
+        withWasmStruct(PluginStateResultSize) { out ->
+            withCStringKt(filepath) { p -> wasmMod.uapmdAppSavePluginStateSync(out, handle, instanceId, p) }
+            readPluginStateResult(out)
+        }
+
+    override fun markPluginInstanceTrackDirty(instanceId: Int) =
+        wasmMod.uapmdAppMarkPluginInstanceTrackDirty(handle, instanceId)
+
     // ── MIDI clip UMP events ────────────────────────────────────────────────
     //
     // uapmd_ump_events_result_t: bool @0, char* @4, uint32 @8, ptr @12 (size 16)
     // uapmd_ump_event_t:         uint64 @0, uint32 @8, ptr @12 (size 16)
 
     override fun getMidiClipUmpEvents(trackIndex: Int, clipId: Int): UmpEventsResult =
-        withWasmStruct(16) { out ->
+        // uapmd_ump_events_result_t: ok@0 err@4 count@8 events@12 tickRes@16 tempo@24, size 32
+        withWasmStruct(32) { out ->
             wasmMod.uapmdAppGetMidiClipUmpEvents(out, handle, trackIndex, clipId)
             val mod = wasmMod
             val ok = mod.getValue(out, "i8").toInt() != 0
@@ -252,7 +461,9 @@ class WasmJsAppModel internal constructor(internal val handle: Int) : AppModel {
             val error = if (errPtr != 0) mod.utf8ToString(errPtr) else null
             val count = mod.getValue(out + 8, "i32").toInt()
             val eventsPtr = mod.getValue(out + 12, "i32").toInt()
-            if (!ok || eventsPtr == 0 || count == 0) UmpEventsResult(ok, error, emptyList())
+            val tickRes = mod.getValue(out + 16, "i32").toInt().toUInt()
+            val tempo = mod.getValue(out + 24, "double")
+            if (!ok || eventsPtr == 0 || count == 0) UmpEventsResult(ok, error, emptyList(), tickRes, tempo)
             else UmpEventsResult(ok, error, (0 until count).map { i ->
                 val base = eventsPtr + i * 16
                 val lo = mod.getValue(base, "i32").toInt().toLong() and 0xFFFFFFFFL
@@ -262,7 +473,7 @@ class WasmJsAppModel internal constructor(internal val handle: Int) : AppModel {
                 UmpEvent(hi * 4294967296L + lo, UIntArray(wordCount) { w ->
                     mod.getValue(wordsPtr + w * 4, "i32").toInt().toUInt()
                 })
-            })
+            }, tickRes, tempo)
         }
 
     override fun addUmpEventToClip(trackIndex: Int, clipId: Int, tick: Long, words: UIntArray): Boolean {
@@ -304,6 +515,179 @@ class WasmJsAppModel internal constructor(internal val handle: Int) : AppModel {
             if (errPtr != 0) mod.utf8ToString(errPtr) else null
         )
     }
+
+    override fun addClipToTrack(
+        trackIndex: Int, position: TimelinePosition, reader: AudioFileReader, filepath: String
+    ): ClipAddResult = withWasmStruct(ClipAddResultSize) { out ->
+        withWasmStruct(TimelinePositionSize) { pos ->
+            wasmWritePosition(pos, position)
+            withCStringKt(filepath) { fp ->
+                wasmMod.uapmdAppAddClipToTrack(
+                    out, handle, trackIndex, pos, (reader as WasmJsAudioFileReader).handle, fp
+                )
+            }
+        }
+        wasmReadClipAddResult(out)
+    }
+
+    override fun addMidiClipToTrack(trackIndex: Int, position: TimelinePosition, filepath: String): ClipAddResult =
+        withWasmStruct(ClipAddResultSize) { out ->
+            withWasmStruct(TimelinePositionSize) { pos ->
+                wasmWritePosition(pos, position)
+                withCStringKt(filepath) { fp ->
+                    wasmMod.uapmdAppAddMidiClipToTrack(out, handle, trackIndex, pos, fp)
+                }
+            }
+            wasmReadClipAddResult(out)
+        }
+
+    override fun addMidiClipFromData(
+        trackIndex: Int, position: TimelinePosition,
+        umpEvents: List<UInt>, tickTimestamps: List<ULong>,
+        tickResolution: UInt, clipTempo: Double,
+        tempoChanges: List<MidiTempoChange>, timeSignatureChanges: List<MidiTimeSignatureChange>,
+        clipName: String, needsFileSave: Boolean
+    ): ClipAddResult {
+        val mod = wasmMod
+        val owned = mutableListOf<Int>()
+        fun alloc(size: Int) = mod.malloc(size).also { owned += it }
+        try {
+            val umpBuf = if (umpEvents.isEmpty()) 0 else alloc(umpEvents.size * 4).also { b ->
+                umpEvents.forEachIndexed { i, v -> wasmSetI32(b + i * 4, v.toInt()) }
+            }
+            val tickBuf = if (tickTimestamps.isEmpty()) 0 else alloc(tickTimestamps.size * 8).also { b ->
+                tickTimestamps.forEachIndexed { i, v -> wasmSetI64(b + i * 8, v.toLong()) }
+            }
+            // uapmd_midi_tempo_change_t: uint64 @0, double @8 (16 bytes)
+            val tempoBuf = if (tempoChanges.isEmpty()) 0 else alloc(tempoChanges.size * MidiTempoChangeSize).also { b ->
+                tempoChanges.forEachIndexed { i, t ->
+                    wasmSetI64(b + i * MidiTempoChangeSize, t.tickPosition.toLong())
+                    mod.setValue(b + i * MidiTempoChangeSize + 8, t.bpm, "double")
+                }
+            }
+            // uapmd_midi_time_sig_change_t: uint64 @0, four uint8 @8..11 (16 bytes)
+            val sigBuf = if (timeSignatureChanges.isEmpty()) 0 else alloc(timeSignatureChanges.size * MidiTimeSigChangeSize).also { b ->
+                timeSignatureChanges.forEachIndexed { i, t ->
+                    val o = b + i * MidiTimeSigChangeSize
+                    wasmSetI64(o, t.tickPosition.toLong())
+                    mod.setValue(o + 8, t.numerator.toInt().toDouble(), "i8")
+                    mod.setValue(o + 9, t.denominator.toInt().toDouble(), "i8")
+                    mod.setValue(o + 10, t.clocksPerClick.toInt().toDouble(), "i8")
+                    mod.setValue(o + 11, t.thirtySecondsPerQuarter.toInt().toDouble(), "i8")
+                }
+            }
+            return withWasmStruct(ClipAddResultSize) { out ->
+                withWasmStruct(TimelinePositionSize) { pos ->
+                    wasmWritePosition(pos, position)
+                    withCStringKt(clipName) { name ->
+                        mod.uapmdAppAddMidiClipFromData(
+                            out, handle, trackIndex, pos,
+                            umpBuf, umpEvents.size, tickBuf, tickTimestamps.size,
+                            tickResolution.toInt(), clipTempo,
+                            tempoBuf, tempoChanges.size, sigBuf, timeSignatureChanges.size,
+                            name, needsFileSave
+                        )
+                    }
+                }
+                wasmReadClipAddResult(out)
+            }
+        } finally { owned.forEach { mod.free(it) } }
+    }
+
+    override fun addDeviceInputToTrack(trackIndex: Int, channelIndices: List<UInt>): Int {
+        if (channelIndices.isEmpty())
+            return wasmMod.uapmdAppAddDeviceInputToTrack(handle, trackIndex, 0, 0)
+        return withWasmStruct(channelIndices.size * 4) { buf ->
+            channelIndices.forEachIndexed { i, v -> wasmSetI32(buf + i * 4, v.toInt()) }
+            wasmMod.uapmdAppAddDeviceInputToTrack(handle, trackIndex, buf, channelIndices.size)
+        }
+    }
+
+    // ── Master track markers ────────────────────────────────────────────────
+
+    override val masterMarkers: List<ClipMarkerData>
+        get() {
+            val n = wasmMod.uapmdAppMasterMarkerCount(handle)
+            if (n == 0) return emptyList()
+            return withWasmStruct(ClipMarkerSize) { out ->
+                (0 until n).mapNotNull { i ->
+                    if (!wasmMod.uapmdAppGetMasterMarker(handle, i, out)) null else wasmReadClipMarker(out)
+                }
+            }
+        }
+
+    override fun setMasterTrackMarkersWithValidation(markers: List<ClipMarkerData>): OpResult {
+        val mod = wasmMod
+        val owned = mutableListOf<Int>()
+        fun cstr(v: String): Int {
+            val size = mod.lengthBytesUTF8(v) + 1
+            val p = mod.malloc(size)
+            mod.stringToUTF8(v, p, size)
+            owned += p
+            return p
+        }
+        val buf = if (markers.isEmpty()) 0 else mod.malloc(markers.size * ClipMarkerSize).also { owned += it }
+        return try {
+            markers.forEachIndexed { i, m ->
+                val b = buf + i * ClipMarkerSize
+                mod.setValue(b, cstr(m.markerId).toDouble(), "i32")
+                mod.setValue(b + 8, m.clipPositionOffset, "double")
+                mod.setValue(b + 16, m.referenceType.nativeValue.toDouble(), "i32")
+                mod.setValue(b + 20, cstr(m.referenceClipId).toDouble(), "i32")
+                mod.setValue(b + 24, cstr(m.referenceMarkerId).toDouble(), "i32")
+                mod.setValue(b + 28, cstr(m.name).toDouble(), "i32")
+            }
+            withWasmStruct(8) { out ->
+                mod.uapmdAppSetMasterTrackMarkersWithValidation(out, handle, buf, markers.size)
+                readOpResult(out)
+            }
+        } finally { owned.forEach { mod.free(it) } }
+    }
+
+    // ── Offline render to file ──────────────────────────────────────────────
+
+    override fun startRenderToFile(settings: RenderToFileSettings): Boolean {
+        val mod = wasmMod
+        return withWasmStruct(AppRenderSettingsSize) { p ->
+            withCStringKt(settings.outputPath) { path ->
+                mod.setValue(p, path.toDouble(), "i32")
+                mod.setValue(p + 8, settings.startSeconds, "double")
+                mod.setValue(p + 16, settings.endSeconds, "double")
+                mod.setValue(p + 24, (if (settings.hasEndSeconds) 1 else 0).toDouble(), "i8")
+                mod.setValue(p + 25, (if (settings.useContentFallback) 1 else 0).toDouble(), "i8")
+                mod.setValue(p + 26, (if (settings.contentBoundsValid) 1 else 0).toDouble(), "i8")
+                mod.setValue(p + 32, settings.contentStartSeconds, "double")
+                mod.setValue(p + 40, settings.contentEndSeconds, "double")
+                mod.setValue(p + 48, settings.tailSeconds, "double")
+                mod.setValue(p + 56, (if (settings.enableSilenceStop) 1 else 0).toDouble(), "i8")
+                mod.setValue(p + 64, settings.silenceDurationSeconds, "double")
+                mod.setValue(p + 72, settings.silenceThresholdDb, "double")
+                mod.uapmdAppStartRenderToFile(handle, p)
+            }
+        }
+    }
+
+    override fun cancelRenderToFile() = wasmMod.uapmdAppCancelRenderToFile(handle)
+
+    override val renderToFileStatus: RenderToFileStatus
+        get() = withWasmStruct(AppRenderStatusSize) { out ->
+            val mod = wasmMod
+            mod.uapmdAppGetRenderToFileStatus(out, handle)
+            RenderToFileStatus(
+                running = mod.getValue(out, "i8").toInt() != 0,
+                completed = mod.getValue(out + 1, "i8").toInt() != 0,
+                success = mod.getValue(out + 2, "i8").toInt() != 0,
+                progress = mod.getValue(out + 8, "double"),
+                renderedSeconds = mod.getValue(out + 16, "double"),
+                message = wasmStrAt(out + 24),
+                outputPath = wasmStrAt(out + 28)
+            )
+        }
+
+    override fun clearCompletedRenderStatus() = wasmMod.uapmdAppClearCompletedRenderStatus(handle)
+
+    override fun requestShowTrackGraph(trackIndex: Int) =
+        wasmMod.uapmdAppRequestShowTrackGraph(handle, trackIndex)
 
     // ── Track graph ─────────────────────────────────────────────────────────
     //
@@ -500,6 +884,85 @@ class WasmJsAppModel internal constructor(internal val handle: Int) : AppModel {
     }
 }
 
+private const val ClipAddResultSize = 16
+private const val TimelinePositionSize = 16
+private const val MidiTempoChangeSize = 16
+private const val MidiTimeSigChangeSize = 16
+private const val AppRenderSettingsSize = 80
+private const val AppRenderStatusSize = 32
+
+/** uapmd_timeline_position_t: int64 @0, double @8 - passed byval, i.e. by pointer. */
+private fun wasmWritePosition(ptr: Int, pos: TimelinePosition) {
+    wasmSetI64(ptr, pos.samples)
+    wasmMod.setValue(ptr + 8, pos.legacyBeats, "double")
+}
+
+private fun wasmReadClipAddResult(ptr: Int): ClipAddResult {
+    val mod = wasmMod
+    return ClipAddResult(
+        mod.getValue(ptr, "i32").toInt(),
+        mod.getValue(ptr + 4, "i32").toInt(),
+        mod.getValue(ptr + 8, "i8").toInt() != 0,
+        mod.getValue(ptr + 12, "i32").toInt().let { if (it != 0) mod.utf8ToString(it) else null }
+    )
+}
+
+private fun wasmReadClipMarker(b: Int) = ClipMarkerData(
+    markerId = wasmStrAt(b),
+    clipPositionOffset = wasmMod.getValue(b + 8, "double"),
+    referenceType = WarpReferenceType.fromNative(wasmMod.getValue(b + 16, "i32").toInt()),
+    referenceClipId = wasmStrAt(b + 20),
+    referenceMarkerId = wasmStrAt(b + 24),
+    name = wasmStrAt(b + 28)
+)
+
+private const val MidiPortInfoSize = 8
+private const val TimelineContentBoundsSize = 32
+private const val DeviceEntrySize = 20
+private const val PluginStateResultSize = 16
+
+/**
+ * Both port getters answer the count for a null `out` and mutate nothing, so
+ * the count-then-fill call pair is safe here.
+ */
+private fun wasmMidiPorts(call: (out: Int, count: Int) -> Int): List<MidiPortInfo> {
+    val n = call(0, 0)
+    if (n == 0) return emptyList()
+    return withWasmStruct(n * MidiPortInfoSize) { out ->
+        val filled = call(out, n)
+        (0 until filled).map { i ->
+            val p = out + i * MidiPortInfoSize
+            MidiPortInfo(wasmStrAt(p), wasmStrAt(p + 4))
+        }
+    }
+}
+
+private fun readDeviceEntry(p: Int): DeviceEntry {
+    val mod = wasmMod
+    return DeviceEntry(
+        id = mod.getValue(p, "i32").toInt(),
+        label = wasmStrAt(p + 4),
+        apiName = wasmStrAt(p + 8),
+        statusMessage = wasmStrAt(p + 12),
+        running = mod.getValue(p + 16, "i8").toInt() != 0,
+        instantiating = mod.getValue(p + 17, "i8").toInt() != 0,
+        hasError = mod.getValue(p + 18, "i8").toInt() != 0
+    )
+}
+
+internal fun readPluginStateResult(p: Int) = PluginStateResult(
+    instanceId = wasmMod.getValue(p, "i32").toInt(),
+    success = wasmMod.getValue(p + 4, "i8").toInt() != 0,
+    error = wasmStrAt(p + 8),
+    filepath = wasmStrAt(p + 12)
+)
+
+private fun pluginStatePtr(callback: (PluginStateResult) -> Unit): Int {
+    val cbId = nextCallbackId()
+    pendingPluginStates[cbId] = callback
+    return makeCFunctionPtr(cbId, "uapmdDispatchPluginState", "vii")
+}
+
 private fun wasmStrAt(ptr: Int): String {
     val p = wasmMod.getValue(ptr, "i32").toInt()
     return if (p != 0) wasmMod.utf8ToString(p) else ""
@@ -595,6 +1058,8 @@ class WasmJsTransportController internal constructor(internal val handle: Int) :
     override fun pause() = wasmMod.uapmdTransportPause(handle)
     override fun resume() = wasmMod.uapmdTransportResume(handle)
     override fun record() = wasmMod.uapmdTransportRecord(handle)
+
+    override fun jump(positionSeconds: Double) = wasmMod.uapmdTransportJump(handle, positionSeconds)
 }
 
 actual fun instantiateAppModel() = wasmMod.uapmdAppInstantiate()
@@ -606,3 +1071,109 @@ actual fun getAppModel(): AppModel {
 }
 
 actual fun cleanupAppModel() = wasmMod.uapmdAppCleanup()
+
+private fun readClipTargets(base: Int, count: Int): List<TimelineClipTarget> =
+    (0 until count).map {
+        val entry = base + it * WasmOff.CLIP_TARGET_STRIDE
+        TimelineClipTarget(
+            wasmGetI32(entry + WasmOff.CLIP_TARGET_TRACK),
+            wasmGetI32(entry + WasmOff.CLIP_TARGET_CLIP)
+        )
+    }
+
+private fun writeClipTargets(base: Int, clips: List<TimelineClipTarget>) {
+    clips.forEachIndexed { i, t ->
+        val entry = base + i * WasmOff.CLIP_TARGET_STRIDE
+        wasmSetI32(entry + WasmOff.CLIP_TARGET_TRACK, t.trackIndex)
+        wasmSetI32(entry + WasmOff.CLIP_TARGET_CLIP, t.clipId)
+    }
+}
+
+private fun readPianoRollNote(p: Int) = PianoRollNote(
+    startSeconds = wasmGetF64(p + WasmOff.PR_NOTE_START),
+    durationSeconds = wasmGetF64(p + WasmOff.PR_NOTE_DURATION),
+    velocity = wasmGetF32(p + WasmOff.PR_NOTE_VELOCITY),
+    note = wasmGetU8(p + WasmOff.PR_NOTE_NOTE),
+    channel = wasmGetU8(p + WasmOff.PR_NOTE_CHANNEL),
+    deleted = wasmGetBool(p + WasmOff.PR_NOTE_DELETED),
+    editId = wasmGetI64(p + WasmOff.PR_NOTE_EDIT_ID),
+    umpGroup = wasmGetU8(p + WasmOff.PR_NOTE_UMP_GROUP),
+    releaseVelocity = wasmGetU16(p + WasmOff.PR_NOTE_RELEASE_VELOCITY),
+    attributeType = wasmGetU8(p + WasmOff.PR_NOTE_ATTRIBUTE_TYPE),
+    attributeValue = wasmGetU16(p + WasmOff.PR_NOTE_ATTRIBUTE_VALUE),
+    automationEventCount = wasmGetI32(p + WasmOff.PR_NOTE_AUTOMATION_COUNT)
+)
+
+class WasmJsPianoRollSnapshot internal constructor(internal val handle: Int) : PianoRollSnapshot {
+    override val isReady: Boolean get() = wasmMod.uapmdPianoRollSnapshotReady(handle)
+    override val error: String
+        get() = wasmMod.uapmdPianoRollSnapshotError(handle)
+            .let { if (it != 0) wasmMod.utf8ToString(it) else "" }
+    override val durationSeconds: Double get() = wasmMod.uapmdPianoRollSnapshotDurationSeconds(handle)
+    override val minNote: Int get() = wasmMod.uapmdPianoRollSnapshotMinNote(handle)
+    override val maxNote: Int get() = wasmMod.uapmdPianoRollSnapshotMaxNote(handle)
+
+    override val notes: List<PianoRollNote>
+        get() = withWasmStruct(WasmOff.PR_NOTE_SIZE) { out ->
+            (0 until wasmMod.uapmdPianoRollSnapshotNoteCount(handle)).mapNotNull { i ->
+                if (!wasmMod.uapmdPianoRollSnapshotGetNote(handle, i, out)) null else readPianoRollNote(out)
+            }
+        }
+
+    override fun close() = wasmMod.uapmdPianoRollSnapshotDestroy(handle)
+}
+
+class WasmJsPianoRollSession internal constructor(private val handle: Int) : PianoRollSession {
+    override val notes: List<PianoRollNote>
+        get() = withWasmStruct(WasmOff.PR_NOTE_SIZE) { out ->
+            (0 until wasmMod.uapmdPianoRollSessionNoteCount(handle)).mapNotNull { i ->
+                if (!wasmMod.uapmdPianoRollSessionGetNote(handle, i, out)) null else readPianoRollNote(out)
+            }
+        }
+
+    override fun isNoteSelected(index: Int) = wasmMod.uapmdPianoRollSessionIsNoteSelected(handle, index)
+    override val selectedNoteCount: Int get() = wasmMod.uapmdPianoRollSessionSelectedNoteCount(handle)
+
+    override var focusedNote: Int
+        get() = wasmMod.uapmdPianoRollSessionFocusedNote(handle)
+        set(value) { wasmMod.uapmdPianoRollSessionSetFocusedNote(handle, value) }
+
+    override val durationSeconds: Double get() = wasmMod.uapmdPianoRollSessionDurationSeconds(handle)
+    override val minNote: Int get() = wasmMod.uapmdPianoRollSessionMinNote(handle)
+    override val maxNote: Int get() = wasmMod.uapmdPianoRollSessionMaxNote(handle)
+    override val clipboardCount: Int get() = wasmMod.uapmdPianoRollSessionClipboardCount(handle)
+    override val isDirty: Boolean get() = wasmMod.uapmdPianoRollSessionDirty(handle)
+    override val error: String
+        get() = wasmMod.uapmdPianoRollSessionError(handle)
+            .let { if (it != 0) wasmMod.utf8ToString(it) else "" }
+
+    override fun matchesSource(snapshot: PianoRollSnapshot) =
+        wasmMod.uapmdPianoRollSessionMatchesSource(handle, (snapshot as WasmJsPianoRollSnapshot).handle)
+
+    override fun loadNotes(snapshot: PianoRollSnapshot?) =
+        wasmMod.uapmdPianoRollSessionLoadNotes(handle, (snapshot as WasmJsPianoRollSnapshot?)?.handle ?: 0)
+
+    override fun selectNote(index: Int, additive: Boolean, toggle: Boolean) =
+        wasmMod.uapmdPianoRollSessionSelectNote(handle, index, additive, toggle)
+
+    override fun performAction(action: PianoRollAction, pasteSeconds: Double) =
+        wasmMod.uapmdPianoRollSessionPerformAction(handle, action.nativeValue, pasteSeconds)
+
+    override fun createNote(startSeconds: Double, durationSeconds: Double, note: Int, velocity: Float) =
+        wasmMod.uapmdPianoRollSessionCreateNote(handle, startSeconds, durationSeconds, note, velocity)
+
+    override fun deleteNote(index: Int) = wasmMod.uapmdPianoRollSessionDeleteNote(handle, index)
+
+    override fun resizeNote(index: Int, startSeconds: Double, durationSeconds: Double, note: Int) =
+        wasmMod.uapmdPianoRollSessionResizeNote(handle, index, startSeconds, durationSeconds, note)
+
+    override fun beginDrag() = wasmMod.uapmdPianoRollSessionBeginDrag(handle)
+    override fun moveSelection(timeDeltaSeconds: Double, pitchDelta: Int) =
+        wasmMod.uapmdPianoRollSessionMoveSelection(handle, timeDeltaSeconds, pitchDelta)
+    override fun cancelDrag() = wasmMod.uapmdPianoRollSessionCancelDrag(handle)
+    override fun finishDrag(index: Int, originalStart: Double, originalEnd: Double, originalNote: Int) =
+        wasmMod.uapmdPianoRollSessionFinishDrag(handle, index, originalStart, originalEnd, originalNote)
+
+    override fun commit(app: AppModel) =
+        wasmMod.uapmdPianoRollSessionCommit(handle, (app as WasmJsAppModel).handle)
+}

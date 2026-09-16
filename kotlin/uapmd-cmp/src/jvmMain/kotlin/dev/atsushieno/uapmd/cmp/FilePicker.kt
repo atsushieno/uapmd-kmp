@@ -34,6 +34,15 @@ actual suspend fun pickMidiFileToOpen(): String? =
 
 actual suspend fun pickAudioFileToOpen(): String? =
     pickMedia("Audio Files (.wav, .flac, .ogg)", listOf(".wav", ".flac", ".ogg", ".mp3", ".aiff"))
+actual suspend fun pickStemModelFileToOpen(extensions: List<String>): String? =
+    // The separator reports glob patterns ("*.bin"); the dialog filter wants
+    // plain suffixes.
+    pickMedia("Model File (${extensions.joinToString(", ")})", extensions.map { it.removePrefix("*") })
+
+/** Beside the source audio, which is where uapmd-app's default lands too. */
+actual fun defaultStemOutputDirectory(audioFilePath: String): String =
+    java.io.File(audioFilePath).absoluteFile.parent ?: System.getProperty("java.io.tmpdir")
+
 actual suspend fun pickProjectFileToSave(defaultName: String): String? =
     pick(FileDialog.SAVE, defaultName)
 

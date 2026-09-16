@@ -85,7 +85,11 @@ interface AppModel {
 
     // ── Tracks ──────────────────────────────────────────────────────────────
 
-    /** Asynchronous since uapmd 0.5.6: track mutations are undo engine operations. */
+    fun isTrackMuted(trackIndex: Int): Boolean
+    fun isTrackSolo(trackIndex: Int): Boolean
+    fun setTrackMuted(trackIndex: Int, muted: Boolean): Boolean
+    fun setTrackSolo(trackIndex: Int, solo: Boolean): Boolean
+
     fun addTrack(callback: (trackIndex: Int, error: String?) -> Unit)
     fun removeTrack(trackIndex: Int, callback: (trackIndex: Int, error: String?) -> Unit)
     fun removeAllTracks(callback: (error: String?) -> Unit)
@@ -149,6 +153,131 @@ interface AppModel {
      */
     fun newProject(): AppProjectResult
 
+    // ── Timeline clip selection and clipboard ───────────────────────────────
+    //
+    // Owned by the model rather than by a UI, so that every host selects,
+    // copies and pastes clips the same way. The selection is held by stable
+    // document identity, not by index, so it survives a clip moving tracks.
+    //
+    // Model thread only.
+
+    fun isTimelineClipSelected(trackIndex: Int, clipId: Int): Boolean
+    val selectedTimelineClips: List<TimelineClipTarget>
+
+    /**
+     * Replaces the selection, adds to it ([additive]), or flips each clip's
+     * state within it ([toggle]) — what a click, a shift-click and a ctrl-click
+     * respectively produce. An empty list with both false clears it.
+     */
+    fun selectTimelineClips(
+        clips: List<TimelineClipTarget>,
+        additive: Boolean = false,
+        toggle: Boolean = false
+    )
+    fun clearTimelineClipSelection()
+
+    /** The MIDI clip an editor is open on, tracked separately from the selection. */
+    fun selectTimelineMidiClip(trackIndex: Int, clipId: Int): Boolean
+    val selectedTimelineMidiClip: TimelineClipTarget?
+
+    val timelineClipboardCount: Int
+    fun clearTimelineClipboard()
+
+    /** False leaves the reason in [lastTimelineClipError]. */
+    fun copySelectedTimelineClips(): Boolean
+
+    /** [cut] copies the selection before deleting it. */
+    fun deleteSelectedTimelineClips(cut: Boolean): TimelineClipDeleteResult
+
+    /**
+     * Which tracks a paste would land on, without performing it.
+     * [originalTracks] pastes each clip back onto the track it came from
+     * instead of onto [trackIndex].
+     */
+    fun timelinePasteDestinations(trackIndex: Int, originalTracks: Boolean): List<Int>
+
+    fun pasteTimelineClips(
+        trackIndex: Int,
+        positionSeconds: Double,
+        originalTracks: Boolean
+    ): TimelinePasteResult
+
+    /** Empty when the last clipboard call succeeded. */
+    val lastTimelineClipError: String
+
+    // ── Piano roll editing session ──────────────────────────────────────────
+    //
+    // uapmd moved the piano roll's editing model out of its GUI and into the
+    // app model, so that every host shares one interpretation of what a clip's
+    // UMP stream means as notes — including the MIDI2 attributes and per-note
+    // automation that a naive note-on/note-off pairing loses.
+    //
+    // The flow: snapshot the clip, open a session, load the snapshot into it
+    // unless the session already matches, edit, commit, close.
+    //
+    // Model thread only.
+
+    /** The caller owns the snapshot and must close it. */
+    fun pianoRollClipSnapshot(
+        trackIndex: Int,
+        clipId: Int,
+        fallbackDurationSeconds: Double = 0.01
+    ): PianoRollSnapshot?
+
+    /** Owned by the model and shared between callers; do not close. */
+    fun openPianoRollSession(trackIndex: Int, clipId: Int): PianoRollSession?
+    fun findPianoRollSession(trackIndex: Int, clipId: Int): PianoRollSession?
+    fun closePianoRollSession(trackIndex: Int, clipId: Int)
+
+    /**
+     * Commit-source tracking.
+     *
+     * A commit changes the clip, which makes the timeline announce the change,
+     * which would normally make an open piano roll reload from it — throwing
+     * away whatever the user has done since. Record the source right after a
+     * commit, and when a change arrives ask [pianoRollSourceMatchesLastEdit]
+     * before reloading. The match is by content fingerprint, not a flag, so an
+     * edit that really did come from elsewhere still reloads.
+     */
+    fun recordPianoRollCommitSource(trackIndex: Int, clipId: Int)
+    fun pianoRollSourceMatchesLastEdit(): Boolean
+    fun clearPianoRollCommitSource()
+
+    // ── Assorted accessors ──────────────────────────────────────────────────
+
+    val midiInputPorts: List<MidiPortInfo>
+    val midiOutputPorts: List<MidiPortInfo>
+
+    /** A hidden track is skipped by paste and by the track list, but still plays. */
+    fun isTrackHidden(trackIndex: Int): Boolean
+
+    /** The span the timeline's content actually occupies. */
+    val timelineContentBounds: TimelineContentBounds
+
+    /** UMP devices the model has instantiated. */
+    val devices: List<DeviceEntry>
+    /** The device hosting a plug-in instance, or null when it has none. */
+    fun deviceForInstance(instanceId: Int): DeviceEntry?
+    fun updateDeviceLabel(instanceId: Int, label: String)
+
+    /**
+     * Plug-in state to and from a file. Prefer these over the `*Sync` variants:
+     * a plug-in's state can be slow to produce, and on Android reading it from
+     * the main thread can deadlock.
+     */
+    fun loadPluginState(instanceId: Int, filepath: String, callback: (PluginStateResult) -> Unit)
+    fun savePluginState(instanceId: Int, filepath: String, callback: (PluginStateResult) -> Unit)
+
+    /**
+     * The blocking variants, for tools and tests that have no loop to post a
+     * completion to. See the warning on [loadPluginState].
+     */
+    fun loadPluginStateSync(instanceId: Int, filepath: String): PluginStateResult
+    fun savePluginStateSync(instanceId: Int, filepath: String): PluginStateResult
+
+    /** Marks the track owning this instance dirty, so the next save rewrites it. */
+    fun markPluginInstanceTrackDirty(instanceId: Int)
+
     /**
      * The project's tempo curve, as the engine derived it from the master
      * track. Read this rather than assembling one from the master tempo points,
@@ -177,6 +306,79 @@ interface AppModel {
         tickResolution: UInt = 480u,
         bpm: Double = 120.0
     ): ClipAddResult
+
+    /**
+     * `AppModel::addClipToTrack`. Ownership of [reader] transfers to the
+     * engine, so do not close it afterwards - a successful call consumes it,
+     * and a failed one reports `reader not found or already consumed` if the
+     * same reader is offered twice.
+     */
+    fun addClipToTrack(
+        trackIndex: Int,
+        position: TimelinePosition,
+        reader: AudioFileReader,
+        filepath: String
+    ): ClipAddResult
+
+    /** `AppModel::addMidiClipToTrack`, reading an SMF or SMF2 from disk. */
+    fun addMidiClipToTrack(trackIndex: Int, position: TimelinePosition, filepath: String): ClipAddResult
+
+    /**
+     * `AppModel::addMidiClipFromData`, for a clip built in memory rather than
+     * read from a file - what a generator or a step sequencer produces.
+     *
+     * [umpEvents] and [tickTimestamps] are parallel: one timestamp per event.
+     * Set [needsFileSave] when the clip has no file behind it yet, so that
+     * saving the project writes one out.
+     */
+    fun addMidiClipFromData(
+        trackIndex: Int,
+        position: TimelinePosition,
+        umpEvents: List<UInt>,
+        tickTimestamps: List<ULong>,
+        tickResolution: UInt = 480u,
+        clipTempo: Double = 120.0,
+        tempoChanges: List<MidiTempoChange> = emptyList(),
+        timeSignatureChanges: List<MidiTimeSignatureChange> = emptyList(),
+        clipName: String = "",
+        needsFileSave: Boolean = true
+    ): ClipAddResult
+
+    /**
+     * `AppModel::addDeviceInputToTrack`, returning the new source node id, or a
+     * negative value on failure. The undoable counterpart is
+     * [ProjectCommands.addDeviceInputToTrack], which takes the node id this
+     * returns; prefer that one from a UI.
+     */
+    fun addDeviceInputToTrack(trackIndex: Int, channelIndices: List<UInt>): Int
+
+    // ── Master track markers ────────────────────────────────────────────────
+
+    /** Reading counterpart to [ProjectCommands.setMasterTrackMarkers]. */
+    val masterMarkers: List<ClipMarkerData>
+
+    /**
+     * Writes the master markers and reports why a rejected set was rejected,
+     * which [ProjectCommands.setMasterTrackMarkers] reduces to a boolean. This
+     * path is not undoable.
+     */
+    fun setMasterTrackMarkersWithValidation(markers: List<ClipMarkerData>): OpResult
+
+    // ── Offline render to file ──────────────────────────────────────────────
+    //
+    // AppModel runs this as a background job: start it, poll the status, and
+    // clear the finished status once the result has been shown. Distinct from
+    // SequencerEngine.renderOffline, which renders synchronously on the calling
+    // thread.
+
+    /** False when a render is already running or the settings are unusable. */
+    fun startRenderToFile(settings: RenderToFileSettings): Boolean
+    fun cancelRenderToFile()
+    val renderToFileStatus: RenderToFileStatus
+    fun clearCompletedRenderStatus()
+
+    /** Asks the host to bring up this track's graph editor. */
+    fun requestShowTrackGraph(trackIndex: Int)
 
     // ── Track graph (DAG) ───────────────────────────────────────────────────
 
@@ -337,7 +539,9 @@ data class UmpEvent(val tick: Long, val words: UIntArray) {
 data class UmpEventsResult(
     val success: Boolean,
     val error: String?,
-    val events: List<UmpEvent>
+    val events: List<UmpEvent>,
+    val tickResolution: UInt = 0u,
+    val clipTempo: Double = 0.0
 )
 
 /** Mirrors `uapmd_app_project_result_t`. */
@@ -371,4 +575,188 @@ interface TransportController {
     fun pause()
     fun resume()
     fun record()
+
+    /** Moves the playhead without starting or stopping the transport. */
+    fun jump(positionSeconds: Double)
 }
+
+/** One clip, by the identifiers the rest of this API takes. */
+data class TimelineClipTarget(val trackIndex: Int, val clipId: Int)
+
+/** [changedTracks] are the tracks that lost a clip. */
+data class TimelineClipDeleteResult(
+    val success: Boolean,
+    val changedTracks: List<Int>,
+    val error: String?
+)
+
+data class TimelinePasteResult(
+    val success: Boolean,
+    val pasted: List<TimelineClipTarget>,
+    val error: String?
+)
+
+/** A MIDI clip parsed into notes, ready to load into a [PianoRollSession]. */
+interface PianoRollSnapshot : AutoCloseable {
+    val isReady: Boolean
+    /** Empty when [isReady]. */
+    val error: String
+    val durationSeconds: Double
+    val minNote: Int
+    val maxNote: Int
+    val notes: List<PianoRollNote>
+}
+
+/**
+ * One note as a session holds it.
+ *
+ * [deleted] notes stay in the list so indexes remain stable across an edit;
+ * skip them when drawing. [editId] is the identity the selection is keyed by —
+ * an index is only good until the next edit.
+ */
+data class PianoRollNote(
+    val startSeconds: Double,
+    val durationSeconds: Double,
+    /** 0.0 - 1.0 */
+    val velocity: Float,
+    val note: Int,
+    val channel: Int,
+    val deleted: Boolean,
+    val editId: Long,
+    val umpGroup: Int,
+    val releaseVelocity: Int,
+    val attributeType: Int,
+    val attributeValue: Int,
+    val automationEventCount: Int
+)
+
+/** The clipboard actions a session performs on its selection. */
+enum class PianoRollAction(val nativeValue: Int) {
+    None(0), Copy(1), Cut(2), Paste(3), Delete(4), SelectAll(5)
+}
+
+/**
+ * A live editing session over one MIDI clip. Owned by the model — obtain one
+ * with [AppModel.openPianoRollSession] and release it with
+ * [AppModel.closePianoRollSession].
+ */
+interface PianoRollSession {
+    val notes: List<PianoRollNote>
+    fun isNoteSelected(index: Int): Boolean
+    val selectedNoteCount: Int
+    /** The note the detail editor is on, or -1. */
+    var focusedNote: Int
+    val durationSeconds: Double
+    val minNote: Int
+    val maxNote: Int
+    val clipboardCount: Int
+    val isDirty: Boolean
+    /** Empty when the last edit succeeded. */
+    val error: String
+
+    /**
+     * Whether this session was built from that snapshot's UMP stream. False
+     * means the clip changed underneath and the session must be reloaded —
+     * which is what stops an edit being applied to a clip it was not made
+     * against.
+     */
+    fun matchesSource(snapshot: PianoRollSnapshot): Boolean
+    fun loadNotes(snapshot: PianoRollSnapshot?)
+
+    /** [index] -1 clears the selection. */
+    fun selectNote(index: Int, additive: Boolean = false, toggle: Boolean = false)
+    fun performAction(action: PianoRollAction, pasteSeconds: Double = 0.0)
+    fun createNote(startSeconds: Double, durationSeconds: Double, note: Int, velocity: Float)
+    fun deleteNote(index: Int)
+    fun resizeNote(index: Int, startSeconds: Double, durationSeconds: Double, note: Int)
+
+    /**
+     * A move drag works from the notes as they were when it began, so each
+     * update re-applies one delta rather than accumulating rounding. The
+     * session holds that snapshot: say when the drag starts, how far it has
+     * moved, and whether it ended or was cancelled.
+     */
+    fun beginDrag()
+    fun moveSelection(timeDeltaSeconds: Double, pitchDelta: Int)
+    fun cancelDrag()
+    fun finishDrag(index: Int, originalStart: Double, originalEnd: Double, originalNote: Int)
+
+    /** Writes the session back to the clip, through the undo history. */
+    fun commit(app: AppModel): Boolean
+}
+
+data class MidiPortInfo(val id: String, val displayName: String)
+
+/** [filepath] is the path actually used for the save or load. */
+data class PluginStateResult(
+    val instanceId: Int,
+    val success: Boolean,
+    val error: String,
+    val filepath: String
+)
+
+data class TimelineContentBounds(
+    val hasContent: Boolean,
+    val startSeconds: Double,
+    val endSeconds: Double,
+    val durationSeconds: Double
+)
+
+/** One UMP device the model has instantiated. */
+data class DeviceEntry(
+    val id: Int,
+    val label: String,
+    val apiName: String,
+    val statusMessage: String,
+    val running: Boolean,
+    val instantiating: Boolean,
+    val hasError: Boolean
+)
+
+/** A tempo change inside a MIDI clip, positioned in the clip's own ticks. */
+data class MidiTempoChange(val tickPosition: ULong, val bpm: Double)
+
+/** A meter change inside a MIDI clip, positioned in the clip's own ticks. */
+data class MidiTimeSignatureChange(
+    val tickPosition: ULong,
+    val numerator: UByte,
+    val denominator: UByte,
+    val clocksPerClick: UByte = 24u,
+    val thirtySecondsPerQuarter: UByte = 8u
+)
+
+/**
+ * What to render and when to stop.
+ *
+ * The span is [startSeconds] to [endSeconds]; leave [hasEndSeconds] false and
+ * set [useContentFallback] to render to the end of the content instead, in
+ * which case the content bounds must be supplied (they come from
+ * [AppModel.timelineContentBounds]). [tailSeconds] keeps rendering past the end
+ * so that reverbs and delays are not cut off, and the silence stop ends the
+ * render early once the output stays below [silenceThresholdDb] for
+ * [silenceDurationSeconds].
+ */
+data class RenderToFileSettings(
+    val outputPath: String,
+    val startSeconds: Double = 0.0,
+    val endSeconds: Double = 0.0,
+    val hasEndSeconds: Boolean = false,
+    val useContentFallback: Boolean = true,
+    val contentBoundsValid: Boolean = false,
+    val contentStartSeconds: Double = 0.0,
+    val contentEndSeconds: Double = 0.0,
+    val tailSeconds: Double = 0.0,
+    val enableSilenceStop: Boolean = false,
+    val silenceDurationSeconds: Double = 2.0,
+    val silenceThresholdDb: Double = -60.0
+)
+
+data class RenderToFileStatus(
+    val running: Boolean,
+    val completed: Boolean,
+    val success: Boolean,
+    val progress: Double,
+    val renderedSeconds: Double,
+    val message: String,
+    val outputPath: String
+)
