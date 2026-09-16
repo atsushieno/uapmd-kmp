@@ -1,0 +1,605 @@
+<!DOCTYPE html>
+<html class="no-js" lang="en">
+<head>
+    <meta name="viewport" content="width=device-width, initial-scale=1" charset="UTF-8">
+    <title>AndroidPluginInstance</title>
+    <link href="../../../images/logo-icon.svg" rel="icon" type="image/svg">
+        <script>var pathToRoot = "../../../";</script>
+    <script>document.documentElement.classList.replace("no-js", "js");</script>
+    <script>const storage = localStorage.getItem("dokka-dark-mode")
+      if (storage == null) {
+        const osDarkSchemePreferred = window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches
+        if (osDarkSchemePreferred === true) {
+          document.getElementsByTagName("html")[0].classList.add("theme-dark")
+        }
+      } else {
+        const savedDarkMode = JSON.parse(storage)
+        if (savedDarkMode === true) {
+          document.getElementsByTagName("html")[0].classList.add("theme-dark")
+        }
+      }
+    </script>
+<script type="text/javascript" src="../../../scripts/sourceset_dependencies.js" async="async"></script>
+<link href="../../../styles/style.css" rel="Stylesheet">
+<link href="../../../styles/main.css" rel="Stylesheet">
+<link href="../../../styles/prism.css" rel="Stylesheet">
+<link href="../../../styles/logo-styles.css" rel="Stylesheet">
+<link href="../../../ui-kit/ui-kit.min.css" rel="Stylesheet">
+<script type="text/javascript" src="../../../scripts/safe-local-storage_blocking.js"></script>
+<script type="text/javascript" src="../../../scripts/navigation-loader.js" async="async"></script>
+<script type="text/javascript" src="../../../scripts/platform-content-handler.js" async="async"></script>
+<script type="text/javascript" src="../../../scripts/main.js" defer="defer"></script>
+<script type="text/javascript" src="../../../scripts/prism.js" async="async"></script>
+<script type="text/javascript" src="../../../ui-kit/ui-kit.min.js" defer="defer"></script>
+</head>
+<body>
+<div class="root">
+    <header class="navigation theme-dark" id="navigation-wrapper" role="banner">
+            <a class="library-name--link" href="../../../index.html" tabindex="1">
+                    uapmd-binding
+            </a>
+        <button class="navigation-controls--btn navigation-controls--btn_toc ui-kit_mobile-only" id="toc-toggle"
+                type="button">Toggle table of contents
+        </button>
+        <div class="navigation-controls--break ui-kit_mobile-only"></div>
+        <div class="library-version" id="library-version">
+        </div>
+        <div class="navigation-controls">
+        <ul class="filter-section filter-section_loading" id="filter-section" aria-label="Target filter">
+                <button class="platform-tag platform-selector jvm-like" data-active="" aria-pressed="true"
+                        data-filter=":uapmd-binding/androidMain">Android</button>
+            <div class="dropdown filter-section--dropdown" data-role="dropdown" id="filter-section-dropdown">
+                <button class="button button_dropdown filter-section--dropdown-toggle" role="combobox"
+                        data-role="dropdown-toggle"
+                        aria-controls="platform-tags-listbox"
+                        aria-haspopup="listbox"
+                        aria-expanded="false"
+                        aria-label="Toggle source sets"
+                ></button>
+                <ul role="listbox" id="platform-tags-listbox" class="dropdown--list" data-role="dropdown-listbox" aria-label="Target filter">
+                    <div class="dropdown--header"><span>Target filter</span>
+                        <button class="button" data-role="dropdown-toggle" aria-label="Close target filter">
+                            <i class="ui-kit-icon ui-kit-icon_cross"></i>
+                        </button>
+                    </div>
+                        <li role="option" class="dropdown--option platform-selector-option jvm-like" tabindex="0">
+                            <label class="checkbox">
+                                <input type="checkbox" class="checkbox--input" id=":uapmd-binding/androidMain"
+                                       data-filter=":uapmd-binding/androidMain"/>
+                                <span class="checkbox--icon"></span>
+                                Android
+                            </label>
+                        </li>
+                </ul>
+                <div class="dropdown--overlay"></div>
+            </div>
+        </ul>
+            <button class="navigation-controls--btn navigation-controls--btn_theme" id="theme-toggle-button"
+                    type="button">Switch theme
+            </button>
+            <div class="navigation-controls--btn navigation-controls--btn_search" id="searchBar" role="button">Search in
+                API
+            </div>
+        </div>
+    </header>
+    <div id="container">
+        <nav id="leftColumn" class="sidebar" data-item-type="SECTION" data-item-config='{"defaultSize": 280, "minSize": 200, "maxSize": 400}'>
+            <a class="toc--skip-link" href="#main">Skip to content</a>
+            <div class="dropdown theme-dark_mobile" data-role="dropdown" id="toc-dropdown">
+                <ul role="listbox" id="toc-listbox" class="dropdown--list dropdown--list_toc-list"
+                    data-role="dropdown-listbox" aria-label="Table of contents">
+                    <div class="dropdown--header">
+                            <span>
+                                    uapmd-binding
+                            </span>
+                        <button class="button" data-role="dropdown-toggle" aria-label="Close table of contents">
+                            <i class="ui-kit-icon ui-kit-icon_cross"></i>
+                        </button>
+                    </div>
+                    <div class="sidebar--inner" id="sideMenu"></div>
+                </ul>
+                <div class="dropdown--overlay"></div>
+            </div>
+        </nav>
+        <div id="resizer" class="resizer" data-item-type="BAR"></div>
+        <div id="main" data-item-type="SECTION" role="main">
+<div class="main-content" data-page-type="classlike" id="content" pageIds="uapmd-binding::dev.atsushieno.uapmd/AndroidPluginInstance///PointingToDeclaration//-2126834290">
+  <div class="breadcrumbs"><a href="../../../index.html">uapmd-binding</a><span class="delimiter">/</span><a href="../index.html">dev.atsushieno.uapmd</a><span class="delimiter">/</span><span class="current">AndroidPluginInstance</span></div>
+  <div class="cover ">
+    <h1 class="cover"><span>Android</span><wbr></wbr><span>Plugin</span><wbr></wbr><span><span>Instance</span></span></h1>
+    <div class="platform-hinted  with-platform-tabs" data-platform-hinted="data-platform-hinted">
+      <div class="platform-bookmarks-row" data-toggle-list="data-toggle-list"><button class="platform-bookmark" data-filterable-current=":uapmd-binding/androidMain" data-filterable-set=":uapmd-binding/androidMain" data-active="" data-toggle=":uapmd-binding/androidMain">Android</button></div>
+<div class="content sourceset-dependent-content" data-active="" data-togglable=":uapmd-binding/androidMain"><div class="symbol monospace"><span class="token keyword">class </span><a href="index.html">AndroidPluginInstance</a> : <a href="../-plugin-instance/index.html">PluginInstance</a></div></div>    </div>
+  </div>
+  <div class="tabbedcontent">
+    <div class="tabs-section" tabs-section="tabs-section"><button class="section-tab" data-active="" data-togglable="CONSTRUCTOR,TYPE,PROPERTY,FUNCTION">Members</button></div>
+    <div class="tabs-section-body">
+      <div data-togglable="PROPERTY">
+        <h2 class="tableheader">Properties</h2>
+        <div class="table"><a data-name="725257069%2FProperties%2F-2126834290" anchor-label="aapUiHostDetails" id="725257069%2FProperties%2F-2126834290" data-filterable-set=":uapmd-binding/androidMain"></a>
+          <div class="table-row table-row_content" data-filterable-current=":uapmd-binding/androidMain" data-filterable-set=":uapmd-binding/androidMain">
+            <div class="main-subrow keyValue ">
+              <div class=""><span class="inline-flex">
+                  <div><a href="aap-ui-host-details.html"><span>aap</span><wbr></wbr><span>Ui</span><wbr></wbr><span>Host</span><wbr></wbr><span><span>Details</span></span></a></div>
+<span class="anchor-wrapper"><span class="anchor-icon" pointing-to="725257069%2FProperties%2F-2126834290"></span>
+                    <div class="copy-popup-wrapper "><span class="copy-popup-icon"></span><span>Link copied to clipboard</span></div>
+                  </span></span></div>
+              <div>
+                <div class="title">
+                  <div class="platform-hinted  with-platform-tabs" data-platform-hinted="data-platform-hinted">
+                    <div class="platform-bookmarks-row" data-toggle-list="data-toggle-list"><button class="platform-bookmark" data-filterable-current=":uapmd-binding/androidMain" data-filterable-set=":uapmd-binding/androidMain" data-active="" data-toggle=":uapmd-binding/androidMain">Android</button></div>
+<div class="content sourceset-dependent-content" data-active="" data-togglable=":uapmd-binding/androidMain"><div class="symbol monospace"><span class="token keyword">open </span><span class="token keyword">override </span><span class="token keyword">val </span><a href="aap-ui-host-details.html">aapUiHostDetails</a><span class="token operator">: </span><a href="../-aap-ui-host-details/index.html">AapUiHostDetails</a><span class="token operator">?</span></div></div>                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+<a data-name="608764124%2FProperties%2F-2126834290" anchor-label="bypassed" id="608764124%2FProperties%2F-2126834290" data-filterable-set=":uapmd-binding/androidMain"></a>
+          <div class="table-row table-row_content" data-filterable-current=":uapmd-binding/androidMain" data-filterable-set=":uapmd-binding/androidMain">
+            <div class="main-subrow keyValue ">
+              <div class=""><span class="inline-flex">
+                  <div><a href="bypassed.html"><span><span>bypassed</span></span></a></div>
+<span class="anchor-wrapper"><span class="anchor-icon" pointing-to="608764124%2FProperties%2F-2126834290"></span>
+                    <div class="copy-popup-wrapper "><span class="copy-popup-icon"></span><span>Link copied to clipboard</span></div>
+                  </span></span></div>
+              <div>
+                <div class="title">
+                  <div class="platform-hinted  with-platform-tabs" data-platform-hinted="data-platform-hinted">
+                    <div class="platform-bookmarks-row" data-toggle-list="data-toggle-list"><button class="platform-bookmark" data-filterable-current=":uapmd-binding/androidMain" data-filterable-set=":uapmd-binding/androidMain" data-active="" data-toggle=":uapmd-binding/androidMain">Android</button></div>
+<div class="content sourceset-dependent-content" data-active="" data-togglable=":uapmd-binding/androidMain"><div class="symbol monospace"><span class="token keyword">open </span><span class="token keyword">override </span><span class="token keyword">var </span><a href="bypassed.html">bypassed</a><span class="token operator">: </span><a href="https://kotlinlang.org/api/core/kotlin-stdlib/kotlin/-boolean/index.html">Boolean</a></div></div>                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+<a data-name="712420714%2FProperties%2F-2126834290" anchor-label="displayName" id="712420714%2FProperties%2F-2126834290" data-filterable-set=":uapmd-binding/androidMain"></a>
+          <div class="table-row table-row_content" data-filterable-current=":uapmd-binding/androidMain" data-filterable-set=":uapmd-binding/androidMain">
+            <div class="main-subrow keyValue ">
+              <div class=""><span class="inline-flex">
+                  <div><a href="display-name.html"><span>display</span><wbr></wbr><span><span>Name</span></span></a></div>
+<span class="anchor-wrapper"><span class="anchor-icon" pointing-to="712420714%2FProperties%2F-2126834290"></span>
+                    <div class="copy-popup-wrapper "><span class="copy-popup-icon"></span><span>Link copied to clipboard</span></div>
+                  </span></span></div>
+              <div>
+                <div class="title">
+                  <div class="platform-hinted  with-platform-tabs" data-platform-hinted="data-platform-hinted">
+                    <div class="platform-bookmarks-row" data-toggle-list="data-toggle-list"><button class="platform-bookmark" data-filterable-current=":uapmd-binding/androidMain" data-filterable-set=":uapmd-binding/androidMain" data-active="" data-toggle=":uapmd-binding/androidMain">Android</button></div>
+<div class="content sourceset-dependent-content" data-active="" data-togglable=":uapmd-binding/androidMain"><div class="symbol monospace"><span class="token keyword">open </span><span class="token keyword">override </span><span class="token keyword">val </span><a href="display-name.html">displayName</a><span class="token operator">: </span><a href="https://kotlinlang.org/api/core/kotlin-stdlib/kotlin/-string/index.html">String</a></div></div>                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+<a data-name="91088929%2FProperties%2F-2126834290" anchor-label="formatName" id="91088929%2FProperties%2F-2126834290" data-filterable-set=":uapmd-binding/androidMain"></a>
+          <div class="table-row table-row_content" data-filterable-current=":uapmd-binding/androidMain" data-filterable-set=":uapmd-binding/androidMain">
+            <div class="main-subrow keyValue ">
+              <div class=""><span class="inline-flex">
+                  <div><a href="format-name.html"><span>format</span><wbr></wbr><span><span>Name</span></span></a></div>
+<span class="anchor-wrapper"><span class="anchor-icon" pointing-to="91088929%2FProperties%2F-2126834290"></span>
+                    <div class="copy-popup-wrapper "><span class="copy-popup-icon"></span><span>Link copied to clipboard</span></div>
+                  </span></span></div>
+              <div>
+                <div class="title">
+                  <div class="platform-hinted  with-platform-tabs" data-platform-hinted="data-platform-hinted">
+                    <div class="platform-bookmarks-row" data-toggle-list="data-toggle-list"><button class="platform-bookmark" data-filterable-current=":uapmd-binding/androidMain" data-filterable-set=":uapmd-binding/androidMain" data-active="" data-toggle=":uapmd-binding/androidMain">Android</button></div>
+<div class="content sourceset-dependent-content" data-active="" data-togglable=":uapmd-binding/androidMain"><div class="symbol monospace"><span class="token keyword">open </span><span class="token keyword">override </span><span class="token keyword">val </span><a href="format-name.html">formatName</a><span class="token operator">: </span><a href="https://kotlinlang.org/api/core/kotlin-stdlib/kotlin/-string/index.html">String</a></div></div>                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+<a data-name="1924028663%2FProperties%2F-2126834290" anchor-label="hasUiSupport" id="1924028663%2FProperties%2F-2126834290" data-filterable-set=":uapmd-binding/androidMain"></a>
+          <div class="table-row table-row_content" data-filterable-current=":uapmd-binding/androidMain" data-filterable-set=":uapmd-binding/androidMain">
+            <div class="main-subrow keyValue ">
+              <div class=""><span class="inline-flex">
+                  <div><a href="../-plugin-instance/has-ui-support.html"><span>has</span><wbr></wbr><span>Ui</span><wbr></wbr><span><span>Support</span></span></a></div>
+<span class="anchor-wrapper"><span class="anchor-icon" pointing-to="1924028663%2FProperties%2F-2126834290"></span>
+                    <div class="copy-popup-wrapper "><span class="copy-popup-icon"></span><span>Link copied to clipboard</span></div>
+                  </span></span></div>
+              <div>
+                <div class="title">
+                  <div class="platform-hinted  with-platform-tabs" data-platform-hinted="data-platform-hinted">
+                    <div class="platform-bookmarks-row" data-toggle-list="data-toggle-list"><button class="platform-bookmark" data-filterable-current=":uapmd-binding/androidMain" data-filterable-set=":uapmd-binding/androidMain" data-active="" data-toggle=":uapmd-binding/androidMain">Android</button></div>
+<div class="content sourceset-dependent-content" data-active="" data-togglable=":uapmd-binding/androidMain"><div class="symbol monospace"><span class="token keyword">open </span><span class="token keyword">val </span><a href="../-plugin-instance/has-ui-support.html">hasUiSupport</a><span class="token operator">: </span><a href="https://kotlinlang.org/api/core/kotlin-stdlib/kotlin/-boolean/index.html">Boolean</a></div></div>                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+<a data-name="1842411389%2FProperties%2F-2126834290" anchor-label="latencyInSamples" id="1842411389%2FProperties%2F-2126834290" data-filterable-set=":uapmd-binding/androidMain"></a>
+          <div class="table-row table-row_content" data-filterable-current=":uapmd-binding/androidMain" data-filterable-set=":uapmd-binding/androidMain">
+            <div class="main-subrow keyValue ">
+              <div class=""><span class="inline-flex">
+                  <div><a href="latency-in-samples.html"><span>latency</span><wbr></wbr><span>In</span><wbr></wbr><span><span>Samples</span></span></a></div>
+<span class="anchor-wrapper"><span class="anchor-icon" pointing-to="1842411389%2FProperties%2F-2126834290"></span>
+                    <div class="copy-popup-wrapper "><span class="copy-popup-icon"></span><span>Link copied to clipboard</span></div>
+                  </span></span></div>
+              <div>
+                <div class="title">
+                  <div class="platform-hinted  with-platform-tabs" data-platform-hinted="data-platform-hinted">
+                    <div class="platform-bookmarks-row" data-toggle-list="data-toggle-list"><button class="platform-bookmark" data-filterable-current=":uapmd-binding/androidMain" data-filterable-set=":uapmd-binding/androidMain" data-active="" data-toggle=":uapmd-binding/androidMain">Android</button></div>
+<div class="content sourceset-dependent-content" data-active="" data-togglable=":uapmd-binding/androidMain"><div class="symbol monospace"><span class="token keyword">open </span><span class="token keyword">override </span><span class="token keyword">val </span><a href="latency-in-samples.html">latencyInSamples</a><span class="token operator">: </span><a href="https://kotlinlang.org/api/core/kotlin-stdlib/kotlin/-u-int/index.html">UInt</a></div></div>                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+<a data-name="-253272611%2FProperties%2F-2126834290" anchor-label="parameterCount" id="-253272611%2FProperties%2F-2126834290" data-filterable-set=":uapmd-binding/androidMain"></a>
+          <div class="table-row table-row_content" data-filterable-current=":uapmd-binding/androidMain" data-filterable-set=":uapmd-binding/androidMain">
+            <div class="main-subrow keyValue ">
+              <div class=""><span class="inline-flex">
+                  <div><a href="parameter-count.html"><span>parameter</span><wbr></wbr><span><span>Count</span></span></a></div>
+<span class="anchor-wrapper"><span class="anchor-icon" pointing-to="-253272611%2FProperties%2F-2126834290"></span>
+                    <div class="copy-popup-wrapper "><span class="copy-popup-icon"></span><span>Link copied to clipboard</span></div>
+                  </span></span></div>
+              <div>
+                <div class="title">
+                  <div class="platform-hinted  with-platform-tabs" data-platform-hinted="data-platform-hinted">
+                    <div class="platform-bookmarks-row" data-toggle-list="data-toggle-list"><button class="platform-bookmark" data-filterable-current=":uapmd-binding/androidMain" data-filterable-set=":uapmd-binding/androidMain" data-active="" data-toggle=":uapmd-binding/androidMain">Android</button></div>
+<div class="content sourceset-dependent-content" data-active="" data-togglable=":uapmd-binding/androidMain"><div class="symbol monospace"><span class="token keyword">open </span><span class="token keyword">override </span><span class="token keyword">val </span><a href="parameter-count.html">parameterCount</a><span class="token operator">: </span><a href="https://kotlinlang.org/api/core/kotlin-stdlib/kotlin/-u-int/index.html">UInt</a></div></div>                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+<a data-name="-232254827%2FProperties%2F-2126834290" anchor-label="pluginId" id="-232254827%2FProperties%2F-2126834290" data-filterable-set=":uapmd-binding/androidMain"></a>
+          <div class="table-row table-row_content" data-filterable-current=":uapmd-binding/androidMain" data-filterable-set=":uapmd-binding/androidMain">
+            <div class="main-subrow keyValue ">
+              <div class=""><span class="inline-flex">
+                  <div><a href="plugin-id.html"><span>plugin</span><wbr></wbr><span><span>Id</span></span></a></div>
+<span class="anchor-wrapper"><span class="anchor-icon" pointing-to="-232254827%2FProperties%2F-2126834290"></span>
+                    <div class="copy-popup-wrapper "><span class="copy-popup-icon"></span><span>Link copied to clipboard</span></div>
+                  </span></span></div>
+              <div>
+                <div class="title">
+                  <div class="platform-hinted  with-platform-tabs" data-platform-hinted="data-platform-hinted">
+                    <div class="platform-bookmarks-row" data-toggle-list="data-toggle-list"><button class="platform-bookmark" data-filterable-current=":uapmd-binding/androidMain" data-filterable-set=":uapmd-binding/androidMain" data-active="" data-toggle=":uapmd-binding/androidMain">Android</button></div>
+<div class="content sourceset-dependent-content" data-active="" data-togglable=":uapmd-binding/androidMain"><div class="symbol monospace"><span class="token keyword">open </span><span class="token keyword">override </span><span class="token keyword">val </span><a href="plugin-id.html">pluginId</a><span class="token operator">: </span><a href="https://kotlinlang.org/api/core/kotlin-stdlib/kotlin/-string/index.html">String</a></div></div>                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+<a data-name="-2062718009%2FProperties%2F-2126834290" anchor-label="presetCount" id="-2062718009%2FProperties%2F-2126834290" data-filterable-set=":uapmd-binding/androidMain"></a>
+          <div class="table-row table-row_content" data-filterable-current=":uapmd-binding/androidMain" data-filterable-set=":uapmd-binding/androidMain">
+            <div class="main-subrow keyValue ">
+              <div class=""><span class="inline-flex">
+                  <div><a href="preset-count.html"><span>preset</span><wbr></wbr><span><span>Count</span></span></a></div>
+<span class="anchor-wrapper"><span class="anchor-icon" pointing-to="-2062718009%2FProperties%2F-2126834290"></span>
+                    <div class="copy-popup-wrapper "><span class="copy-popup-icon"></span><span>Link copied to clipboard</span></div>
+                  </span></span></div>
+              <div>
+                <div class="title">
+                  <div class="platform-hinted  with-platform-tabs" data-platform-hinted="data-platform-hinted">
+                    <div class="platform-bookmarks-row" data-toggle-list="data-toggle-list"><button class="platform-bookmark" data-filterable-current=":uapmd-binding/androidMain" data-filterable-set=":uapmd-binding/androidMain" data-active="" data-toggle=":uapmd-binding/androidMain">Android</button></div>
+<div class="content sourceset-dependent-content" data-active="" data-togglable=":uapmd-binding/androidMain"><div class="symbol monospace"><span class="token keyword">open </span><span class="token keyword">override </span><span class="token keyword">val </span><a href="preset-count.html">presetCount</a><span class="token operator">: </span><a href="https://kotlinlang.org/api/core/kotlin-stdlib/kotlin/-u-int/index.html">UInt</a></div></div>                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+<a data-name="1151102327%2FProperties%2F-2126834290" anchor-label="requiresReplacingProcess" id="1151102327%2FProperties%2F-2126834290" data-filterable-set=":uapmd-binding/androidMain"></a>
+          <div class="table-row table-row_content" data-filterable-current=":uapmd-binding/androidMain" data-filterable-set=":uapmd-binding/androidMain">
+            <div class="main-subrow keyValue ">
+              <div class=""><span class="inline-flex">
+                  <div><a href="requires-replacing-process.html"><span>requires</span><wbr></wbr><span>Replacing</span><wbr></wbr><span><span>Process</span></span></a></div>
+<span class="anchor-wrapper"><span class="anchor-icon" pointing-to="1151102327%2FProperties%2F-2126834290"></span>
+                    <div class="copy-popup-wrapper "><span class="copy-popup-icon"></span><span>Link copied to clipboard</span></div>
+                  </span></span></div>
+              <div>
+                <div class="title">
+                  <div class="platform-hinted  with-platform-tabs" data-platform-hinted="data-platform-hinted">
+                    <div class="platform-bookmarks-row" data-toggle-list="data-toggle-list"><button class="platform-bookmark" data-filterable-current=":uapmd-binding/androidMain" data-filterable-set=":uapmd-binding/androidMain" data-active="" data-toggle=":uapmd-binding/androidMain">Android</button></div>
+<div class="content sourceset-dependent-content" data-active="" data-togglable=":uapmd-binding/androidMain"><div class="symbol monospace"><span class="token keyword">open </span><span class="token keyword">override </span><span class="token keyword">val </span><a href="requires-replacing-process.html">requiresReplacingProcess</a><span class="token operator">: </span><a href="https://kotlinlang.org/api/core/kotlin-stdlib/kotlin/-boolean/index.html">Boolean</a></div></div>                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+<a data-name="-2102347053%2FProperties%2F-2126834290" anchor-label="tailLengthInSeconds" id="-2102347053%2FProperties%2F-2126834290" data-filterable-set=":uapmd-binding/androidMain"></a>
+          <div class="table-row table-row_content" data-filterable-current=":uapmd-binding/androidMain" data-filterable-set=":uapmd-binding/androidMain">
+            <div class="main-subrow keyValue ">
+              <div class=""><span class="inline-flex">
+                  <div><a href="tail-length-in-seconds.html"><span>tail</span><wbr></wbr><span>Length</span><wbr></wbr><span>In</span><wbr></wbr><span><span>Seconds</span></span></a></div>
+<span class="anchor-wrapper"><span class="anchor-icon" pointing-to="-2102347053%2FProperties%2F-2126834290"></span>
+                    <div class="copy-popup-wrapper "><span class="copy-popup-icon"></span><span>Link copied to clipboard</span></div>
+                  </span></span></div>
+              <div>
+                <div class="title">
+                  <div class="platform-hinted  with-platform-tabs" data-platform-hinted="data-platform-hinted">
+                    <div class="platform-bookmarks-row" data-toggle-list="data-toggle-list"><button class="platform-bookmark" data-filterable-current=":uapmd-binding/androidMain" data-filterable-set=":uapmd-binding/androidMain" data-active="" data-toggle=":uapmd-binding/androidMain">Android</button></div>
+<div class="content sourceset-dependent-content" data-active="" data-togglable=":uapmd-binding/androidMain"><div class="symbol monospace"><span class="token keyword">open </span><span class="token keyword">override </span><span class="token keyword">val </span><a href="tail-length-in-seconds.html">tailLengthInSeconds</a><span class="token operator">: </span><a href="https://kotlinlang.org/api/core/kotlin-stdlib/kotlin/-double/index.html">Double</a></div></div>                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+<a data-name="-275827495%2FProperties%2F-2126834290" anchor-label="uiCapabilities" id="-275827495%2FProperties%2F-2126834290" data-filterable-set=":uapmd-binding/androidMain"></a>
+          <div class="table-row table-row_content" data-filterable-current=":uapmd-binding/androidMain" data-filterable-set=":uapmd-binding/androidMain">
+            <div class="main-subrow keyValue ">
+              <div class=""><span class="inline-flex">
+                  <div><a href="ui-capabilities.html"><span>ui</span><wbr></wbr><span><span>Capabilities</span></span></a></div>
+<span class="anchor-wrapper"><span class="anchor-icon" pointing-to="-275827495%2FProperties%2F-2126834290"></span>
+                    <div class="copy-popup-wrapper "><span class="copy-popup-icon"></span><span>Link copied to clipboard</span></div>
+                  </span></span></div>
+              <div>
+                <div class="title">
+                  <div class="platform-hinted  with-platform-tabs" data-platform-hinted="data-platform-hinted">
+                    <div class="platform-bookmarks-row" data-toggle-list="data-toggle-list"><button class="platform-bookmark" data-filterable-current=":uapmd-binding/androidMain" data-filterable-set=":uapmd-binding/androidMain" data-active="" data-toggle=":uapmd-binding/androidMain">Android</button></div>
+<div class="content sourceset-dependent-content" data-active="" data-togglable=":uapmd-binding/androidMain"><div class="symbol monospace"><span class="token keyword">open </span><span class="token keyword">override </span><span class="token keyword">val </span><a href="ui-capabilities.html">uiCapabilities</a><span class="token operator">: </span><a href="../-plugin-ui-capabilities/index.html">PluginUiCapabilities</a></div></div>                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div data-togglable="FUNCTION">
+        <h2 class="tableheader">Functions</h2>
+        <div class="table"><a data-name="-1129233012%2FFunctions%2F-2126834290" anchor-label="createUiPresentation" id="-1129233012%2FFunctions%2F-2126834290" data-filterable-set=":uapmd-binding/androidMain"></a>
+          <div class="table-row table-row_content" data-filterable-current=":uapmd-binding/androidMain" data-filterable-set=":uapmd-binding/androidMain">
+            <div class="main-subrow keyValue ">
+              <div class=""><span class="inline-flex">
+                  <div><a href="create-ui-presentation.html"><span>create</span><wbr></wbr><span>Ui</span><wbr></wbr><span><span>Presentation</span></span></a></div>
+<span class="anchor-wrapper"><span class="anchor-icon" pointing-to="-1129233012%2FFunctions%2F-2126834290"></span>
+                    <div class="copy-popup-wrapper "><span class="copy-popup-icon"></span><span>Link copied to clipboard</span></div>
+                  </span></span></div>
+              <div>
+                <div class="title">
+                  <div class="platform-hinted  with-platform-tabs" data-platform-hinted="data-platform-hinted">
+                    <div class="platform-bookmarks-row" data-toggle-list="data-toggle-list"><button class="platform-bookmark" data-filterable-current=":uapmd-binding/androidMain" data-filterable-set=":uapmd-binding/androidMain" data-active="" data-toggle=":uapmd-binding/androidMain">Android</button></div>
+<div class="content sourceset-dependent-content" data-active="" data-togglable=":uapmd-binding/androidMain"><div class="symbol monospace"><span class="token keyword">open </span><span class="token keyword">override </span><span class="token keyword">fun </span><a href="create-ui-presentation.html"><span class="token function">createUiPresentation</span></a><span class="token punctuation">(</span><span class="parameters "><span class="parameter ">request<span class="token operator">: </span><a href="../-plugin-ui-presentation-request/index.html">PluginUiPresentationRequest</a><span class="token operator"> = </span>PluginUiPresentationRequest()</span></span><span class="token punctuation">)</span><span class="token operator">: </span><a href="../-plugin-ui-presentation/index.html">PluginUiPresentation</a><span class="token operator">?</span></div></div>                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+<a data-name="-1065413734%2FFunctions%2F-2126834290" anchor-label="getParameterMetadata" id="-1065413734%2FFunctions%2F-2126834290" data-filterable-set=":uapmd-binding/androidMain"></a>
+          <div class="table-row table-row_content" data-filterable-current=":uapmd-binding/androidMain" data-filterable-set=":uapmd-binding/androidMain">
+            <div class="main-subrow keyValue ">
+              <div class=""><span class="inline-flex">
+                  <div><a href="get-parameter-metadata.html"><span>get</span><wbr></wbr><span>Parameter</span><wbr></wbr><span><span>Metadata</span></span></a></div>
+<span class="anchor-wrapper"><span class="anchor-icon" pointing-to="-1065413734%2FFunctions%2F-2126834290"></span>
+                    <div class="copy-popup-wrapper "><span class="copy-popup-icon"></span><span>Link copied to clipboard</span></div>
+                  </span></span></div>
+              <div>
+                <div class="title">
+                  <div class="platform-hinted  with-platform-tabs" data-platform-hinted="data-platform-hinted">
+                    <div class="platform-bookmarks-row" data-toggle-list="data-toggle-list"><button class="platform-bookmark" data-filterable-current=":uapmd-binding/androidMain" data-filterable-set=":uapmd-binding/androidMain" data-active="" data-toggle=":uapmd-binding/androidMain">Android</button></div>
+<div class="content sourceset-dependent-content" data-active="" data-togglable=":uapmd-binding/androidMain"><div class="symbol monospace"><span class="token keyword">open </span><span class="token keyword">override </span><span class="token keyword">fun </span><a href="get-parameter-metadata.html"><span class="token function">getParameterMetadata</span></a><span class="token punctuation">(</span><span class="parameters "><span class="parameter ">index<span class="token operator">: </span><a href="https://kotlinlang.org/api/core/kotlin-stdlib/kotlin/-u-int/index.html">UInt</a></span></span><span class="token punctuation">)</span><span class="token operator">: </span><a href="../-parameter-metadata/index.html">ParameterMetadata</a><span class="token operator">?</span></div></div>                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+<a data-name="425060247%2FFunctions%2F-2126834290" anchor-label="getParameterValue" id="425060247%2FFunctions%2F-2126834290" data-filterable-set=":uapmd-binding/androidMain"></a>
+          <div class="table-row table-row_content" data-filterable-current=":uapmd-binding/androidMain" data-filterable-set=":uapmd-binding/androidMain">
+            <div class="main-subrow keyValue ">
+              <div class=""><span class="inline-flex">
+                  <div><a href="get-parameter-value.html"><span>get</span><wbr></wbr><span>Parameter</span><wbr></wbr><span><span>Value</span></span></a></div>
+<span class="anchor-wrapper"><span class="anchor-icon" pointing-to="425060247%2FFunctions%2F-2126834290"></span>
+                    <div class="copy-popup-wrapper "><span class="copy-popup-icon"></span><span>Link copied to clipboard</span></div>
+                  </span></span></div>
+              <div>
+                <div class="title">
+                  <div class="platform-hinted  with-platform-tabs" data-platform-hinted="data-platform-hinted">
+                    <div class="platform-bookmarks-row" data-toggle-list="data-toggle-list"><button class="platform-bookmark" data-filterable-current=":uapmd-binding/androidMain" data-filterable-set=":uapmd-binding/androidMain" data-active="" data-toggle=":uapmd-binding/androidMain">Android</button></div>
+<div class="content sourceset-dependent-content" data-active="" data-togglable=":uapmd-binding/androidMain"><div class="symbol monospace"><span class="token keyword">open </span><span class="token keyword">override </span><span class="token keyword">fun </span><a href="get-parameter-value.html"><span class="token function">getParameterValue</span></a><span class="token punctuation">(</span><span class="parameters "><span class="parameter ">index<span class="token operator">: </span><a href="https://kotlinlang.org/api/core/kotlin-stdlib/kotlin/-int/index.html">Int</a></span></span><span class="token punctuation">)</span><span class="token operator">: </span><a href="https://kotlinlang.org/api/core/kotlin-stdlib/kotlin/-double/index.html">Double</a></div></div>                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+<a data-name="788222827%2FFunctions%2F-2126834290" anchor-label="getParameterValueString" id="788222827%2FFunctions%2F-2126834290" data-filterable-set=":uapmd-binding/androidMain"></a>
+          <div class="table-row table-row_content" data-filterable-current=":uapmd-binding/androidMain" data-filterable-set=":uapmd-binding/androidMain">
+            <div class="main-subrow keyValue ">
+              <div class=""><span class="inline-flex">
+                  <div><a href="get-parameter-value-string.html"><span>get</span><wbr></wbr><span>Parameter</span><wbr></wbr><span>Value</span><wbr></wbr><span><span>String</span></span></a></div>
+<span class="anchor-wrapper"><span class="anchor-icon" pointing-to="788222827%2FFunctions%2F-2126834290"></span>
+                    <div class="copy-popup-wrapper "><span class="copy-popup-icon"></span><span>Link copied to clipboard</span></div>
+                  </span></span></div>
+              <div>
+                <div class="title">
+                  <div class="platform-hinted  with-platform-tabs" data-platform-hinted="data-platform-hinted">
+                    <div class="platform-bookmarks-row" data-toggle-list="data-toggle-list"><button class="platform-bookmark" data-filterable-current=":uapmd-binding/androidMain" data-filterable-set=":uapmd-binding/androidMain" data-active="" data-toggle=":uapmd-binding/androidMain">Android</button></div>
+<div class="content sourceset-dependent-content" data-active="" data-togglable=":uapmd-binding/androidMain"><div class="symbol monospace"><span class="token keyword">open </span><span class="token keyword">override </span><span class="token keyword">fun </span><a href="get-parameter-value-string.html"><span class="token function">getParameterValueString</span></a><span class="token punctuation">(</span><span class="parameters "><span class="parameter ">index<span class="token operator">: </span><a href="https://kotlinlang.org/api/core/kotlin-stdlib/kotlin/-int/index.html">Int</a><span class="token punctuation">, </span></span><span class="parameter ">value<span class="token operator">: </span><a href="https://kotlinlang.org/api/core/kotlin-stdlib/kotlin/-double/index.html">Double</a></span></span><span class="token punctuation">)</span><span class="token operator">: </span><a href="https://kotlinlang.org/api/core/kotlin-stdlib/kotlin/-string/index.html">String</a></div></div>                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+<a data-name="109806970%2FFunctions%2F-2126834290" anchor-label="getPerNoteControllerValueString" id="109806970%2FFunctions%2F-2126834290" data-filterable-set=":uapmd-binding/androidMain"></a>
+          <div class="table-row table-row_content" data-filterable-current=":uapmd-binding/androidMain" data-filterable-set=":uapmd-binding/androidMain">
+            <div class="main-subrow keyValue ">
+              <div class=""><span class="inline-flex">
+                  <div><a href="get-per-note-controller-value-string.html"><span>get</span><wbr></wbr><span>Per</span><wbr></wbr><span>Note</span><wbr></wbr><span>Controller</span><wbr></wbr><span>Value</span><wbr></wbr><span><span>String</span></span></a></div>
+<span class="anchor-wrapper"><span class="anchor-icon" pointing-to="109806970%2FFunctions%2F-2126834290"></span>
+                    <div class="copy-popup-wrapper "><span class="copy-popup-icon"></span><span>Link copied to clipboard</span></div>
+                  </span></span></div>
+              <div>
+                <div class="title">
+                  <div class="platform-hinted  with-platform-tabs" data-platform-hinted="data-platform-hinted">
+                    <div class="platform-bookmarks-row" data-toggle-list="data-toggle-list"><button class="platform-bookmark" data-filterable-current=":uapmd-binding/androidMain" data-filterable-set=":uapmd-binding/androidMain" data-active="" data-toggle=":uapmd-binding/androidMain">Android</button></div>
+<div class="content sourceset-dependent-content" data-active="" data-togglable=":uapmd-binding/androidMain"><div class="symbol monospace"><span class="token keyword">open </span><span class="token keyword">override </span><span class="token keyword">fun </span><a href="get-per-note-controller-value-string.html"><span class="token function">getPerNoteControllerValueString</span></a><span class="token punctuation">(</span><span class="parameters "><span class="parameter ">note<span class="token operator">: </span><a href="https://kotlinlang.org/api/core/kotlin-stdlib/kotlin/-u-byte/index.html">UByte</a><span class="token punctuation">, </span></span><span class="parameter ">index<span class="token operator">: </span><a href="https://kotlinlang.org/api/core/kotlin-stdlib/kotlin/-u-byte/index.html">UByte</a><span class="token punctuation">, </span></span><span class="parameter ">value<span class="token operator">: </span><a href="https://kotlinlang.org/api/core/kotlin-stdlib/kotlin/-double/index.html">Double</a></span></span><span class="token punctuation">)</span><span class="token operator">: </span><a href="https://kotlinlang.org/api/core/kotlin-stdlib/kotlin/-string/index.html">String</a></div></div>                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+<a data-name="1990776520%2FFunctions%2F-2126834290" anchor-label="getPresetMetadata" id="1990776520%2FFunctions%2F-2126834290" data-filterable-set=":uapmd-binding/androidMain"></a>
+          <div class="table-row table-row_content" data-filterable-current=":uapmd-binding/androidMain" data-filterable-set=":uapmd-binding/androidMain">
+            <div class="main-subrow keyValue ">
+              <div class=""><span class="inline-flex">
+                  <div><a href="get-preset-metadata.html"><span>get</span><wbr></wbr><span>Preset</span><wbr></wbr><span><span>Metadata</span></span></a></div>
+<span class="anchor-wrapper"><span class="anchor-icon" pointing-to="1990776520%2FFunctions%2F-2126834290"></span>
+                    <div class="copy-popup-wrapper "><span class="copy-popup-icon"></span><span>Link copied to clipboard</span></div>
+                  </span></span></div>
+              <div>
+                <div class="title">
+                  <div class="platform-hinted  with-platform-tabs" data-platform-hinted="data-platform-hinted">
+                    <div class="platform-bookmarks-row" data-toggle-list="data-toggle-list"><button class="platform-bookmark" data-filterable-current=":uapmd-binding/androidMain" data-filterable-set=":uapmd-binding/androidMain" data-active="" data-toggle=":uapmd-binding/androidMain">Android</button></div>
+<div class="content sourceset-dependent-content" data-active="" data-togglable=":uapmd-binding/androidMain"><div class="symbol monospace"><span class="token keyword">open </span><span class="token keyword">override </span><span class="token keyword">fun </span><a href="get-preset-metadata.html"><span class="token function">getPresetMetadata</span></a><span class="token punctuation">(</span><span class="parameters "><span class="parameter ">index<span class="token operator">: </span><a href="https://kotlinlang.org/api/core/kotlin-stdlib/kotlin/-u-int/index.html">UInt</a></span></span><span class="token punctuation">)</span><span class="token operator">: </span><a href="../-preset-metadata/index.html">PresetMetadata</a><span class="token operator">?</span></div></div>                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+<a data-name="1277587804%2FFunctions%2F-2126834290" anchor-label="loadPreset" id="1277587804%2FFunctions%2F-2126834290" data-filterable-set=":uapmd-binding/androidMain"></a>
+          <div class="table-row table-row_content" data-filterable-current=":uapmd-binding/androidMain" data-filterable-set=":uapmd-binding/androidMain">
+            <div class="main-subrow keyValue ">
+              <div class=""><span class="inline-flex">
+                  <div><a href="load-preset.html"><span>load</span><wbr></wbr><span><span>Preset</span></span></a></div>
+<span class="anchor-wrapper"><span class="anchor-icon" pointing-to="1277587804%2FFunctions%2F-2126834290"></span>
+                    <div class="copy-popup-wrapper "><span class="copy-popup-icon"></span><span>Link copied to clipboard</span></div>
+                  </span></span></div>
+              <div>
+                <div class="title">
+                  <div class="platform-hinted  with-platform-tabs" data-platform-hinted="data-platform-hinted">
+                    <div class="platform-bookmarks-row" data-toggle-list="data-toggle-list"><button class="platform-bookmark" data-filterable-current=":uapmd-binding/androidMain" data-filterable-set=":uapmd-binding/androidMain" data-active="" data-toggle=":uapmd-binding/androidMain">Android</button></div>
+<div class="content sourceset-dependent-content" data-active="" data-togglable=":uapmd-binding/androidMain"><div class="symbol monospace"><span class="token keyword">open </span><span class="token keyword">override </span><span class="token keyword">fun </span><a href="load-preset.html"><span class="token function">loadPreset</span></a><span class="token punctuation">(</span><span class="parameters "><span class="parameter ">presetIndex<span class="token operator">: </span><a href="https://kotlinlang.org/api/core/kotlin-stdlib/kotlin/-int/index.html">Int</a></span></span><span class="token punctuation">)</span></div></div>                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+<a data-name="-1940088219%2FFunctions%2F-2126834290" anchor-label="loadState" id="-1940088219%2FFunctions%2F-2126834290" data-filterable-set=":uapmd-binding/androidMain"></a>
+          <div class="table-row table-row_content" data-filterable-current=":uapmd-binding/androidMain" data-filterable-set=":uapmd-binding/androidMain">
+            <div class="main-subrow keyValue ">
+              <div class=""><span class="inline-flex">
+                  <div><a href="load-state.html"><span>load</span><wbr></wbr><span><span>State</span></span></a></div>
+<span class="anchor-wrapper"><span class="anchor-icon" pointing-to="-1940088219%2FFunctions%2F-2126834290"></span>
+                    <div class="copy-popup-wrapper "><span class="copy-popup-icon"></span><span>Link copied to clipboard</span></div>
+                  </span></span></div>
+              <div>
+                <div class="title">
+                  <div class="platform-hinted  with-platform-tabs" data-platform-hinted="data-platform-hinted">
+                    <div class="platform-bookmarks-row" data-toggle-list="data-toggle-list"><button class="platform-bookmark" data-filterable-current=":uapmd-binding/androidMain" data-filterable-set=":uapmd-binding/androidMain" data-active="" data-toggle=":uapmd-binding/androidMain">Android</button></div>
+<div class="content sourceset-dependent-content" data-active="" data-togglable=":uapmd-binding/androidMain"><div class="symbol monospace"><span class="token keyword">open </span><span class="token keyword">override </span><span class="token keyword">fun </span><a href="load-state.html"><span class="token function">loadState</span></a><span class="token punctuation">(</span><span class="parameters "><span class="parameter ">data<span class="token operator">: </span><a href="https://kotlinlang.org/api/core/kotlin-stdlib/kotlin/-byte-array/index.html">ByteArray</a><span class="token punctuation">, </span></span><span class="parameter ">ctx<span class="token operator">: </span><a href="../-state-context-type/index.html">StateContextType</a><span class="token punctuation">, </span></span><span class="parameter ">includeUiState<span class="token operator">: </span><a href="https://kotlinlang.org/api/core/kotlin-stdlib/kotlin/-boolean/index.html">Boolean</a><span class="token punctuation">, </span></span><span class="parameter ">callback<span class="token operator">: </span><span class="token punctuation">(</span><a href="https://kotlinlang.org/api/core/kotlin-stdlib/kotlin/-string/index.html">String</a><span class="token operator">?</span><span class="token punctuation">)</span><span class="token operator"> -&gt; </span><a href="https://kotlinlang.org/api/core/kotlin-stdlib/kotlin/-unit/index.html">Unit</a></span></span><span class="token punctuation">)</span></div></div>                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+<a data-name="1203090701%2FFunctions%2F-2126834290" anchor-label="loadStateSync" id="1203090701%2FFunctions%2F-2126834290" data-filterable-set=":uapmd-binding/androidMain"></a>
+          <div class="table-row table-row_content" data-filterable-current=":uapmd-binding/androidMain" data-filterable-set=":uapmd-binding/androidMain">
+            <div class="main-subrow keyValue ">
+              <div class=""><span class="inline-flex">
+                  <div><a href="load-state-sync.html"><span>load</span><wbr></wbr><span>State</span><wbr></wbr><span><span>Sync</span></span></a></div>
+<span class="anchor-wrapper"><span class="anchor-icon" pointing-to="1203090701%2FFunctions%2F-2126834290"></span>
+                    <div class="copy-popup-wrapper "><span class="copy-popup-icon"></span><span>Link copied to clipboard</span></div>
+                  </span></span></div>
+              <div>
+                <div class="title">
+                  <div class="platform-hinted  with-platform-tabs" data-platform-hinted="data-platform-hinted">
+                    <div class="platform-bookmarks-row" data-toggle-list="data-toggle-list"><button class="platform-bookmark" data-filterable-current=":uapmd-binding/androidMain" data-filterable-set=":uapmd-binding/androidMain" data-active="" data-toggle=":uapmd-binding/androidMain">Android</button></div>
+<div class="content sourceset-dependent-content" data-active="" data-togglable=":uapmd-binding/androidMain"><div class="symbol monospace"><span class="token keyword">open </span><span class="token keyword">override </span><span class="token keyword">fun </span><a href="load-state-sync.html"><span class="token function">loadStateSync</span></a><span class="token punctuation">(</span><span class="parameters "><span class="parameter ">data<span class="token operator">: </span><a href="https://kotlinlang.org/api/core/kotlin-stdlib/kotlin/-byte-array/index.html">ByteArray</a></span></span><span class="token punctuation">)</span></div></div>                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+<a data-name="1538882571%2FFunctions%2F-2126834290" anchor-label="requestState" id="1538882571%2FFunctions%2F-2126834290" data-filterable-set=":uapmd-binding/androidMain"></a>
+          <div class="table-row table-row_content" data-filterable-current=":uapmd-binding/androidMain" data-filterable-set=":uapmd-binding/androidMain">
+            <div class="main-subrow keyValue ">
+              <div class=""><span class="inline-flex">
+                  <div><a href="request-state.html"><span>request</span><wbr></wbr><span><span>State</span></span></a></div>
+<span class="anchor-wrapper"><span class="anchor-icon" pointing-to="1538882571%2FFunctions%2F-2126834290"></span>
+                    <div class="copy-popup-wrapper "><span class="copy-popup-icon"></span><span>Link copied to clipboard</span></div>
+                  </span></span></div>
+              <div>
+                <div class="title">
+                  <div class="platform-hinted  with-platform-tabs" data-platform-hinted="data-platform-hinted">
+                    <div class="platform-bookmarks-row" data-toggle-list="data-toggle-list"><button class="platform-bookmark" data-filterable-current=":uapmd-binding/androidMain" data-filterable-set=":uapmd-binding/androidMain" data-active="" data-toggle=":uapmd-binding/androidMain">Android</button></div>
+<div class="content sourceset-dependent-content" data-active="" data-togglable=":uapmd-binding/androidMain"><div class="symbol monospace"><span class="token keyword">open </span><span class="token keyword">override </span><span class="token keyword">fun </span><a href="request-state.html"><span class="token function">requestState</span></a><span class="token punctuation">(</span><span class="parameters "><span class="parameter ">ctx<span class="token operator">: </span><a href="../-state-context-type/index.html">StateContextType</a><span class="token punctuation">, </span></span><span class="parameter ">includeUiState<span class="token operator">: </span><a href="https://kotlinlang.org/api/core/kotlin-stdlib/kotlin/-boolean/index.html">Boolean</a><span class="token punctuation">, </span></span><span class="parameter ">callback<span class="token operator">: </span><span class="token punctuation">(</span><a href="https://kotlinlang.org/api/core/kotlin-stdlib/kotlin/-byte-array/index.html">ByteArray</a><span class="token operator">?</span><span class="token punctuation">, </span><a href="https://kotlinlang.org/api/core/kotlin-stdlib/kotlin/-string/index.html">String</a><span class="token operator">?</span><span class="token punctuation">)</span><span class="token operator"> -&gt; </span><a href="https://kotlinlang.org/api/core/kotlin-stdlib/kotlin/-unit/index.html">Unit</a></span></span><span class="token punctuation">)</span></div></div>                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+<a data-name="882631112%2FFunctions%2F-2126834290" anchor-label="saveStateSync" id="882631112%2FFunctions%2F-2126834290" data-filterable-set=":uapmd-binding/androidMain"></a>
+          <div class="table-row table-row_content" data-filterable-current=":uapmd-binding/androidMain" data-filterable-set=":uapmd-binding/androidMain">
+            <div class="main-subrow keyValue ">
+              <div class=""><span class="inline-flex">
+                  <div><a href="save-state-sync.html"><span>save</span><wbr></wbr><span>State</span><wbr></wbr><span><span>Sync</span></span></a></div>
+<span class="anchor-wrapper"><span class="anchor-icon" pointing-to="882631112%2FFunctions%2F-2126834290"></span>
+                    <div class="copy-popup-wrapper "><span class="copy-popup-icon"></span><span>Link copied to clipboard</span></div>
+                  </span></span></div>
+              <div>
+                <div class="title">
+                  <div class="platform-hinted  with-platform-tabs" data-platform-hinted="data-platform-hinted">
+                    <div class="platform-bookmarks-row" data-toggle-list="data-toggle-list"><button class="platform-bookmark" data-filterable-current=":uapmd-binding/androidMain" data-filterable-set=":uapmd-binding/androidMain" data-active="" data-toggle=":uapmd-binding/androidMain">Android</button></div>
+<div class="content sourceset-dependent-content" data-active="" data-togglable=":uapmd-binding/androidMain"><div class="symbol monospace"><span class="token keyword">open </span><span class="token keyword">override </span><span class="token keyword">fun </span><a href="save-state-sync.html"><span class="token function">saveStateSync</span></a><span class="token punctuation">(</span><span class="token punctuation">)</span><span class="token operator">: </span><a href="https://kotlinlang.org/api/core/kotlin-stdlib/kotlin/-byte-array/index.html">ByteArray</a></div></div>                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+<a data-name="-1479818768%2FFunctions%2F-2126834290" anchor-label="setParameterValue" id="-1479818768%2FFunctions%2F-2126834290" data-filterable-set=":uapmd-binding/androidMain"></a>
+          <div class="table-row table-row_content" data-filterable-current=":uapmd-binding/androidMain" data-filterable-set=":uapmd-binding/androidMain">
+            <div class="main-subrow keyValue ">
+              <div class=""><span class="inline-flex">
+                  <div><a href="set-parameter-value.html"><span>set</span><wbr></wbr><span>Parameter</span><wbr></wbr><span><span>Value</span></span></a></div>
+<span class="anchor-wrapper"><span class="anchor-icon" pointing-to="-1479818768%2FFunctions%2F-2126834290"></span>
+                    <div class="copy-popup-wrapper "><span class="copy-popup-icon"></span><span>Link copied to clipboard</span></div>
+                  </span></span></div>
+              <div>
+                <div class="title">
+                  <div class="platform-hinted  with-platform-tabs" data-platform-hinted="data-platform-hinted">
+                    <div class="platform-bookmarks-row" data-toggle-list="data-toggle-list"><button class="platform-bookmark" data-filterable-current=":uapmd-binding/androidMain" data-filterable-set=":uapmd-binding/androidMain" data-active="" data-toggle=":uapmd-binding/androidMain">Android</button></div>
+<div class="content sourceset-dependent-content" data-active="" data-togglable=":uapmd-binding/androidMain"><div class="symbol monospace"><span class="token keyword">open </span><span class="token keyword">override </span><span class="token keyword">fun </span><a href="set-parameter-value.html"><span class="token function">setParameterValue</span></a><span class="token punctuation">(</span><span class="parameters "><span class="parameter ">index<span class="token operator">: </span><a href="https://kotlinlang.org/api/core/kotlin-stdlib/kotlin/-int/index.html">Int</a><span class="token punctuation">, </span></span><span class="parameter ">value<span class="token operator">: </span><a href="https://kotlinlang.org/api/core/kotlin-stdlib/kotlin/-double/index.html">Double</a></span></span><span class="token punctuation">)</span></div></div>                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+<a data-name="1078933205%2FFunctions%2F-2126834290" anchor-label="setPerNoteControllerValue" id="1078933205%2FFunctions%2F-2126834290" data-filterable-set=":uapmd-binding/androidMain"></a>
+          <div class="table-row table-row_content" data-filterable-current=":uapmd-binding/androidMain" data-filterable-set=":uapmd-binding/androidMain">
+            <div class="main-subrow keyValue ">
+              <div class=""><span class="inline-flex">
+                  <div><a href="set-per-note-controller-value.html"><span>set</span><wbr></wbr><span>Per</span><wbr></wbr><span>Note</span><wbr></wbr><span>Controller</span><wbr></wbr><span><span>Value</span></span></a></div>
+<span class="anchor-wrapper"><span class="anchor-icon" pointing-to="1078933205%2FFunctions%2F-2126834290"></span>
+                    <div class="copy-popup-wrapper "><span class="copy-popup-icon"></span><span>Link copied to clipboard</span></div>
+                  </span></span></div>
+              <div>
+                <div class="title">
+                  <div class="platform-hinted  with-platform-tabs" data-platform-hinted="data-platform-hinted">
+                    <div class="platform-bookmarks-row" data-toggle-list="data-toggle-list"><button class="platform-bookmark" data-filterable-current=":uapmd-binding/androidMain" data-filterable-set=":uapmd-binding/androidMain" data-active="" data-toggle=":uapmd-binding/androidMain">Android</button></div>
+<div class="content sourceset-dependent-content" data-active="" data-togglable=":uapmd-binding/androidMain"><div class="symbol monospace"><span class="token keyword">open </span><span class="token keyword">override </span><span class="token keyword">fun </span><a href="set-per-note-controller-value.html"><span class="token function">setPerNoteControllerValue</span></a><span class="token punctuation">(</span><span class="parameters "><span class="parameter ">note<span class="token operator">: </span><a href="https://kotlinlang.org/api/core/kotlin-stdlib/kotlin/-u-byte/index.html">UByte</a><span class="token punctuation">, </span></span><span class="parameter ">index<span class="token operator">: </span><a href="https://kotlinlang.org/api/core/kotlin-stdlib/kotlin/-u-byte/index.html">UByte</a><span class="token punctuation">, </span></span><span class="parameter ">value<span class="token operator">: </span><a href="https://kotlinlang.org/api/core/kotlin-stdlib/kotlin/-double/index.html">Double</a></span></span><span class="token punctuation">)</span></div></div>                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+<a data-name="-644659518%2FFunctions%2F-2126834290" anchor-label="startProcessing" id="-644659518%2FFunctions%2F-2126834290" data-filterable-set=":uapmd-binding/androidMain"></a>
+          <div class="table-row table-row_content" data-filterable-current=":uapmd-binding/androidMain" data-filterable-set=":uapmd-binding/androidMain">
+            <div class="main-subrow keyValue ">
+              <div class=""><span class="inline-flex">
+                  <div><a href="start-processing.html"><span>start</span><wbr></wbr><span><span>Processing</span></span></a></div>
+<span class="anchor-wrapper"><span class="anchor-icon" pointing-to="-644659518%2FFunctions%2F-2126834290"></span>
+                    <div class="copy-popup-wrapper "><span class="copy-popup-icon"></span><span>Link copied to clipboard</span></div>
+                  </span></span></div>
+              <div>
+                <div class="title">
+                  <div class="platform-hinted  with-platform-tabs" data-platform-hinted="data-platform-hinted">
+                    <div class="platform-bookmarks-row" data-toggle-list="data-toggle-list"><button class="platform-bookmark" data-filterable-current=":uapmd-binding/androidMain" data-filterable-set=":uapmd-binding/androidMain" data-active="" data-toggle=":uapmd-binding/androidMain">Android</button></div>
+<div class="content sourceset-dependent-content" data-active="" data-togglable=":uapmd-binding/androidMain"><div class="symbol monospace"><span class="token keyword">open </span><span class="token keyword">override </span><span class="token keyword">fun </span><a href="start-processing.html"><span class="token function">startProcessing</span></a><span class="token punctuation">(</span><span class="token punctuation">)</span><span class="token operator">: </span><a href="https://kotlinlang.org/api/core/kotlin-stdlib/kotlin/-int/index.html">Int</a></div></div>                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+<a data-name="1547225838%2FFunctions%2F-2126834290" anchor-label="stopProcessing" id="1547225838%2FFunctions%2F-2126834290" data-filterable-set=":uapmd-binding/androidMain"></a>
+          <div class="table-row table-row_content" data-filterable-current=":uapmd-binding/androidMain" data-filterable-set=":uapmd-binding/androidMain">
+            <div class="main-subrow keyValue ">
+              <div class=""><span class="inline-flex">
+                  <div><a href="stop-processing.html"><span>stop</span><wbr></wbr><span><span>Processing</span></span></a></div>
+<span class="anchor-wrapper"><span class="anchor-icon" pointing-to="1547225838%2FFunctions%2F-2126834290"></span>
+                    <div class="copy-popup-wrapper "><span class="copy-popup-icon"></span><span>Link copied to clipboard</span></div>
+                  </span></span></div>
+              <div>
+                <div class="title">
+                  <div class="platform-hinted  with-platform-tabs" data-platform-hinted="data-platform-hinted">
+                    <div class="platform-bookmarks-row" data-toggle-list="data-toggle-list"><button class="platform-bookmark" data-filterable-current=":uapmd-binding/androidMain" data-filterable-set=":uapmd-binding/androidMain" data-active="" data-toggle=":uapmd-binding/androidMain">Android</button></div>
+<div class="content sourceset-dependent-content" data-active="" data-togglable=":uapmd-binding/androidMain"><div class="symbol monospace"><span class="token keyword">open </span><span class="token keyword">override </span><span class="token keyword">fun </span><a href="stop-processing.html"><span class="token function">stopProcessing</span></a><span class="token punctuation">(</span><span class="token punctuation">)</span><span class="token operator">: </span><a href="https://kotlinlang.org/api/core/kotlin-stdlib/kotlin/-int/index.html">Int</a></div></div>                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+    <div class="footer">
+        <div class="footer--container">
+            <a href="#content" id="go-to-top-link" class="footer--button footer--button_go-to-top"></a>
+            <div class="footer--content">
+                <div>
+                    <span>Generated by </span>
+                    <a class="footer--link footer--link_external" href="https://github.com/Kotlin/dokka">
+                        Dokka
+                    </a>
+                    <div>© 2026 Copyright</div>
+                </div>
+            </div>
+        </div>
+    </div>
+        </div>
+    </div>
+</div>
+</body>
+</html>
