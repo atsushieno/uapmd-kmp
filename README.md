@@ -7,7 +7,7 @@ A Kotlin Multiplatform binding and application for [uapmd](https://github.com/at
 The project is split into two parts:
 
 - **`uapmd-binding`** — KMP library that wraps the uapmd C++ engine through platform-native FFI, exposing a common Kotlin API for sequencing, plugin hosting, audio I/O, and parameter control.
-- **`composeApp`** — Compose Multiplatform application built on top of the binding layer, providing a sequencer, plugin browser, parameter editor, and spectrum analyzer.
+- **`uapmd-cmp`** — Compose Multiplatform application built on top of the binding layer, providing a sequencer, plugin browser, parameter editor, and spectrum analyzer.
 
 Target platforms: Android, iOS, JVM desktop (macOS, Linux, Windows), and WebAssembly (experimental).
 
@@ -159,9 +159,9 @@ The C API is cross-compiled by Emscripten (`emcmake cmake`) to produce `uapmd-c-
 
 ---
 
-## composeApp
+## uapmd-cmp
 
-`composeApp` is the end-user application. It targets Android, iOS, JVM desktop, and WebAssembly from a single shared Compose codebase under `commonMain`, with small platform-specific entry points (`MainActivity`, `MainViewController`, `main.kt`).
+`uapmd-cmp` is the end-user application. It targets Android, iOS, JVM desktop, and WebAssembly from a single shared Compose codebase under `commonMain`, with small platform-specific entry points (`MainActivity`, `MainViewController`, `main.kt`).
 
 ### UI structure
 
