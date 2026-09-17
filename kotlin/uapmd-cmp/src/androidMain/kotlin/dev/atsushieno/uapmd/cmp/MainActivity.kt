@@ -24,6 +24,7 @@ class MainActivity : ComponentActivity() {
         androidStartupNoPoll = intent?.getBooleanExtra("uapmd.cmp.noPoll", false) ?: false
         androidStartupRenderPath = intent?.getStringExtra("uapmd.cmp.renderTo")
         androidStartupBufferSize = intent?.getIntExtra("uapmd.cmp.bufferSize", 0) ?: 0
+        androidStartupPreloadPlugin = intent?.getStringExtra("uapmd.cmp.showUi")
         enableEdgeToEdge()
         super.onCreate(savedInstanceState)
         // Idempotent, and UapmdHost.start() does it too; doing it here as well

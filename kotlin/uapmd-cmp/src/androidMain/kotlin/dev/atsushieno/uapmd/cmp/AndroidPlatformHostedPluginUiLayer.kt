@@ -35,7 +35,9 @@ import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.LocalWindowInfo
 import androidx.compose.ui.unit.IntOffset
+import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.compose.ui.window.Popup
@@ -80,6 +82,10 @@ private fun AapPluginUiPopup(
     onError: (String) -> Unit
 ) {
     val context = LocalContext.current
+    // What the plug-in UI may grow to. uapmd-app reads the activity's content
+    // area for this; LocalWindowInfo is the Compose equivalent and, unlike the
+    // display metrics, follows folds and multi-window.
+    val available = LocalWindowInfo.current.containerSize
     val hostDetails = info.aapUiHostDetails
     if (hostDetails == null) {
         LaunchedEffect(info.pluginId) {
@@ -109,12 +115,20 @@ private fun AapPluginUiPopup(
             )
         }
         try {
-            val preferred = host.getPreferredSizeOrFallback(480, 320)
+            // A plug-in with no native view of its own (AAP's default Compose UI,
+            // e.g. the MDA plug-ins) reports no preferred size. Falling back to a
+            // fixed 480x320 made that its content size, and since the viewport can
+            // never exceed the content, its window could not be resized at all.
+            // uapmd-app falls back to the host's content area instead; do the same.
+            val preferred = host.getPreferredSizeOrFallback(
+                available.width.coerceAtLeast(MIN_CONTENT_FALLBACK_WIDTH),
+                available.height.coerceAtLeast(MIN_CONTENT_FALLBACK_HEIGHT)
+            )
             value = AapHostLoadState.Ready(
                 AapHostState(
                     host,
-                    preferred.width.coerceAtLeast(240),
-                    preferred.height.coerceAtLeast(180)
+                    preferred.width.coerceAtLeast(MIN_CONTENT_FALLBACK_WIDTH),
+                    preferred.height.coerceAtLeast(MIN_CONTENT_FALLBACK_HEIGHT)
                 )
             )
             awaitDispose {
@@ -140,6 +154,7 @@ private fun AapPluginUiPopup(
         is AapHostLoadState.Ready -> AapPluginSurfacePopup(
             title = info.displayName,
             state = state.state,
+            available = available,
             onClose = onClose
         )
     }
@@ -155,41 +170,97 @@ private data class AapHostState(
 private fun AapPluginSurfacePopup(
     title: String,
     state: AapHostState,
+    available: IntSize,
     onClose: () -> Unit
 ) {
+    val density = LocalDensity.current
+    val scrollbarThickness = 12.dp
+    val resizeHandleSize = 20.dp
+    // Only an estimate of the title bar's own height, used to keep the window
+    // within the host window; the bar itself is sized by its content.
+    val titleBarHeight = 52.dp
+    val scrollbarThicknessPx = with(density) { scrollbarThickness.roundToPx() }
+    val chromeHeightPx = with(density) { (titleBarHeight + scrollbarThickness).roundToPx() }
+    // The viewport may grow up to the content size, but never past what the host
+    // window can actually show. Mirrors uapmd-app's constrainViewportSize().
+    val maxAvailableWidthPx = (available.width - scrollbarThicknessPx).coerceAtLeast(1)
+    val maxAvailableHeightPx = (available.height - chromeHeightPx).coerceAtLeast(1)
+    val minDimensionPx = with(density) { MIN_VIEWPORT_DIMENSION.roundToPx() }
+
     var offsetX by remember(title) { mutableStateOf(32f) }
     var offsetY by remember(title) { mutableStateOf(32f) }
-    var viewportWidthPx by remember(state.contentWidth) { mutableStateOf(state.contentWidth.coerceAtMost(720)) }
-    var viewportHeightPx by remember(state.contentHeight) { mutableStateOf(state.contentHeight.coerceAtMost(540)) }
+    var contentWidthPx by remember(state) { mutableStateOf(state.contentWidth) }
+    var contentHeightPx by remember(state) { mutableStateOf(state.contentHeight) }
+    // Open at 80% of the host window at most, as uapmd-app does, so the window
+    // lands fully on screen with room to grab its edges.
+    var viewportWidthPx by remember(state) {
+        mutableStateOf(
+            constrainViewport(
+                state.contentWidth, (maxAvailableWidthPx * INITIAL_MAX_HOST_FRACTION).toInt(),
+                state.contentWidth, minDimensionPx
+            )
+        )
+    }
+    var viewportHeightPx by remember(state) {
+        mutableStateOf(
+            constrainViewport(
+                state.contentHeight, (maxAvailableHeightPx * INITIAL_MAX_HOST_FRACTION).toInt(),
+                state.contentHeight, minDimensionPx
+            )
+        )
+    }
     var scrollX by remember { mutableStateOf(0) }
     var scrollY by remember { mutableStateOf(0) }
-    var attached by remember { mutableStateOf(false) }
-    var connected by remember { mutableStateOf(false) }
+    var surfaceReady by remember(state) { mutableStateOf(false) }
+    var connected by remember(state) { mutableStateOf(false) }
     var resizeStartWidth by remember { mutableStateOf(viewportWidthPx) }
     var resizeStartHeight by remember { mutableStateOf(viewportHeightPx) }
     var resizeDragWidth by remember { mutableStateOf(0f) }
     var resizeDragHeight by remember { mutableStateOf(0f) }
-    var contentWidthPx by remember(state) { mutableStateOf(state.contentWidth) }
-    var contentHeightPx by remember(state) { mutableStateOf(state.contentHeight) }
     val currentHost by rememberUpdatedState(state.host)
-    val density = LocalDensity.current
     val viewportWidthDp = with(density) { viewportWidthPx.toDp() }
     val viewportHeightDp = with(density) { viewportHeightPx.toDp() }
-    val minViewportWidthPx = 240
-    val minViewportHeightPx = 180
-    val maxViewportWidthPx = contentWidthPx.coerceAtLeast(minViewportWidthPx)
-    val maxViewportHeightPx = contentHeightPx.coerceAtLeast(minViewportHeightPx)
+    val maxViewportWidthPx = minOf(contentWidthPx, maxAvailableWidthPx).coerceAtLeast(1)
+    val maxViewportHeightPx = minOf(contentHeightPx, maxAvailableHeightPx).coerceAtLeast(1)
+    val minViewportWidthPx = minDimensionPx.coerceAtMost(maxViewportWidthPx)
+    val minViewportHeightPx = minDimensionPx.coerceAtMost(maxViewportHeightPx)
     val maxScrollX = (contentWidthPx - viewportWidthPx).coerceAtLeast(0)
     val maxScrollY = (contentHeightPx - viewportHeightPx).coerceAtLeast(0)
     val effectiveScrollX = scrollX.coerceIn(0, maxScrollX)
     val effectiveScrollY = scrollY.coerceIn(0, maxScrollY)
-    val scrollbarThickness = 12.dp
-    val resizeHandleSize = 20.dp
     val frameWidthDp = viewportWidthDp + if (maxScrollY > 0) scrollbarThickness else 0.dp
 
     DisposableEffect(currentHost) {
         onDispose {
             connected = false
+        }
+    }
+
+    // Ordering matters for remote plugin UI setup, exactly as in uapmd-app's
+    // PluginUiOverlay.scheduleSurfaceReadyNotification: the SurfaceView has to be
+    // in a live view tree with a display and layout params before connect() may
+    // run, because connectUINoHandler() reads surfaceView.display.displayId and
+    // hands the plug-in this view's host token. Connecting during composition -
+    // before Android has attached the view - raced SurfaceControlViewHost setup
+    // and left the plug-in surface blank.
+    DisposableEffect(currentHost) {
+        val view = currentHost.surfaceView
+        var cancelled = false
+        val notifyWhenReady = object : Runnable {
+            override fun run() {
+                if (cancelled)
+                    return
+                if (!view.isAttachedToWindow || view.display == null || view.layoutParams == null) {
+                    view.post(this)
+                    return
+                }
+                surfaceReady = true
+            }
+        }
+        view.post(notifyWhenReady)
+        onDispose {
+            cancelled = true
+            surfaceReady = false
         }
     }
 
@@ -214,8 +285,12 @@ private fun AapPluginSurfacePopup(
         }
     }
 
-    LaunchedEffect(attached, viewportWidthPx, viewportHeightPx, currentHost) {
-        if (!attached || connected)
+    // Deliberately NOT keyed on the viewport size: it changes while the popup is
+    // laid out, which cancelled this effect mid-connect() and ran a second
+    // connect(). The service then tore down the first GUI session ("Another GUI
+    // controller ... was alive. Terminating it.") and the plug-in UI stayed blank.
+    LaunchedEffect(currentHost, surfaceReady) {
+        if (!surfaceReady || connected)
             return@LaunchedEffect
         // Connect at the full preferred content size so JUCE's peer view is not constrained
         // to the (smaller) viewport dimensions. This allows JUCE to report its actual preferred
@@ -277,19 +352,12 @@ private fun AapPluginSurfacePopup(
                         .width(viewportWidthDp)
                         .height(viewportHeightDp)
                         .border(1.dp, MaterialTheme.colorScheme.outline)
-                        .onSizeChanged {
-                            viewportWidthPx = it.width.coerceAtLeast(1)
-                            viewportHeightPx = it.height.coerceAtLeast(1)
-                        }
                 ) {
                     AndroidView(
                         modifier = Modifier.fillMaxSize(),
-                        factory = { _: Context ->
-                            attached = true
-                            state.host.surfaceView
-                        },
+                        factory = { _: Context -> state.host.surfaceView },
                         onRelease = { _: View ->
-                            attached = false
+                            surfaceReady = false
                             connected = false
                         },
                         onReset = { _: View -> }
@@ -471,6 +539,25 @@ private fun ResizeHandle(
     }
 }
 
+
+/**
+ * Smallest usable plug-in window, matching uapmd-app's MIN_DIMENSION_DP. It is a
+ * ceiling as well as a floor: a plug-in whose content is smaller than this may
+ * not be stretched past its own content size.
+ */
+private val MIN_VIEWPORT_DIMENSION = 200.dp
+
+/** Floor for a content size, used when a plug-in reports no preferred size. */
+private const val MIN_CONTENT_FALLBACK_WIDTH = 480
+private const val MIN_CONTENT_FALLBACK_HEIGHT = 320
+
+/** Fraction of the host window a freshly opened plug-in window may occupy. */
+private const val INITIAL_MAX_HOST_FRACTION = 0.8f
+
+private fun constrainViewport(contentPx: Int, maxAvailablePx: Int, desiredPx: Int, minPx: Int): Int {
+    val max = minOf(contentPx, maxAvailablePx).coerceAtLeast(1)
+    return desiredPx.coerceIn(minPx.coerceAtMost(max), max)
+}
 
 /** The four fields this layer needs about a platform-hosted instance. */
 internal data class HostedInstanceInfo(

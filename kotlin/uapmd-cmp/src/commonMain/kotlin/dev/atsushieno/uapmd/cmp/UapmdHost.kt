@@ -1762,6 +1762,55 @@ fun rememberUapmdHost(): UapmdHost {
 }
 
 /**
+ * Dev hook: instantiate one catalog entry by name and show its plug-in UI.
+ *
+ * Split out of the load-project hook so it can also run on its own - on Android
+ * it is the only headless way to reach the plug-in UI code path, since the test
+ * device is lock-screened and cannot be driven by taps.
+ */
+private suspend fun runPreloadPluginUiHook(host: UapmdHost) {
+    val requestedName = startupPreloadPlugin() ?: return
+    var waited = 0
+    while ((host.isScanning || host.catalog.isEmpty()) && waited < 120_000) {
+        kotlinx.coroutines.delay(200); waited += 200
+    }
+    val matchingEntries = host.catalog.filter {
+        it.displayName.contains(requestedName, ignoreCase = true)
+    }
+    val entry = matchingEntries.firstOrNull { it.format == "AU" }
+        ?: matchingEntries.firstOrNull()
+    if (entry == null) {
+        println("uapmd.cmp dev hook: no preload plug-in matches '$requestedName'")
+        return
+    }
+    println(
+        "uapmd.cmp dev hook: preloading ${entry.format} " +
+            "${entry.pluginId} ${entry.displayName}"
+    )
+    host.instantiate(entry, 0)
+    var instantiateWait = 0
+    while (host.isInstantiating && instantiateWait < 30_000) {
+        kotlinx.coroutines.delay(50)
+        instantiateWait += 50
+    }
+    println(
+        "uapmd.cmp dev hook: preload completed in ${instantiateWait}ms " +
+            "id=${host.lastInstantiation?.instanceId} " +
+            "err=${host.lastInstantiation?.error}"
+    )
+    val preloadedId = host.lastInstantiation?.instanceId ?: -1
+    if (startupShowPreloadUi() && preloadedId >= 0 && host.lastInstantiation?.error == null) {
+        host.showPluginUi(preloadedId)
+        println(
+            "uapmd.cmp dev hook: preload UI visible=" +
+                host.isPluginUiVisible(preloadedId) +
+                " status=${host.pluginUiStatusMessage}"
+        )
+        kotlinx.coroutines.delay(1000)
+    }
+}
+
+/**
  * Startup dev hooks, run concurrently with the UI poll.
  *
  * They used to run ahead of the poll loop, which meant `refresh()` never ran
@@ -1787,6 +1836,8 @@ private suspend fun runStartupDevHooks(host: UapmdHost) = kotlinx.coroutines.cor
             host.applyDeviceSettings(-1, -1, sr, bs)
             kotlinx.coroutines.delay(1500)
         }
+        if (startupLoadProjectPath() == null)
+            runPreloadPluginUiHook(host)
         startupLoadProjectPath()?.let { path ->
             // Wait for the plug-in scan: a project can only resolve plug-ins the
             // catalog knows about, so loading before the scan finishes silently
@@ -1813,42 +1864,7 @@ private suspend fun runStartupDevHooks(host: UapmdHost) = kotlinx.coroutines.cor
             }
             println("uapmd.cmp dev hook: catalog ready after ${waited}ms, entries=${host.catalog.size}")
             host.catalog.forEach { println("uapmd.cmp catalog: ${it.format} | ${it.pluginId} | ${it.displayName}") }
-            startupPreloadPlugin()?.let { requestedName ->
-                val matchingEntries = host.catalog.filter {
-                    it.displayName.contains(requestedName, ignoreCase = true)
-                }
-                val entry = matchingEntries.firstOrNull { it.format == "AU" }
-                    ?: matchingEntries.firstOrNull()
-                if (entry == null) {
-                    println("uapmd.cmp dev hook: no preload plug-in matches '$requestedName'")
-                } else {
-                    println(
-                        "uapmd.cmp dev hook: preloading ${entry.format} " +
-                            "${entry.pluginId} ${entry.displayName}"
-                    )
-                    host.instantiate(entry, 0)
-                    var instantiateWait = 0
-                    while (host.isInstantiating && instantiateWait < 30_000) {
-                        kotlinx.coroutines.delay(50)
-                        instantiateWait += 50
-                    }
-                    println(
-                        "uapmd.cmp dev hook: preload completed in ${instantiateWait}ms " +
-                            "id=${host.lastInstantiation?.instanceId} " +
-                            "err=${host.lastInstantiation?.error}"
-                    )
-                    val preloadedId = host.lastInstantiation?.instanceId ?: -1
-                    if (startupShowPreloadUi() && preloadedId >= 0 && host.lastInstantiation?.error == null) {
-                        host.showPluginUi(preloadedId)
-                        println(
-                            "uapmd.cmp dev hook: preload UI visible=" +
-                                host.isPluginUiVisible(preloadedId) +
-                                " status=${host.pluginUiStatusMessage}"
-                        )
-                        kotlinx.coroutines.delay(1000)
-                    }
-                }
-            }
+            runPreloadPluginUiHook(host)
             repeat(startupLoadCount()) { pass ->
             // Heartbeat on the UI dispatcher: every gap longer than a frame is a
             // stall the user would see as a freeze.

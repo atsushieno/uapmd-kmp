@@ -114,6 +114,7 @@ internal var androidStartupPlaySeconds: Int = 0
 internal var androidStartupNoPoll: Boolean = false
 internal var androidStartupRenderPath: String? = null
 internal var androidStartupBufferSize: Int = 0
+internal var androidStartupPreloadPlugin: String? = null
 
 actual fun startupImportPath(): String? = androidStartupImportPath
 
@@ -176,9 +177,9 @@ actual fun startupLoadCount(): Int = androidStartupLoadCount
 
 actual fun startupShowLoadedUi(): String? = null
 
-actual fun startupPreloadPlugin(): String? = null
+actual fun startupPreloadPlugin(): String? = androidStartupPreloadPlugin
 
-actual fun startupShowPreloadUi(): Boolean = false
+actual fun startupShowPreloadUi(): Boolean = androidStartupPreloadPlugin != null
 
 actual fun startupPlaySeconds(): Int = androidStartupPlaySeconds
 
