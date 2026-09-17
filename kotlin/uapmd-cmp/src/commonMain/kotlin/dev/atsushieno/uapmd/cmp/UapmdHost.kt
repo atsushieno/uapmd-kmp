@@ -84,6 +84,16 @@ class UapmdHost private constructor(val model: AppModel) {
     )
 
     /**
+     * The poll in [rememberUapmdHost] is a LaunchedEffect, so [scope]'s
+     * cancellation does not reach it and it keeps ticking until the composition
+     * is disposed — which happens after [shutdown]. A tick landing on a
+     * half-destroyed AppModel reads freed native state, so it checks this.
+     */
+    @Volatile
+    var isShuttingDown: Boolean = false
+        private set
+
+    /**
      * Async engine completions land on whatever thread finished the operation,
      * not the UI thread (verified: `AWT-EventQueue-0` while the caller was
      * `main`). Compose state must only change on the UI thread, so every
@@ -410,7 +420,17 @@ class UapmdHost private constructor(val model: AppModel) {
     }
 
     fun stopMcp() {
-        mcpOrNull?.let { runCatching { it.stop() }; runCatching { it.close() } }
+        mcpOrNull?.let {
+            // McpServer::stop() joins the httplib thread, and httplib joins its
+            // workers. A worker serving /mcp is parked in an untimed
+            // future.get() until this queue is pumped, so stopping without a
+            // final drain can join a thread that never finishes. Draining is
+            // not a cure — a request arriving after it parks the same way —
+            // but it closes the window that quitting normally lands in.
+            runCatching { it.processMainThreadQueue() }
+            runCatching { it.stop() }
+            runCatching { it.close() }
+        }
         mcpOrNull = null
         mcpState = McpState.Idle
         mcpStatusMessage = ""
@@ -1685,6 +1705,11 @@ class UapmdHost private constructor(val model: AppModel) {
     }
 
     fun shutdown() {
+        // Both quit paths call this, and the window-close one can follow the
+        // AppKit one. A second pass would reach model.* after the AppModel is
+        // destroyed, which dereferences a null unique_ptr.
+        if (isShuttingDown) return
+        isShuttingDown = true
         scope.cancel()
         stopMcp()
         jsRuntimeOrNull?.let { runCatching { it.close() } }
@@ -1707,6 +1732,11 @@ class UapmdHost private constructor(val model: AppModel) {
          */
         internal fun attach(model: AppModel) = UapmdHost(model)
 
+        /** The host [start] built, for quit paths that sit outside the composition. */
+        @Volatile
+        var current: UapmdHost? = null
+            private set
+
         fun start(): UapmdHost {
             // Ordering is load-bearing: the event loop must exist first (§2.3).
             initPlatformEventLoop()
@@ -1717,6 +1747,7 @@ class UapmdHost private constructor(val model: AppModel) {
             notifyPersistentStorageReadyForPlatform(host.model)
             host.enableAudioEngine(platformStartsWithAudioEngineEnabled)
             startupImportPath()?.let { host.importMidiClip(0, it) }
+            current = host
             return host
         }
     }
@@ -1799,7 +1830,8 @@ fun rememberUapmdHost(): UapmdHost {
         var pollTick = 0
         while (true) {
             // Skip the poll while a project load owns the engine; refreshing
-            // through it is what froze the UI.
+            // through it is what froze the UI. Teardown owns it the same way.
+            if (host.isShuttingDown) break
             if (!host.isLoadingProject && !startupSuppressPolling()) {
                 pollTick++
                 host.refresh(structural = pollTick % 5 == 0)
