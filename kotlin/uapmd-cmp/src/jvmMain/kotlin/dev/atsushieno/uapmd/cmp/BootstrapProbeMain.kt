@@ -1698,6 +1698,97 @@ fun main() {
         }
     }
 
+    // ── JS runtime and MCP ───────────────────────────────────────────────────
+    run {
+        println("-- JS runtime")
+        val rt = dev.atsushieno.uapmd.JsRuntime.create()
+        check("a JS runtime is created", rt != null)
+        if (rt != null) rt.use {
+            check("the embedded API bundle bootstraps", it.ensureApiBootstrapped())
+
+            val arithmetic = it.evaluate("1 + 2")
+            println("   1 + 2 -> success=${arithmetic.success} json=${arithmetic.json} err=${arithmetic.error}")
+            check("a plain expression evaluates", arithmetic.success)
+            check("and returns its value as JSON", arithmetic.json?.trim() == "3")
+
+            val str = it.evaluate("JSON.stringify({a: 1, b: 'two'})")
+            check("an object round-trips as JSON",
+                str.success && str.json?.contains("two") == true)
+
+            // A script error must arrive as a result, not as an exception
+            // crossing the C boundary.
+            val broken = it.evaluate("this is not javascript")
+            println("   broken script -> success=${broken.success} err=${broken.error}")
+            check("a syntax error is reported, not thrown", !broken.success)
+            check("and carries a message", !broken.error.isNullOrEmpty())
+
+            // The uapmd API the bundle installs is what a user script is for.
+            val api = it.evaluate("typeof uapmd")
+            println("   typeof uapmd -> ${api.json}")
+            check("the uapmd global exists after bootstrap",
+                api.success && api.json?.contains("undefined") != true)
+
+            // The resolver is consulted for an import the bundle lacks, and its
+            // source is used.
+            var asked: String? = null
+            val withModule = it.evaluate(
+                "import { answer } from 'probe-module'; answer",
+                moduleResolver = { path -> asked = path; "export const answer = 42;" }
+            )
+            println("   module import -> success=${withModule.success} json=${withModule.json} asked=$asked")
+            check("the module resolver was consulted", asked != null)
+
+            // Listener registration must not throw for an absent instance.
+            it.registerAllParameterListeners()
+            it.registerAllMetadataListeners()
+            it.unregisterAllParameterListeners()
+            it.unregisterAllMetadataListeners()
+            check("listener registration survives an empty project", true)
+
+            it.reinitialize()
+            check("a reinitialized runtime still evaluates",
+                it.evaluate("6 * 7").json?.trim() == "42")
+        }
+
+        println("-- MCP")
+        val supported = dev.atsushieno.uapmd.McpServer.isSupported
+        val http = dev.atsushieno.uapmd.McpServer.hasHttpServer
+        println("   supported=$supported httpServer=$http")
+        check("this desktop build reports MCP support", supported)
+        check("and an embedded HTTP server", http)
+
+        check("the default port is uapmd's own",
+            dev.atsushieno.uapmd.cmp.ui.DefaultMcpPort == 37373)
+
+        if (http) {
+            // Deliberately not 37373: uapmd-app binds that at startup, and a
+            // probe that fought a running app for the port would fail for a
+            // reason that has nothing to do with the binding.
+            val server = dev.atsushieno.uapmd.McpServer.server(38763)
+            check("a server-mode transport is created", server != null)
+            server?.use {
+                check("it reports server mode", it.mode == dev.atsushieno.uapmd.McpMode.Server)
+                check("it reports the port it was given", it.port == 38763)
+                check("it starts idle", it.connectionState == dev.atsushieno.uapmd.McpState.Idle)
+                it.start()
+                java.awt.EventQueue.invokeAndWait { }
+                println("   after start: state=${it.connectionState} status='${it.statusMessage}'")
+                // Pumping with nothing queued must be harmless.
+                repeat(3) { _ -> it.processMainThreadQueue() }
+                check("pumping an idle queue is harmless", true)
+                it.stop()
+            }
+        }
+
+        val client = dev.atsushieno.uapmd.McpServer.client("ws://127.0.0.1:1/mcp", autoReconnect = false)
+        check("a client-mode transport is created", client != null)
+        client?.use {
+            check("it reports client mode", it.mode == dev.atsushieno.uapmd.McpMode.Client)
+            it.processMainThreadQueue()
+            check("pumping an unstarted client is harmless", true)
+        }
+    }
+
     // ── ordered teardown: engine off, then cleanup (§2.5) ────────────────────
     model.setAudioEngineEnabled(false)
     val teardownAt = System.currentTimeMillis()

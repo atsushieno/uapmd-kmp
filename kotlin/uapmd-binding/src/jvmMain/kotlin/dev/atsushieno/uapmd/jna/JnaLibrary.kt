@@ -19,6 +19,11 @@ interface RequestStateCb : Callback {
     fun invoke(state: Pointer?, stateSize: Long, error: String?, userData: Pointer?)
 }
 
+interface JsModuleResolver : Callback {
+    /** Returns the module source, or null for "not found". */
+    fun invoke(modulePath: String?, userData: Pointer?): String?
+}
+
 interface LoadStateCb : Callback {
     fun invoke(error: String?, userData: Pointer?)
 }
@@ -243,6 +248,15 @@ open class UapmdAppRenderStatus : Structure() {
     @JvmField var output_path: String? = null
 
     class ByVal : UapmdAppRenderStatus(), Structure.ByValue
+}
+
+@FieldOrder("success", "json", "error")
+open class UapmdJsResult : Structure() {
+    @JvmField var success: Byte = 0
+    @JvmField var json: String? = null
+    @JvmField var error: String? = null
+
+    class ByVal : UapmdJsResult(), Structure.ByValue
 }
 
 @FieldOrder("clip_id", "source_node_id", "success", "error")
@@ -1687,6 +1701,35 @@ interface UapmdLibrary : Library {
     fun uapmd_app_is_track_solo(app: Pointer?, trackIndex: Int): Boolean
     fun uapmd_app_set_track_muted(app: Pointer?, trackIndex: Int, muted: Boolean): Boolean
     fun uapmd_app_set_track_solo(app: Pointer?, trackIndex: Int, solo: Boolean): Boolean
+    // ── JS runtime ──────────────────────────────────────────────────────────
+    fun uapmd_js_runtime_create(): Pointer?
+    fun uapmd_js_runtime_destroy(rt: Pointer?)
+    fun uapmd_js_runtime_ensure_api_bootstrapped(rt: Pointer?): Boolean
+    fun uapmd_js_runtime_reinitialize(rt: Pointer?)
+    fun uapmd_js_runtime_evaluate(rt: Pointer?, code: String?, userData: Pointer?, resolver: JsModuleResolver?): UapmdJsResult.ByVal
+    fun uapmd_js_runtime_register_parameter_listener(rt: Pointer?, instanceId: Int)
+    fun uapmd_js_runtime_unregister_parameter_listener(rt: Pointer?, instanceId: Int)
+    fun uapmd_js_runtime_register_all_parameter_listeners(rt: Pointer?)
+    fun uapmd_js_runtime_unregister_all_parameter_listeners(rt: Pointer?)
+    fun uapmd_js_runtime_register_metadata_listener(rt: Pointer?, instanceId: Int)
+    fun uapmd_js_runtime_unregister_metadata_listener(rt: Pointer?, instanceId: Int)
+    fun uapmd_js_runtime_register_all_metadata_listeners(rt: Pointer?)
+    fun uapmd_js_runtime_unregister_all_metadata_listeners(rt: Pointer?)
+
+    // ── MCP ─────────────────────────────────────────────────────────────────
+    fun uapmd_mcp_is_supported(): Boolean
+    fun uapmd_mcp_has_http_server(): Boolean
+    fun uapmd_mcp_server_create(port: Int): Pointer?
+    fun uapmd_mcp_client_create(relayUrl: String?, autoReconnect: Boolean): Pointer?
+    fun uapmd_mcp_server_destroy(mcp: Pointer?)
+    fun uapmd_mcp_server_start(mcp: Pointer?)
+    fun uapmd_mcp_server_stop(mcp: Pointer?)
+    fun uapmd_mcp_server_mode(mcp: Pointer?): Int
+    fun uapmd_mcp_server_connection_state(mcp: Pointer?): Int
+    fun uapmd_mcp_server_port(mcp: Pointer?): Int
+    fun uapmd_mcp_server_status_message(mcp: Pointer?): String?
+    fun uapmd_mcp_server_process_main_thread_queue(mcp: Pointer?)
+
     fun uapmd_app_add_track(app: Pointer?, userData: Pointer?, callback: TrackMutationCb?)
     fun uapmd_app_remove_track(app: Pointer?, trackIndex: Int, userData: Pointer?, callback: TrackMutationCb?)
     fun uapmd_app_remove_all_tracks(app: Pointer?, userData: Pointer?, callback: TrackClearCb?)

@@ -46,6 +46,8 @@ import androidx.compose.ui.unit.dp
 import dev.atsushieno.uapmd.cmp.ui.FloatingWindowLayer
 import dev.atsushieno.uapmd.cmp.ui.closeDetailsWindowsExcept
 import dev.atsushieno.uapmd.cmp.ui.AddinManagerWindow
+import dev.atsushieno.uapmd.cmp.ui.McpSettingsWindow
+import dev.atsushieno.uapmd.cmp.ui.ScriptEditorWindow
 import dev.atsushieno.uapmd.cmp.ui.AudioImportWindow
 import dev.atsushieno.uapmd.cmp.ui.DeviceSettings
 import dev.atsushieno.uapmd.cmp.ui.ExporterWindow
@@ -159,6 +161,16 @@ fun MainWindow() {
                             onToggleExporter = {
                                 windows.toggle("exporter", "Render To File", DpSize(560.dp, 280.dp)) {
                                     ExporterWindow(host)
+                                }
+                            },
+                            onToggleScript = {
+                                windows.toggle("script", "Script", DpSize(620.dp, 520.dp)) {
+                                    ScriptEditorWindow(host)
+                                }
+                            },
+                            onToggleMcp = {
+                                windows.toggle("mcp", "MCP Settings", DpSize(460.dp, 320.dp)) {
+                                    McpSettingsWindow(host)
                                 }
                             },
                             onToggleAddins = {

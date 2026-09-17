@@ -1031,6 +1031,60 @@ external interface UapmdCApiModule : JsAny {
     fun uapmdAppSetTrackMuted(app: Int, trackIndex: Int, muted: Boolean): Boolean
     @JsName("_uapmd_app_set_track_solo")
     fun uapmdAppSetTrackSolo(app: Int, trackIndex: Int, solo: Boolean): Boolean
+    // ── JS runtime ─────────────────────────────────────────────────────────
+    @JsName("_uapmd_js_runtime_create")
+    fun uapmdJsRuntimeCreate(): Int
+    @JsName("_uapmd_js_runtime_destroy")
+    fun uapmdJsRuntimeDestroy(rt: Int)
+    @JsName("_uapmd_js_runtime_ensure_api_bootstrapped")
+    fun uapmdJsRuntimeEnsureApiBootstrapped(rt: Int): Boolean
+    @JsName("_uapmd_js_runtime_reinitialize")
+    fun uapmdJsRuntimeReinitialize(rt: Int)
+    /** sret: the result pointer is the first argument. */
+    @JsName("_uapmd_js_runtime_evaluate")
+    fun uapmdJsRuntimeEvaluate(outPtr: Int, rt: Int, codePtr: Int, userData: Int, resolver: Int)
+    @JsName("_uapmd_js_runtime_register_parameter_listener")
+    fun uapmdJsRuntimeRegisterParameterListener(rt: Int, instanceId: Int)
+    @JsName("_uapmd_js_runtime_unregister_parameter_listener")
+    fun uapmdJsRuntimeUnregisterParameterListener(rt: Int, instanceId: Int)
+    @JsName("_uapmd_js_runtime_register_all_parameter_listeners")
+    fun uapmdJsRuntimeRegisterAllParameterListeners(rt: Int)
+    @JsName("_uapmd_js_runtime_unregister_all_parameter_listeners")
+    fun uapmdJsRuntimeUnregisterAllParameterListeners(rt: Int)
+    @JsName("_uapmd_js_runtime_register_metadata_listener")
+    fun uapmdJsRuntimeRegisterMetadataListener(rt: Int, instanceId: Int)
+    @JsName("_uapmd_js_runtime_unregister_metadata_listener")
+    fun uapmdJsRuntimeUnregisterMetadataListener(rt: Int, instanceId: Int)
+    @JsName("_uapmd_js_runtime_register_all_metadata_listeners")
+    fun uapmdJsRuntimeRegisterAllMetadataListeners(rt: Int)
+    @JsName("_uapmd_js_runtime_unregister_all_metadata_listeners")
+    fun uapmdJsRuntimeUnregisterAllMetadataListeners(rt: Int)
+
+    // ── MCP ────────────────────────────────────────────────────────────────
+    @JsName("_uapmd_mcp_is_supported")
+    fun uapmdMcpIsSupported(): Boolean
+    @JsName("_uapmd_mcp_has_http_server")
+    fun uapmdMcpHasHttpServer(): Boolean
+    @JsName("_uapmd_mcp_server_create")
+    fun uapmdMcpServerCreate(port: Int): Int
+    @JsName("_uapmd_mcp_client_create")
+    fun uapmdMcpClientCreate(relayUrlPtr: Int, autoReconnect: Boolean): Int
+    @JsName("_uapmd_mcp_server_destroy")
+    fun uapmdMcpServerDestroy(mcp: Int)
+    @JsName("_uapmd_mcp_server_start")
+    fun uapmdMcpServerStart(mcp: Int)
+    @JsName("_uapmd_mcp_server_stop")
+    fun uapmdMcpServerStop(mcp: Int)
+    @JsName("_uapmd_mcp_server_mode")
+    fun uapmdMcpServerMode(mcp: Int): Int
+    @JsName("_uapmd_mcp_server_connection_state")
+    fun uapmdMcpServerConnectionState(mcp: Int): Int
+    @JsName("_uapmd_mcp_server_port")
+    fun uapmdMcpServerPort(mcp: Int): Int
+    @JsName("_uapmd_mcp_server_status_message")
+    fun uapmdMcpServerStatusMessage(mcp: Int): Int
+    @JsName("_uapmd_mcp_server_process_main_thread_queue")
+    fun uapmdMcpServerProcessMainThreadQueue(mcp: Int)
     @JsName("_uapmd_app_add_track")
     fun uapmdAppAddTrack(app: Int, userData: Int, callback: Int)
     @JsName("_uapmd_app_remove_track")
@@ -1621,6 +1675,7 @@ internal val pendingErrorOnlyCallbacks = mutableMapOf<Int, (String?) -> Unit>()
 internal val pendingInstanceCreations = mutableMapOf<Int, (PluginInstanceResult) -> Unit>()
 internal val pendingProjectSaves = mutableMapOf<Int, (AppProjectResult) -> Unit>()
 internal val pendingPluginStates = mutableMapOf<Int, (PluginStateResult) -> Unit>()
+internal val pendingJsModuleResolvers = mutableMapOf<Int, (String) -> Int>()
 
 /** The C callback takes uapmd_undo_result_t by value, i.e. as a pointer. */
 @JsExport
@@ -1888,6 +1943,14 @@ fun uapmdDispatchProjectSave(cbId: Int, resultPtr: Int) {
 @JsExport
 fun uapmdDispatchPluginState(cbId: Int, resultPtr: Int) {
     pendingPluginStates.remove(cbId)?.invoke(readPluginStateResult(resultPtr))
+}
+
+/** Returns the module source as a wasm pointer, or 0 for "not found". */
+@JsExport
+fun uapmdDispatchJsModuleResolver(cbId: Int, pathPtr: Int): Int {
+    val resolve = pendingJsModuleResolvers[cbId] ?: return 0
+    val path = if (pathPtr != 0) wasmMod.utf8ToString(pathPtr) else ""
+    return resolve(path)
 }
 
 @JsExport

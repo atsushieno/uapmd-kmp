@@ -63,6 +63,8 @@ fun Toolbar(
     onToggleDeviceSettings: () -> Unit,
     onTogglePlugins: () -> Unit,
     onToggleAudioImport: () -> Unit,
+    onToggleScript: () -> Unit,
+    onToggleMcp: () -> Unit,
     onNewProject: () -> Unit,
     uiScale: Float = 1f,
     onUiScaleChange: (Float) -> Unit = {},
@@ -121,10 +123,15 @@ fun Toolbar(
                         text = { Text(if (isAddinsOpen) "Hide Addins" else "Show Addins") },
                         onClick = { commandOpen = false; onToggleAddins() }
                     )
-                    // Script and MCP Settings live here in uapmd-app; both need
-                    // C API that does not exist yet (UapmdJSRuntime, McpServer).
-                    DropdownMenuItem(text = { Text("Show Script") }, enabled = false, onClick = {})
-                    DropdownMenuItem(text = { Text("Show MCP Settings") }, enabled = false, onClick = {})
+                    DropdownMenuItem(
+                        text = { Text("Show Script") },
+                        onClick = { commandOpen = false; onToggleScript() }
+                    )
+                    DropdownMenuItem(
+                        text = { Text("Show MCP Settings") },
+                        enabled = host.mcpSupported,
+                        onClick = { commandOpen = false; onToggleMcp() }
+                    )
 
                     // Commands contributed by addins, in the same place
                     // uapmd-app puts them (MainWindow.cpp:498-513): after a

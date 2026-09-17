@@ -711,6 +711,39 @@ object JniBridge {
     @JvmStatic external fun uapmdAppIsTrackSolo(app: Long, trackIndex: Int): Boolean
     @JvmStatic external fun uapmdAppSetTrackMuted(app: Long, trackIndex: Int, muted: Boolean): Boolean
     @JvmStatic external fun uapmdAppSetTrackSolo(app: Long, trackIndex: Int, solo: Boolean): Boolean
+    // ══ JS runtime and MCP ══════════════════════════════════════════════════
+    //
+    // evaluate() answers Object[]{ boolean[1] success, String? json, String? error }.
+    // The resolver is an object with invoke(String): String?, as the other
+    // callbacks here are, so the descriptor the native side looks up is exact.
+
+    @JvmStatic external fun uapmdJsRuntimeCreate(): Long
+    @JvmStatic external fun uapmdJsRuntimeDestroy(rt: Long)
+    @JvmStatic external fun uapmdJsRuntimeEnsureApiBootstrapped(rt: Long): Boolean
+    @JvmStatic external fun uapmdJsRuntimeReinitialize(rt: Long)
+    @JvmStatic external fun uapmdJsRuntimeEvaluate(rt: Long, code: String, resolver: Any?): Array<Any?>
+    @JvmStatic external fun uapmdJsRuntimeRegisterParameterListener(rt: Long, instanceId: Int)
+    @JvmStatic external fun uapmdJsRuntimeUnregisterParameterListener(rt: Long, instanceId: Int)
+    @JvmStatic external fun uapmdJsRuntimeRegisterAllParameterListeners(rt: Long)
+    @JvmStatic external fun uapmdJsRuntimeUnregisterAllParameterListeners(rt: Long)
+    @JvmStatic external fun uapmdJsRuntimeRegisterMetadataListener(rt: Long, instanceId: Int)
+    @JvmStatic external fun uapmdJsRuntimeUnregisterMetadataListener(rt: Long, instanceId: Int)
+    @JvmStatic external fun uapmdJsRuntimeRegisterAllMetadataListeners(rt: Long)
+    @JvmStatic external fun uapmdJsRuntimeUnregisterAllMetadataListeners(rt: Long)
+
+    @JvmStatic external fun uapmdMcpIsSupported(): Boolean
+    @JvmStatic external fun uapmdMcpHasHttpServer(): Boolean
+    @JvmStatic external fun uapmdMcpServerCreate(port: Int): Long
+    @JvmStatic external fun uapmdMcpClientCreate(relayUrl: String, autoReconnect: Boolean): Long
+    @JvmStatic external fun uapmdMcpServerDestroy(mcp: Long)
+    @JvmStatic external fun uapmdMcpServerStart(mcp: Long)
+    @JvmStatic external fun uapmdMcpServerStop(mcp: Long)
+    @JvmStatic external fun uapmdMcpServerMode(mcp: Long): Int
+    @JvmStatic external fun uapmdMcpServerConnectionState(mcp: Long): Int
+    @JvmStatic external fun uapmdMcpServerPort(mcp: Long): Int
+    @JvmStatic external fun uapmdMcpServerStatusMessage(mcp: Long): String
+    @JvmStatic external fun uapmdMcpServerProcessMainThreadQueue(mcp: Long)
+
     @JvmStatic external fun uapmdAppAddTrack(app: Long, cb: Any)
     /** cb: (trackIndex: Int, error: String?) -> Unit */
     @JvmStatic external fun uapmdAppRemoveTrack(app: Long, trackIndex: Int, cb: Any)

@@ -25,6 +25,10 @@ import dev.atsushieno.uapmd.AudioIoDirection
 import dev.atsushieno.uapmd.BlocklistEntry
 import dev.atsushieno.uapmd.createAddinManager
 import dev.atsushieno.uapmd.getAudioDeviceManager
+import dev.atsushieno.uapmd.JsResult
+import dev.atsushieno.uapmd.JsRuntime
+import dev.atsushieno.uapmd.McpServer
+import dev.atsushieno.uapmd.McpState
 import dev.atsushieno.uapmd.PluginUiHost
 import dev.atsushieno.uapmd.PluginUiPresentation
 import dev.atsushieno.uapmd.PluginUiPresentationRequest
@@ -339,6 +343,83 @@ class UapmdHost private constructor(val model: AppModel) {
     fun invokeClipCommand(index: Int, target: ClipCommandTarget) {
         clipCommandRegistry?.invoke(index, target)
         refresh()
+    }
+
+    // ── Script runner ────────────────────────────────────────────────────────
+
+    /**
+     * Created on first use and kept: the runtime holds the project listeners a
+     * script polls, so rebuilding it per run would lose everything queued since
+     * the last one.
+     */
+    private var jsRuntimeOrNull: JsRuntime? = null
+
+    var scriptResult by mutableStateOf<JsResult?>(null)
+        private set
+
+    fun runScript(code: String, moduleResolver: ((String) -> String?)? = null) {
+        val rt = jsRuntimeOrNull ?: JsRuntime.create()?.also {
+            jsRuntimeOrNull = it
+            it.ensureApiBootstrapped()
+            it.registerAllParameterListeners()
+            it.registerAllMetadataListeners()
+        }
+        scriptResult = rt?.evaluate(code, moduleResolver)
+            ?: JsResult(false, null, "No JavaScript runtime is available in this build.")
+    }
+
+    fun resetScriptRuntime() {
+        jsRuntimeOrNull?.reinitialize()
+        jsRuntimeOrNull?.ensureApiBootstrapped()
+        scriptResult = null
+    }
+
+    // ── MCP ──────────────────────────────────────────────────────────────────
+
+    val mcpSupported: Boolean get() = McpServer.isSupported
+    val mcpHasHttpServer: Boolean get() = McpServer.hasHttpServer
+
+    private var mcpOrNull: McpServer? = null
+
+    var mcpState by mutableStateOf(McpState.Idle)
+        private set
+    var mcpStatusMessage by mutableStateOf("")
+        private set
+    val mcpRunning: Boolean get() = mcpOrNull != null
+
+    fun startMcpServer(port: Int) {
+        stopMcp()
+        mcpOrNull = McpServer.server(port)
+        if (mcpOrNull == null) {
+            mcpStatusMessage = "This build has no embedded MCP HTTP server."
+            return
+        }
+        mcpOrNull?.start()
+        refreshMcpState()
+    }
+
+    fun startMcpClient(relayUrl: String, autoReconnect: Boolean) {
+        stopMcp()
+        mcpOrNull = McpServer.client(relayUrl, autoReconnect)
+        if (mcpOrNull == null) {
+            mcpStatusMessage = "Could not open an MCP client connection."
+            return
+        }
+        mcpOrNull?.start()
+        refreshMcpState()
+    }
+
+    fun stopMcp() {
+        mcpOrNull?.let { runCatching { it.stop() }; runCatching { it.close() } }
+        mcpOrNull = null
+        mcpState = McpState.Idle
+        mcpStatusMessage = ""
+    }
+
+    private fun refreshMcpState() {
+        val mcp = mcpOrNull ?: return
+        mcpState = runCatching { mcp.connectionState }.getOrDefault(McpState.Idle)
+        mcpStatusMessage = runCatching { mcp.statusMessage }.getOrDefault("")
     }
 
     // ── Audio devices ───────────────────────────────────────────────────────
@@ -1583,6 +1664,14 @@ class UapmdHost private constructor(val model: AppModel) {
         val sr = model.sampleRate.takeIf { it > 0 } ?: 48000
         playheadSeconds = engine.playbackPosition.toDouble() / sr
 
+        // Queued MCP tool calls are dispatched here. uapmd-app pumps this once
+        // per rendered frame; this poll is the nearest equivalent uapmd-cmp has,
+        // so a tool call waits up to one tick rather than one frame.
+        mcpOrNull?.let { mcp ->
+            runCatching { mcp.processMainThreadQueue() }
+            refreshMcpState()
+        }
+
         inputSpectrum = runCatching { engine.getInputSpectrum(24) }.getOrDefault(inputSpectrum)
         outputSpectrum = runCatching { engine.getOutputSpectrum(24) }.getOrDefault(outputSpectrum)
 
@@ -1597,6 +1686,9 @@ class UapmdHost private constructor(val model: AppModel) {
 
     fun shutdown() {
         scope.cancel()
+        stopMcp()
+        jsRuntimeOrNull?.let { runCatching { it.close() } }
+        jsRuntimeOrNull = null
         val presentationsToClose = nativeUiPresentations.values.toList()
         nativeUiPresentations.clear()
         nativeUiVisibleInstanceIds = emptySet()
