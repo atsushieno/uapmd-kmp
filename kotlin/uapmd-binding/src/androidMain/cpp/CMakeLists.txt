@@ -19,6 +19,7 @@ include("${UAPMD_SRC_DIR}/cmake/CPM.cmake")
 get_filename_component(UAPMD_KMP_CMAKE_DIR
     "${CMAKE_CURRENT_SOURCE_DIR}/../../../../../cmake" REALPATH)
 include("${UAPMD_KMP_CMAKE_DIR}/UapmdFeatureOptions.cmake")
+include("${UAPMD_KMP_CMAKE_DIR}/UapmdPatches.cmake")
 
 find_package(SDL3 REQUIRED CONFIG)
 
