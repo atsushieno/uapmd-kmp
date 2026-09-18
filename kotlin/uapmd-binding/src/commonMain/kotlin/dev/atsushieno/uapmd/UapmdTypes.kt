@@ -28,7 +28,15 @@ enum class StateContextType(val nativeValue: Int) {
     Remember(0), Copyable(1), Preset(2), Project(3)
 }
 
-data class CatalogEntry(val format: String, val pluginId: String, val displayName: String, val vendor: String = "")
+data class CatalogEntry(
+    val format: String,
+    val pluginId: String,
+    val displayName: String,
+    val vendor: String = "",
+    val productUrl: String = "",
+    /** A path, or a URL for remote formats (WebCLAP); empty where there is no bundle (AU). */
+    val bundlePath: String = ""
+)
 
 data class UiSize(val width: UInt, val height: UInt)
 

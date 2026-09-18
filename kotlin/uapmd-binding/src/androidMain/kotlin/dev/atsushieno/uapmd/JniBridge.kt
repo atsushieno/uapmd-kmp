@@ -116,6 +116,22 @@ object JniBridge {
     @JvmStatic external fun uapmdPluginHostCatalogEntryCount(h: Long): Int
     /** Returns String[3]{format, pluginId, displayName} or null */
     @JvmStatic external fun uapmdPluginHostGetCatalogEntry(h: Long, idx: Int): Array<String?>?
+    @JvmStatic external fun uapmdPluginHostFormatCount(h: Long): Int
+    @JvmStatic external fun uapmdPluginHostGetFormatName(h: Long, idx: Int): String
+    @JvmStatic external fun uapmdApplicationDataDirectorySet(path: String)
+    @JvmStatic external fun uapmdApplicationDataDirectoryGet(): String
+    @JvmStatic external fun uapmdScanToolGetSearchPathSettingsFile(h: Long): String
+    @JvmStatic external fun uapmdScanToolLoadSearchPathSettings(h: Long)
+    @JvmStatic external fun uapmdScanToolSaveSearchPathSettings(h: Long)
+    @JvmStatic external fun uapmdScanToolFormatUsesSearchPaths(h: Long, fi: Int): Boolean
+    @JvmStatic external fun uapmdScanToolFormatDefaultSearchPathCount(h: Long, fi: Int): Int
+    @JvmStatic external fun uapmdScanToolFormatGetDefaultSearchPath(h: Long, fi: Int, pi: Int): String
+    @JvmStatic external fun uapmdScanToolFormatSearchPathCount(h: Long, fi: Int): Int
+    @JvmStatic external fun uapmdScanToolFormatGetSearchPath(h: Long, fi: Int, pi: Int): String
+    @JvmStatic external fun uapmdScanToolFormatAddSearchPath(h: Long, fi: Int, path: String)
+    @JvmStatic external fun uapmdScanToolFormatSetSearchPaths(h: Long, fi: Int, paths: Array<String>)
+    @JvmStatic external fun uapmdScanToolFormatGetUseDefaultSearchPaths(h: Long, fi: Int): Boolean
+    @JvmStatic external fun uapmdScanToolFormatSetUseDefaultSearchPaths(h: Long, fi: Int, value: Boolean)
     @JvmStatic external fun uapmdPluginHostSaveCatalog(h: Long, path: String)
     @JvmStatic external fun uapmdPluginHostPerformScanning(h: Long, rescan: Boolean)
     @JvmStatic external fun uapmdPluginHostReloadCatalogFromCache(h: Long)

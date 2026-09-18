@@ -18,6 +18,15 @@ include("${UAPMD_SRC_DIR}/cmake/CPM.cmake")
 # exists. The Gradle build passes -DUAPMD_ENABLE_ARA=OFF, which still wins.
 get_filename_component(UAPMD_KMP_CMAKE_DIR
     "${CMAKE_CURRENT_SOURCE_DIR}/../../../../../cmake" REALPATH)
+# ysfx's EEL2 carries hand-written ARM assembly that the NDK's clang rejects on
+# armeabi-v7a ("invalid instruction" throughout asm-nseel-arm-gcc.c), so JSFX is
+# off for that ABI only. arm64-v8a builds it, and that is the ABI Android devices
+# have had since 2019 -- the cost is that a 32-bit ARM build has no JSFX in its
+# plugin catalogue.
+if(ANDROID_ABI STREQUAL "armeabi-v7a")
+    set(UAPMD_ENABLE_JSFX OFF CACHE BOOL "JSFX is unavailable on armeabi-v7a" FORCE)
+endif()
+
 include("${UAPMD_KMP_CMAKE_DIR}/UapmdFeatureOptions.cmake")
 include("${UAPMD_KMP_CMAKE_DIR}/UapmdPatches.cmake")
 

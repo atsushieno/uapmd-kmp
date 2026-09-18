@@ -99,8 +99,42 @@ external interface UapmdCApiModule : JsAny {
         fmtBuf: Int, fmtBufSize: Int,
         idBuf: Int, idBufSize: Int,
         nameBuf: Int, nameBufSize: Int,
-        vendorBuf: Int, vendorBufSize: Int
+        vendorBuf: Int, vendorBufSize: Int,
+        productUrlBuf: Int, productUrlBufSize: Int,
+        bundlePathBuf: Int, bundlePathBufSize: Int
     ): Boolean
+    @JsName("_uapmd_plugin_host_format_count")
+    fun uapmdPluginHostFormatCount(handle: Int): Int
+    @JsName("_uapmd_plugin_host_get_format_name")
+    fun uapmdPluginHostGetFormatName(handle: Int, index: Int, buf: Int, bufSize: Int): Int
+    @JsName("_uapmd_application_data_directory_set")
+    fun uapmdApplicationDataDirectorySet(pathPtr: Int)
+    @JsName("_uapmd_application_data_directory_get")
+    fun uapmdApplicationDataDirectoryGet(buf: Int, bufSize: Int): Int
+    @JsName("_uapmd_scan_tool_get_search_path_settings_file")
+    fun uapmdScanToolGetSearchPathSettingsFile(tool: Int, buf: Int, bufSize: Int): Int
+    @JsName("_uapmd_scan_tool_load_search_path_settings")
+    fun uapmdScanToolLoadSearchPathSettings(tool: Int)
+    @JsName("_uapmd_scan_tool_save_search_path_settings")
+    fun uapmdScanToolSaveSearchPathSettings(tool: Int)
+    @JsName("_uapmd_scan_tool_format_uses_search_paths")
+    fun uapmdScanToolFormatUsesSearchPaths(tool: Int, formatIndex: Int): Boolean
+    @JsName("_uapmd_scan_tool_format_default_search_path_count")
+    fun uapmdScanToolFormatDefaultSearchPathCount(tool: Int, formatIndex: Int): Int
+    @JsName("_uapmd_scan_tool_format_get_default_search_path")
+    fun uapmdScanToolFormatGetDefaultSearchPath(tool: Int, formatIndex: Int, pathIndex: Int, buf: Int, bufSize: Int): Int
+    @JsName("_uapmd_scan_tool_format_search_path_count")
+    fun uapmdScanToolFormatSearchPathCount(tool: Int, formatIndex: Int): Int
+    @JsName("_uapmd_scan_tool_format_get_search_path")
+    fun uapmdScanToolFormatGetSearchPath(tool: Int, formatIndex: Int, pathIndex: Int, buf: Int, bufSize: Int): Int
+    @JsName("_uapmd_scan_tool_format_add_search_path")
+    fun uapmdScanToolFormatAddSearchPath(tool: Int, formatIndex: Int, pathPtr: Int)
+    @JsName("_uapmd_scan_tool_format_set_search_paths")
+    fun uapmdScanToolFormatSetSearchPaths(tool: Int, formatIndex: Int, pathsPtr: Int, count: Int)
+    @JsName("_uapmd_scan_tool_format_get_use_default_search_paths")
+    fun uapmdScanToolFormatGetUseDefaultSearchPaths(tool: Int, formatIndex: Int): Boolean
+    @JsName("_uapmd_scan_tool_format_set_use_default_search_paths")
+    fun uapmdScanToolFormatSetUseDefaultSearchPaths(tool: Int, formatIndex: Int, value: Boolean)
     @JsName("_uapmd_plugin_host_get_instance_ids")
     fun uapmdPluginHostGetInstanceIds(handle: Int, buf: Int, bufCount: Int): Int
 

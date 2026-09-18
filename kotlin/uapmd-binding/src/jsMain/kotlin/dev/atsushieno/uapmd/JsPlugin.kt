@@ -208,19 +208,39 @@ class JsPluginHost internal constructor(
         get() = (jsMod._uapmd_plugin_host_catalog_entry_count(handle) as Int).toUInt()
 
     override fun getCatalogEntry(index: UInt): CatalogEntry? {
-        val fmtSz = 256; val idSz = 256; val nameSz = 256
+        val fmtSz = 256; val idSz = 512; val nameSz = 512
+        val vendorSz = 256; val urlSz = 512; val bundleSz = 1024
         val fBuf = jsMod._malloc(fmtSz) as Int
         val iBuf = jsMod._malloc(idSz)  as Int
         val nBuf = jsMod._malloc(nameSz) as Int
+        val vBuf = jsMod._malloc(vendorSz) as Int
+        val uBuf = jsMod._malloc(urlSz) as Int
+        val bBuf = jsMod._malloc(bundleSz) as Int
         return try {
-            if (!(jsMod._uapmd_plugin_host_get_catalog_entry(handle, index.toInt(), fBuf, fmtSz, iBuf, idSz, nBuf, nameSz) as Boolean)) null
+            if (!(jsMod._uapmd_plugin_host_get_catalog_entry(
+                    handle, index.toInt(), fBuf, fmtSz, iBuf, idSz, nBuf, nameSz,
+                    vBuf, vendorSz, uBuf, urlSz, bBuf, bundleSz) as Boolean)) null
             else CatalogEntry(
                 format      = jsMod.UTF8ToString(fBuf) as String,
                 pluginId    = jsMod.UTF8ToString(iBuf) as String,
-                displayName = jsMod.UTF8ToString(nBuf) as String
+                displayName = jsMod.UTF8ToString(nBuf) as String,
+                vendor      = jsMod.UTF8ToString(vBuf) as String,
+                productUrl  = jsMod.UTF8ToString(uBuf) as String,
+                bundlePath  = jsMod.UTF8ToString(bBuf) as String
             )
-        } finally { jsMod._free(fBuf); jsMod._free(iBuf); jsMod._free(nBuf) }
+        } finally {
+            jsMod._free(fBuf); jsMod._free(iBuf); jsMod._free(nBuf)
+            jsMod._free(vBuf); jsMod._free(uBuf); jsMod._free(bBuf)
+        }
     }
+
+    override val formatCount: UInt
+        get() = (jsMod._uapmd_plugin_host_format_count(handle) as Int).toUInt()
+
+    override fun getFormatName(index: UInt): String =
+        readJsStringIndexed(handle, index.toInt()) { h, i, buf, sz ->
+            jsMod._uapmd_plugin_host_get_format_name(h, i, buf, sz) as Int
+        }
 
     override fun saveCatalog(path: String) =
         withJsCString(path) { ptr -> jsMod._uapmd_plugin_host_save_catalog(handle, ptr) }

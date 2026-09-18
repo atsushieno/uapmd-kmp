@@ -8,6 +8,7 @@ set(UAPMD_C_API_HEADERS
     include/c-api/uapmd-c-engine.h
     include/c-api/uapmd-c-tooling.h
     include/c-api/uapmd-c-gui.h
+    include/c-api/uapmd-c-framebuffer-ui.h
     include/c-api/uapmd-c-script.h
     include/c-api/uapmd-c-app.h
     include/c-api/uapmd-c-undo.h
@@ -21,6 +22,7 @@ set(UAPMD_C_API_SOURCES
     src/uapmd-c-engine.cpp
     src/uapmd-c-tooling.cpp
     src/uapmd-c-gui.cpp
+    src/uapmd-c-framebuffer-ui.cpp
     src/uapmd-c-app.cpp
     src/uapmd-c-undo.cpp
     src/uapmd-c-addin.cpp

@@ -76,7 +76,60 @@ UAPMD_C_EXPORT size_t   uapmd_scan_tool_get_format_name(uapmd_scan_tool_t tool, 
                                                           char* buf, size_t buf_size);
 
 /* Cache file */
+/* Where this installation keeps the plugin list cache, the blocklist, the search
+ * path settings and anything a plugin format writes.
+ *
+ * Desktop and the web work this out themselves. Android and iOS cannot -- the
+ * location belongs to the application sandbox -- so the platform layer sets it
+ * before anything that writes is constructed. Setting it after a scan tool exists
+ * does not move that tool's files. An empty path means nothing persists, which is
+ * a supported state. */
+UAPMD_C_EXPORT void   uapmd_application_data_directory_set(const char* path);
+UAPMD_C_EXPORT size_t uapmd_application_data_directory_get(char* buf, size_t buf_size);
+
 UAPMD_C_EXPORT size_t uapmd_scan_tool_get_cache_file(uapmd_scan_tool_t tool, char* buf, size_t buf_size);
+
+/* The user's plugin search paths, kept beside the cache file. Empty on platforms
+ * with no writable location.
+ *
+ * Load applies the stored paths to every format that has any, and must run after
+ * the formats are registered and before the first scan, because a format reads its
+ * search paths when it enumerates. Save records what the formats currently have;
+ * changing them afterwards needs a rescan, since dropping a location has to drop
+ * its plugins from the catalog. */
+UAPMD_C_EXPORT size_t uapmd_scan_tool_get_search_path_settings_file(uapmd_scan_tool_t tool,
+                                                                    char* buf, size_t buf_size);
+UAPMD_C_EXPORT void   uapmd_scan_tool_load_search_path_settings(uapmd_scan_tool_t tool);
+UAPMD_C_EXPORT void   uapmd_scan_tool_save_search_path_settings(uapmd_scan_tool_t tool);
+
+/* Per-format search paths, indexed as uapmd_scan_tool_get_format_name indexes.
+ *
+ * Only a format that looks its plugins up in search paths has any: AU is
+ * enumerated by the operating system, so it reports false here and the rest of
+ * these do nothing. The default locations are a separate, uneditable list; the
+ * override paths are the user's own, and `use_default` decides whether the
+ * defaults are consulted as well.
+ *
+ * Changing any of this needs a rescan before it shows in the catalog, because
+ * dropping a location has to drop its plugins. */
+UAPMD_C_EXPORT bool uapmd_scan_tool_format_uses_search_paths(uapmd_scan_tool_t tool, uint32_t format_index);
+
+UAPMD_C_EXPORT uint32_t uapmd_scan_tool_format_default_search_path_count(uapmd_scan_tool_t tool, uint32_t format_index);
+UAPMD_C_EXPORT size_t   uapmd_scan_tool_format_get_default_search_path(uapmd_scan_tool_t tool, uint32_t format_index,
+                                                                      uint32_t path_index, char* buf, size_t buf_size);
+
+UAPMD_C_EXPORT uint32_t uapmd_scan_tool_format_search_path_count(uapmd_scan_tool_t tool, uint32_t format_index);
+UAPMD_C_EXPORT size_t   uapmd_scan_tool_format_get_search_path(uapmd_scan_tool_t tool, uint32_t format_index,
+                                                              uint32_t path_index, char* buf, size_t buf_size);
+UAPMD_C_EXPORT void     uapmd_scan_tool_format_add_search_path(uapmd_scan_tool_t tool, uint32_t format_index,
+                                                              const char* path);
+/* Replaces the whole set; `count` of 0 clears it. */
+UAPMD_C_EXPORT void     uapmd_scan_tool_format_set_search_paths(uapmd_scan_tool_t tool, uint32_t format_index,
+                                                               const char* const* paths, uint32_t count);
+
+UAPMD_C_EXPORT bool uapmd_scan_tool_format_get_use_default_search_paths(uapmd_scan_tool_t tool, uint32_t format_index);
+UAPMD_C_EXPORT void uapmd_scan_tool_format_set_use_default_search_paths(uapmd_scan_tool_t tool, uint32_t format_index,
+                                                                       bool value);
 UAPMD_C_EXPORT void   uapmd_scan_tool_set_cache_file(uapmd_scan_tool_t tool, const char* path);
 UAPMD_C_EXPORT void   uapmd_scan_tool_save_cache(uapmd_scan_tool_t tool);
 UAPMD_C_EXPORT void   uapmd_scan_tool_save_cache_to(uapmd_scan_tool_t tool, const char* path);

@@ -266,10 +266,19 @@ class NativePluginHost internal constructor(
         val idBuf = allocArray<ByteVar>(512)
         val nameBuf = allocArray<ByteVar>(512)
         val vendorBuf = allocArray<ByteVar>(256)
-        if (!uapmd_plugin_host_get_catalog_entry(handle, index, fmtBuf, 256u, idBuf, 512u, nameBuf, 512u, vendorBuf, 256u))
+        val urlBuf = allocArray<ByteVar>(512)
+        val bundleBuf = allocArray<ByteVar>(1024)
+        if (!uapmd_plugin_host_get_catalog_entry(handle, index, fmtBuf, 256u, idBuf, 512u, nameBuf, 512u,
+                vendorBuf, 256u, urlBuf, 512u, bundleBuf, 1024u))
             return null
-        CatalogEntry(fmtBuf.toKString(), idBuf.toKString(), nameBuf.toKString(), vendorBuf.toKString())
+        CatalogEntry(fmtBuf.toKString(), idBuf.toKString(), nameBuf.toKString(), vendorBuf.toKString(),
+            urlBuf.toKString(), bundleBuf.toKString())
     }
+
+    override val formatCount: UInt get() = uapmd_plugin_host_format_count(handle)
+
+    override fun getFormatName(index: UInt): String =
+        readCString { buf, size -> uapmd_plugin_host_get_format_name(handle, index, buf, size) }
 
     override fun saveCatalog(path: String) = uapmd_plugin_host_save_catalog(handle, path)
     override fun performScanning(rescan: Boolean) = uapmd_plugin_host_perform_scanning(handle, rescan)

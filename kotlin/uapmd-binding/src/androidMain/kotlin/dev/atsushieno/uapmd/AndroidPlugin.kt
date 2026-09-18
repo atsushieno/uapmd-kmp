@@ -235,8 +235,14 @@ class AndroidPluginHost internal constructor(
 
     override fun getCatalogEntry(index: UInt): CatalogEntry? {
         val arr = JniBridge.uapmdPluginHostGetCatalogEntry(handle, index.toInt()) ?: return null
-        return CatalogEntry(arr[0] ?: "", arr[1] ?: "", arr[2] ?: "", arr[3] ?: "")
+        return CatalogEntry(arr[0] ?: "", arr[1] ?: "", arr[2] ?: "", arr[3] ?: "",
+            arr.getOrNull(4) ?: "", arr.getOrNull(5) ?: "")
     }
+
+    override val formatCount: UInt get() = JniBridge.uapmdPluginHostFormatCount(handle).toUInt()
+
+    override fun getFormatName(index: UInt): String =
+        JniBridge.uapmdPluginHostGetFormatName(handle, index.toInt())
 
     override fun saveCatalog(path: String) = JniBridge.uapmdPluginHostSaveCatalog(handle, path)
     override fun performScanning(rescan: Boolean) = JniBridge.uapmdPluginHostPerformScanning(handle, rescan)

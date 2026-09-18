@@ -17,6 +17,44 @@ class NativeScanTool internal constructor(
         get() = readCString { buf, size -> uapmd_scan_tool_get_cache_file(handle, buf, size) }
         set(value) { uapmd_scan_tool_set_cache_file(handle, value) }
 
+    override val searchPathSettingsFile: String
+        get() = readCString { buf, size -> uapmd_scan_tool_get_search_path_settings_file(handle, buf, size) }
+
+    override fun loadSearchPathSettings() = uapmd_scan_tool_load_search_path_settings(handle)
+    override fun saveSearchPathSettings() = uapmd_scan_tool_save_search_path_settings(handle)
+
+    override fun formatUsesSearchPaths(formatIndex: UInt): Boolean =
+        uapmd_scan_tool_format_uses_search_paths(handle, formatIndex)
+
+    override fun getFormatDefaultSearchPaths(formatIndex: UInt): List<String> =
+        (0u until uapmd_scan_tool_format_default_search_path_count(handle, formatIndex)).map { i ->
+            readCString { buf, size ->
+                uapmd_scan_tool_format_get_default_search_path(handle, formatIndex, i, buf, size)
+            }
+        }
+
+    override fun getFormatSearchPaths(formatIndex: UInt): List<String> =
+        (0u until uapmd_scan_tool_format_search_path_count(handle, formatIndex)).map { i ->
+            readCString { buf, size ->
+                uapmd_scan_tool_format_get_search_path(handle, formatIndex, i, buf, size)
+            }
+        }
+
+    override fun addFormatSearchPath(formatIndex: UInt, path: String) =
+        uapmd_scan_tool_format_add_search_path(handle, formatIndex, path)
+
+    override fun setFormatSearchPaths(formatIndex: UInt, paths: List<String>) = memScoped {
+        val array = allocArray<CPointerVar<ByteVar>>(paths.size)
+        paths.forEachIndexed { i, value -> array[i] = value.cstr.ptr }
+        uapmd_scan_tool_format_set_search_paths(handle, formatIndex, array, paths.size.toUInt())
+    }
+
+    override fun getFormatUseDefaultSearchPaths(formatIndex: UInt): Boolean =
+        uapmd_scan_tool_format_get_use_default_search_paths(handle, formatIndex)
+
+    override fun setFormatUseDefaultSearchPaths(formatIndex: UInt, value: Boolean) =
+        uapmd_scan_tool_format_set_use_default_search_paths(handle, formatIndex, value)
+
     override fun saveCache() = uapmd_scan_tool_save_cache(handle)
     override fun saveCacheTo(path: String) = uapmd_scan_tool_save_cache_to(handle, path)
 
@@ -123,3 +161,8 @@ class NativePluginInstancing internal constructor(
 
     override fun close() = uapmd_instancing_destroy(handle)
 }
+
+
+actual var applicationDataDirectory: String
+    get() = readCString { buf, size -> uapmd_application_data_directory_get(buf, size) }
+    set(value) { uapmd_application_data_directory_set(value) }

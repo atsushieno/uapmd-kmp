@@ -35,6 +35,13 @@ option(UAPMD_ENABLE_BASIC_PITCH
 option(UAPMD_ENABLE_DRUMSCRIPT
         "Build the DrumScript drum transcription addin (Apache-2.0, requires UAPMD_ENABLE_LIBROSA_CPP)" ON)
 
+# ysfx is Apache-2.0, the same category as ARA and Basic Pitch above, and JSFX is a
+# plugin format the bindings publish like any other: with it off there is no JSFX in
+# the catalogue for them to bind to. Its editor is a framebuffer rather than a native
+# window, which is what the framebuffer UI entry points in c-api/ exist for.
+option(UAPMD_ENABLE_JSFX
+        "Build the JSFX plugin format (Apache-2.0 ysfx, zlib-licensed WDL/EEL2)" ON)
+
 # Windows MIDI Services is Windows-only; matching uapmd's own default keeps the
 # option present (and visible in the cache) on every platform.
 option(UAPMD_ENABLE_WINMIDI

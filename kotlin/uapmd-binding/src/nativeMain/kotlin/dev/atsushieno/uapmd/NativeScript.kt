@@ -4,7 +4,9 @@ import kotlinx.cinterop.ExperimentalForeignApi
 import kotlinx.cinterop.CPointer
 import kotlinx.cinterop.StableRef
 import kotlinx.cinterop.asStableRef
-import kotlinx.cinterop.cstr
+import kotlinx.cinterop.allocArray
+import kotlinx.cinterop.get
+import kotlinx.cinterop.set
 import kotlinx.cinterop.memScoped
 import kotlinx.cinterop.staticCFunction
 import kotlinx.cinterop.toKString
@@ -33,13 +35,19 @@ class NativeJsRuntime internal constructor(internal val handle: uapmd_js_runtime
                     val found = b.resolve(path?.toKString() ?: "")
                     if (found == null) null else {
                         b.last = found
-                        b.lastPinned = found.cstr.getPointer(kotlinx.cinterop.nativeHeap)
-                        b.lastPinned
+                        // nativeHeap, not a scope: this outlives the callback and is
+                        // freed once the evaluation that asked for it has returned.
+                        val bytes = found.encodeToByteArray()
+                        val buf = kotlinx.cinterop.nativeHeap.allocArray<kotlinx.cinterop.ByteVar>(bytes.size + 1)
+                        bytes.forEachIndexed { i, byte -> buf[i] = byte }
+                        buf[bytes.size] = 0
+                        b.lastPinned = buf
+                        buf
                     }
                 }
             ).useContents { JsResult(success, json?.toKString(), error?.toKString()) }
         } finally {
-            box.lastPinned?.let { kotlinx.cinterop.nativeHeap.free(it) }
+            box.lastPinned?.let { kotlinx.cinterop.nativeHeap.free(it.rawValue) }
             ref.dispose()
         }
     }

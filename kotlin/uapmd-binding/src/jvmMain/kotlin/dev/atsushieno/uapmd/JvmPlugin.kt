@@ -276,21 +276,32 @@ class JvmPluginHost internal constructor(
         val idBuf = ByteArray(512)
         val nameBuf = ByteArray(512)
         val vendorBuf = ByteArray(256)
+        val urlBuf = ByteArray(512)
+        val bundleBuf = ByteArray(1024)
         if (!lib.uapmd_plugin_host_get_catalog_entry(
                 handle, index.toInt(),
                 fmtBuf, 256L,
                 idBuf, 512L,
                 nameBuf, 512L,
-                vendorBuf, 256L
+                vendorBuf, 256L,
+                urlBuf, 512L,
+                bundleBuf, 1024L
             )
         ) return null
         return CatalogEntry(
             fmtBuf.decodeToNullTerminated(),
             idBuf.decodeToNullTerminated(),
             nameBuf.decodeToNullTerminated(),
-            vendorBuf.decodeToNullTerminated()
+            vendorBuf.decodeToNullTerminated(),
+            urlBuf.decodeToNullTerminated(),
+            bundleBuf.decodeToNullTerminated()
         )
     }
+
+    override val formatCount: UInt get() = lib.uapmd_plugin_host_format_count(handle).toUInt()
+
+    override fun getFormatName(index: UInt): String =
+        readJvmString { buf, size -> lib.uapmd_plugin_host_get_format_name(handle, index.toInt(), buf, size) }
 
     override fun saveCatalog(path: String) = lib.uapmd_plugin_host_save_catalog(handle, path)
     override fun performScanning(rescan: Boolean) = lib.uapmd_plugin_host_perform_scanning(handle, rescan)

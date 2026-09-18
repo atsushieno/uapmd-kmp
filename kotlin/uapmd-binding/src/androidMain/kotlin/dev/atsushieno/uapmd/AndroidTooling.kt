@@ -83,6 +83,37 @@ class AndroidScanTool internal constructor(
 
     override val lastScanError: String get() = JniBridge.uapmdScanToolLastScanError(handle)
 
+    override val searchPathSettingsFile: String
+        get() = JniBridge.uapmdScanToolGetSearchPathSettingsFile(handle)
+
+    override fun loadSearchPathSettings() = JniBridge.uapmdScanToolLoadSearchPathSettings(handle)
+    override fun saveSearchPathSettings() = JniBridge.uapmdScanToolSaveSearchPathSettings(handle)
+
+    override fun formatUsesSearchPaths(formatIndex: UInt): Boolean =
+        JniBridge.uapmdScanToolFormatUsesSearchPaths(handle, formatIndex.toInt())
+
+    override fun getFormatDefaultSearchPaths(formatIndex: UInt): List<String> =
+        (0 until JniBridge.uapmdScanToolFormatDefaultSearchPathCount(handle, formatIndex.toInt())).map {
+            JniBridge.uapmdScanToolFormatGetDefaultSearchPath(handle, formatIndex.toInt(), it)
+        }
+
+    override fun getFormatSearchPaths(formatIndex: UInt): List<String> =
+        (0 until JniBridge.uapmdScanToolFormatSearchPathCount(handle, formatIndex.toInt())).map {
+            JniBridge.uapmdScanToolFormatGetSearchPath(handle, formatIndex.toInt(), it)
+        }
+
+    override fun addFormatSearchPath(formatIndex: UInt, path: String) =
+        JniBridge.uapmdScanToolFormatAddSearchPath(handle, formatIndex.toInt(), path)
+
+    override fun setFormatSearchPaths(formatIndex: UInt, paths: List<String>) =
+        JniBridge.uapmdScanToolFormatSetSearchPaths(handle, formatIndex.toInt(), paths.toTypedArray())
+
+    override fun getFormatUseDefaultSearchPaths(formatIndex: UInt): Boolean =
+        JniBridge.uapmdScanToolFormatGetUseDefaultSearchPaths(handle, formatIndex.toInt())
+
+    override fun setFormatUseDefaultSearchPaths(formatIndex: UInt, value: Boolean) =
+        JniBridge.uapmdScanToolFormatSetUseDefaultSearchPaths(handle, formatIndex.toInt(), value)
+
     override fun close() = JniBridge.uapmdScanToolDestroy(handle)
 }
 
@@ -119,3 +150,8 @@ class AndroidPluginInstancing internal constructor(
 
     override fun close() = JniBridge.uapmdInstancingDestroy(handle)
 }
+
+
+actual var applicationDataDirectory: String
+    get() = JniBridge.uapmdApplicationDataDirectoryGet()
+    set(value) { JniBridge.uapmdApplicationDataDirectorySet(value) }

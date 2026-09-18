@@ -1108,8 +1108,12 @@ interface UapmdLibrary : Library {
         formatBuf: ByteArray, formatBufSize: Long,
         pluginIdBuf: ByteArray, pluginIdBufSize: Long,
         displayNameBuf: ByteArray, displayNameBufSize: Long,
-        vendorBuf: ByteArray, vendorBufSize: Long
+        vendorBuf: ByteArray, vendorBufSize: Long,
+        productUrlBuf: ByteArray, productUrlBufSize: Long,
+        bundlePathBuf: ByteArray, bundlePathBufSize: Long
     ): Boolean
+    fun uapmd_plugin_host_format_count(host: Pointer?): Int
+    fun uapmd_plugin_host_get_format_name(host: Pointer?, index: Int, buf: ByteArray?, bufSize: Long): Long
     fun uapmd_plugin_host_save_catalog(host: Pointer?, path: String)
     fun uapmd_plugin_host_perform_scanning(host: Pointer?, rescan: Boolean)
     fun uapmd_plugin_host_reload_catalog_from_cache(host: Pointer?)
@@ -1423,6 +1427,23 @@ interface UapmdLibrary : Library {
     fun uapmd_scan_tool_catalog_entry_count(tool: Pointer?): Int
     fun uapmd_scan_tool_format_count(tool: Pointer?): Int
     fun uapmd_scan_tool_get_format_name(tool: Pointer?, index: Int, buf: ByteArray?, bufSize: Long): Long
+
+    fun uapmd_application_data_directory_set(path: String)
+    fun uapmd_application_data_directory_get(buf: ByteArray?, bufSize: Long): Long
+
+    fun uapmd_scan_tool_get_search_path_settings_file(tool: Pointer?, buf: ByteArray?, bufSize: Long): Long
+    fun uapmd_scan_tool_load_search_path_settings(tool: Pointer?)
+    fun uapmd_scan_tool_save_search_path_settings(tool: Pointer?)
+
+    fun uapmd_scan_tool_format_uses_search_paths(tool: Pointer?, formatIndex: Int): Boolean
+    fun uapmd_scan_tool_format_default_search_path_count(tool: Pointer?, formatIndex: Int): Int
+    fun uapmd_scan_tool_format_get_default_search_path(tool: Pointer?, formatIndex: Int, pathIndex: Int, buf: ByteArray?, bufSize: Long): Long
+    fun uapmd_scan_tool_format_search_path_count(tool: Pointer?, formatIndex: Int): Int
+    fun uapmd_scan_tool_format_get_search_path(tool: Pointer?, formatIndex: Int, pathIndex: Int, buf: ByteArray?, bufSize: Long): Long
+    fun uapmd_scan_tool_format_add_search_path(tool: Pointer?, formatIndex: Int, path: String)
+    fun uapmd_scan_tool_format_set_search_paths(tool: Pointer?, formatIndex: Int, paths: Array<String>?, count: Int)
+    fun uapmd_scan_tool_format_get_use_default_search_paths(tool: Pointer?, formatIndex: Int): Boolean
+    fun uapmd_scan_tool_format_set_use_default_search_paths(tool: Pointer?, formatIndex: Int, value: Boolean)
 
     fun uapmd_scan_tool_get_cache_file(tool: Pointer?, buf: ByteArray?, bufSize: Long): Long
     fun uapmd_scan_tool_set_cache_file(tool: Pointer?, path: String)

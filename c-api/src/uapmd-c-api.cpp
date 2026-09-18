@@ -592,7 +592,7 @@ void uapmd_plugin_host_destroy(uapmd_plugin_host_t host) {
     s_owned_hosts.erase(H(host));
 }
 
-static thread_local std::vector<remidy::PluginCatalogEntry> tl_catalog;
+static thread_local std::vector<uapmd_plugin_hosting::AudioPluginCatalogEntry> tl_catalog;
 
 uint32_t uapmd_plugin_host_catalog_entry_count(uapmd_plugin_host_t host) {
     tl_catalog = H(host)->pluginCatalogEntries();
@@ -603,7 +603,9 @@ bool uapmd_plugin_host_get_catalog_entry(uapmd_plugin_host_t host, uint32_t inde
                                           char* format_buf, size_t format_buf_size,
                                           char* plugin_id_buf, size_t plugin_id_buf_size,
                                           char* display_name_buf, size_t display_name_buf_size,
-                                          char* vendor_buf, size_t vendor_buf_size) {
+                                          char* vendor_buf, size_t vendor_buf_size,
+                                          char* product_url_buf, size_t product_url_buf_size,
+                                          char* bundle_path_buf, size_t bundle_path_buf_size) {
     if (tl_catalog.empty())
         tl_catalog = H(host)->pluginCatalogEntries();
     if (index >= tl_catalog.size())
@@ -613,7 +615,25 @@ bool uapmd_plugin_host_get_catalog_entry(uapmd_plugin_host_t host, uint32_t inde
     copy_string(entry.pluginId(), plugin_id_buf, plugin_id_buf_size);
     copy_string(entry.displayName(), display_name_buf, display_name_buf_size);
     copy_string(entry.vendorName(), vendor_buf, vendor_buf_size);
+    copy_string(entry.productUrl(), product_url_buf, product_url_buf_size);
+    copy_string(entry.bundlePath().string(), bundle_path_buf, bundle_path_buf_size);
     return true;
+}
+
+static thread_local std::vector<uapmd_plugin_hosting::AudioPluginFormat*> tl_host_formats;
+
+uint32_t uapmd_plugin_host_format_count(uapmd_plugin_host_t host) {
+    tl_host_formats = H(host)->pluginFormats();
+    return static_cast<uint32_t>(tl_host_formats.size());
+}
+
+size_t uapmd_plugin_host_get_format_name(uapmd_plugin_host_t host, uint32_t index,
+                                          char* buf, size_t buf_size) {
+    if (tl_host_formats.empty())
+        tl_host_formats = H(host)->pluginFormats();
+    if (index >= tl_host_formats.size())
+        return 0;
+    return copy_string(tl_host_formats[index]->name(), buf, buf_size);
 }
 
 void uapmd_plugin_host_save_catalog(uapmd_plugin_host_t host, const char* path) {

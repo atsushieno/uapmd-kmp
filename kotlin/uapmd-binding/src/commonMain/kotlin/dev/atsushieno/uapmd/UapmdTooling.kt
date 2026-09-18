@@ -25,7 +25,28 @@ interface ScanTool : AutoCloseable {
     fun clearBlocklist()
     fun addToBlocklist(formatName: String, pluginId: String, reason: String)
     val lastScanError: String
+
+    val searchPathSettingsFile: String
+    /** Run after the formats are registered and before the first scan. */
+    fun loadSearchPathSettings()
+    fun saveSearchPathSettings()
+
+    /** False for a format enumerated by the OS (AU); the rest below then do nothing. */
+    fun formatUsesSearchPaths(formatIndex: UInt): Boolean
+    fun getFormatDefaultSearchPaths(formatIndex: UInt): List<String>
+    fun getFormatSearchPaths(formatIndex: UInt): List<String>
+    fun addFormatSearchPath(formatIndex: UInt, path: String)
+    fun setFormatSearchPaths(formatIndex: UInt, paths: List<String>)
+    fun getFormatUseDefaultSearchPaths(formatIndex: UInt): Boolean
+    fun setFormatUseDefaultSearchPaths(formatIndex: UInt, value: Boolean)
 }
+
+/**
+ * Where uapmd keeps the plugin list cache, the blocklist and the search path
+ * settings. Android and iOS must set it before anything that writes exists;
+ * elsewhere it is worked out already. An empty path means nothing persists.
+ */
+expect var applicationDataDirectory: String
 
 /** Minimal format manager – exposes available plugin formats by name. */
 interface FormatManager : AutoCloseable {

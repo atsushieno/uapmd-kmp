@@ -731,20 +731,32 @@ JNIEXPORT jint JNICALL Java_dev_atsushieno_uapmd_JniBridge_uapmdPluginHostCatalo
         JNIEnv*, jclass, jlong h) {
     return static_cast<jint>(uapmd_plugin_host_catalog_entry_count(j2p<uapmd_plugin_host_t>(h)));
 }
-// Returns {format, pluginId, displayName} as String[3], or null if not found.
+// Returns {format, pluginId, displayName, vendor, productUrl, bundlePath}, or null.
 JNIEXPORT jobjectArray JNICALL Java_dev_atsushieno_uapmd_JniBridge_uapmdPluginHostGetCatalogEntry(
         JNIEnv* env, jclass, jlong h, jint idx) {
-    char fmt[256], pid[512], name[512], vendor[256];
+    char fmt[256], pid[512], name[512], vendor[256], url[512], bundle[1024];
     if (!uapmd_plugin_host_get_catalog_entry(j2p<uapmd_plugin_host_t>(h), idx,
-            fmt, sizeof(fmt), pid, sizeof(pid), name, sizeof(name), vendor, sizeof(vendor)))
+            fmt, sizeof(fmt), pid, sizeof(pid), name, sizeof(name), vendor, sizeof(vendor),
+            url, sizeof(url), bundle, sizeof(bundle)))
         return nullptr;
     jclass sc = env->FindClass("java/lang/String");
-    jobjectArray arr = env->NewObjectArray(4, sc, nullptr);
+    jobjectArray arr = env->NewObjectArray(6, sc, nullptr);
     env->SetObjectArrayElement(arr, 0, env->NewStringUTF(fmt));
     env->SetObjectArrayElement(arr, 1, env->NewStringUTF(pid));
     env->SetObjectArrayElement(arr, 2, env->NewStringUTF(name));
     env->SetObjectArrayElement(arr, 3, env->NewStringUTF(vendor));
+    env->SetObjectArrayElement(arr, 4, env->NewStringUTF(url));
+    env->SetObjectArrayElement(arr, 5, env->NewStringUTF(bundle));
     return arr;
+}
+JNIEXPORT jint JNICALL Java_dev_atsushieno_uapmd_JniBridge_uapmdPluginHostFormatCount(
+        JNIEnv*, jclass, jlong h) {
+    return static_cast<jint>(uapmd_plugin_host_format_count(j2p<uapmd_plugin_host_t>(h)));
+}
+JNIEXPORT jstring JNICALL Java_dev_atsushieno_uapmd_JniBridge_uapmdPluginHostGetFormatName(
+        JNIEnv* env, jclass, jlong h, jint idx) {
+    auto p = j2p<uapmd_plugin_host_t>(h);
+    return cstr(env, [&](char* b, size_t n){ return uapmd_plugin_host_get_format_name(p, idx, b, n); });
 }
 JNIEXPORT void JNICALL Java_dev_atsushieno_uapmd_JniBridge_uapmdPluginHostSaveCatalog(
         JNIEnv* env, jclass, jlong h, jstring path) {
@@ -1716,6 +1728,80 @@ JNIEXPORT jstring JNICALL Java_dev_atsushieno_uapmd_JniBridge_uapmdScanToolGetFo
         JNIEnv* env, jclass, jlong h, jint idx) {
     auto t = j2p<uapmd_scan_tool_t>(h);
     return cstr(env, [&](char* b, size_t n){ return uapmd_scan_tool_get_format_name(t, idx, b, n); });
+}
+JNIEXPORT void JNICALL Java_dev_atsushieno_uapmd_JniBridge_uapmdApplicationDataDirectorySet(
+        JNIEnv* env, jclass, jstring path) {
+    const char* p = jstr(env, path);
+    uapmd_application_data_directory_set(p);
+    jstr_release(env, path, p);
+}
+JNIEXPORT jstring JNICALL Java_dev_atsushieno_uapmd_JniBridge_uapmdApplicationDataDirectoryGet(
+        JNIEnv* env, jclass) {
+    return cstr(env, [&](char* b, size_t n){ return uapmd_application_data_directory_get(b, n); });
+}
+JNIEXPORT jstring JNICALL Java_dev_atsushieno_uapmd_JniBridge_uapmdScanToolGetSearchPathSettingsFile(
+        JNIEnv* env, jclass, jlong h) {
+    auto t = j2p<uapmd_scan_tool_t>(h);
+    return cstr(env, [&](char* b, size_t n){ return uapmd_scan_tool_get_search_path_settings_file(t, b, n); });
+}
+JNIEXPORT void JNICALL Java_dev_atsushieno_uapmd_JniBridge_uapmdScanToolLoadSearchPathSettings(
+        JNIEnv*, jclass, jlong h) { uapmd_scan_tool_load_search_path_settings(j2p<uapmd_scan_tool_t>(h)); }
+JNIEXPORT void JNICALL Java_dev_atsushieno_uapmd_JniBridge_uapmdScanToolSaveSearchPathSettings(
+        JNIEnv*, jclass, jlong h) { uapmd_scan_tool_save_search_path_settings(j2p<uapmd_scan_tool_t>(h)); }
+JNIEXPORT jboolean JNICALL Java_dev_atsushieno_uapmd_JniBridge_uapmdScanToolFormatUsesSearchPaths(
+        JNIEnv*, jclass, jlong h, jint fi) {
+    return uapmd_scan_tool_format_uses_search_paths(j2p<uapmd_scan_tool_t>(h), fi);
+}
+JNIEXPORT jint JNICALL Java_dev_atsushieno_uapmd_JniBridge_uapmdScanToolFormatDefaultSearchPathCount(
+        JNIEnv*, jclass, jlong h, jint fi) {
+    return static_cast<jint>(uapmd_scan_tool_format_default_search_path_count(j2p<uapmd_scan_tool_t>(h), fi));
+}
+JNIEXPORT jstring JNICALL Java_dev_atsushieno_uapmd_JniBridge_uapmdScanToolFormatGetDefaultSearchPath(
+        JNIEnv* env, jclass, jlong h, jint fi, jint pi) {
+    auto t = j2p<uapmd_scan_tool_t>(h);
+    return cstr(env, [&](char* b, size_t n){ return uapmd_scan_tool_format_get_default_search_path(t, fi, pi, b, n); });
+}
+JNIEXPORT jint JNICALL Java_dev_atsushieno_uapmd_JniBridge_uapmdScanToolFormatSearchPathCount(
+        JNIEnv*, jclass, jlong h, jint fi) {
+    return static_cast<jint>(uapmd_scan_tool_format_search_path_count(j2p<uapmd_scan_tool_t>(h), fi));
+}
+JNIEXPORT jstring JNICALL Java_dev_atsushieno_uapmd_JniBridge_uapmdScanToolFormatGetSearchPath(
+        JNIEnv* env, jclass, jlong h, jint fi, jint pi) {
+    auto t = j2p<uapmd_scan_tool_t>(h);
+    return cstr(env, [&](char* b, size_t n){ return uapmd_scan_tool_format_get_search_path(t, fi, pi, b, n); });
+}
+JNIEXPORT void JNICALL Java_dev_atsushieno_uapmd_JniBridge_uapmdScanToolFormatAddSearchPath(
+        JNIEnv* env, jclass, jlong h, jint fi, jstring path) {
+    const char* p = jstr(env, path);
+    uapmd_scan_tool_format_add_search_path(j2p<uapmd_scan_tool_t>(h), fi, p);
+    jstr_release(env, path, p);
+}
+JNIEXPORT void JNICALL Java_dev_atsushieno_uapmd_JniBridge_uapmdScanToolFormatSetSearchPaths(
+        JNIEnv* env, jclass, jlong h, jint fi, jobjectArray paths) {
+    jsize count = paths ? env->GetArrayLength(paths) : 0;
+    std::vector<std::string> owned;
+    std::vector<const char*> ptrs;
+    owned.reserve(count);
+    ptrs.reserve(count);
+    for (jsize i = 0; i < count; i++) {
+        auto s = (jstring) env->GetObjectArrayElement(paths, i);
+        const char* c = jstr(env, s);
+        owned.emplace_back(c);
+        jstr_release(env, s, c);
+    }
+    for (auto& v : owned)
+        ptrs.push_back(v.c_str());
+    uapmd_scan_tool_format_set_search_paths(j2p<uapmd_scan_tool_t>(h), fi,
+                                            ptrs.empty() ? nullptr : ptrs.data(),
+                                            static_cast<uint32_t>(ptrs.size()));
+}
+JNIEXPORT jboolean JNICALL Java_dev_atsushieno_uapmd_JniBridge_uapmdScanToolFormatGetUseDefaultSearchPaths(
+        JNIEnv*, jclass, jlong h, jint fi) {
+    return uapmd_scan_tool_format_get_use_default_search_paths(j2p<uapmd_scan_tool_t>(h), fi);
+}
+JNIEXPORT void JNICALL Java_dev_atsushieno_uapmd_JniBridge_uapmdScanToolFormatSetUseDefaultSearchPaths(
+        JNIEnv*, jclass, jlong h, jint fi, jboolean value) {
+    uapmd_scan_tool_format_set_use_default_search_paths(j2p<uapmd_scan_tool_t>(h), fi, value);
 }
 JNIEXPORT jstring JNICALL Java_dev_atsushieno_uapmd_JniBridge_uapmdScanToolGetCacheFile(
         JNIEnv* env, jclass, jlong h) {

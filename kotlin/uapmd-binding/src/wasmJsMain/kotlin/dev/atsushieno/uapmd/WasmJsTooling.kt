@@ -123,6 +123,60 @@ class WasmJsScanTool internal constructor(
     override val lastScanError: String
         get() = readString(handle) { h, buf, size -> uapmdScanToolLastScanError(h, buf, size) }
 
+    override val searchPathSettingsFile: String
+        get() = readString(handle) { h, buf, size -> uapmdScanToolGetSearchPathSettingsFile(h, buf, size) }
+
+    override fun loadSearchPathSettings() = wasmMod.uapmdScanToolLoadSearchPathSettings(handle)
+    override fun saveSearchPathSettings() = wasmMod.uapmdScanToolSaveSearchPathSettings(handle)
+
+    override fun formatUsesSearchPaths(formatIndex: UInt): Boolean =
+        wasmMod.uapmdScanToolFormatUsesSearchPaths(handle, formatIndex.toInt())
+
+    override fun getFormatDefaultSearchPaths(formatIndex: UInt): List<String> =
+        (0 until wasmMod.uapmdScanToolFormatDefaultSearchPathCount(handle, formatIndex.toInt())).map { i ->
+            readStringIndexed2(handle, formatIndex.toInt(), i) { h, fi, pi, buf, size ->
+                uapmdScanToolFormatGetDefaultSearchPath(h, fi, pi, buf, size)
+            }
+        }
+
+    override fun getFormatSearchPaths(formatIndex: UInt): List<String> =
+        (0 until wasmMod.uapmdScanToolFormatSearchPathCount(handle, formatIndex.toInt())).map { i ->
+            readStringIndexed2(handle, formatIndex.toInt(), i) { h, fi, pi, buf, size ->
+                uapmdScanToolFormatGetSearchPath(h, fi, pi, buf, size)
+            }
+        }
+
+    override fun addFormatSearchPath(formatIndex: UInt, path: String) =
+        withCStringKt(path) { ptr ->
+            wasmMod.uapmdScanToolFormatAddSearchPath(handle, formatIndex.toInt(), ptr)
+        }
+
+    override fun setFormatSearchPaths(formatIndex: UInt, paths: List<String>) {
+        val mod = wasmMod
+        val strs = paths.map { value ->
+            val bytes = value.encodeToByteArray()
+            val p = mod.malloc(bytes.size + 1)
+            bytes.forEachIndexed { i, b -> mod.setValue(p + i, b.toDouble(), "i8") }
+            mod.setValue(p + bytes.size, 0.0, "i8")
+            p
+        }
+        // An array of pointers needs storage of its own: 4 bytes each on wasm32.
+        val array = mod.malloc(if (strs.isEmpty()) 4 else strs.size * 4)
+        try {
+            strs.forEachIndexed { i, p -> mod.setValue(array + i * 4, p.toDouble(), "i32") }
+            mod.uapmdScanToolFormatSetSearchPaths(handle, formatIndex.toInt(), array, strs.size)
+        } finally {
+            strs.forEach { mod.free(it) }
+            mod.free(array)
+        }
+    }
+
+    override fun getFormatUseDefaultSearchPaths(formatIndex: UInt): Boolean =
+        wasmMod.uapmdScanToolFormatGetUseDefaultSearchPaths(handle, formatIndex.toInt())
+
+    override fun setFormatUseDefaultSearchPaths(formatIndex: UInt, value: Boolean) =
+        wasmMod.uapmdScanToolFormatSetUseDefaultSearchPaths(handle, formatIndex.toInt(), value)
+
     override fun close() = wasmMod.uapmdScanToolDestroy(handle)
 }
 
@@ -161,3 +215,8 @@ class WasmJsPluginInstancing internal constructor(
 
     override fun close() = wasmMod.uapmdInstancingDestroy(handle)
 }
+
+
+actual var applicationDataDirectory: String
+    get() = readString(0) { _, buf, size -> uapmdApplicationDataDirectoryGet(buf, size) }
+    set(value) = withCStringKt(value) { ptr -> wasmMod.uapmdApplicationDataDirectorySet(ptr) }

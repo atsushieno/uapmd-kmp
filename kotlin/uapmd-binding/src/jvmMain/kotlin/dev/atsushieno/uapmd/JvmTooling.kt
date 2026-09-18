@@ -79,6 +79,44 @@ class JvmScanTool internal constructor(
     override fun addToBlocklist(formatName: String, pluginId: String, reason: String) =
         lib.uapmd_scan_tool_add_to_blocklist(handle, formatName, pluginId, reason)
 
+    override val searchPathSettingsFile: String
+        get() = readJvmString { buf, size ->
+            lib.uapmd_scan_tool_get_search_path_settings_file(handle, buf, size)
+        }
+
+    override fun loadSearchPathSettings() = lib.uapmd_scan_tool_load_search_path_settings(handle)
+    override fun saveSearchPathSettings() = lib.uapmd_scan_tool_save_search_path_settings(handle)
+
+    override fun formatUsesSearchPaths(formatIndex: UInt): Boolean =
+        lib.uapmd_scan_tool_format_uses_search_paths(handle, formatIndex.toInt())
+
+    override fun getFormatDefaultSearchPaths(formatIndex: UInt): List<String> =
+        (0 until lib.uapmd_scan_tool_format_default_search_path_count(handle, formatIndex.toInt())).map { i ->
+            readJvmString { buf, size ->
+                lib.uapmd_scan_tool_format_get_default_search_path(handle, formatIndex.toInt(), i, buf, size)
+            }
+        }
+
+    override fun getFormatSearchPaths(formatIndex: UInt): List<String> =
+        (0 until lib.uapmd_scan_tool_format_search_path_count(handle, formatIndex.toInt())).map { i ->
+            readJvmString { buf, size ->
+                lib.uapmd_scan_tool_format_get_search_path(handle, formatIndex.toInt(), i, buf, size)
+            }
+        }
+
+    override fun addFormatSearchPath(formatIndex: UInt, path: String) =
+        lib.uapmd_scan_tool_format_add_search_path(handle, formatIndex.toInt(), path)
+
+    override fun setFormatSearchPaths(formatIndex: UInt, paths: List<String>) =
+        lib.uapmd_scan_tool_format_set_search_paths(
+            handle, formatIndex.toInt(), paths.toTypedArray(), paths.size)
+
+    override fun getFormatUseDefaultSearchPaths(formatIndex: UInt): Boolean =
+        lib.uapmd_scan_tool_format_get_use_default_search_paths(handle, formatIndex.toInt())
+
+    override fun setFormatUseDefaultSearchPaths(formatIndex: UInt, value: Boolean) =
+        lib.uapmd_scan_tool_format_set_use_default_search_paths(handle, formatIndex.toInt(), value)
+
     override val lastScanError: String
         get() = readJvmString { buf, size -> lib.uapmd_scan_tool_last_scan_error(handle, buf, size) }
 
@@ -117,3 +155,8 @@ class JvmPluginInstancing internal constructor(
 
     override fun close() = lib.uapmd_instancing_destroy(handle)
 }
+
+
+actual var applicationDataDirectory: String
+    get() = readJvmString { buf, size -> lib.uapmd_application_data_directory_get(buf, size) }
+    set(value) { lib.uapmd_application_data_directory_set(value) }

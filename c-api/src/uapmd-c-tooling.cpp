@@ -40,7 +40,7 @@ static std::unordered_map<uapmd_plugin_hosting::PluginFormatManager*, std::uniqu
 
 /* ── Thread-local storage ─────────────────────────────────────────────────── */
 
-static thread_local std::vector<remidy::PluginFormat*> tl_formats;
+static thread_local std::vector<uapmd_plugin_hosting::AudioPluginFormat*> tl_formats;
 static thread_local std::vector<uapmd_plugin_hosting::BlocklistEntry> tl_blocklist;
 
 /* ═══════════════════════════════════════════════════════════════════════════
@@ -76,6 +76,107 @@ size_t uapmd_scan_tool_get_format_name(uapmd_scan_tool_t tool, uint32_t index, c
     if (index >= tl_formats.size())
         return 0;
     return copy_string(tl_formats[index]->name(), buf, buf_size);
+}
+
+void uapmd_application_data_directory_set(const char* path) {
+    uapmd_plugin_hosting::applicationDataDirectory(path ? std::filesystem::path(path) : std::filesystem::path());
+}
+
+size_t uapmd_application_data_directory_get(char* buf, size_t buf_size) {
+    return copy_string(uapmd_plugin_hosting::applicationDataDirectory().string(), buf, buf_size);
+}
+
+size_t uapmd_scan_tool_get_search_path_settings_file(uapmd_scan_tool_t tool, char* buf, size_t buf_size) {
+    return copy_string(PST(tool)->searchPathSettingsFile().string(), buf, buf_size);
+}
+
+void uapmd_scan_tool_load_search_path_settings(uapmd_scan_tool_t tool) {
+    PST(tool)->loadSearchPathSettings();
+}
+
+void uapmd_scan_tool_save_search_path_settings(uapmd_scan_tool_t tool) {
+    PST(tool)->saveSearchPathSettings();
+}
+
+/* Search paths live on the file/URL flavour of scanning; a format enumerated by the
+ * operating system has none, and every accessor below answers emptily for it. */
+static uapmd_plugin_hosting::AudioPluginFileOrUrlScanning* format_search_paths(
+        uapmd_scan_tool_t tool, uint32_t format_index) {
+    if (tl_formats.empty())
+        tl_formats = PST(tool)->formats();
+    if (format_index >= tl_formats.size())
+        return nullptr;
+    auto* scanning = tl_formats[format_index]->scanning();
+    if (!scanning)
+        return nullptr;
+    auto* byPath = dynamic_cast<uapmd_plugin_hosting::AudioPluginFileOrUrlScanning*>(scanning);
+    if (!byPath || !byPath->usePluginSearchPaths())
+        return nullptr;
+    return byPath;
+}
+
+bool uapmd_scan_tool_format_uses_search_paths(uapmd_scan_tool_t tool, uint32_t format_index) {
+    return format_search_paths(tool, format_index) != nullptr;
+}
+
+uint32_t uapmd_scan_tool_format_default_search_path_count(uapmd_scan_tool_t tool, uint32_t format_index) {
+    auto* s = format_search_paths(tool, format_index);
+    return s ? static_cast<uint32_t>(s->getDefaultSearchPaths().size()) : 0;
+}
+
+size_t uapmd_scan_tool_format_get_default_search_path(uapmd_scan_tool_t tool, uint32_t format_index,
+                                                     uint32_t path_index, char* buf, size_t buf_size) {
+    auto* s = format_search_paths(tool, format_index);
+    if (!s)
+        return 0;
+    auto& paths = s->getDefaultSearchPaths();
+    if (path_index >= paths.size())
+        return 0;
+    return copy_string(paths[path_index].string(), buf, buf_size);
+}
+
+uint32_t uapmd_scan_tool_format_search_path_count(uapmd_scan_tool_t tool, uint32_t format_index) {
+    auto* s = format_search_paths(tool, format_index);
+    return s ? static_cast<uint32_t>(s->getOverrideSearchPaths().size()) : 0;
+}
+
+size_t uapmd_scan_tool_format_get_search_path(uapmd_scan_tool_t tool, uint32_t format_index,
+                                              uint32_t path_index, char* buf, size_t buf_size) {
+    auto* s = format_search_paths(tool, format_index);
+    if (!s)
+        return 0;
+    auto& paths = s->getOverrideSearchPaths();
+    if (path_index >= paths.size())
+        return 0;
+    return copy_string(paths[path_index], buf, buf_size);
+}
+
+void uapmd_scan_tool_format_add_search_path(uapmd_scan_tool_t tool, uint32_t format_index, const char* path) {
+    auto* s = format_search_paths(tool, format_index);
+    if (s && path)
+        s->addSearchPath(path);
+}
+
+void uapmd_scan_tool_format_set_search_paths(uapmd_scan_tool_t tool, uint32_t format_index,
+                                             const char* const* paths, uint32_t count) {
+    auto* s = format_search_paths(tool, format_index);
+    if (!s)
+        return;
+    std::vector<std::string> values;
+    values.reserve(count);
+    for (uint32_t i = 0; i < count; i++)
+        values.emplace_back(paths && paths[i] ? paths[i] : "");
+    s->setOverrideSearchPaths(std::move(values));
+}
+
+bool uapmd_scan_tool_format_get_use_default_search_paths(uapmd_scan_tool_t tool, uint32_t format_index) {
+    auto* s = format_search_paths(tool, format_index);
+    return s ? s->useDefaultSearchPaths() : false;
+}
+
+void uapmd_scan_tool_format_set_use_default_search_paths(uapmd_scan_tool_t tool, uint32_t format_index, bool value) {
+    if (auto* s = format_search_paths(tool, format_index))
+        s->useDefaultSearchPaths(value);
 }
 
 size_t uapmd_scan_tool_get_cache_file(uapmd_scan_tool_t tool, char* buf, size_t buf_size) {
@@ -114,7 +215,7 @@ void uapmd_scan_tool_save_cache_to(uapmd_scan_tool_t tool, const char* path) {
 namespace {
 
 struct AsyncScanBundle {
-    remidy::FileOrUrlBasedPluginScanning* scanning;
+    uapmd_plugin_hosting::AudioPluginFileOrUrlScanning* scanning;
     std::string format_name;
     std::filesystem::path path;
 };
@@ -140,7 +241,7 @@ void async_scan_finish(const std::shared_ptr<AsyncScanSession>& session) {
 }
 
 void async_scan_merge(const std::shared_ptr<AsyncScanSession>& session,
-                      std::vector<remidy::PluginCatalogEntry>& results) {
+                      std::vector<uapmd_plugin_hosting::AudioPluginCatalogEntry>& results) {
     auto& catalog = session->tool->catalog();
     for (auto& entry : results) {
         if (!catalog.contains(entry.format(), entry.pluginId()))
@@ -167,9 +268,9 @@ void async_scan_step(std::shared_ptr<AsyncScanSession> session) {
     if (session->has_observer && session->observer.bundle_scan_started)
         session->observer.bundle_scan_started(path.string().c_str(), session->observer.user_data);
 
-    auto results = std::make_shared<std::vector<remidy::PluginCatalogEntry>>();
+    auto results = std::make_shared<std::vector<uapmd_plugin_hosting::AudioPluginCatalogEntry>>();
     scanning->scanBundle(path, session->require_fast_scanning, 0.0,
-        [results](remidy::PluginCatalogEntry entry) {
+        [results](uapmd_plugin_hosting::AudioPluginCatalogEntry entry) {
             results->emplace_back(std::move(entry));
         },
         [session, results, path](std::string error) {
@@ -202,7 +303,7 @@ void perform_scanning_async(uapmd_scan_tool_t tool,
     /* Seed the catalog from the plugin list cache, as the shared scan planner does. */
     auto& cache_file = scan_tool->pluginListCacheFile();
     if (!cache_file.empty() && std::filesystem::exists(cache_file)) {
-        remidy::PluginCatalog cached;
+        uapmd_plugin_hosting::AudioPluginCatalog cached;
         cached.load(cache_file);
         for (auto* entry : cached.getPlugins())
             if (entry && !catalog.contains(entry->format(), entry->pluginId()))
@@ -221,10 +322,10 @@ void perform_scanning_async(uapmd_scan_tool_t tool,
 
         if (require_fast_scanning || !scanning->scanningMayBeSlow())
             continue;
-        auto* file_scanning = dynamic_cast<remidy::FileOrUrlBasedPluginScanning*>(scanning);
+        auto* file_scanning = dynamic_cast<uapmd_plugin_hosting::AudioPluginFileOrUrlScanning*>(scanning);
         if (!file_scanning) {
             async_scan_notify_error(session,
-                "Format " + format->name() + " reports slow scanning but does not implement FileOrUrlBasedPluginScanning.");
+                "Format " + format->name() + " reports slow scanning but does not implement AudioPluginFileOrUrlScanning.");
             continue;
         }
         /* Already covered by the cache: nothing to re-fetch. */
@@ -360,7 +461,7 @@ uapmd_instancing_state_t uapmd_instancing_state(uapmd_plugin_instancing_t inst) 
  *  PluginFormatManager
  * ═══════════════════════════════════════════════════════════════════════════ */
 
-static thread_local std::vector<remidy::PluginFormat*> tl_mgr_formats;
+static thread_local std::vector<uapmd_plugin_hosting::AudioPluginFormat*> tl_mgr_formats;
 
 uapmd_format_manager_t uapmd_format_manager_create() {
     auto mgr = std::make_unique<uapmd_plugin_hosting::PluginFormatManager>();

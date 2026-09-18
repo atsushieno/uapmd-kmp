@@ -317,18 +317,32 @@ class WasmJsPluginHost internal constructor(
         val idBuf   = mod.malloc(idBufSize)
         val nameBuf = mod.malloc(nameBufSize)
         val vendorBufSize = 256; val vendorBuf = mod.malloc(vendorBufSize)
+        val urlBufSize = 512; val urlBuf = mod.malloc(urlBufSize)
+        val bundleBufSize = 1024; val bundleBuf = mod.malloc(bundleBufSize)
         return try {
-            if (!mod.uapmdPluginHostGetCatalogEntry(handle, index.toInt(), fmtBuf, fmtBufSize, idBuf, idBufSize, nameBuf, nameBufSize, vendorBuf, vendorBufSize)) null
+            if (!mod.uapmdPluginHostGetCatalogEntry(handle, index.toInt(), fmtBuf, fmtBufSize,
+                    idBuf, idBufSize, nameBuf, nameBufSize, vendorBuf, vendorBufSize,
+                    urlBuf, urlBufSize, bundleBuf, bundleBufSize)) null
             else CatalogEntry(
                 format      = mod.utf8ToString(fmtBuf),
                 pluginId    = mod.utf8ToString(idBuf),
                 displayName = mod.utf8ToString(nameBuf),
-                vendor      = mod.utf8ToString(vendorBuf)
+                vendor      = mod.utf8ToString(vendorBuf),
+                productUrl  = mod.utf8ToString(urlBuf),
+                bundlePath  = mod.utf8ToString(bundleBuf)
             )
         } finally {
             mod.free(fmtBuf); mod.free(idBuf); mod.free(nameBuf); mod.free(vendorBuf)
+            mod.free(urlBuf); mod.free(bundleBuf)
         }
     }
+
+    override val formatCount: UInt get() = wasmMod.uapmdPluginHostFormatCount(handle).toUInt()
+
+    override fun getFormatName(index: UInt): String =
+        readStringIndexed(handle, index.toInt()) { h, i, buf, size ->
+            uapmdPluginHostGetFormatName(h, i, buf, size)
+        }
 
     override fun saveCatalog(path: String) =
         withCStringKt(path) { pathPtr -> wasmMod.uapmdPluginHostSaveCatalog(handle, pathPtr) }

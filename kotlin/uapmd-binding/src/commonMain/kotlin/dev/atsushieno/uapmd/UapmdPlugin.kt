@@ -95,6 +95,9 @@ interface PluginUiPresentation {
 interface PluginHost : AutoCloseable {
     val catalogEntryCount: UInt
     fun getCatalogEntry(index: UInt): CatalogEntry?
+    /** Built-in formats and any the application registered. */
+    val formatCount: UInt
+    fun getFormatName(index: UInt): String
     fun saveCatalog(path: String)
     fun performScanning(rescan: Boolean)
     fun reloadCatalogFromCache()
