@@ -148,6 +148,9 @@ fun MainWindow() {
                     windows.closeDetailsWindowsExcept(liveInstanceIds)
                 }
 
+                // Opens and closes a window per drawn plug-in editor; draws nothing here.
+                FramebufferPluginUiLayer(host, windows)
+
                 FloatingWindowLayer(windows) {
                     Column(Modifier.fillMaxSize()) {
                         Toolbar(

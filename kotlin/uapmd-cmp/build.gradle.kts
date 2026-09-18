@@ -120,7 +120,11 @@ compose.desktop {
         mainClass = "dev.atsushieno.uapmd.cmp.MainKt"
         jvmArgs += listOf(
             "-Dapple.awt.application.name=uapmd-cmp",
-            "-Xdock:name=uapmd-cmp"
+            "-Xdock:name=uapmd-cmp",
+            // A JVM crash in native code writes this alongside the system's own report.
+            // The system one names no Java frames at all, so it cannot say which call
+            // crossed into native code -- which is the only part worth knowing.
+            "-XX:ErrorFile=${layout.buildDirectory.get().asFile}/hs_err_pid%p.log"
         ) + listOfNotNull(
             System.getProperty("uapmd.cmp.importMidi")?.let { "-Duapmd.cmp.importMidi=$it" },
             System.getProperty("uapmd.cmp.instantiate")?.let { "-Duapmd.cmp.instantiate=$it" },
@@ -237,6 +241,24 @@ tasks.register<JavaExec>("runPluginUiProbe") {
     jvmArgs("-Dapple.awt.application.name=uapmd-cmp", "-Xdock:name=uapmd-cmp")
     listOf("uapmd.probe.uiPlugin", "uapmd.probe.uiFormat").forEach { key ->
         System.getProperty(key)?.let { systemProperty(key, it) }
+    }
+}
+
+tasks.register<JavaExec>("runFramebufferUiProbe") {
+    group = "verification"
+    description = "Headless check that a framebuffer plug-in editor reports frames to the binding."
+    dependsOn("jvmJar")
+    mainClass.set("dev.atsushieno.uapmd.cmp.FramebufferUiProbeMainKt")
+    forwardScannerExecutable()
+    classpath(
+        files(tasks.named("jvmJar")),
+        jvmMainCompilation.runtimeDependencyFiles
+    )
+    jvmArgs("-Dapple.awt.application.name=uapmd-cmp", "-Xdock:name=uapmd-cmp")
+    // The probe documents -Duapmd.probe.plugin for choosing which effect to open, which
+    // only reaches it if the task passes it on.
+    listOf("uapmd.probe.plugin").forEach { key ->
+        providers.systemProperty(key).orNull?.let { systemProperty(key, it) }
     }
 }
 

@@ -106,6 +106,68 @@ interface EventLoopEnqueueCb : Callback {
 
 // ─── JNA Structure types ─────────────────────────────────────────────────────
 
+// ── Framebuffer plugin editors ───────────────────────────────────────────────
+
+@FieldOrder("width", "height", "strideBytes", "format", "serial")
+open class UapmdFbuiFrameInfo : Structure() {
+    @JvmField var width: Int = 0
+    @JvmField var height: Int = 0
+    @JvmField var strideBytes: Int = 0
+    @JvmField var format: Int = 0
+    @JvmField var serial: Long = 0
+}
+
+@FieldOrder("pointerX", "pointerY", "buttons", "modifiers", "wheel", "horizontalWheel",
+            "hasFocus", "visible", "pointerOver")
+open class UapmdFbuiInput : Structure(), Structure.ByReference {
+    @JvmField var pointerX: Int = 0
+    @JvmField var pointerY: Int = 0
+    @JvmField var buttons: Int = 0
+    @JvmField var modifiers: Int = 0
+    @JvmField var wheel: Double = 0.0
+    @JvmField var horizontalWheel: Double = 0.0
+    // Byte rather than Boolean throughout: JNA lays a Java boolean out as four bytes and
+    // C++ bool is one, which does not merely mistranslate the flag -- it moves every
+    // field after it, so the struct the plugin reads is not the one that was written.
+    @JvmField var hasFocus: Byte = 0
+    @JvmField var visible: Byte = 1
+    @JvmField var pointerOver: Byte = 0
+}
+
+@FieldOrder("modifiers", "character", "key", "pressed")
+open class UapmdFbuiKeyEvent : Structure() {
+    @JvmField var modifiers: Int = 0
+    @JvmField var character: Int = 0
+    @JvmField var key: Int = 0
+    @JvmField var pressed: Byte = 0
+}
+
+@FieldOrder("label", "id", "disabled", "checked", "separator", "childCount")
+open class UapmdFbuiMenuItem : Structure {
+    // The pointer form is how an array handed over by C is read back.
+    constructor() : super()
+    constructor(p: Pointer) : super(p)
+
+    @JvmField var label: String? = null
+    @JvmField var id: Int = 0
+    @JvmField var disabled: Byte = 0
+    @JvmField var checked: Byte = 0
+    @JvmField var separator: Byte = 0
+    @JvmField var childCount: Int = 0
+}
+
+interface FbuiMenuCb : Callback {
+    fun invoke(request: Pointer?, items: Pointer?, itemCount: Long, x: Int, y: Int, userData: Pointer?)
+}
+
+interface FbuiCursorCb : Callback {
+    fun invoke(cursor: Int, userData: Pointer?)
+}
+
+interface FbuiDroppedFileCb : Callback {
+    fun invoke(index: Int, buf: Pointer?, bufSize: Long, userData: Pointer?): Long
+}
+
 @FieldOrder("value", "name")
 open class UapmdParameterNamedValue : Structure() {
     @JvmField var value: Double = 0.0
@@ -1012,6 +1074,23 @@ interface UapmdLibrary : Library {
     fun uapmd_instance_format_name(inst: Pointer?, buf: ByteArray?, bufSize: Long): Long
     fun uapmd_instance_plugin_id(inst: Pointer?, buf: ByteArray?, bufSize: Long): Long
     fun uapmd_instance_get_aap_ui_host_details(inst: Pointer?, out: UapmdAapUiHostDetails): Boolean
+
+    fun uapmd_instance_has_framebuffer_ui(inst: Pointer?): Boolean
+    fun uapmd_instance_fbui_preferred_size(inst: Pointer?, outWidth: IntByReference, outHeight: IntByReference): Boolean
+    fun uapmd_instance_fbui_set_surface_size(inst: Pointer?, width: Int, height: Int, scaleFactor: Double)
+    fun uapmd_instance_fbui_frame_info(inst: Pointer?, outInfo: UapmdFbuiFrameInfo): Boolean
+    fun uapmd_instance_fbui_copy_frame(inst: Pointer?, dst: ByteArray?, dstCapacityBytes: Long,
+                                       dstStrideBytes: Int, outInfo: UapmdFbuiFrameInfo): Boolean
+    fun uapmd_instance_fbui_deliver_input(inst: Pointer?, input: UapmdFbuiInput,
+                                          keys: Pointer?, keyCount: Long)
+    // Byte, not Boolean: JNA marshals a Java boolean as a 4-byte int, and this takes a
+    // C++ bool, which is one byte.
+    fun uapmd_instance_fbui_set_displayed(inst: Pointer?, displayed: Byte)
+    fun uapmd_instance_fbui_set_host(inst: Pointer?, menuCallback: FbuiMenuCb?,
+                                     cursorCallback: FbuiCursorCb?,
+                                     droppedFileCallback: FbuiDroppedFileCb?,
+                                     userData: Pointer?)
+    fun uapmd_instance_fbui_complete_menu(request: Pointer?, chosenItem: Int)
 
     fun uapmd_instance_get_bypassed(inst: Pointer?): Boolean
     fun uapmd_instance_set_bypassed(inst: Pointer?, value: Boolean)

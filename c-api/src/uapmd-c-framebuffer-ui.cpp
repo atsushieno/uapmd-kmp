@@ -255,10 +255,23 @@ void uapmd_instance_fbui_set_host(uapmd_plugin_instance_t inst,
     if (!ui)
         return;
     if (!menu_callback && !cursor_callback && !dropped_file_callback) {
-        /* Detach before dropping ours: the plugin must not be left holding it. */
+        /* Detach first: the plugin must not be left holding it. */
         ui->uiHost(nullptr);
         std::lock_guard lock(g_host_mutex);
-        g_hosts.erase(ui);
+        /* The entry is kept rather than erased, and only its callbacks are dropped.
+           Detaching stops calls that have not started, but a menu request is made with
+           the plugin's lock released -- it has to be, since it blocks the renderer until
+           the host answers -- so one can still be inside this object as we return.
+           Destroying it here would pull it out from under that call. Keeping it costs one
+           small object per instance that has ever shown an editor, and the slot is reused
+           when the editor opens again. */
+        if (auto found = g_hosts.find(ui); found != g_hosts.end() && found->second) {
+            auto& host = *found->second;
+            host.menu_cb = nullptr;
+            host.cursor_cb = nullptr;
+            host.dropped_cb = nullptr;
+            host.user_data = nullptr;
+        }
         return;
     }
     std::lock_guard lock(g_host_mutex);

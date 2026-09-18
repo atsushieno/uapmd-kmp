@@ -34,6 +34,14 @@ interface PluginInstance {
     val uiCapabilities: PluginUiCapabilities
     val hasUiSupport: Boolean get() = uiCapabilities.hasUiSupport
     fun createUiPresentation(request: PluginUiPresentationRequest = PluginUiPresentationRequest()): PluginUiPresentation?
+
+    /**
+     * The editor of a plugin that draws rather than embedding a view, or null when its
+     * editor is a native window (or it has none). A host that gets one here draws it
+     * itself and must not ask for a presentation: there is no view to put in one, which
+     * is what an empty floating window for a JSFX effect used to be.
+     */
+    val framebufferUi: FramebufferUi? get() = null
 }
 
 data class AapUiHostDetails(

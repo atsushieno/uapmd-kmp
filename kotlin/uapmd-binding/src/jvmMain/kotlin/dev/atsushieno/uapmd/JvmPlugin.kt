@@ -147,6 +147,15 @@ class JvmPluginInstance internal constructor(
         lib.uapmd_instance_load_state(handle, data, data.size.toLong(), ctx.toJvmInt(), includeUiState, null, cb)
     }
 
+    // Built once: the host installs callbacks on it, and a fresh wrapper each time would
+    // drop them as soon as JNA collected the old one.
+    private val framebufferUiOrNull: FramebufferUi? by lazy {
+        if (lib.uapmd_instance_has_framebuffer_ui(handle)) JvmFramebufferUi(handle) else null
+    }
+
+    override val framebufferUi: FramebufferUi?
+        get() = framebufferUiOrNull
+
     override val uiCapabilities: PluginUiCapabilities
         get() {
             val caps = UapmdUiCapabilities()

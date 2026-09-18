@@ -703,6 +703,7 @@ class UapmdHost private constructor(val model: AppModel) {
         onUiThread {
             if (result.success) {
                 platformHostedUiInstanceIds = emptySet()
+                framebufferUiInstanceIds = emptySet()
                 selectedMidiClip = null
             }
             lastProjectResult = AppProjectResult(result.success, result.error)
@@ -767,6 +768,7 @@ class UapmdHost private constructor(val model: AppModel) {
         onUiThread {
             if (result.success) {
                 platformHostedUiInstanceIds = emptySet()
+                framebufferUiInstanceIds = emptySet()
                 selectedMidiClip = null
             }
             lastProjectResult = result
@@ -796,6 +798,13 @@ class UapmdHost private constructor(val model: AppModel) {
     private val nativeUiPresentations = mutableMapOf<Int, PluginUiPresentation>()
 
     var platformHostedUiInstanceIds by mutableStateOf<Set<Int>>(emptySet())
+
+    /**
+     * Plugins whose editor is a pixel buffer we draw ourselves, rather than a view the
+     * platform embeds. Asking for a native presentation for one of these produces an
+     * empty window, since there is no view to put in it.
+     */
+    var framebufferUiInstanceIds by mutableStateOf<Set<Int>>(emptySet())
         private set
     var pluginUiStatusMessage by mutableStateOf<String?>(null)
         private set
@@ -814,7 +823,8 @@ class UapmdHost private constructor(val model: AppModel) {
     fun reportPluginUiStatus(message: String?) { pluginUiStatusMessage = message }
 
     fun isPluginUiVisible(instanceId: Int): Boolean =
-        instanceId in nativeUiVisibleInstanceIds || instanceId in platformHostedUiInstanceIds
+        instanceId in nativeUiVisibleInstanceIds || instanceId in platformHostedUiInstanceIds ||
+                instanceId in framebufferUiInstanceIds
 
     /**
      * Re-reads visibility from the presentations themselves. Called from
@@ -850,6 +860,14 @@ class UapmdHost private constructor(val model: AppModel) {
         // Android AAP plugins are hosted by the platform's own view system.
         if (supportsPlatformHostedPluginUi(inst)) {
             platformHostedUiInstanceIds = platformHostedUiInstanceIds + instanceId
+            pluginUiStatusMessage = null
+            return
+        }
+
+        // Formats that draw their editor rather than embedding a view -- JSFX among them.
+        // We draw it, so no presentation is created: one would be an empty window.
+        if (inst.framebufferUi != null) {
+            framebufferUiInstanceIds = framebufferUiInstanceIds + instanceId
             pluginUiStatusMessage = null
             return
         }
@@ -910,6 +928,7 @@ class UapmdHost private constructor(val model: AppModel) {
      */
     fun hidePluginUi(instanceId: Int) {
         platformHostedUiInstanceIds = platformHostedUiInstanceIds - instanceId
+        framebufferUiInstanceIds = framebufferUiInstanceIds - instanceId
         nativeUiPresentations[instanceId]?.hide()
         markNativeUiVisible(instanceId, false)
     }
