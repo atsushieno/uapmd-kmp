@@ -160,14 +160,14 @@ private const val ResizeGripPx = 6f
  * [kMinSafeTimelineScale, kMaxTimelineScale] and zooms exponentially —
  * `scale * 2^(wheel * kZoomWheelSensitivity)` (TimelineNavigator.cpp:147) — so a
  * step is a constant *ratio* rather than a constant number of pixels. Our unit is
- * pixels-per-second rather than its scale factor, but the law is the same one, and
+ * dp-per-second rather than its scale factor, but the law is the same one, and
  * the bounds are the zoom slider's so the slider and the navigator cannot disagree.
  */
 /** Beats the timeline shows when a project finishes loading. */
 private const val InitialViewBeats = 32.0
 
-private const val MinPixelsPerSecond = 8f
-private const val MaxPixelsPerSecond = 240f
+private const val MinDpPerSecond = 8f
+private const val MaxDpPerSecond = 240f
 private const val ZoomWheelSensitivity = 0.2f
 
 /**
@@ -217,7 +217,6 @@ private fun dbToLinear(db: Double): Double =
 private fun NavigatorBar(
     host: UapmdHost,
     contentSeconds: Double,
-    pixelsPerSecond: Float,
     onZoom: (Float) -> Unit,
     hScroll: androidx.compose.foundation.ScrollState,
     modifier: Modifier = Modifier
@@ -387,9 +386,9 @@ fun Timeline(
     windows: FloatingWindowManager,
     modifier: Modifier = Modifier
 ) {
-    var pixelsPerSecond by remember { mutableStateOf(40f) }
+    var dpPerSecond by remember { mutableStateOf(40f) }
     // The second of the two things a zoom has to do: the lane is `contentSeconds *
-    // pixelsPerSecond` wide, so changing the zoom alone leaves the scroll offset
+    // dpPerSecond` wide, so changing the zoom alone leaves the scroll offset
     // pointing at a different moment in the song and the view slides sideways on
     // every step. Remember where the middle of the viewport was, in seconds, and put
     // it back once the lane has been remeasured at the new scale.
@@ -401,17 +400,19 @@ fun Timeline(
     val hScroll = rememberScrollState()
     val density = LocalDensity.current.density
 
-    /** Pixels per second as the scroll state counts them, rather than in dp. */
-    fun scrollPxPerSecond(scale: Float) = scale * density
+    // Layout widths and zoom are in dp; Canvas, pointer input and ScrollState
+    // all use physical pixels. Convert once so every lane and the navigator
+    // describe the same time range, including on high-density displays.
+    val pixelsPerSecond = dpPerSecond * density
 
     fun zoomBy(factor: Float) {
-        val previous = pixelsPerSecond
-        val next = (previous * factor).coerceIn(MinPixelsPerSecond, MaxPixelsPerSecond)
+        val previous = dpPerSecond
+        val next = (previous * factor).coerceIn(MinDpPerSecond, MaxDpPerSecond)
         if (next == previous) return
         val viewport = hScroll.viewportSize
         if (viewport > 0)
-            recentreSeconds = (hScroll.value + viewport / 2f) / scrollPxPerSecond(previous)
-        pixelsPerSecond = next
+            recentreSeconds = (hScroll.value + viewport / 2f) / pixelsPerSecond
+        dpPerSecond = next
     }
 
     // A freshly loaded project opens on the first 32 quarter-note beats rather
@@ -425,8 +426,8 @@ fun Timeline(
         appliedInitialViewFor = host.projectRevision
         val spanSeconds = host.tempoMap.beatsToSeconds(InitialViewBeats)
         if (spanSeconds <= 0.0) return@LaunchedEffect
-        pixelsPerSecond = (viewport / density / spanSeconds).toFloat()
-            .coerceIn(MinPixelsPerSecond, MaxPixelsPerSecond)
+        dpPerSecond = (viewport / density / spanSeconds).toFloat()
+            .coerceIn(MinDpPerSecond, MaxDpPerSecond)
         recentreSeconds = null
         hScroll.scrollTo(0)
     }
@@ -448,9 +449,9 @@ fun Timeline(
         // `maxValue` still describes the old scale; scrolling then would clamp
         // against the wrong extent and, because the value would have been consumed,
         // never be corrected. Wait for the extent that matches the new scale.
-        val expectedContentPx = contentSeconds.toFloat() * scrollPxPerSecond(pixelsPerSecond)
+        val expectedContentPx = contentSeconds.toFloat() * pixelsPerSecond
         if (abs((hScroll.maxValue + viewport) - expectedContentPx) > 2f) return@LaunchedEffect
-        val target = (centre * scrollPxPerSecond(pixelsPerSecond) - viewport / 2f)
+        val target = (centre * pixelsPerSecond - viewport / 2f)
             .coerceIn(0f, hScroll.maxValue.toFloat())
         recentreSeconds = null
         hScroll.scrollTo(target.roundToInt())
@@ -475,9 +476,9 @@ fun Timeline(
             }) { Text(if (timeUnit == TimeUnit.Seconds) "View: Seconds" else "View: Beats") }
             Text("Zoom", style = MaterialTheme.typography.bodySmall)
             Slider(
-                value = pixelsPerSecond,
-                onValueChange = { zoomBy(it / pixelsPerSecond) },
-                valueRange = MinPixelsPerSecond..MaxPixelsPerSecond,
+                value = dpPerSecond,
+                onValueChange = { zoomBy(it / dpPerSecond) },
+                valueRange = MinDpPerSecond..MaxDpPerSecond,
                 modifier = Modifier.width(140.dp)
             )
             Text(
@@ -499,7 +500,7 @@ fun Timeline(
         Row(Modifier.fillMaxWidth().padding(horizontal = 6.dp)) {
             Spacer(Modifier.width(legendWidth))
             NavigatorBar(
-                host, contentSeconds, pixelsPerSecond,
+                host, contentSeconds,
                 onZoom = ::zoomBy,
                 hScroll = hScroll,
                 modifier = Modifier.weight(1f)
@@ -545,7 +546,7 @@ fun Timeline(
 
             // ── Lanes ────────────────────────────────────────────────────────
             Column(Modifier.fillMaxSize().horizontalScroll(hScroll).verticalScroll(vScroll)) {
-                val laneWidth = (contentSeconds * pixelsPerSecond).dp
+                val laneWidth = (contentSeconds * dpPerSecond).dp
                 val fallbackBeatsPerBar = host.timeline?.timeSignatureNumerator ?: 4
                 // One tick list for the strip and every lane, so a bar line and
                 // the bar number above it can never disagree.
