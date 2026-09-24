@@ -129,6 +129,8 @@ const char* uapmd_addin_state_name(uapmd_addin_state_t state) {
 
 namespace {
 constexpr const char* kCommandPath       = "/uapmd/app/command/v1";
+constexpr const char* kProjectCommandPath = "/uapmd/app/project-command/v1";
+constexpr const char* kPanelPath         = "/uapmd/app/panel/v1";
 constexpr const char* kClipCommandPath   = "/uapmd/app/clip-command/v1";
 constexpr const char* kClipEditorPath    = "/uapmd/app/timeline/clip-editor/v1";
 constexpr const char* kStemSeparatorPath = "/uapmd/audio-import/stem-separator/v1";
@@ -180,6 +182,11 @@ void uapmd_addin_manager_register_command_registry(uapmd_addin_manager_t mgr, ua
     AM(mgr)->registerExtensionPoint(kCommandPath, CR(reg));
 }
 
+void uapmd_addin_manager_register_project_command_registry(uapmd_addin_manager_t mgr, uapmd_command_registry_t reg) {
+    if (!mgr || !reg) return;
+    AM(mgr)->registerExtensionPoint(kProjectCommandPath, CR(reg));
+}
+
 uint32_t uapmd_command_registry_count(uapmd_command_registry_t reg) {
     return reg ? static_cast<uint32_t>(CR(reg)->commands().size()) : 0;
 }
@@ -215,6 +222,31 @@ bool uapmd_command_registry_invoke_by_id(uapmd_command_registry_t reg, const cha
         }
     }
     return false;
+}
+
+/* ── PanelRegistry ───────────────────────────────────────────────────────── */
+
+static uapmd_addin::PanelRegistry* PR(uapmd_panel_registry_t h) {
+    return reinterpret_cast<uapmd_addin::PanelRegistry*>(h);
+}
+
+uapmd_panel_registry_t uapmd_panel_registry_create(void) {
+    return reinterpret_cast<uapmd_panel_registry_t>(new uapmd_addin::PanelRegistry());
+}
+
+void uapmd_panel_registry_destroy(uapmd_panel_registry_t reg) { delete PR(reg); }
+
+void uapmd_addin_manager_register_panel_registry(uapmd_addin_manager_t mgr, uapmd_panel_registry_t reg) {
+    if (!mgr || !reg) return;
+    AM(mgr)->registerExtensionPoint(kPanelPath, PR(reg));
+}
+
+void uapmd_panel_registry_update(uapmd_panel_registry_t reg) {
+    if (reg) PR(reg)->update();
+}
+
+void uapmd_panel_registry_clear_retained_panels(uapmd_panel_registry_t reg) {
+    if (reg) PR(reg)->clearRetainedPanels();
 }
 
 /* ── ClipCommandRegistry ─────────────────────────────────────────────────── */

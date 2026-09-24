@@ -9,6 +9,7 @@
 #include "uapmd-c-file.h"
 #include "uapmd-c-tooling.h"
 #include "uapmd-c-undo.h"
+#include "uapmd-c-addin.h"
 
 #ifdef __cplusplus
 extern "C" {
@@ -201,6 +202,29 @@ UAPMD_C_EXPORT bool    uapmd_app_set_instance_group(uapmd_app_model_t app, int32
 /* UMP device enable/disable */
 UAPMD_C_EXPORT void uapmd_app_enable_ump_device(uapmd_app_model_t app, int32_t instance_id, const char* device_name);
 UAPMD_C_EXPORT void uapmd_app_disable_ump_device(uapmd_app_model_t app, int32_t instance_id);
+
+/* Virtual MIDI 2.0 devices are the built-in "Virtual MIDI Devices" addin
+ * (uapmd_app::registerVirtualMidiDevicesAddin()). A host that wants them calls
+ * uapmd_app_register_virtual_midi_devices_addin() and publishes the model with
+ * uapmd_addin_manager_register_app_model() (uapmd-c-addin.h) before
+ * uapmd_addin_manager_initialize(). While the addin is not active,
+ * uapmd_app_enable_ump_device() fails with "Virtual MIDI Devices addin is
+ * disabled". */
+UAPMD_C_EXPORT void uapmd_app_register_virtual_midi_devices_addin(void);
+/* Publishes the model at /uapmd/app/model/v1. */
+UAPMD_C_EXPORT void uapmd_addin_manager_register_app_model(uapmd_addin_manager_t mgr, uapmd_app_model_t app);
+UAPMD_C_EXPORT bool uapmd_app_virtual_midi_devices_enabled(uapmd_app_model_t app);
+/* Off by default. Applies to subsequently registered instances; existing
+ * devices are unchanged. */
+UAPMD_C_EXPORT bool uapmd_app_auto_create_virtual_midi_devices(uapmd_app_model_t app);
+UAPMD_C_EXPORT void uapmd_app_set_auto_create_virtual_midi_devices(uapmd_app_model_t app, bool enabled);
+/* AppModel::showVirtualMidiDevices: invoked (on the model thread) when the
+ * addin's command asks the host to toggle its window. NULL clears it; clear it
+ * before the callback's user_data goes away. */
+typedef void (*uapmd_app_show_virtual_midi_devices_cb_t)(void* user_data);
+UAPMD_C_EXPORT void uapmd_app_set_show_virtual_midi_devices_callback(uapmd_app_model_t app,
+                                                                      void* user_data,
+                                                                      uapmd_app_show_virtual_midi_devices_cb_t callback);
 
 /* ═══════════════════════════════════════════════════════════════════════════
  *  Instance details

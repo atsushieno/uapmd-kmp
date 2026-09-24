@@ -11,6 +11,12 @@ import dev.atsushieno.uapmd.initJvmEventLoop
 import dev.atsushieno.uapmd.getAppModel
 import dev.atsushieno.uapmd.instantiateAppModel
 import dev.atsushieno.uapmd.cmp.ui.PluginSelector
+import dev.atsushieno.uapmd.cmp.ui.PluginList
+import dev.atsushieno.uapmd.cmp.ui.PluginGroupMode
+import dev.atsushieno.uapmd.cmp.ui.Toolbar
+import dev.atsushieno.uapmd.cmp.ui.DeviceSettings
+import dev.atsushieno.uapmd.cmp.ui.VirtualMidiDevicesWindow
+import dev.atsushieno.uapmd.cmp.ui.Augene2Window
 import dev.atsushieno.uapmd.cmp.ui.StepSequencerEditor
 import dev.atsushieno.uapmd.cmp.ui.Timeline
 import dev.atsushieno.uapmd.cmp.ui.InstanceDetails
@@ -86,6 +92,9 @@ fun main() {
     }
 
     val view = System.getProperty("uapmd.cmp.snapshotView")
+    // The addin windows need the addins the app starts with.
+    val sceneHost = UapmdHost.attach(model)
+    if (view == "vmidi" || view == "augene2" || view == "toolbar") sceneHost.initAddins()
     if (view == "steps") {
         val added = model.createEmptyMidiClip(0, 0L, tickResolution = 480u, bpm = 120.0)
         stepClip = added.clipId
@@ -123,7 +132,7 @@ fun main() {
         }
         java.awt.EventQueue.invokeAndWait { }
     }
-    if (view == "graph" || view == "instance") {
+    if (view == "graph" || view == "instance" || view == "vmidi") {
         val pluginHost = model.sequencer.engine.pluginHost
         val entry = (0 until pluginHost.catalogEntryCount.toInt())
             .mapNotNull { pluginHost.getCatalogEntry(it.toUInt()) }
@@ -154,13 +163,26 @@ fun main() {
         scene.setContent {
             MaterialTheme(colorScheme = darkColorScheme()) {
                 Surface(color = MaterialTheme.colorScheme.background) {
-                    val host = remember { UapmdHost.attach(model) }
+                    val host = remember { sceneHost }
                     host.refresh()
                     // -Duapmd.cmp.snapshotView picks the view: "selector" for the
                     // Plugin Selector, "graph" for a track's graph editor, the
                     // timeline otherwise.
                     when (view) {
                         "selector" -> PluginSelector(host)
+                        "pluginlist" -> {
+                            host.refreshCatalog()
+                            PluginList(
+                                host.catalog, null, {},
+                                initialGroupMode = PluginGroupMode.entries.firstOrNull {
+                                    it.name == System.getProperty("uapmd.cmp.snapshotGroup")
+                                } ?: PluginGroupMode.Format
+                            )
+                        }
+                        "toolbar" -> Toolbar(host, {}, {}, {}, {}, {}, {}, {}, {})
+                        "devices" -> DeviceSettings(host)
+                        "vmidi" -> VirtualMidiDevicesWindow(host, rememberFloatingWindowManager())
+                        "augene2" -> host.augene2?.let { Augene2Window(it) }
                         "steps" -> StepSequencerEditor(host, 0, stepClip)
                         "graph" -> TrackGraphEditor(host, graphTrack)
                         "pianoroll" -> PianoRollEditor(

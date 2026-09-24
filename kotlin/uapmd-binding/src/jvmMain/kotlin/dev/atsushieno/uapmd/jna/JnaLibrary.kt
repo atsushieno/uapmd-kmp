@@ -1000,6 +1000,25 @@ interface TrackFragmentCb : Callback {
     fun invoke(fragment: Pointer?, error: String?, userData: Pointer?)
 }
 
+// ─── uapmd f5d490d: virtual MIDI devices addin, audio workers, Augene2 ─────────
+
+interface ShowVirtualMidiDevicesCb : Callback {
+    fun invoke(userData: Pointer?)
+}
+
+@FieldOrder("path", "external_path", "compile")
+open class UapmdAugene2Source : Structure() {
+    @JvmField var path: String? = null
+    @JvmField var external_path: String? = null
+    @JvmField var compile: Byte = 0
+}
+
+@FieldOrder("key", "track_index")
+open class UapmdAugene2TrackMapping : Structure() {
+    @JvmField var key: String? = null
+    @JvmField var track_index: Int = -1
+}
+
 interface UapmdLibrary : Library {
 
     companion object {
@@ -1971,4 +1990,54 @@ interface UapmdLibrary : Library {
 
     fun uapmd_app_get_clip_audio_events(app: Pointer?, trackIndex: Int, clipId: Int): UapmdClipAudioEventsResult.ByVal
     fun uapmd_app_set_clip_audio_events(app: Pointer?, trackIndex: Int, clipId: Int, markers: UapmdClipMarker?, markerCount: Int, warps: UapmdAudioWarpPoint?, warpCount: Int): UapmdOpResult.ByVal
+
+    // ══ additions for uapmd f5d490d ════════════════════════════════════════════════
+
+    fun uapmd_midi_api_supports_dynamic_ump_endpoints(apiName: String?): Boolean
+    fun uapmd_engine_audio_workers_configure(engine: Pointer?, workerCount: Int): Boolean
+    fun uapmd_engine_audio_workers_count(engine: Pointer?): Int
+    fun uapmd_engine_audio_workers_stop_on_deadline(engine: Pointer?): Boolean
+    fun uapmd_engine_audio_workers_set_stop_on_deadline(engine: Pointer?, enabled: Boolean)
+    fun uapmd_engine_audio_workers_wait(engine: Pointer?)
+    fun uapmd_engine_audio_workers_fault(engine: Pointer?): Int
+    fun uapmd_engine_audio_workers_reset_fault(engine: Pointer?)
+    fun uapmd_engine_dropped_plugin_parameter_notification_count(engine: Pointer?): Int
+    fun uapmd_engine_dropped_plugin_preset_request_count(engine: Pointer?): Int
+
+    fun uapmd_app_register_virtual_midi_devices_addin()
+    fun uapmd_addin_manager_register_app_model(mgr: Pointer?, app: Pointer?)
+    fun uapmd_app_virtual_midi_devices_enabled(app: Pointer?): Boolean
+    fun uapmd_app_auto_create_virtual_midi_devices(app: Pointer?): Boolean
+    fun uapmd_app_set_auto_create_virtual_midi_devices(app: Pointer?, enabled: Boolean)
+    fun uapmd_app_set_show_virtual_midi_devices_callback(app: Pointer?, userData: Pointer?, callback: ShowVirtualMidiDevicesCb?)
+    fun uapmd_app_document_provider(app: Pointer?): Pointer?
+
+    fun uapmd_addin_manager_register_project_command_registry(mgr: Pointer?, reg: Pointer?)
+    fun uapmd_panel_registry_create(): Pointer?
+    fun uapmd_panel_registry_destroy(reg: Pointer?)
+    fun uapmd_addin_manager_register_panel_registry(mgr: Pointer?, reg: Pointer?)
+    fun uapmd_panel_registry_update(reg: Pointer?)
+    fun uapmd_panel_registry_clear_retained_panels(reg: Pointer?)
+
+    fun uapmd_augene2_available(): Boolean
+    fun uapmd_augene2_register_project_service(timeline: Pointer?, panels: Pointer?)
+    fun uapmd_augene2_integration(): Pointer?
+    fun uapmd_augene2_integration_release(integration: Pointer?)
+    fun uapmd_augene2_integration_is_open(integration: Pointer?): Boolean
+    fun uapmd_augene2_integration_set_open(integration: Pointer?, open: Boolean)
+    fun uapmd_augene2_integration_busy(integration: Pointer?): Boolean
+    fun uapmd_augene2_integration_compiling(integration: Pointer?): Boolean
+    fun uapmd_augene2_integration_source_count(integration: Pointer?): Int
+    fun uapmd_augene2_integration_get_source(integration: Pointer?, index: Int, out: UapmdAugene2Source): Boolean
+    fun uapmd_augene2_integration_track_mapping_count(integration: Pointer?): Int
+    fun uapmd_augene2_integration_get_track_mapping(integration: Pointer?, index: Int, out: UapmdAugene2TrackMapping): Boolean
+    fun uapmd_augene2_integration_status(integration: Pointer?, buf: ByteArray?, bufSize: Long): Long
+    fun uapmd_augene2_integration_diagnostic_count(integration: Pointer?): Int
+    fun uapmd_augene2_integration_get_diagnostic(integration: Pointer?, index: Int, buf: ByteArray?, bufSize: Long): Long
+    fun uapmd_augene2_integration_resource_folder(integration: Pointer?, buf: ByteArray?, bufSize: Long): Long
+    fun uapmd_augene2_integration_set_resource_folder(integration: Pointer?, folder: String?)
+    fun uapmd_augene2_integration_import_sources(integration: Pointer?, compile: Boolean)
+    fun uapmd_augene2_integration_relink_source(integration: Pointer?, path: String?)
+    fun uapmd_augene2_integration_remove_source(integration: Pointer?, path: String?)
+    fun uapmd_augene2_integration_compile(integration: Pointer?)
 }

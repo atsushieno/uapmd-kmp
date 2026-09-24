@@ -19,6 +19,9 @@ class NativeAddinManager internal constructor(
     override fun registerCommandRegistry(registry: CommandRegistry) =
         uapmd_addin_manager_register_command_registry(handle, (registry as NativeCommandRegistry).handle)
 
+    override fun registerProjectCommandRegistry(registry: CommandRegistry) =
+        uapmd_addin_manager_register_project_command_registry(handle, (registry as NativeCommandRegistry).handle)
+
     override fun registerClipCommandRegistry(registry: ClipCommandRegistry) =
         uapmd_addin_manager_register_clip_command_registry(handle, (registry as NativeClipCommandRegistry).handle)
 
@@ -27,6 +30,12 @@ class NativeAddinManager internal constructor(
 
     override fun registerStemSeparatorRegistry(registry: StemSeparatorRegistry) =
         uapmd_addin_manager_register_stem_separator_registry(handle, (registry as NativeStemSeparatorRegistry).handle)
+
+    override fun registerPanelRegistry(registry: PanelRegistry) =
+        uapmd_addin_manager_register_panel_registry(handle, (registry as NativePanelRegistry).handle)
+
+    override fun registerAppModel(model: AppModel) =
+        uapmd_addin_manager_register_app_model(handle, (model as NativeAppModel).handle)
 
     override val directories: List<String>
         get() = (0 until uapmd_addin_manager_directory_count(handle).toInt()).map { i ->
@@ -196,3 +205,68 @@ internal actual fun createClipEditorRegistry(): ClipEditorRegistry =
 
 internal actual fun createStemSeparatorRegistry(): StemSeparatorRegistry =
     NativeStemSeparatorRegistry(uapmd_stem_separator_registry_create() ?: error("uapmd_stem_separator_registry_create failed"))
+
+class NativePanelRegistry internal constructor(internal val handle: uapmd_panel_registry_t) : PanelRegistry {
+    override fun update() = uapmd_panel_registry_update(handle)
+    override fun clearRetainedPanels() = uapmd_panel_registry_clear_retained_panels(handle)
+    override fun close() = uapmd_panel_registry_destroy(handle)
+}
+
+internal actual fun createPanelRegistry(): PanelRegistry =
+    NativePanelRegistry(uapmd_panel_registry_create() ?: error("uapmd_panel_registry_create failed"))
+
+// ─── Augene2 ─────────────────────────────────────────────────────────────────
+
+class NativeAugene2Integration internal constructor(
+    internal val handle: uapmd_augene2_integration_t
+) : Augene2Integration {
+    override var isOpen: Boolean
+        get() = uapmd_augene2_integration_is_open(handle)
+        set(value) = uapmd_augene2_integration_set_open(handle, value)
+    override val busy: Boolean get() = uapmd_augene2_integration_busy(handle)
+    override val compiling: Boolean get() = uapmd_augene2_integration_compiling(handle)
+    override val sources: List<Augene2IntegrationSource>
+        get() = memScoped {
+            val out = alloc<uapmd_augene2_source_t>()
+            (0 until uapmd_augene2_integration_source_count(handle).toInt()).mapNotNull { i ->
+                if (!uapmd_augene2_integration_get_source(handle, i.toUInt(), out.ptr)) return@mapNotNull null
+                Augene2IntegrationSource(
+                    out.path?.toKString() ?: "",
+                    out.external_path?.toKString() ?: "",
+                    out.compile
+                )
+            }
+        }
+    override val trackMappings: List<Augene2TrackMapping>
+        get() = memScoped {
+            val out = alloc<uapmd_augene2_track_mapping_t>()
+            (0 until uapmd_augene2_integration_track_mapping_count(handle).toInt()).mapNotNull { i ->
+                if (!uapmd_augene2_integration_get_track_mapping(handle, i.toUInt(), out.ptr)) return@mapNotNull null
+                Augene2TrackMapping(out.key?.toKString() ?: "", out.track_index)
+            }
+        }
+    override val status: String
+        get() = readCString { buf, size -> uapmd_augene2_integration_status(handle, buf, size) }
+    override val diagnostics: List<String>
+        get() = (0 until uapmd_augene2_integration_diagnostic_count(handle).toInt()).map { i ->
+            readCString { buf, size -> uapmd_augene2_integration_get_diagnostic(handle, i.toUInt(), buf, size) }
+        }
+    override var resourceFolder: String
+        get() = readCString { buf, size -> uapmd_augene2_integration_resource_folder(handle, buf, size) }
+        set(value) = uapmd_augene2_integration_set_resource_folder(handle, value)
+
+    override fun importSources(compile: Boolean) = uapmd_augene2_integration_import_sources(handle, compile)
+    override fun relinkSource(path: String) = uapmd_augene2_integration_relink_source(handle, path)
+    override fun removeSource(path: String) = uapmd_augene2_integration_remove_source(handle, path)
+    override fun compile() = uapmd_augene2_integration_compile(handle)
+    override fun close() = uapmd_augene2_integration_release(handle)
+}
+
+internal actual fun augene2Available(): Boolean = uapmd_augene2_available()
+
+internal actual fun augene2RegisterProjectService(timeline: TimelineFacade, panels: PanelRegistry) =
+    uapmd_augene2_register_project_service(
+        (timeline as NativeTimelineFacade).handle, (panels as NativePanelRegistry).handle)
+
+internal actual fun augene2Integration(): Augene2Integration? =
+    uapmd_augene2_integration()?.let { NativeAugene2Integration(it) }

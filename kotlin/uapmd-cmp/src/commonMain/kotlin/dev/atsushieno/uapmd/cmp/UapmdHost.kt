@@ -15,6 +15,14 @@ import dev.atsushieno.uapmd.AudioImportResult
 import dev.atsushieno.uapmd.StemSeparatorInfo
 import dev.atsushieno.uapmd.TimelineClipTarget
 import dev.atsushieno.uapmd.AddinManager
+import dev.atsushieno.uapmd.Augene2
+import dev.atsushieno.uapmd.Augene2Integration
+import dev.atsushieno.uapmd.AudioWorkerFault
+import dev.atsushieno.uapmd.DocumentProvider
+import dev.atsushieno.uapmd.PanelRegistry
+import dev.atsushieno.uapmd.ProjectAddressBook
+import dev.atsushieno.uapmd.midiApiSupportsDynamicUmpEndpoints
+import dev.atsushieno.uapmd.registerVirtualMidiDevicesAddin
 import dev.atsushieno.uapmd.ClipCommandRegistry
 import dev.atsushieno.uapmd.ClipCommandTarget
 import dev.atsushieno.uapmd.ClipEditorRegistry
@@ -119,6 +127,13 @@ class UapmdHost private constructor(val model: AppModel) {
     val sequencer: RealtimeSequencer = BorrowedRealtimeSequencer(model.sequencer)
 
     var isAudioEngineEnabled by mutableStateOf(false)
+        private set
+
+    /**
+     * A worker fault stops the engine until it is restarted; AppModel reports
+     * the engine as off meanwhile, and turning it on resets the fault.
+     */
+    var audioWorkerFault by mutableStateOf(AudioWorkerFault.None)
         private set
 
     /** Engine control goes through AppModel, never `setActive` + `startAudio` (§2.1). */
@@ -275,8 +290,23 @@ class UapmdHost private constructor(val model: AppModel) {
     var addins: AddinManager? = null
         private set
 
-    /** Application-wide commands addins contributed, for the Command menu. */
+    /** Application-wide commands addins contributed, for the System menu. */
     var commandRegistry: CommandRegistry? = null
+        private set
+
+    /** Project-wide commands (MIR analysis, transcription), for the Project menu. */
+    var projectCommandRegistry: CommandRegistry? = null
+        private set
+
+    /**
+     * Addin panels' services, run from [tickModelServices]. Their ImGui panels
+     * are not drawn here; an addin with a model (Augene2) gets a Compose window.
+     */
+    var panelRegistry: PanelRegistry? = null
+        private set
+
+    /** The Augene2 project service; null when the build has no uapmd-augene2. */
+    var augene2: Augene2Integration? = null
         private set
 
     /** Clip-scoped commands, offered from a clip's context menu. */
@@ -295,28 +325,147 @@ class UapmdHost private constructor(val model: AppModel) {
     var stemSeparatorRegistry: StemSeparatorRegistry? = null
         private set
 
-    private fun initAddins() {
+    internal fun initAddins() {
         runCatching {
             val manager = createAddinManager()
-            model.sequencer.engine.registerAddinExtensionPoints(manager)
+            val engine = model.sequencer.engine
+            engine.registerAddinExtensionPoints(manager)
 
             val commands = CommandRegistry.create()
+            val projectCommands = CommandRegistry.create()
+            val panels = PanelRegistry.create()
             val clipCommands = ClipCommandRegistry.create()
             val clipEditors = ClipEditorRegistry.create()
             val separators = StemSeparatorRegistry.create()
             manager.registerCommandRegistry(commands)
+            manager.registerProjectCommandRegistry(projectCommands)
+            manager.registerPanelRegistry(panels)
+            // Augene2's project persistence works even while its addin is
+            // disabled, so it is registered as a service of its own.
+            if (Augene2.isAvailable)
+                Augene2.registerProjectService(engine.timeline, panels)
             manager.registerClipCommandRegistry(clipCommands)
             manager.registerClipEditorRegistry(clipEditors)
             manager.registerStemSeparatorRegistry(separators)
+            // Virtual MIDI 2.0 devices are an addin over the model; its
+            // command asks the host to toggle the window.
+            manager.registerAppModel(model)
+            model.showVirtualMidiDevices = {
+                onUiThread { isVirtualMidiDevicesOpen = !isVirtualMidiDevicesOpen }
+            }
+            registerVirtualMidiDevicesAddin()
 
             manager.initialize()
 
             addins = manager
             commandRegistry = commands
+            projectCommandRegistry = projectCommands
+            panelRegistry = panels
             clipCommandRegistry = clipCommands
             clipEditorRegistry = clipEditors
             stemSeparatorRegistry = separators
+            augene2 = Augene2.integration()
         }
+    }
+
+    /** `AppModel::documentProvider()`; addins pick documents through it. */
+    private val documentProvider: DocumentProvider? by lazy {
+        runCatching { model.documentProvider }.getOrNull()
+    }
+
+    /**
+     * What uapmd-app's `MainWindow::update()` does every frame, on the model
+     * thread: the addin panels' services (Augene2 applies compilations here),
+     * then the document provider, whose picks complete only when ticked.
+     */
+    fun tickModelServices() {
+        if (isShuttingDown) return
+        runCatching { panelRegistry?.update() }
+        runCatching { documentProvider?.tick() }
+        augene2?.let { isAugene2Open = runCatching { it.isOpen }.getOrDefault(false) }
+    }
+
+    /** Project-wide commands, re-read for the same reason as [addinCommands]. */
+    fun projectCommands(): List<AddinCommandInfo> = projectCommandRegistry?.commands.orEmpty()
+
+    fun invokeProjectCommand(id: String) {
+        projectCommandRegistry?.invokeById(id)
+        refresh()
+    }
+
+    // ── Virtual MIDI Devices ────────────────────────────────────────────────
+
+    /** Toggled by the Virtual MIDI Devices addin's command; closed when the addin is. */
+    var isVirtualMidiDevicesOpen by mutableStateOf(false)
+
+    var virtualMidiDevicesEnabled by mutableStateOf(false)
+        private set
+
+    var autoCreateVirtualMidiDevices: Boolean
+        get() = model.autoCreateVirtualMidiDevices
+        set(value) { model.autoCreateVirtualMidiDevices = value; refresh() }
+
+    /**
+     * uapmd-app's `TrackInstance` device fields for one instance
+     * (`MainWindow::buildTrackInstanceInfo`): the label the model holds, or
+     * `name [format] T<n>` / `... Master` when it has none.
+     */
+    data class VirtualMidiDeviceRow(
+        val instanceId: Int,
+        val trackIndex: Int,
+        val pluginName: String,
+        val pluginFormat: String,
+        val defaultDeviceName: String,
+        val running: Boolean,
+        val instantiating: Boolean,
+        val supported: Boolean,
+        val statusMessage: String
+    )
+
+    fun virtualMidiDeviceRow(instanceId: Int): VirtualMidiDeviceRow? {
+        val engine = model.sequencer.engine
+        val instance = engine.getPluginInstance(instanceId) ?: return null
+        val trackIndex = engine.findTrackForInstance(instanceId)
+        val device = runCatching { model.deviceForInstance(instanceId) }.getOrNull()
+        val defaultName = device?.label?.takeIf { it.isNotEmpty() } ?: buildString {
+            append("${instance.displayName} [${instance.formatName}]")
+            if (trackIndex >= 0) append(" T${trackIndex + 1}")
+            else if (trackIndex == ProjectAddressBook.MASTER_TRACK_INDEX) append(" Master")
+        }
+        return VirtualMidiDeviceRow(
+            instanceId = instanceId,
+            trackIndex = trackIndex,
+            pluginName = instance.displayName,
+            pluginFormat = instance.formatName,
+            defaultDeviceName = defaultName,
+            running = device?.running == true,
+            instantiating = device?.instantiating == true,
+            supported = device != null && midiApiSupportsDynamicUmpEndpoints(device.apiName),
+            statusMessage = device?.statusMessage.orEmpty()
+        )
+    }
+
+    /** `MainWindow::handleEnableDevice`: the label first, then the device. */
+    fun enableVirtualMidiDevice(instanceId: Int, deviceName: String) {
+        model.updateDeviceLabel(instanceId, deviceName)
+        model.enableUmpDevice(instanceId, deviceName)
+        refresh()
+    }
+
+    fun disableVirtualMidiDevice(instanceId: Int) {
+        model.disableUmpDevice(instanceId)
+        refresh()
+    }
+
+    // ── Augene2 ─────────────────────────────────────────────────────────────
+
+    /** Mirrors [Augene2Integration.isOpen]; its command opens it, disabling the addin closes it. */
+    var isAugene2Open by mutableStateOf(false)
+        private set
+
+    fun openAugene2(open: Boolean) {
+        augene2?.isOpen = open
+        isAugene2Open = open
     }
 
     /**
@@ -445,33 +594,53 @@ class UapmdHost private constructor(val model: AppModel) {
 
     // ── Audio devices ───────────────────────────────────────────────────────
 
-    data class UiAudioDevice(val id: Int, val name: String, val isInput: Boolean)
+    /**
+     * [index] is the device's position among the devices of its own direction,
+     * which is what the device manager's open() takes - the same count
+     * uapmd-app makes in `MainWindow::updateAudioDeviceSettingsData`.
+     */
+    data class UiAudioDevice(val index: Int, val name: String, val isInput: Boolean)
 
     fun audioDevices(): List<UiAudioDevice> {
         val mgr = getAudioDeviceManager()
         val result = mutableListOf<UiAudioDevice>()
+        var inputs = 0
+        var outputs = 0
         for (i in 0 until mgr.deviceCount.toInt()) {
             val info = mgr.getDeviceInfo(i.toUInt()) ?: continue
-            when (info.directions) {
-                AudioIoDirection.Input -> result += UiAudioDevice(info.id, info.name, true)
-                AudioIoDirection.Output -> result += UiAudioDevice(info.id, info.name, false)
-                AudioIoDirection.Duplex -> {
-                    result += UiAudioDevice(info.id, info.name, true)
-                    result += UiAudioDevice(info.id, info.name, false)
-                }
-            }
+            if (info.directions == AudioIoDirection.Input || info.directions == AudioIoDirection.Duplex)
+                result += UiAudioDevice(inputs++, info.name, true)
+            if (info.directions == AudioIoDirection.Output || info.directions == AudioIoDirection.Duplex)
+                result += UiAudioDevice(outputs++, info.name, false)
         }
         return result
     }
 
-    /** Returns a status line, or null when the change applied cleanly. */
-    fun applyDeviceSettings(inputId: Int, outputId: Int, sampleRate: Int, bufferSize: Int): String? {
+    /**
+     * Returns a status line, or null when the change applied cleanly. Indexes
+     * are per direction; -1 is the system default and
+     * [dev.atsushieno.uapmd.AudioDeviceManager.NO_DEVICE_INDEX] leaves that
+     * direction closed.
+     */
+    fun applyDeviceSettings(inputIndex: Int, outputIndex: Int, sampleRate: Int, bufferSize: Int): String? {
         // AppModel owns the UI-facing values; the sequencer owns the device.
         model.updateAudioDeviceSettings(sampleRate, bufferSize.toUInt())
-        val ok = sequencer.reconfigureAudioDevice(inputId, outputId, sampleRate.toUInt(), bufferSize.toUInt())
+        val ok = sequencer.reconfigureAudioDevice(inputIndex, outputIndex, sampleRate.toUInt(), bufferSize.toUInt())
         refresh()
         return if (ok) null else "Failed to reconfigure the audio device."
     }
+
+    // ── Audio workers ───────────────────────────────────────────────────────
+
+    val audioWorkerCount: UInt get() = model.sequencer.engine.audioWorkers.count
+
+    /** Returns an error line, or null when the pool took the new size. */
+    fun configureAudioWorkers(count: UInt): String? =
+        if (model.sequencer.engine.audioWorkers.configure(count)) null else "Could not configure audio workers."
+
+    var stopAudioEngineOnDeadline: Boolean
+        get() = model.sequencer.engine.audioWorkers.stopOnDeadline
+        set(value) { model.sequencer.engine.audioWorkers.stopOnDeadline = value }
 
     // ── Plugin catalog ──────────────────────────────────────────────────────
 
@@ -1640,6 +1809,11 @@ class UapmdHost private constructor(val model: AppModel) {
      */
     fun refresh(structural: Boolean = true) {
         isAudioEngineEnabled = model.isAudioEngineEnabled
+        audioWorkerFault = runCatching { model.sequencer.engine.audioWorkers.fault }
+            .getOrDefault(AudioWorkerFault.None)
+        virtualMidiDevicesEnabled = runCatching { model.virtualMidiDevicesEnabled }.getOrDefault(false)
+        // uapmd-app closes the window whenever the addin is not active.
+        if (!virtualMidiDevicesEnabled) isVirtualMidiDevicesOpen = false
         isScanning = model.isScanning
         scanProgress = runCatching { model.slowScanProgress }.getOrDefault(SlowScanProgress())
         scanError = runCatching { model.lastPluginScanError }.getOrNull()
@@ -1738,7 +1912,13 @@ class UapmdHost private constructor(val model: AppModel) {
         nativeUiPresentations.clear()
         nativeUiVisibleInstanceIds = emptySet()
         presentationsToClose.forEach { runCatching { it.close() } }
+        // uapmd-app's order (MainWindow::shutdown): addins first, then the
+        // model's handler, then the project services retained past them.
         addins?.shutdown()
+        runCatching { model.showVirtualMidiDevices = null }
+        panelRegistry?.clearRetainedPanels()
+        augene2?.close()
+        augene2 = null
         addins?.close()
         model.setAudioEngineEnabled(false)
         cleanupUapmdAppModel()
@@ -1818,6 +1998,16 @@ expect val platformSupportsRemoteScanner: Boolean
 expect val platformStartsWithAudioEngineEnabled: Boolean
 
 /**
+ * Whether Device Settings offers the audio worker controls. Desktop only, as in
+ * uapmd-app (`MainWindow::renderDeviceSettingsWindow` hides them on Emscripten,
+ * Android and iOS).
+ */
+expect val platformSupportsAudioWorkerSettings: Boolean
+
+/** `std::thread::hardware_concurrency()`: 0 when unknown. */
+expect val platformHardwareConcurrency: Int
+
+/**
  * Desktop/mobile call `notifyPersistentStorageReady()` directly. On web the
  * binding's `initUapmdWasm()` has already mounted IDBFS before this point.
  */
@@ -1856,6 +2046,7 @@ fun rememberUapmdHost(): UapmdHost {
                 pollTick++
                 host.refresh(structural = pollTick % 5 == 0)
             }
+            if (!host.isLoadingProject) host.tickModelServices()
             tickPlatformFilePicker()
             if (pendingFormat != null && !host.isScanning && host.catalog.isNotEmpty()) {
                 val format = pendingFormat

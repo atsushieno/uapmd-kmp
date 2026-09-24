@@ -1384,6 +1384,98 @@ external interface UapmdCApiModule : JsAny {
     @JsName("_uapmd_app_connect_track_graph")
     fun uapmdAppConnectTrackGraph(out: Int, app: Int, trackIndex: Int, connection: Int)
 
+
+    // ── uapmd f5d490d: audio workers, Virtual MIDI Devices addin, panels, Augene2 ──
+
+    @JsName("_uapmd_midi_api_supports_dynamic_ump_endpoints")
+    fun uapmdMidiApiSupportsDynamicUmpEndpoints(apiName: Int): Boolean
+    @JsName("_uapmd_engine_audio_workers_configure")
+    fun uapmdEngineAudioWorkersConfigure(engine: Int, workerCount: Int): Boolean
+    @JsName("_uapmd_engine_audio_workers_count")
+    fun uapmdEngineAudioWorkersCount(engine: Int): Int
+    @JsName("_uapmd_engine_audio_workers_stop_on_deadline")
+    fun uapmdEngineAudioWorkersStopOnDeadline(engine: Int): Boolean
+    @JsName("_uapmd_engine_audio_workers_set_stop_on_deadline")
+    fun uapmdEngineAudioWorkersSetStopOnDeadline(engine: Int, enabled: Boolean)
+    @JsName("_uapmd_engine_audio_workers_wait")
+    fun uapmdEngineAudioWorkersWait(engine: Int)
+    @JsName("_uapmd_engine_audio_workers_fault")
+    fun uapmdEngineAudioWorkersFault(engine: Int): Int
+    @JsName("_uapmd_engine_audio_workers_reset_fault")
+    fun uapmdEngineAudioWorkersResetFault(engine: Int)
+    @JsName("_uapmd_engine_dropped_plugin_parameter_notification_count")
+    fun uapmdEngineDroppedPluginParameterNotificationCount(engine: Int): Int
+    @JsName("_uapmd_engine_dropped_plugin_preset_request_count")
+    fun uapmdEngineDroppedPluginPresetRequestCount(engine: Int): Int
+
+    @JsName("_uapmd_app_register_virtual_midi_devices_addin")
+    fun uapmdAppRegisterVirtualMidiDevicesAddin()
+    @JsName("_uapmd_addin_manager_register_app_model")
+    fun uapmdAddinManagerRegisterAppModel(mgr: Int, app: Int)
+    @JsName("_uapmd_app_virtual_midi_devices_enabled")
+    fun uapmdAppVirtualMidiDevicesEnabled(app: Int): Boolean
+    @JsName("_uapmd_app_auto_create_virtual_midi_devices")
+    fun uapmdAppAutoCreateVirtualMidiDevices(app: Int): Boolean
+    @JsName("_uapmd_app_set_auto_create_virtual_midi_devices")
+    fun uapmdAppSetAutoCreateVirtualMidiDevices(app: Int, enabled: Boolean)
+    @JsName("_uapmd_app_set_show_virtual_midi_devices_callback")
+    fun uapmdAppSetShowVirtualMidiDevicesCallback(app: Int, userData: Int, callback: Int)
+
+    @JsName("_uapmd_addin_manager_register_project_command_registry")
+    fun uapmdAddinManagerRegisterProjectCommandRegistry(mgr: Int, reg: Int)
+    @JsName("_uapmd_panel_registry_create")
+    fun uapmdPanelRegistryCreate(): Int
+    @JsName("_uapmd_panel_registry_destroy")
+    fun uapmdPanelRegistryDestroy(reg: Int)
+    @JsName("_uapmd_addin_manager_register_panel_registry")
+    fun uapmdAddinManagerRegisterPanelRegistry(mgr: Int, reg: Int)
+    @JsName("_uapmd_panel_registry_update")
+    fun uapmdPanelRegistryUpdate(reg: Int)
+    @JsName("_uapmd_panel_registry_clear_retained_panels")
+    fun uapmdPanelRegistryClearRetainedPanels(reg: Int)
+
+    @JsName("_uapmd_augene2_available")
+    fun uapmdAugene2Available(): Boolean
+    @JsName("_uapmd_augene2_register_project_service")
+    fun uapmdAugene2RegisterProjectService(timeline: Int, panels: Int)
+    @JsName("_uapmd_augene2_integration")
+    fun uapmdAugene2Integration(): Int
+    @JsName("_uapmd_augene2_integration_release")
+    fun uapmdAugene2IntegrationRelease(h: Int)
+    @JsName("_uapmd_augene2_integration_is_open")
+    fun uapmdAugene2IntegrationIsOpen(h: Int): Boolean
+    @JsName("_uapmd_augene2_integration_set_open")
+    fun uapmdAugene2IntegrationSetOpen(h: Int, open: Boolean)
+    @JsName("_uapmd_augene2_integration_busy")
+    fun uapmdAugene2IntegrationBusy(h: Int): Boolean
+    @JsName("_uapmd_augene2_integration_compiling")
+    fun uapmdAugene2IntegrationCompiling(h: Int): Boolean
+    @JsName("_uapmd_augene2_integration_source_count")
+    fun uapmdAugene2IntegrationSourceCount(h: Int): Int
+    @JsName("_uapmd_augene2_integration_get_source")
+    fun uapmdAugene2IntegrationGetSource(h: Int, index: Int, outPtr: Int): Boolean
+    @JsName("_uapmd_augene2_integration_track_mapping_count")
+    fun uapmdAugene2IntegrationTrackMappingCount(h: Int): Int
+    @JsName("_uapmd_augene2_integration_get_track_mapping")
+    fun uapmdAugene2IntegrationGetTrackMapping(h: Int, index: Int, outPtr: Int): Boolean
+    @JsName("_uapmd_augene2_integration_status")
+    fun uapmdAugene2IntegrationStatus(h: Int, buf: Int, bufSize: Int): Int
+    @JsName("_uapmd_augene2_integration_diagnostic_count")
+    fun uapmdAugene2IntegrationDiagnosticCount(h: Int): Int
+    @JsName("_uapmd_augene2_integration_get_diagnostic")
+    fun uapmdAugene2IntegrationGetDiagnostic(h: Int, index: Int, buf: Int, bufSize: Int): Int
+    @JsName("_uapmd_augene2_integration_resource_folder")
+    fun uapmdAugene2IntegrationResourceFolder(h: Int, buf: Int, bufSize: Int): Int
+    @JsName("_uapmd_augene2_integration_set_resource_folder")
+    fun uapmdAugene2IntegrationSetResourceFolder(h: Int, folder: Int)
+    @JsName("_uapmd_augene2_integration_import_sources")
+    fun uapmdAugene2IntegrationImportSources(h: Int, compile: Boolean)
+    @JsName("_uapmd_augene2_integration_relink_source")
+    fun uapmdAugene2IntegrationRelinkSource(h: Int, path: Int)
+    @JsName("_uapmd_augene2_integration_remove_source")
+    fun uapmdAugene2IntegrationRemoveSource(h: Int, path: Int)
+    @JsName("_uapmd_augene2_integration_compile")
+    fun uapmdAugene2IntegrationCompile(h: Int)
 }
 
 
@@ -1572,6 +1664,14 @@ internal val pendingRenderCancelCallbacks   = mutableMapOf<Int, (() -> Boolean)?
 internal val pendingRequestStateCallbacks   = mutableMapOf<Int, (ByteArray?, String?) -> Unit>()
 internal val pendingLoadStateCallbacks      = mutableMapOf<Int, (String?) -> Unit>()
 internal val pendingImportMidiTracksCallbacks = mutableMapOf<Int, (Boolean, String?, Int) -> Unit>()
+
+/** `AppModel::showVirtualMidiDevices`; C signature `void(void*)`. */
+internal var showVirtualMidiDevicesHandler: (() -> Unit)? = null
+
+@JsExport
+fun uapmdDispatchShowVirtualMidiDevices(cbId: Int, userData: Int) {
+    showVirtualMidiDevicesHandler?.invoke()
+}
 
 @JsExport
 fun uapmdDispatchCreateInstance(cbId: Int, instanceId: Int, errorPtr: Int) {

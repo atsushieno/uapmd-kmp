@@ -44,7 +44,7 @@ uint32@8, ptr@12, sizeof 16; `uapmd_ump_event_t` tick@0, word_count@8, words@12,
 |---|---|---|
 | Plugin UI | `show_plugin_ui` (the parent-handle/resize-handler form) | no |
 | Plugin state | `save_plugin_state`, `load_plugin_state` | **yes** — `uapmd_plugin_state_result_t` |
-| Project I/O | `document_provider` | no |
+| Project I/O | `document_provider` beyond `tick()` — `AppModel.documentProvider` is bound with `tick()` only, which is all a host needs for addins' picks to complete; pick/read/write still go through the per-platform file pickers | no |
 | Clips | `add_clip_to_track`, `add_midi_clip_to_track`, `add_midi_clip_from_data` | **yes** — `uapmd_clip_add_result_t`. Note `TimelineFacade.addMidiClipFromFile()` / `addAudioClip()` were already bound and cover the common cases |
 | Offline render | `start_render`, `cancel_render`, `get_render_status`, `clear_render_status` | **yes**. Not needed so far: `SequencerEngine.renderOffline()` was already bound and drives the Exporter directly |
 | Track graph | `request_show_track_graph` (the request/serve indirection; not needed — the app opens its own window) | no |
@@ -60,15 +60,34 @@ first. All predate 0.5.6 — they were simply never needed by a KMP app before.
 
 | Item | Home in uapmd | Needed for |
 |---|---|---|
-| `UapmdJSRuntime` | `tools/uapmd-app-model/…/UapmdJSRuntime.hpp` | Script editor window |
-| `McpServer` | `tools/uapmd-app-model/…/McpServer.hpp` | MCP settings window |
 | `PreparedSequencerTrack` family — `prepareTrack`, `addPluginToPreparedTrack`, `publishPreparedTrack` | `uapmd-engine/…/SequencerEngine.hpp` | 0.5.6 delta not covered by `13dac10` |
 | `PluginInstanceLifecycleListener` add/remove | same | 0.5.6 delta not covered by `13dac10` |
 | `restoreNodeId` parameter on `addPluginToTrack()` | same | 0.5.6 delta not covered by `13dac10` |
-| Demucs source-separation import | `tools/uapmd-app-model` | the Import ▸ Split Audio Tracks path |
 | `FrozenTrackManager::errorMessageForTrack` | `uapmd-engine/…/FrozenTrackManager.hpp` | showing why a freeze failed; the runtime state alone says only that it did |
 
 Deliberately **not** wanted, for the record: `setEngineActive` / `setOutputMuted` /
 `resetProcessingState` / `outputAnalyser`. They are internals of a sequence
 `uapmd_app_set_audio_engine_enabled` already performs correctly; exposing them would only invite
 a worse reimplementation in Kotlin.
+
+---
+
+## 3 · Deferred from the `f5d490d5` bump
+
+Bound in this bump: audio workers (count, configure, stop-on-deadline, fault, reset,
+wait), the two dropped-event counters, `kNoDeviceIndex`, the Virtual MIDI Devices addin
+and its `AppModel` members, the project-command and panel registries, `/uapmd/app/model/v1`,
+`uapmd-augene2` (project service and the `Integration` model from
+`patches/uapmd/0001-*`), and the pre-existing `midiApiSupportsDynamicUmpEndpoints()`.
+
+Not bound, deliberately or for now:
+
+| Item | Home in uapmd | Why |
+|---|---|---|
+| `AudioWorkers::diagnostic()` | `uapmd-engine/…/AudioWorkers.hpp` | a struct with 33- and 128-element snapshot arrays; the MCP `get_audio_worker_diagnostics` tool already exposes it through `McpServer` |
+| `AudioWorkers::setThreadSetup()` | same | takes a `std::function` returning a C++ token; device-side plumbing |
+| `AudioPerformanceCounter` | `…/AudioPerformanceCounter.hpp` | no consumer yet; a lock-free queue drained with `tryDequeue()` |
+| `TimelineFacade::replaceMidiClipData(ClipInfo)` | `…/TimelineFacade.hpp` | needs a `ClipInfo` marshalled *into* C++; only Augene2 uses it, internally |
+| `MidiClipReader` in Kotlin | `uapmd-data` | C has `read_any_format` and now `read_smf2_clip` plus `ClipInfo.name`; Kotlin has never bound the reader |
+| `PanelRegistry::render()` | `uapmd-addin-core` | draws ImGui; an addin that wants other toolkits exposes a model, as Augene2 now does |
+| `SequencerTrack` plugin-output events and processing groups, `supportsParallelTrackProcessing()`, `AudioThreadScope` | `uapmd-engine`, `uapmd-graph`, `remidy` | internals of the parallel track scheduler |

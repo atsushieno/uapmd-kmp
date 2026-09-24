@@ -58,7 +58,7 @@ class AndroidTimelineTrack internal constructor(
 // ─── AndroidTimelineFacade ───────────────────────────────────────────────────
 
 class AndroidTimelineFacade internal constructor(
-    private val handle: Long
+    internal val handle: Long
 ) : TimelineFacade {
 
     private val history = AndroidTimelineHistory(handle)

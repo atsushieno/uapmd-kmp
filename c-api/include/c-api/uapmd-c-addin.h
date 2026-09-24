@@ -22,6 +22,7 @@ typedef struct uapmd_command_registry*        uapmd_command_registry_t;
 typedef struct uapmd_clip_command_registry*   uapmd_clip_command_registry_t;
 typedef struct uapmd_clip_editor_registry*    uapmd_clip_editor_registry_t;
 typedef struct uapmd_stem_separator_registry* uapmd_stem_separator_registry_t;
+typedef struct uapmd_panel_registry*          uapmd_panel_registry_t;
 
 /* ── Types ───────────────────────────────────────────────────────────────── */
 
@@ -97,14 +98,20 @@ UAPMD_C_EXPORT const char* uapmd_addin_state_name(uapmd_addin_state_t state);
  *  below are the ones the addins uapmd ships attach to, so a host that wants
  *  them has to publish all of these before initialize():
  *
- *    /uapmd/app/command/v1                    the MIR, Basic Pitch, DrumScript
- *                                             and Demucs analysis commands
+ *    /uapmd/app/command/v1                    application commands (Virtual MIDI
+ *                                             Devices, Augene2 Integration)
+ *    /uapmd/app/project-command/v1            project-wide commands: the MIR,
+ *                                             Basic Pitch, DrumScript and pitch
+ *                                             transcription analyses
  *    /uapmd/app/clip-command/v1               their clip-scoped counterparts
  *    /uapmd/app/timeline/clip-editor/v1       timeline clip editors
  *    /uapmd/audio-import/stem-separator/v1    Demucs and BS-Roformer
+ *    /uapmd/app/panel/v1                      addin panels (Augene2 Integration)
  *
  *  uapmd_engine_register_addin_extension_points() publishes the engine's own
- *  two (/uapmd/engine/v1 and /uapmd/audio-graph/provider/v1) separately.
+ *  two (/uapmd/engine/v1 and /uapmd/audio-graph/provider/v1) separately, and
+ *  uapmd_addin_manager_register_app_model() (uapmd-c-app.h) publishes
+ *  /uapmd/app/model/v1 for the Virtual MIDI Devices addin.
  *
  *  Every index below addresses into the registry's current contents, which
  *  change when an addin is enabled or disabled. Treat an index as valid only
@@ -133,6 +140,9 @@ UAPMD_C_EXPORT bool     uapmd_command_registry_invoke(uapmd_command_registry_t r
 /* Invoking by id survives the list changing underneath, which an index does
  * not. False when no command with that id is registered. */
 UAPMD_C_EXPORT bool     uapmd_command_registry_invoke_by_id(uapmd_command_registry_t reg, const char* id);
+/* Project-wide commands are a CommandRegistry of their own, published at
+ * /uapmd/app/project-command/v1; read and invoke it with the functions above. */
+UAPMD_C_EXPORT void     uapmd_addin_manager_register_project_command_registry(uapmd_addin_manager_t mgr, uapmd_command_registry_t reg);
 
 /* The clip a clip-scoped command is being offered for. The identifiers are the
  * ones the rest of this API takes, so a command resolves the clip through the
@@ -175,6 +185,24 @@ UAPMD_C_EXPORT void     uapmd_clip_editor_registry_destroy(uapmd_clip_editor_reg
 UAPMD_C_EXPORT void     uapmd_addin_manager_register_clip_editor_registry(uapmd_addin_manager_t mgr, uapmd_clip_editor_registry_t reg);
 UAPMD_C_EXPORT uint32_t uapmd_clip_editor_registry_count(uapmd_clip_editor_registry_t reg);
 UAPMD_C_EXPORT bool     uapmd_clip_editor_registry_get(uapmd_clip_editor_registry_t reg, uint32_t index, uapmd_clip_editor_info_t* out);
+
+/* ── Panels ──────────────────────────────────────────────────────────────── */
+
+/* Model-thread services with an optional panel (uapmd_addin::PanelRegistry).
+ * update() runs every registered panel's service work -- call it from the model
+ * thread on every UI tick, whether or not any panel is shown. Panels draw
+ * themselves with render() inside the host's immediate-mode UI loop, which is
+ * not bound, for the same reason clip editors are not; an addin that wants to be
+ * presented by other toolkits exposes a model of its own (see uapmd-c-augene2.h).
+ *
+ * Retained panels are project services that outlive their addin's UI: release
+ * them with clear_retained_panels() after uapmd_addin_manager_shutdown(), while
+ * the sequencer engine is still alive. */
+UAPMD_C_EXPORT uapmd_panel_registry_t uapmd_panel_registry_create(void);
+UAPMD_C_EXPORT void uapmd_panel_registry_destroy(uapmd_panel_registry_t reg);
+UAPMD_C_EXPORT void uapmd_addin_manager_register_panel_registry(uapmd_addin_manager_t mgr, uapmd_panel_registry_t reg);
+UAPMD_C_EXPORT void uapmd_panel_registry_update(uapmd_panel_registry_t reg);
+UAPMD_C_EXPORT void uapmd_panel_registry_clear_retained_panels(uapmd_panel_registry_t reg);
 
 /* ── Stem separation ─────────────────────────────────────────────────────── */
 

@@ -269,6 +269,9 @@ typedef struct uapmd_smf_convert_result {
     uint32_t time_sig_change_count;
     uint32_t tick_resolution;
     double detected_tempo;
+    /* MidiClipReader::ClipInfo::name, the embedded MIDI 2.0 clip-name
+     * metadata; NULL when the clip carries none (and for every SMF conversion). */
+    const char* name;
 } uapmd_smf_convert_result_t;
 
 UAPMD_C_EXPORT uapmd_smf_convert_result_t* uapmd_smf_convert_to_ump(const char* smf_file_path);
@@ -280,6 +283,9 @@ UAPMD_C_EXPORT void uapmd_smf_convert_result_free(uapmd_smf_convert_result_t* re
  * ═══════════════════════════════════════════════════════════════════════════ */
 
 UAPMD_C_EXPORT uapmd_smf_convert_result_t* uapmd_midi_clip_read_any_format(const char* file_path);
+/* MidiClipReader::readSmf2Clip(): an in-memory SMF2 clip (from a compiler or
+ * an import), as UMP words from its first DeltaClockstamp on; no file needed. */
+UAPMD_C_EXPORT uapmd_smf_convert_result_t* uapmd_midi_clip_read_smf2_clip(const uapmd_ump_t* words, uint32_t word_count);
 UAPMD_C_EXPORT bool uapmd_midi_clip_is_valid_smf2(const char* file_path);
 UAPMD_C_EXPORT bool uapmd_midi_clip_is_valid_smf(const char* file_path);
 

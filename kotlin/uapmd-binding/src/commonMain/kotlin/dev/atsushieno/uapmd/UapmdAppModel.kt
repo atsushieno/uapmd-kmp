@@ -129,9 +129,30 @@ interface AppModel {
     fun getInstanceGroup(instanceId: Int): UByte
     fun setInstanceGroup(instanceId: Int, group: UByte): Boolean
 
-    /** Registers the instance as a virtual MIDI 2.0 device where the platform supports it. */
+    /**
+     * Registers the instance as a virtual MIDI 2.0 device where the platform
+     * supports it. Fails while the Virtual MIDI Devices addin is not active
+     * (see [registerVirtualMidiDevicesAddin]).
+     */
     fun enableUmpDevice(instanceId: Int, deviceName: String)
     fun disableUmpDevice(instanceId: Int)
+
+    /** True while the Virtual MIDI Devices addin is active. */
+    val virtualMidiDevicesEnabled: Boolean
+    /**
+     * Off by default. Applies to instances registered afterwards; existing
+     * devices are unchanged.
+     */
+    var autoCreateVirtualMidiDevices: Boolean
+    /**
+     * `AppModel::showVirtualMidiDevices`: invoked on the model thread when the
+     * addin's command asks the host to toggle its window. Set it before the
+     * addin initializes, and clear it (null) before the host goes away.
+     */
+    var showVirtualMidiDevices: (() -> Unit)?
+
+    /** `AppModel::documentProvider()`, which addins pick and read documents through. */
+    val documentProvider: DocumentProvider
 
     fun requestShowInstanceDetails(instanceId: Int)
     fun requestShowPluginUi(instanceId: Int)
@@ -760,3 +781,12 @@ data class RenderToFileStatus(
     val message: String,
     val outputPath: String
 )
+
+/**
+ * `uapmd::IDocumentProvider`, as far as a host that only needs to keep it
+ * running has to see it. Picks complete from [tick], so a host ticks the
+ * provider on every UI update, as uapmd-app does.
+ */
+interface DocumentProvider {
+    fun tick()
+}

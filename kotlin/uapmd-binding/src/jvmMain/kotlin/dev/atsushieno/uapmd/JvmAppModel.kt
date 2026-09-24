@@ -172,6 +172,32 @@ class JvmAppModel internal constructor(
 
     override fun disableUmpDevice(instanceId: Int) = lib.uapmd_app_disable_ump_device(handle, instanceId)
 
+    override val virtualMidiDevicesEnabled: Boolean
+        get() = lib.uapmd_app_virtual_midi_devices_enabled(handle)
+
+    override var autoCreateVirtualMidiDevices: Boolean
+        get() = lib.uapmd_app_auto_create_virtual_midi_devices(handle)
+        set(value) = lib.uapmd_app_set_auto_create_virtual_midi_devices(handle, value)
+
+    override var showVirtualMidiDevices: (() -> Unit)?
+        get() = showVirtualMidiDevicesHandler
+        set(value) {
+            showVirtualMidiDevicesHandler = value
+            // AppModel is a process-wide singleton and this wrapper is not, so
+            // the trampoline lives at file scope where JNA cannot lose it.
+            showVirtualMidiDevicesCb = value?.let { handler ->
+                object : ShowVirtualMidiDevicesCb {
+                    override fun invoke(userData: Pointer?) = handler()
+                }
+            }
+            lib.uapmd_app_set_show_virtual_midi_devices_callback(handle, null, showVirtualMidiDevicesCb)
+        }
+
+    override val documentProvider: DocumentProvider
+        get() = JvmDocumentProvider(
+            lib.uapmd_app_document_provider(handle) ?: error("uapmd_app_document_provider returned null")
+        )
+
     override fun requestShowInstanceDetails(instanceId: Int) =
         lib.uapmd_app_request_show_instance_details(handle, instanceId)
 
@@ -732,6 +758,15 @@ actual fun getAppModel(): AppModel =
     JvmAppModel(lib.uapmd_app_instance() ?: error("uapmd_app_instance returned null; call instantiateAppModel() first"))
 
 actual fun cleanupAppModel() = lib.uapmd_app_cleanup()
+
+actual fun registerVirtualMidiDevicesAddin() = lib.uapmd_app_register_virtual_midi_devices_addin()
+
+private var showVirtualMidiDevicesHandler: (() -> Unit)? = null
+private var showVirtualMidiDevicesCb: ShowVirtualMidiDevicesCb? = null
+
+class JvmDocumentProvider internal constructor(internal val handle: Pointer) : DocumentProvider {
+    override fun tick() = lib.uapmd_document_provider_tick(handle)
+}
 
 internal fun UapmdPianoRollNote.toKotlin() = PianoRollNote(
     startSeconds = start_seconds,

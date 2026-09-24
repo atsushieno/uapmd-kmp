@@ -20,3 +20,8 @@ actual val platformStartsWithAudioEngineEnabled: Boolean = false
 actual fun notifyPersistentStorageReadyForPlatform(model: AppModel) = model.notifyPersistentStorageReady()
 
 actual fun cleanupUapmdAppModel() = cleanupAppModel()
+
+actual val platformSupportsAudioWorkerSettings: Boolean = false
+
+actual val platformHardwareConcurrency: Int
+    get() = 0

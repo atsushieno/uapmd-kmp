@@ -85,7 +85,7 @@ class NativeTimelineTrack internal constructor(
 // ---------------------------------------------------------------------------
 
 class NativeTimelineFacade internal constructor(
-    private val handle: uapmd_timeline_facade_t
+    internal val handle: uapmd_timeline_facade_t
 ) : TimelineFacade {
 
     private val history = NativeTimelineHistory(handle)

@@ -92,12 +92,10 @@ android {
                     "-DMIDICCI_SKIP_TOOLS=ON",
                     "-DCPM_SOURCE_CACHE=${cpmCacheDir.absolutePath}",
                     "-DANDROID_STL=c++_shared",
-                    // ARA_SDK's ARAInterface.h only supports x86/x86_64 and 64-bit ARM, so it
-                    // fails to compile for the 32-bit armeabi-v7a ABI ("unsupported CPU
-                    // architecture"). uapmd already defaults UAPMD_ENABLE_ARA to OFF, but
-                    // option() cannot lower a value already present in an AGP .cxx CMake cache,
-                    // so state it explicitly to keep Android builds reproducible.
-                    "-DUAPMD_ENABLE_ARA=OFF",
+                    // No UAPMD_ENABLE_* here: cmake/UapmdFeatureOptions.cmake turns every
+                    // addin on, except ARA on 32-bit ABIs (ARA_SDK's ARAInterface.h has no
+                    // 32-bit ARM support) and Augene2 on Android (see that file). Each ABI
+                    // has its own .cxx cache; after changing an option, delete .cxx.
                     "-DAAP_DIR=placeholder"
                 ))
                 targets.add("uapmd-jni")

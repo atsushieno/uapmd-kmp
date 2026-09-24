@@ -66,6 +66,19 @@ interface SequencerEngine {
 
     val timeline: TimelineFacade
 
+    /** `SequencerEngine::audioWorkers()`: parallel processing of independent tracks. */
+    val audioWorkers: AudioWorkers
+    /**
+     * Lifetime count of plugin parameter notifications dropped at the bounded
+     * audio-to-UI handoff; wraps modulo 2^32.
+     */
+    val droppedPluginParameterNotificationCount: UInt
+    /**
+     * Lifetime count of MIDI preset requests discarded (offline/freeze
+     * rendering, or control-queue overflow); wraps modulo 2^32.
+     */
+    val droppedPluginPresetRequestCount: UInt
+
     /**
      * Live MIDI capture into one clip, or null when the extension is absent.
      * Backed by `uapmd::MidiRecorder`.
@@ -106,6 +119,31 @@ interface SequencerEngine {
         progressCallback: ((OfflineRenderProgress) -> Unit)? = null,
         shouldCancel: (() -> Boolean)? = null
     ): OfflineRenderResult
+}
+
+enum class AudioWorkerFault(val nativeValue: Int) {
+    None(0), DeadlineExceeded(1), PluginFailure(2);
+
+    companion object {
+        fun fromNative(v: Int): AudioWorkerFault = entries.firstOrNull { it.nativeValue == v } ?: None
+    }
+}
+
+/**
+ * `uapmd::AudioWorkers`. A [count] of 0 processes tracks serially. [configure]
+ * and [waitForWorkers] are control-thread operations and may wait for
+ * outstanding workers.
+ */
+interface AudioWorkers {
+    fun configure(workerCount: UInt): Boolean
+    val count: UInt
+    /** Off by default: late blocks are silenced and processing resumes by itself. */
+    var stopOnDeadline: Boolean
+    /** `AudioWorkers::wait()`, renamed because `wait()` is final on `java.lang.Object`. */
+    fun waitForWorkers()
+    /** Anything but [AudioWorkerFault.None] stops the engine until the fault is reset. */
+    val fault: AudioWorkerFault
+    fun resetFault()
 }
 
 /** `uapmd::MidiRecorder` — captures live MIDI input into a selected clip. */
@@ -158,6 +196,14 @@ interface AudioDeviceManager {
     val deviceCount: UInt
     fun getDeviceInfo(index: UInt): AudioDeviceInfo?
     fun open(inputDeviceIndex: Int, outputDeviceIndex: Int, sampleRate: UInt, bufferSize: UInt): AudioIODevice
+
+    companion object {
+        /**
+         * `AudioIODeviceManager::kNoDeviceIndex`: leaves that direction closed
+         * entirely instead of falling back to the system default (-1).
+         */
+        const val NO_DEVICE_INDEX: Int = -2
+    }
 }
 
 interface AudioIODevice {

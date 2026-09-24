@@ -54,7 +54,8 @@ import dev.atsushieno.uapmd.cmp.ui.ExporterWindow
 import dev.atsushieno.uapmd.cmp.ui.InstanceDetails
 import dev.atsushieno.uapmd.cmp.ui.MasterMarkersWindow
 import dev.atsushieno.uapmd.cmp.ui.MixerMonitor
-import dev.atsushieno.uapmd.cmp.ui.PluginInstances
+import dev.atsushieno.uapmd.cmp.ui.Augene2Window
+import dev.atsushieno.uapmd.cmp.ui.VirtualMidiDevicesWindow
 import dev.atsushieno.uapmd.cmp.ui.PluginSelector
 import dev.atsushieno.uapmd.cmp.ui.Timeline
 import dev.atsushieno.uapmd.cmp.ui.Toolbar
@@ -131,10 +132,10 @@ fun MainWindow() {
                     }
             ) {
                 // A deleted instance must take its Details window with it, whichever
-                // path deleted it: the track menu, the master track menu, the
-                // Plugin Instances window, or the window's own Delete button. Two
-                // of those four used to close it by hand and two did not, so this
-                // prunes against the live instance list instead — which also
+                // path deleted it: the track menu, the master track menu, or the
+                // window's own Delete button. Closing it by hand in each path
+                // missed some, so this prunes against the live instance list
+                // instead — which also
                 // catches the removals no button performed at all, such as a
                 // project load replacing every instance at once.
                 //
@@ -151,6 +152,29 @@ fun MainWindow() {
                 // Opens and closes a window per drawn plug-in editor; draws nothing here.
                 FramebufferPluginUiLayer(host, windows)
 
+                // Windows owned by addins: their commands (System menu) open
+                // them, and disabling the addin closes them, so they follow the
+                // host's state rather than a button of their own.
+                LaunchedEffect(host.isVirtualMidiDevicesOpen) {
+                    val key = "virtualMidiDevices"
+                    if (host.isVirtualMidiDevicesOpen)
+                        windows.open(key, "Virtual MIDI Devices", DpSize(620.dp, 420.dp),
+                            onClose = { host.isVirtualMidiDevicesOpen = false }) {
+                            VirtualMidiDevicesWindow(host, windows)
+                        }
+                    else windows.close(key)
+                }
+                LaunchedEffect(host.isAugene2Open) {
+                    val key = "augene2"
+                    val integration = host.augene2
+                    if (host.isAugene2Open && integration != null)
+                        windows.open(key, "Augene2 Integration", DpSize(720.dp, 480.dp),
+                            onClose = { host.openAugene2(false) }) {
+                            Augene2Window(integration)
+                        }
+                    else windows.close(key)
+                }
+
                 FloatingWindowLayer(windows) {
                     Column(Modifier.fillMaxSize()) {
                         Toolbar(
@@ -161,6 +185,8 @@ fun MainWindow() {
                             onToggleTheme = { darkTheme = !darkTheme },
                             isDeviceSettingsOpen = windows.isOpen("devices"),
                             isAddinsOpen = windows.isOpen("addins"),
+                            isScriptOpen = windows.isOpen("script"),
+                            isMcpOpen = windows.isOpen("mcp"),
                             onToggleExporter = {
                                 windows.toggle("exporter", "Render To File", DpSize(560.dp, 280.dp)) {
                                     ExporterWindow(host)
@@ -182,7 +208,7 @@ fun MainWindow() {
                                 }
                             },
                             onToggleDeviceSettings = {
-                                windows.toggle("devices", "Device Settings", DpSize(420.dp, 320.dp)) {
+                                windows.toggle("devices", "Device Settings", DpSize(460.dp, 440.dp)) {
                                     DeviceSettings(host)
                                 }
                             },
@@ -264,9 +290,5 @@ private fun BottomBar(host: UapmdHost, windows: dev.atsushieno.uapmd.cmp.ui.Floa
         Button(onClick = {
             windows.toggle("mixer", "Mixer Monitor", DpSize(480.dp, 340.dp)) { MixerMonitor(host) }
         }) { Text("Mixer Monitor") }
-        Text("  ")
-        Button(onClick = {
-            windows.toggle("instances", "Plugin Instances", DpSize(520.dp, 320.dp)) { PluginInstances(host, windows) }
-        }) { Text("Plugin Instances") }
     }
 }

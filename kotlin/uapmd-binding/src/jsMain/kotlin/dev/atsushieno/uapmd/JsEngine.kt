@@ -2,6 +2,20 @@ package dev.atsushieno.uapmd
 
 // ─── JsSequencerEngine ────────────────────────────────────────────────────────
 
+/** Addressed through its engine: `AudioWorkers` has no C handle of its own. */
+class JsAudioWorkers internal constructor(private val engine: Int) : AudioWorkers {
+    override fun configure(workerCount: UInt): Boolean =
+        (jsMod._uapmd_engine_audio_workers_configure(engine, workerCount.toInt()) as Int) != 0
+    override val count: UInt get() = (jsMod._uapmd_engine_audio_workers_count(engine) as Int).toUInt()
+    override var stopOnDeadline: Boolean
+        get() = (jsMod._uapmd_engine_audio_workers_stop_on_deadline(engine) as Int) != 0
+        set(value) { jsMod._uapmd_engine_audio_workers_set_stop_on_deadline(engine, value) }
+    override fun waitForWorkers() { jsMod._uapmd_engine_audio_workers_wait(engine) }
+    override val fault: AudioWorkerFault
+        get() = AudioWorkerFault.fromNative(jsMod._uapmd_engine_audio_workers_fault(engine) as Int)
+    override fun resetFault() { jsMod._uapmd_engine_audio_workers_reset_fault(engine) }
+}
+
 class JsSequencerEngine internal constructor(
     internal val handle: Int
 ) : SequencerEngine {
@@ -147,6 +161,12 @@ class JsSequencerEngine internal constructor(
     override val timeline: TimelineFacade
         get() = JsTimelineFacade(jsMod._uapmd_engine_timeline(handle) as Int)
 
+    override val audioWorkers: AudioWorkers get() = JsAudioWorkers(handle)
+    override val droppedPluginParameterNotificationCount: UInt
+        get() = (jsMod._uapmd_engine_dropped_plugin_parameter_notification_count(handle) as Int).toUInt()
+    override val droppedPluginPresetRequestCount: UInt
+        get() = (jsMod._uapmd_engine_dropped_plugin_preset_request_count(handle) as Int).toUInt()
+
     override fun renderOffline(
         settings: OfflineRenderSettings,
         progressCallback: ((OfflineRenderProgress) -> Unit)?,
@@ -289,3 +309,6 @@ class JsMidiRecorder internal constructor(private val handle: Int) : MidiRecorde
     override fun stop() { jsMod._uapmd_midi_recorder_stop(handle) }
     override fun cancel() { jsMod._uapmd_midi_recorder_cancel(handle) }
 }
+
+actual fun midiApiSupportsDynamicUmpEndpoints(apiName: String): Boolean =
+    withJsCString(apiName) { p -> (jsMod._uapmd_midi_api_supports_dynamic_ump_endpoints(p) as Int) != 0 }

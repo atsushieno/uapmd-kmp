@@ -3,6 +3,7 @@
 #include "c-api/uapmd-c-data.h"
 #include <uapmd-data/uapmd-data.hpp>
 #include <cstring>
+#include <optional>
 #include <string>
 #include <vector>
 #include "c-api-internal.h"
@@ -355,6 +356,7 @@ struct SmfConvertResultStorage {
     std::vector<uint64_t> tick_stamps;
     std::vector<uapmd_midi_tempo_change_t> tempo_changes;
     std::vector<uapmd_midi_time_sig_change_t> time_sig_changes;
+    std::optional<std::string> name;
 };
 
 static uapmd_smf_convert_result_t* make_smf_result(const uapmd::SmfConverter::ConvertResult& src) {
@@ -422,12 +424,25 @@ static uapmd_smf_convert_result_t* make_clip_result(const uapmd::MidiClipReader:
     compat.timeSignatureChanges = info.time_signature_changes;
     compat.tickResolution = info.tick_resolution;
     compat.detectedTempo = info.tempo;
-    return make_smf_result(compat);
+    auto* result = make_smf_result(compat);
+    if (info.name) {
+        auto* storage = reinterpret_cast<SmfConvertResultStorage*>(result);
+        storage->name = *info.name;
+        storage->result.name = storage->name->c_str();
+    }
+    return result;
 }
 
 uapmd_smf_convert_result_t* uapmd_midi_clip_read_any_format(const char* file_path) {
     auto info = uapmd::MidiClipReader::readAnyFormat(file_path);
     return make_clip_result(info);
+}
+
+uapmd_smf_convert_result_t* uapmd_midi_clip_read_smf2_clip(const uapmd_ump_t* words, uint32_t word_count) {
+    std::vector<umppi::Ump> clip;
+    if (words && word_count > 0)
+        clip = umppi::Ump::fromWords(words, word_count);
+    return make_clip_result(uapmd::MidiClipReader::readSmf2Clip(clip));
 }
 
 bool uapmd_midi_clip_is_valid_smf2(const char* file_path) {

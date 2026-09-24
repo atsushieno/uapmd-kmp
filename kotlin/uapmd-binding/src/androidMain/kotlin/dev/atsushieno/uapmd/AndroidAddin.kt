@@ -14,6 +14,9 @@ class AndroidAddinManager internal constructor(
     override fun registerCommandRegistry(registry: CommandRegistry) =
         JniBridge.uapmdAddinManagerRegisterCommandRegistry(handle, (registry as AndroidCommandRegistry).handle)
 
+    override fun registerProjectCommandRegistry(registry: CommandRegistry) =
+        JniBridge.uapmdAddinManagerRegisterProjectCommandRegistry(handle, (registry as AndroidCommandRegistry).handle)
+
     override fun registerClipCommandRegistry(registry: ClipCommandRegistry) =
         JniBridge.uapmdAddinManagerRegisterClipCommandRegistry(handle, (registry as AndroidClipCommandRegistry).handle)
 
@@ -22,6 +25,12 @@ class AndroidAddinManager internal constructor(
 
     override fun registerStemSeparatorRegistry(registry: StemSeparatorRegistry) =
         JniBridge.uapmdAddinManagerRegisterStemSeparatorRegistry(handle, (registry as AndroidStemSeparatorRegistry).handle)
+
+    override fun registerPanelRegistry(registry: PanelRegistry) =
+        JniBridge.uapmdAddinManagerRegisterPanelRegistry(handle, (registry as AndroidPanelRegistry).handle)
+
+    override fun registerAppModel(model: AppModel) =
+        JniBridge.uapmdAddinManagerRegisterAppModel(handle, (model as AndroidAppModel).handle)
 
     override val directories: List<String>
         get() = (0 until JniBridge.uapmdAddinManagerDirectoryCount(handle)).map {
@@ -176,3 +185,60 @@ internal actual fun createClipEditorRegistry(): ClipEditorRegistry =
 
 internal actual fun createStemSeparatorRegistry(): StemSeparatorRegistry =
     AndroidStemSeparatorRegistry(JniBridge.uapmdStemSeparatorRegistryCreate())
+
+class AndroidPanelRegistry internal constructor(internal val handle: Long) : PanelRegistry {
+    override fun update() = JniBridge.uapmdPanelRegistryUpdate(handle)
+    override fun clearRetainedPanels() = JniBridge.uapmdPanelRegistryClearRetainedPanels(handle)
+    override fun close() = JniBridge.uapmdPanelRegistryDestroy(handle)
+}
+
+internal actual fun createPanelRegistry(): PanelRegistry {
+    val handle = JniBridge.uapmdPanelRegistryCreate()
+    require(handle != 0L) { "uapmdPanelRegistryCreate returned null" }
+    return AndroidPanelRegistry(handle)
+}
+
+// ─── Augene2 ─────────────────────────────────────────────────────────────────
+
+class AndroidAugene2Integration internal constructor(internal val handle: Long) : Augene2Integration {
+    override var isOpen: Boolean
+        get() = JniBridge.uapmdAugene2IntegrationIsOpen(handle)
+        set(value) = JniBridge.uapmdAugene2IntegrationSetOpen(handle, value)
+    override val busy: Boolean get() = JniBridge.uapmdAugene2IntegrationBusy(handle)
+    override val compiling: Boolean get() = JniBridge.uapmdAugene2IntegrationCompiling(handle)
+    override val sources: List<Augene2IntegrationSource>
+        get() = (0 until JniBridge.uapmdAugene2IntegrationSourceCount(handle)).mapNotNull { i ->
+            val strings = arrayOfNulls<String>(2)
+            val flags = JniBridge.uapmdAugene2IntegrationGetSource(handle, i, strings) ?: return@mapNotNull null
+            Augene2IntegrationSource(strings[0] ?: "", strings[1] ?: "", flags[0] != 0)
+        }
+    override val trackMappings: List<Augene2TrackMapping>
+        get() = (0 until JniBridge.uapmdAugene2IntegrationTrackMappingCount(handle)).mapNotNull { i ->
+            val strings = arrayOfNulls<String>(1)
+            val values = JniBridge.uapmdAugene2IntegrationGetTrackMapping(handle, i, strings) ?: return@mapNotNull null
+            Augene2TrackMapping(strings[0] ?: "", values[0])
+        }
+    override val status: String get() = JniBridge.uapmdAugene2IntegrationStatus(handle)
+    override val diagnostics: List<String>
+        get() = (0 until JniBridge.uapmdAugene2IntegrationDiagnosticCount(handle)).map {
+            JniBridge.uapmdAugene2IntegrationGetDiagnostic(handle, it)
+        }
+    override var resourceFolder: String
+        get() = JniBridge.uapmdAugene2IntegrationResourceFolder(handle)
+        set(value) = JniBridge.uapmdAugene2IntegrationSetResourceFolder(handle, value)
+
+    override fun importSources(compile: Boolean) = JniBridge.uapmdAugene2IntegrationImportSources(handle, compile)
+    override fun relinkSource(path: String) = JniBridge.uapmdAugene2IntegrationRelinkSource(handle, path)
+    override fun removeSource(path: String) = JniBridge.uapmdAugene2IntegrationRemoveSource(handle, path)
+    override fun compile() = JniBridge.uapmdAugene2IntegrationCompile(handle)
+    override fun close() = JniBridge.uapmdAugene2IntegrationRelease(handle)
+}
+
+internal actual fun augene2Available(): Boolean = JniBridge.uapmdAugene2Available()
+
+internal actual fun augene2RegisterProjectService(timeline: TimelineFacade, panels: PanelRegistry) =
+    JniBridge.uapmdAugene2RegisterProjectService(
+        (timeline as AndroidTimelineFacade).handle, (panels as AndroidPanelRegistry).handle)
+
+internal actual fun augene2Integration(): Augene2Integration? =
+    JniBridge.uapmdAugene2Integration().takeIf { it != 0L }?.let { AndroidAugene2Integration(it) }

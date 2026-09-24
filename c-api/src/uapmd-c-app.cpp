@@ -3,6 +3,7 @@
 #include "c-api/uapmd-c-app.h"
 #include "c-api-internal.h"
 #include <uapmd-app-model/uapmd-app-model.hpp>
+#include <uapmd-addin-core/uapmd-addin-core.hpp>
 #include <uapmd-midi-service/uapmd-midi-service.hpp>
 #include <uapmd-plugin-hosting/uapmd-plugin-hosting.hpp>
 #include <algorithm>
@@ -288,6 +289,38 @@ void uapmd_app_enable_ump_device(uapmd_app_model_t app, int32_t instance_id, con
 
 void uapmd_app_disable_ump_device(uapmd_app_model_t app, int32_t instance_id) {
     AM(app)->disableUmpDevice(instance_id);
+}
+
+void uapmd_app_register_virtual_midi_devices_addin(void) {
+    uapmd_app::registerVirtualMidiDevicesAddin();
+}
+
+void uapmd_addin_manager_register_app_model(uapmd_addin_manager_t mgr, uapmd_app_model_t app) {
+    if (!mgr || !app)
+        return;
+    reinterpret_cast<uapmd_addin::AddinManager*>(mgr)->registerExtensionPoint("/uapmd/app/model/v1", AM(app));
+}
+
+bool uapmd_app_virtual_midi_devices_enabled(uapmd_app_model_t app) {
+    return AM(app)->virtualMidiDevicesEnabled();
+}
+
+bool uapmd_app_auto_create_virtual_midi_devices(uapmd_app_model_t app) {
+    return AM(app)->autoCreateVirtualMidiDevices();
+}
+
+void uapmd_app_set_auto_create_virtual_midi_devices(uapmd_app_model_t app, bool enabled) {
+    AM(app)->setAutoCreateVirtualMidiDevices(enabled);
+}
+
+void uapmd_app_set_show_virtual_midi_devices_callback(uapmd_app_model_t app,
+                                                       void* user_data,
+                                                       uapmd_app_show_virtual_midi_devices_cb_t callback) {
+    if (!callback) {
+        AM(app)->showVirtualMidiDevices = {};
+        return;
+    }
+    AM(app)->showVirtualMidiDevices = [callback, user_data]() { callback(user_data); };
 }
 
 /* ═══════════════════════════════════════════════════════════════════════════

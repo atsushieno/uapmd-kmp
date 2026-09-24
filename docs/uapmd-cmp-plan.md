@@ -5,7 +5,7 @@ versus uapmd-app are tracked in `uapmd-cmp-ui-audit.md`; binding gaps in
 `uapmd-binding-missing-api.md`.
 
 Reference for every question of behaviour: `external/uapmd/source/tools/uapmd-app/` at the pinned
-submodule commit (`93c25a70`, 0.5.6).
+submodule commit (`f5d490d5`, 0.6.0 development).
 
 ---
 
@@ -314,25 +314,60 @@ Note for future debugging: the worklet's fetches do **not** appear in the page's
 network log, because a worker issues them. `performance.getEntriesByType('resource')`
 does show them, and an empty page-level log means nothing here.
 
-### 2.10 The embedder hooks live upstream; there is no patch step
+### 2.10 uapmd changes not yet upstream: `patches/uapmd/`
 
-uapmd-cmp needs a few embedder hooks that upstream once lacked
-(`setRemoteScannerExecutable`, the Emscripten main-thread check in
-`EventLoopEmscripten`, and the null-body-status guard in `coop-coep-sw.js`). These
-were carried for a while as `patches/uapmd/*.patch` and applied to the pinned
-submodule by a best-effort `:uapmd-binding:applyUapmdPatches` Gradle task.
+The embedder hooks uapmd-cmp once needed (`setRemoteScannerExecutable`, the
+Emscripten main-thread check, the `coop-coep-sw.js` guard) are all in uapmd now, and
+the old best-effort Gradle patch task that carried them is gone.
 
-**All of them are now in uapmd itself**, as of the pinned submodule commit. The
-patch files, the Gradle task, and the `dependsOn`/`afterEvaluate` wiring that
-brought it into the desktop, wasm and AGP CMake builds have all been removed. A
-fresh checkout compiles the hooks straight from the submodule, and nothing in the
-build mutates `external/uapmd` any more.
+What replaced it is `cmake/UapmdPatches.cmake`: every `patches/uapmd/*.patch` is
+applied to the submodule at CMake configure time by all three entry points (desktop,
+Android, Emscripten), idempotently, and a patch that no longer applies fails configure
+instead of silently dropping the change. Each patch is a holding area for a change
+that is meant to go upstream; once uapmd carries it, deleting the file is the whole
+removal.
 
-The standing rule that replaces the old one: **do not reintroduce a patch step.**
-A change needed in uapmd goes upstream and the submodule pointer moves to pick it
-up. A build that edits its own submodule working tree makes every checkout's state
-depend on build history, which is what the old task's elaborate half-applied,
-CRLF-tolerant, never-fatal handling existed to paper over.
+Currently carried:
+
+- `0001-augene2-public-integration-model.patch` — makes `uapmd_augene2::Integration`
+  a public model (sources, track mappings, status, diagnostics, busy/compiling,
+  import/relink/remove/compile, panel visibility) with the ImGui panel as one view
+  of it. uapmd-cmp's Augene2 window is the other view (§2.11).
+
+### 2.11 Addin wiring (uapmd `f5d490d5`)
+
+`UapmdHost.initAddins()` reproduces the extension points uapmd-app's `MainWindow`
+publishes before `AddinManager::initialize()`. Leaving one out is not a missing
+menu item, it is an addin that fails to load:
+
+| Extension point | Who needs it |
+|---|---|
+| `/uapmd/app/command/v1` | Virtual MIDI Devices, Augene2 Integration (System menu) |
+| `/uapmd/app/project-command/v1` | MIR analyses, pitch/basic-pitch/DrumScript transcription (Project menu) |
+| `/uapmd/app/panel/v1` | Augene2 Integration |
+| `/uapmd/app/model/v1` | Virtual MIDI Devices, which also needs `registerVirtualMidiDevicesAddin()` |
+
+`uapmd_augene2::registerProjectService()` is called too, so Augene2 project data
+loads and saves whether or not its addin is enabled.
+
+Augene2 is built everywhere except Android (`cmake/UapmdFeatureOptions.cmake`): its
+ANTLR 4.13.2 C++ runtime inherits uapmd's C++23 and does not compile against NDK r28's
+libc++. The fix belongs in augene2. Until then `Augene2.isAvailable` is false on
+Android and uapmd-cmp shows no Augene2 command there.
+
+Every poll tick runs `UapmdHost.tickModelServices()`, which is what uapmd-app's
+`MainWindow::update()` does per frame: `PanelRegistry::update()` (Augene2 applies
+compilations there) and the AppModel document provider's `tick()` (addin file picks
+complete there). Both run on the model thread, which is the thread that created
+AppModel — the Compose main thread.
+
+Virtual MIDI 2.0 devices are off by default now. Instances get no endpoint until one
+is enabled in the Virtual MIDI Devices window (opened by the addin's command) or
+automatic creation is turned on there.
+
+`./gradlew :uapmd-cmp:runAddinProbe [-Duapmd.probe.instantiate=CLAP]` checks all of
+this headlessly: every addin Active, both command registries populated, both windows
+opening from their commands, audio worker resizing, and enabling/disabling a device.
 
 ## 3 · Window model
 

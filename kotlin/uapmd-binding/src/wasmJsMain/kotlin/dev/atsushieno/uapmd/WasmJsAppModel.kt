@@ -207,6 +207,31 @@ class WasmJsAppModel internal constructor(internal val handle: Int) : AppModel {
 
     override fun disableUmpDevice(instanceId: Int) = wasmMod.uapmdAppDisableUmpDevice(handle, instanceId)
 
+    override val virtualMidiDevicesEnabled: Boolean
+        get() = wasmMod.uapmdAppVirtualMidiDevicesEnabled(handle)
+
+    override var autoCreateVirtualMidiDevices: Boolean
+        get() = wasmMod.uapmdAppAutoCreateVirtualMidiDevices(handle)
+        set(value) = wasmMod.uapmdAppSetAutoCreateVirtualMidiDevices(handle, value)
+
+    override var showVirtualMidiDevices: (() -> Unit)?
+        get() = showVirtualMidiDevicesHandler
+        set(value) {
+            showVirtualMidiDevicesHandler = value
+            if (value == null) {
+                wasmMod.uapmdAppSetShowVirtualMidiDevicesCallback(handle, 0, 0)
+                return
+            }
+            // One function-table entry serves every handler: the dispatcher
+            // reads the current one, so it is created once and never removed.
+            if (showVirtualMidiDevicesFnPtr == 0)
+                showVirtualMidiDevicesFnPtr = makeCFunctionPtr(0, "uapmdDispatchShowVirtualMidiDevices", "vi")
+            wasmMod.uapmdAppSetShowVirtualMidiDevicesCallback(handle, 0, showVirtualMidiDevicesFnPtr)
+        }
+
+    override val documentProvider: DocumentProvider
+        get() = WasmJsDocumentProvider(wasmMod.uapmdAppDocumentProvider(handle))
+
     override fun requestShowInstanceDetails(instanceId: Int) =
         wasmMod.uapmdAppRequestShowInstanceDetails(handle, instanceId)
 
@@ -1071,6 +1096,14 @@ actual fun getAppModel(): AppModel {
 }
 
 actual fun cleanupAppModel() = wasmMod.uapmdAppCleanup()
+
+actual fun registerVirtualMidiDevicesAddin() = wasmMod.uapmdAppRegisterVirtualMidiDevicesAddin()
+
+private var showVirtualMidiDevicesFnPtr = 0
+
+class WasmJsDocumentProvider internal constructor(internal val handle: Int) : DocumentProvider {
+    override fun tick() = wasmMod.uapmdDocumentProviderTick(handle)
+}
 
 private fun readClipTargets(base: Int, count: Int): List<TimelineClipTarget> =
     (0 until count).map {

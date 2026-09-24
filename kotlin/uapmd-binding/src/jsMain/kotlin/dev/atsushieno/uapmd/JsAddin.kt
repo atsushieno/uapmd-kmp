@@ -17,6 +17,10 @@ class JsAddinManager internal constructor(internal val handle: Int) : AddinManag
         jsMod._uapmd_addin_manager_register_command_registry(handle, (registry as JsCommandRegistry).handle)
     }
 
+    override fun registerProjectCommandRegistry(registry: CommandRegistry) {
+        jsMod._uapmd_addin_manager_register_project_command_registry(handle, (registry as JsCommandRegistry).handle)
+    }
+
     override fun registerClipCommandRegistry(registry: ClipCommandRegistry) {
         jsMod._uapmd_addin_manager_register_clip_command_registry(handle, (registry as JsClipCommandRegistry).handle)
     }
@@ -27,6 +31,14 @@ class JsAddinManager internal constructor(internal val handle: Int) : AddinManag
 
     override fun registerStemSeparatorRegistry(registry: StemSeparatorRegistry) {
         jsMod._uapmd_addin_manager_register_stem_separator_registry(handle, (registry as JsStemSeparatorRegistry).handle)
+    }
+
+    override fun registerPanelRegistry(registry: PanelRegistry) {
+        jsMod._uapmd_addin_manager_register_panel_registry(handle, (registry as JsPanelRegistry).handle)
+    }
+
+    override fun registerAppModel(model: AppModel) {
+        jsMod._uapmd_addin_manager_register_app_model(handle, (model as JsAppModel).handle)
     }
 
     override val directories: List<String>
@@ -237,3 +249,83 @@ internal actual fun createClipEditorRegistry(): ClipEditorRegistry =
 
 internal actual fun createStemSeparatorRegistry(): StemSeparatorRegistry =
     JsStemSeparatorRegistry(jsMod._uapmd_stem_separator_registry_create() as Int)
+
+class JsPanelRegistry internal constructor(internal val handle: Int) : PanelRegistry {
+    override fun update() { jsMod._uapmd_panel_registry_update(handle) }
+    override fun clearRetainedPanels() { jsMod._uapmd_panel_registry_clear_retained_panels(handle) }
+    override fun close() { jsMod._uapmd_panel_registry_destroy(handle) }
+}
+
+internal actual fun createPanelRegistry(): PanelRegistry =
+    JsPanelRegistry(jsMod._uapmd_panel_registry_create() as Int)
+
+// ─── Augene2 ─────────────────────────────────────────────────────────────────
+
+// uapmd_augene2_source_t: path@0, external_path@4, compile@8, sizeof 12;
+// uapmd_augene2_track_mapping_t: key@0, track_index@4, sizeof 8 (emcc-verified).
+private object JsAugene2Offsets {
+    const val SOURCE_PATH = 0
+    const val SOURCE_EXTERNAL_PATH = 4
+    const val SOURCE_COMPILE = 8
+    const val SOURCE_SIZE = 12
+    const val MAPPING_KEY = 0
+    const val MAPPING_TRACK_INDEX = 4
+    const val MAPPING_SIZE = 8
+}
+
+class JsAugene2Integration internal constructor(internal val handle: Int) : Augene2Integration {
+    override var isOpen: Boolean
+        get() = (jsMod._uapmd_augene2_integration_is_open(handle) as Int) != 0
+        set(value) { jsMod._uapmd_augene2_integration_set_open(handle, value) }
+    override val busy: Boolean get() = (jsMod._uapmd_augene2_integration_busy(handle) as Int) != 0
+    override val compiling: Boolean get() = (jsMod._uapmd_augene2_integration_compiling(handle) as Int) != 0
+    override val sources: List<Augene2IntegrationSource>
+        get() = withWasmMem(JsAugene2Offsets.SOURCE_SIZE) { out ->
+            (0 until (jsMod._uapmd_augene2_integration_source_count(handle) as Int)).mapNotNull { i ->
+                if ((jsMod._uapmd_augene2_integration_get_source(handle, i, out) as Int) == 0) return@mapNotNull null
+                Augene2IntegrationSource(
+                    jsGetStr(out + JsAugene2Offsets.SOURCE_PATH),
+                    jsGetStr(out + JsAugene2Offsets.SOURCE_EXTERNAL_PATH),
+                    jsGetBool(out + JsAugene2Offsets.SOURCE_COMPILE)
+                )
+            }
+        }
+    override val trackMappings: List<Augene2TrackMapping>
+        get() = withWasmMem(JsAugene2Offsets.MAPPING_SIZE) { out ->
+            (0 until (jsMod._uapmd_augene2_integration_track_mapping_count(handle) as Int)).mapNotNull { i ->
+                if ((jsMod._uapmd_augene2_integration_get_track_mapping(handle, i, out) as Int) == 0) return@mapNotNull null
+                Augene2TrackMapping(jsGetStr(out + JsAugene2Offsets.MAPPING_KEY), jsGetI32(out + JsAugene2Offsets.MAPPING_TRACK_INDEX))
+            }
+        }
+    override val status: String
+        get() = readJsString(handle) { h, buf, size -> jsMod._uapmd_augene2_integration_status(h, buf, size) as Int }
+    override val diagnostics: List<String>
+        get() = (0 until (jsMod._uapmd_augene2_integration_diagnostic_count(handle) as Int)).map { i ->
+            readJsStringIndexed(handle, i) { h, idx, buf, size ->
+                jsMod._uapmd_augene2_integration_get_diagnostic(h, idx, buf, size) as Int
+            }
+        }
+    override var resourceFolder: String
+        get() = readJsString(handle) { h, buf, size -> jsMod._uapmd_augene2_integration_resource_folder(h, buf, size) as Int }
+        set(value) { withJsCString(value) { p -> jsMod._uapmd_augene2_integration_set_resource_folder(handle, p) } }
+
+    override fun importSources(compile: Boolean) { jsMod._uapmd_augene2_integration_import_sources(handle, compile) }
+    override fun relinkSource(path: String) {
+        withJsCString(path) { p -> jsMod._uapmd_augene2_integration_relink_source(handle, p) }
+    }
+    override fun removeSource(path: String) {
+        withJsCString(path) { p -> jsMod._uapmd_augene2_integration_remove_source(handle, p) }
+    }
+    override fun compile() { jsMod._uapmd_augene2_integration_compile(handle) }
+    override fun close() { jsMod._uapmd_augene2_integration_release(handle) }
+}
+
+internal actual fun augene2Available(): Boolean = (jsMod._uapmd_augene2_available() as Int) != 0
+
+internal actual fun augene2RegisterProjectService(timeline: TimelineFacade, panels: PanelRegistry) {
+    jsMod._uapmd_augene2_register_project_service(
+        (timeline as JsTimelineFacade).handle, (panels as JsPanelRegistry).handle)
+}
+
+internal actual fun augene2Integration(): Augene2Integration? =
+    (jsMod._uapmd_augene2_integration() as Int).takeIf { it != 0 }?.let { JsAugene2Integration(it) }

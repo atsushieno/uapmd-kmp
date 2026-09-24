@@ -249,6 +249,42 @@ uapmd_timeline_facade_t uapmd_engine_timeline(uapmd_sequencer_engine_t engine) {
     return reinterpret_cast<uapmd_timeline_facade_t>(&E(engine)->timeline());
 }
 
+/* ── Audio workers ────────────────────────────────────────────────────────── */
+
+static_assert(static_cast<int>(uapmd::AudioWorkerFault::None) == UAPMD_AUDIO_WORKER_FAULT_NONE);
+static_assert(static_cast<int>(uapmd::AudioWorkerFault::DeadlineExceeded) == UAPMD_AUDIO_WORKER_FAULT_DEADLINE_EXCEEDED);
+static_assert(static_cast<int>(uapmd::AudioWorkerFault::PluginFailure) == UAPMD_AUDIO_WORKER_FAULT_PLUGIN_FAILURE);
+static_assert(uapmd::AudioIODeviceManager::kNoDeviceIndex == UAPMD_AUDIO_NO_DEVICE_INDEX);
+
+bool uapmd_engine_audio_workers_configure(uapmd_sequencer_engine_t engine, uint32_t worker_count) {
+    return E(engine)->audioWorkers().configure(worker_count);
+}
+uint32_t uapmd_engine_audio_workers_count(uapmd_sequencer_engine_t engine) {
+    return E(engine)->audioWorkers().count();
+}
+bool uapmd_engine_audio_workers_stop_on_deadline(uapmd_sequencer_engine_t engine) {
+    return E(engine)->audioWorkers().stopOnDeadline();
+}
+void uapmd_engine_audio_workers_set_stop_on_deadline(uapmd_sequencer_engine_t engine, bool enabled) {
+    E(engine)->audioWorkers().setStopOnDeadline(enabled);
+}
+void uapmd_engine_audio_workers_wait(uapmd_sequencer_engine_t engine) {
+    E(engine)->audioWorkers().wait();
+}
+uapmd_audio_worker_fault_t uapmd_engine_audio_workers_fault(uapmd_sequencer_engine_t engine) {
+    return static_cast<uapmd_audio_worker_fault_t>(E(engine)->audioWorkers().fault());
+}
+void uapmd_engine_audio_workers_reset_fault(uapmd_sequencer_engine_t engine) {
+    E(engine)->audioWorkers().resetFault();
+}
+
+uint32_t uapmd_engine_dropped_plugin_parameter_notification_count(uapmd_sequencer_engine_t engine) {
+    return E(engine)->droppedPluginParameterNotificationCount();
+}
+uint32_t uapmd_engine_dropped_plugin_preset_request_count(uapmd_sequencer_engine_t engine) {
+    return E(engine)->droppedPluginPresetRequestCount();
+}
+
 /* ═══════════════════════════════════════════════════════════════════════════
  *  Project / track dirty state
  * ═══════════════════════════════════════════════════════════════════════════ */
@@ -693,6 +729,10 @@ bool     uapmd_audio_device_is_playing(uapmd_audio_io_device_t dev)       { retu
 
 uapmd_midi_io_device_t uapmd_midi_device_instance(const char* driver_name) {
     return reinterpret_cast<uapmd_midi_io_device_t>(uapmd::MidiIODevice::instance(driver_name ? driver_name : ""));
+}
+
+bool uapmd_midi_api_supports_dynamic_ump_endpoints(const char* api_name) {
+    return uapmd::midiApiSupportsDynamicUmpEndpoints(api_name ? api_name : "");
 }
 
 /* ═══════════════════════════════════════════════════════════════════════════

@@ -149,6 +149,28 @@ UAPMD_C_EXPORT void uapmd_engine_get_output_spectrum(uapmd_sequencer_engine_t en
 /* Timeline facade access */
 UAPMD_C_EXPORT uapmd_timeline_facade_t uapmd_engine_timeline(uapmd_sequencer_engine_t engine);
 
+/* Audio workers (SequencerEngine::audioWorkers()): independent tracks processed
+ * in parallel. A count of 0 processes serially. configure() and wait() are
+ * control-thread operations and may wait for outstanding workers. */
+typedef enum uapmd_audio_worker_fault {
+    UAPMD_AUDIO_WORKER_FAULT_NONE              = 0,
+    UAPMD_AUDIO_WORKER_FAULT_DEADLINE_EXCEEDED = 1,
+    UAPMD_AUDIO_WORKER_FAULT_PLUGIN_FAILURE    = 2
+} uapmd_audio_worker_fault_t;
+
+UAPMD_C_EXPORT bool     uapmd_engine_audio_workers_configure(uapmd_sequencer_engine_t engine, uint32_t worker_count);
+UAPMD_C_EXPORT uint32_t uapmd_engine_audio_workers_count(uapmd_sequencer_engine_t engine);
+UAPMD_C_EXPORT bool     uapmd_engine_audio_workers_stop_on_deadline(uapmd_sequencer_engine_t engine);
+UAPMD_C_EXPORT void     uapmd_engine_audio_workers_set_stop_on_deadline(uapmd_sequencer_engine_t engine, bool enabled);
+UAPMD_C_EXPORT void     uapmd_engine_audio_workers_wait(uapmd_sequencer_engine_t engine);
+UAPMD_C_EXPORT uapmd_audio_worker_fault_t uapmd_engine_audio_workers_fault(uapmd_sequencer_engine_t engine);
+UAPMD_C_EXPORT void     uapmd_engine_audio_workers_reset_fault(uapmd_sequencer_engine_t engine);
+
+/* Lifetime counters of notifications and preset requests the engine had to drop
+ * (bounded audio-to-control handoff). Both wrap modulo 2^32. */
+UAPMD_C_EXPORT uint32_t uapmd_engine_dropped_plugin_parameter_notification_count(uapmd_sequencer_engine_t engine);
+UAPMD_C_EXPORT uint32_t uapmd_engine_dropped_plugin_preset_request_count(uapmd_sequencer_engine_t engine);
+
 /* ═══════════════════════════════════════════════════════════════════════════
  *  SequencerTrack
  * ═══════════════════════════════════════════════════════════════════════════ */
@@ -368,6 +390,11 @@ UAPMD_C_EXPORT void uapmd_tl_set_timeline_changed_callback(
 
 UAPMD_C_EXPORT uapmd_audio_io_device_mgr_t uapmd_audio_device_mgr_instance(const char* driver_name);
 
+/* AudioIODeviceManager::kNoDeviceIndex. Passed as an input or output device
+ * index, it leaves that direction closed entirely instead of falling back to the
+ * system default (-1). */
+#define UAPMD_AUDIO_NO_DEVICE_INDEX (-2)
+
 UAPMD_C_EXPORT uint32_t uapmd_audio_device_mgr_device_count(uapmd_audio_io_device_mgr_t mgr);
 UAPMD_C_EXPORT bool     uapmd_audio_device_mgr_get_device_info(uapmd_audio_io_device_mgr_t mgr, uint32_t index, uapmd_audio_device_info_t* out);
 
@@ -394,6 +421,11 @@ UAPMD_C_EXPORT bool     uapmd_audio_device_is_playing(uapmd_audio_io_device_t de
  * ═══════════════════════════════════════════════════════════════════════════ */
 
 UAPMD_C_EXPORT uapmd_midi_io_device_t uapmd_midi_device_instance(const char* driver_name);
+
+/* uapmd::midiApiSupportsDynamicUmpEndpoints(): whether virtual MIDI 2.0 devices
+ * can be created through this MIDI API ("default" or a libremidi API name).
+ * Always false on Android. */
+UAPMD_C_EXPORT bool uapmd_midi_api_supports_dynamic_ump_endpoints(const char* api_name);
 
 /* ═══════════════════════════════════════════════════════════════════════════
  *  DeviceIODispatcher

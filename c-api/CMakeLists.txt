@@ -13,6 +13,7 @@ set(UAPMD_C_API_HEADERS
     include/c-api/uapmd-c-app.h
     include/c-api/uapmd-c-undo.h
     include/c-api/uapmd-c-addin.h
+    include/c-api/uapmd-c-augene2.h
 )
 
 set(UAPMD_C_API_SOURCES
@@ -27,6 +28,7 @@ set(UAPMD_C_API_SOURCES
     src/uapmd-c-undo.cpp
     src/uapmd-c-addin.cpp
     src/uapmd-c-script.cpp
+    src/uapmd-c-augene2.cpp
 )
 
 if(ANDROID OR IOS OR EMSCRIPTEN)
@@ -93,6 +95,13 @@ foreach(_addin_pair IN ITEMS
                 "$<LINK_LIBRARY:WHOLE_ARCHIVE,${_addin_target}>")
     endif()
 endforeach()
+# uapmd-augene2 has no uapmd:: alias; it is declared by tools/uapmd-app when
+# UAPMD_ENABLE_AUGENE2 is on. It is also linked for its public API (the
+# project service and its Integration model), not only for registration.
+if(TARGET uapmd-augene2)
+    list(APPEND _uapmd_c_api_builtin_addins
+            "$<LINK_LIBRARY:WHOLE_ARCHIVE,uapmd-augene2>")
+endif()
 if(_uapmd_c_api_builtin_addins)
     target_link_libraries(uapmd-c-api PRIVATE ${_uapmd_c_api_builtin_addins})
 endif()

@@ -59,3 +59,8 @@ actual fun notifyPersistentStorageReadyForPlatform(model: AppModel) {
 }
 
 actual fun cleanupUapmdAppModel() = cleanupAppModel()
+
+actual val platformSupportsAudioWorkerSettings: Boolean = true
+
+actual val platformHardwareConcurrency: Int
+    get() = Runtime.getRuntime().availableProcessors()

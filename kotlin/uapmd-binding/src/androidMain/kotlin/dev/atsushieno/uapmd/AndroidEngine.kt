@@ -2,6 +2,20 @@ package dev.atsushieno.uapmd
 
 // ─── AndroidSequencerEngine ──────────────────────────────────────────────────
 
+/** Addressed through its engine: `AudioWorkers` has no C handle of its own. */
+class AndroidAudioWorkers internal constructor(private val engine: Long) : AudioWorkers {
+    override fun configure(workerCount: UInt): Boolean =
+        JniBridge.uapmdEngineAudioWorkersConfigure(engine, workerCount.toInt())
+    override val count: UInt get() = JniBridge.uapmdEngineAudioWorkersCount(engine).toUInt()
+    override var stopOnDeadline: Boolean
+        get() = JniBridge.uapmdEngineAudioWorkersStopOnDeadline(engine)
+        set(value) = JniBridge.uapmdEngineAudioWorkersSetStopOnDeadline(engine, value)
+    override fun waitForWorkers() = JniBridge.uapmdEngineAudioWorkersWait(engine)
+    override val fault: AudioWorkerFault
+        get() = AudioWorkerFault.fromNative(JniBridge.uapmdEngineAudioWorkersFault(engine))
+    override fun resetFault() = JniBridge.uapmdEngineAudioWorkersResetFault(engine)
+}
+
 class AndroidSequencerEngine internal constructor(
     internal val handle: Long
 ) : SequencerEngine {
@@ -122,6 +136,12 @@ class AndroidSequencerEngine internal constructor(
         get() = JniBridge.uapmdEngineMidiRecorder(handle).takeIf { it != 0L }?.let { AndroidMidiRecorder(it) }
 
     override val timeline: TimelineFacade get() = AndroidTimelineFacade(JniBridge.uapmdEngineTimeline(handle))
+
+    override val audioWorkers: AudioWorkers get() = AndroidAudioWorkers(handle)
+    override val droppedPluginParameterNotificationCount: UInt
+        get() = JniBridge.uapmdEngineDroppedPluginParameterNotificationCount(handle).toUInt()
+    override val droppedPluginPresetRequestCount: UInt
+        get() = JniBridge.uapmdEngineDroppedPluginPresetRequestCount(handle).toUInt()
 
     // ─── Project / track dirty state ────────────────────────────────────────
 
@@ -337,3 +357,6 @@ class AndroidMidiRecorder internal constructor(private val handle: Long) : MidiR
     override fun stop() = JniBridge.uapmdMidiRecorderStop(handle)
     override fun cancel() = JniBridge.uapmdMidiRecorderCancel(handle)
 }
+
+actual fun midiApiSupportsDynamicUmpEndpoints(apiName: String): Boolean =
+    JniBridge.uapmdMidiApiSupportsDynamicUmpEndpoints(apiName)

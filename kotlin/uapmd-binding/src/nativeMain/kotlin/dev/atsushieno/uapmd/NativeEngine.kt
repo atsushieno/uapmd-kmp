@@ -3,6 +3,19 @@ package dev.atsushieno.uapmd
 import kotlinx.cinterop.*
 import uapmd.*
 
+/** Addressed through its engine: `AudioWorkers` has no C handle of its own. */
+class NativeAudioWorkers internal constructor(private val engine: uapmd_sequencer_engine_t) : AudioWorkers {
+    override fun configure(workerCount: UInt): Boolean = uapmd_engine_audio_workers_configure(engine, workerCount)
+    override val count: UInt get() = uapmd_engine_audio_workers_count(engine)
+    override var stopOnDeadline: Boolean
+        get() = uapmd_engine_audio_workers_stop_on_deadline(engine)
+        set(value) = uapmd_engine_audio_workers_set_stop_on_deadline(engine, value)
+    override fun waitForWorkers() = uapmd_engine_audio_workers_wait(engine)
+    override val fault: AudioWorkerFault
+        get() = AudioWorkerFault.fromNative(uapmd_engine_audio_workers_fault(engine).toInt())
+    override fun resetFault() = uapmd_engine_audio_workers_reset_fault(engine)
+}
+
 class NativeSequencerEngine internal constructor(
     internal val handle: uapmd_sequencer_engine_t
 ) : SequencerEngine {
@@ -135,6 +148,12 @@ class NativeSequencerEngine internal constructor(
 
     override val timeline: TimelineFacade
         get() = NativeTimelineFacade(uapmd_engine_timeline(handle)!!)
+
+    override val audioWorkers: AudioWorkers get() = NativeAudioWorkers(handle)
+    override val droppedPluginParameterNotificationCount: UInt
+        get() = uapmd_engine_dropped_plugin_parameter_notification_count(handle)
+    override val droppedPluginPresetRequestCount: UInt
+        get() = uapmd_engine_dropped_plugin_preset_request_count(handle)
 
     // ─── Project / track dirty state ────────────────────────────────────────
 
@@ -356,3 +375,6 @@ class NativeMidiRecorder internal constructor(private val handle: uapmd_midi_rec
     override fun stop() = uapmd_midi_recorder_stop(handle)
     override fun cancel() = uapmd_midi_recorder_cancel(handle)
 }
+
+actual fun midiApiSupportsDynamicUmpEndpoints(apiName: String): Boolean =
+    uapmd_midi_api_supports_dynamic_ump_endpoints(apiName)

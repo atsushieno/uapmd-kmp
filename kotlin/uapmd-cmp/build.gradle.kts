@@ -262,6 +262,20 @@ tasks.register<JavaExec>("runFramebufferUiProbe") {
     }
 }
 
+tasks.register<JavaExec>("runAddinProbe") {
+    group = "verification"
+    description = "Headless check of the addin wiring: registries, Virtual MIDI Devices, Augene2 and audio workers."
+    dependsOn("jvmJar")
+    mainClass.set("dev.atsushieno.uapmd.cmp.AddinProbeMainKt")
+    forwardScannerExecutable()
+    classpath(
+        files(tasks.named("jvmJar")),
+        jvmMainCompilation.runtimeDependencyFiles
+    )
+    jvmArgs("-Dapple.awt.application.name=uapmd-cmp", "-Xdock:name=uapmd-cmp")
+    System.getProperty("uapmd.probe.instantiate")?.let { systemProperty("uapmd.probe.instantiate", it) }
+}
+
 tasks.register<JavaExec>("runBootstrapProbe") {
     group = "verification"
     description = "Headless check that the AppModel bootstrap starts, cleanly stops, and restarts audio."

@@ -33,9 +33,14 @@ import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.unit.dp
-import dev.atsushieno.uapmd.ScanMode
+import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.PlainTooltip
+import androidx.compose.material3.TooltipBox
+import androidx.compose.material3.TooltipDefaults
+import androidx.compose.material3.rememberTooltipState
+import dev.atsushieno.uapmd.AddinCommandInfo
+import dev.atsushieno.uapmd.AudioWorkerFault
 import dev.atsushieno.uapmd.cmp.UapmdHost
-import dev.atsushieno.uapmd.cmp.pickAudioFileToOpen
 import dev.atsushieno.uapmd.cmp.pickMidiFileToOpen
 import dev.atsushieno.uapmd.cmp.pickProjectFileToOpen
 import dev.atsushieno.uapmd.cmp.saveProjectToPlatform
@@ -47,14 +52,15 @@ private val EngineOff = Color(0xFF944536)
 private val RecordActive = Color(0xFFE03333)
 
 /**
- * uapmd-app's toolbar is two rows: there is no `SameLine()` after the theme
- * toggle (`MainWindow.cpp:576-581`), so `Plugins` starts a second line, and the
- * toolbar child is `90.0f * uiScale_` tall. Row 1 is engine / Command / transport
- * / scale / theme; row 2 is Plugins / Import / Project / In+Out meters. Device
- * Settings, Script, MCP and Addins live inside the "Command" popup, along with
- * undo/redo. Both rows are FlowRows so they wrap rather than clip on a phone.
+ * uapmd-app's toolbar is two rows (`MainWindow::render`, the `MainToolbar`
+ * child, `90.0f * uiScale_` tall): row 1 is engine / System / Project / UI
+ * scale / theme, and there is no `SameLine()` after the theme toggle, so row 2
+ * starts with Plugins, then the transport and the In/Out meters. Device
+ * Settings, Addins, Scripting and MCP live in the System popup along with
+ * undo/redo; file I/O and imports live in Project. Both rows are FlowRows so
+ * they wrap rather than clip on a phone.
  */
-@OptIn(ExperimentalLayoutApi::class)
+@OptIn(ExperimentalLayoutApi::class, ExperimentalMaterial3Api::class)
 @Composable
 fun Toolbar(
     host: UapmdHost,
@@ -72,41 +78,69 @@ fun Toolbar(
     onToggleTheme: () -> Unit = {},
     isDeviceSettingsOpen: Boolean = false,
     isAddinsOpen: Boolean = false,
+    isScriptOpen: Boolean = false,
+    isMcpOpen: Boolean = false,
     modifier: Modifier = Modifier
 ) {
-    var commandOpen by remember { mutableStateOf(false) }
+    var systemOpen by remember { mutableStateOf(false) }
     var projectOpen by remember { mutableStateOf(false) }
-    var importOpen by remember { mutableStateOf(false) }
     var scaleMenu by remember { mutableStateOf(false) }
     var recordStatus by remember { mutableStateOf<String?>(null) }
     val scope = rememberCoroutineScope()
 
     Column(modifier.fillMaxWidth().padding(6.dp)) {
-        // Row 1: engine, command menu, transport, scale, theme.
-        // uapmd-app breaks the line here (no SameLine after the theme toggle),
-        // and its toolbar child is 90pt tall - two rows, not one.
+        // Row 1: engine, System and Project menus, UI scale, theme.
         FlowRow(horizontalArrangement = Arrangement.spacedBy(4.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-            Button(
-                onClick = { host.toggleAudioEngine() },
-                contentPadding = Compact,
-                colors = ButtonDefaults.buttonColors(
-                    containerColor = if (host.isAudioEngineEnabled) EngineOn else EngineOff
-                )
-            ) { Text(if (host.isAudioEngineEnabled) "Audio Engine: On" else "Audio Engine: Off") }
+            val fault = host.audioWorkerFault
+            TooltipBox(
+                positionProvider = TooltipDefaults.rememberTooltipPositionProvider(),
+                tooltip = {
+                    PlainTooltip {
+                        Text(
+                            when (fault) {
+                                AudioWorkerFault.DeadlineExceeded ->
+                                    "Audio workers missed their deadline. Use fewer workers or a larger buffer in Settings, then click to restart."
+                                AudioWorkerFault.PluginFailure ->
+                                    "A plugin failed during parallel processing. Select Serial in Settings, then click to restart."
+                                AudioWorkerFault.None ->
+                                    if (host.isAudioEngineEnabled) "Click to turn off the audio engine"
+                                    else "Click to turn on the audio engine"
+                            }
+                        )
+                    }
+                },
+                state = rememberTooltipState()
+            ) {
+                Button(
+                    onClick = { host.toggleAudioEngine() },
+                    contentPadding = Compact,
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = if (host.isAudioEngineEnabled) EngineOn else EngineOff
+                    )
+                ) {
+                    Text(
+                        when {
+                            fault != AudioWorkerFault.None -> "Audio Engine: Restart"
+                            host.isAudioEngineEnabled -> "Audio Engine: On"
+                            else -> "Audio Engine: Off"
+                        }
+                    )
+                }
+            }
 
             Box {
-                Button(onClick = { commandOpen = true }, contentPadding = Compact) { Text("Command") }
-                DropdownMenu(expanded = commandOpen, onDismissRequest = { commandOpen = false }) {
+                Button(onClick = { systemOpen = true }, contentPadding = Compact) { Text("System") }
+                DropdownMenu(expanded = systemOpen, onDismissRequest = { systemOpen = false }) {
                     val h = host.history
                     DropdownMenuItem(
                         text = { Text(if (h.undoDescription.isEmpty()) "Undo" else "Undo ${h.undoDescription}") },
                         enabled = h.canUndo && !h.busy,
-                        onClick = { host.undo(); commandOpen = false }
+                        onClick = { host.undo(); systemOpen = false }
                     )
                     DropdownMenuItem(
                         text = { Text(if (h.redoDescription.isEmpty()) "Redo" else "Redo ${h.redoDescription}") },
                         enabled = h.canRedo && !h.busy,
-                        onClick = { host.redo(); commandOpen = false }
+                        onClick = { host.redo(); systemOpen = false }
                     )
                     if (h.busy) {
                         DropdownMenuItem(
@@ -115,109 +149,25 @@ fun Toolbar(
                         )
                     }
                     HorizontalDivider()
-                    DropdownMenuItem(
-                        text = { Text(if (isDeviceSettingsOpen) "Hide Device Settings" else "Show Device Settings") },
-                        onClick = { commandOpen = false; onToggleDeviceSettings() }
-                    )
-                    DropdownMenuItem(
-                        text = { Text(if (isAddinsOpen) "Hide Addins" else "Show Addins") },
-                        onClick = { commandOpen = false; onToggleAddins() }
-                    )
-                    DropdownMenuItem(
-                        text = { Text("Show Script") },
-                        onClick = { commandOpen = false; onToggleScript() }
-                    )
-                    DropdownMenuItem(
-                        text = { Text("Show MCP Settings") },
-                        enabled = host.mcpSupported,
-                        onClick = { commandOpen = false; onToggleMcp() }
-                    )
+                    // Toggles for the four panels, with a check mark on the open
+                    // ones, as uapmd-app's contextActionMenuItem(label, selected).
+                    CheckedMenuItem("Device Settings", isDeviceSettingsOpen) { systemOpen = false; onToggleDeviceSettings() }
+                    CheckedMenuItem("UAPMD Addins", isAddinsOpen) { systemOpen = false; onToggleAddins() }
+                    CheckedMenuItem("Scripting", isScriptOpen) { systemOpen = false; onToggleScript() }
+                    CheckedMenuItem("MCP Settings", isMcpOpen, enabled = host.mcpSupported) {
+                        systemOpen = false; onToggleMcp()
+                    }
 
-                    // Commands contributed by addins, in the same place
-                    // uapmd-app puts them (MainWindow.cpp:498-513): after a
-                    // separator, in the order the registry reports.
+                    // Application commands contributed by addins (Virtual MIDI
+                    // Devices, Augene2 Integration), after a separator, in the
+                    // order the registry reports (renderCommandMenuItems).
                     // Re-read while the menu is open: a running command keeps
                     // its progress in its own title.
-                    val commandTick = rememberTicker(commandOpen)
-                    val addinCommands = remember(host.addinRevision, commandOpen, commandTick) {
+                    val commandTick = rememberTicker(systemOpen)
+                    val addinCommands = remember(host.addinRevision, systemOpen, commandTick) {
                         host.addinCommands()
                     }
-                    if (addinCommands.isNotEmpty()) {
-                        HorizontalDivider()
-                        addinCommands.forEach { command ->
-                            DropdownMenuItem(
-                                text = { Text(command.title) },
-                                enabled = command.enabled,
-                                onClick = { commandOpen = false; host.invokeAddinCommand(command.id) }
-                            )
-                        }
-                    }
-                }
-            }
-
-            // Record first, then Play/Stop, as uapmd-app orders them: the
-            // destructive button is not the one under the thumb.
-            Button(
-                onClick = { recordStatus = host.toggleRecording() },
-                enabled = host.isAudioEngineEnabled,
-                contentPadding = Compact,
-                colors = ButtonDefaults.buttonColors(
-                    containerColor = if (host.isRecording) RecordActive else MaterialTheme.colorScheme.primary
-                )
-            ) { RecordIcon(LocalContentColor.current) }
-            Button(onClick = { host.playOrStop() }, enabled = host.isAudioEngineEnabled, contentPadding = Compact) {
-                if (host.isPlaying) StopIcon(LocalContentColor.current) else PlayIcon(LocalContentColor.current)
-            }
-            Button(
-                onClick = { host.pauseOrResume() },
-                enabled = host.isAudioEngineEnabled && host.isPlaying,
-                contentPadding = Compact
-            ) { if (host.isPaused) PlayIcon(LocalContentColor.current) else PauseIcon(LocalContentColor.current) }
-
-            Box {
-                Button(onClick = { scaleMenu = true }, contentPadding = Compact) { Text("×$uiScale") }
-                DropdownMenu(expanded = scaleMenu, onDismissRequest = { scaleMenu = false }) {
-                    listOf(0.5f, 0.8f, 1f, 1.2f, 1.5f, 2f, 4f).forEach { v ->
-                        DropdownMenuItem(text = { Text("×$v") }, onClick = { onUiScaleChange(v); scaleMenu = false })
-                    }
-                }
-            }
-            Button(onClick = onToggleTheme, contentPadding = Compact) { ThemeIcon(LocalContentColor.current, darkTheme) }
-        }
-
-        // Row 2: content actions and the level meters.
-        FlowRow(
-            horizontalArrangement = Arrangement.spacedBy(4.dp),
-            verticalArrangement = Arrangement.spacedBy(4.dp),
-            modifier = Modifier.padding(top = 4.dp)
-        ) {
-            // No Scan button here: uapmd-app scans from inside the Plugin
-            // Selector (PluginSelector.cpp:116), not the toolbar.
-            Button(onClick = onTogglePlugins, contentPadding = Compact) { Text("Plugins") }
-
-            Box {
-                Button(onClick = { importOpen = true }, contentPadding = Compact) { Text("Import") }
-                DropdownMenu(expanded = importOpen, onDismissRequest = { importOpen = false }) {
-                    DropdownMenuItem(text = { Text("Add MIDI Clip from File… (track 0)") }, onClick = {
-                        importOpen = false
-                        scope.launch { pickMidiFileToOpen()?.let { host.importMidiClip(0, it) } }
-                    })
-                    DropdownMenuItem(text = { Text("Add Audio Clip from File… (track 0)") }, onClick = {
-                        importOpen = false
-                        scope.launch { pickAudioFileToOpen()?.let { host.importAudioClip(0, it) } }
-                    })
-                    DropdownMenuItem(text = { Text("Import MIDI Tracks (SMF)") }, onClick = {
-                        importOpen = false
-                        scope.launch { pickMidiFileToOpen()?.let { host.importMidiTracks(it) } }
-                    })
-                    // The backend is whichever separator addin is enabled, so
-                    // the item is live only when at least one is.
-                    val separators = remember(host.addinRevision, importOpen) { host.stemSeparators() }
-                    DropdownMenuItem(
-                        text = { Text("Import Split Audio Tracks") },
-                        enabled = separators.isNotEmpty(),
-                        onClick = { importOpen = false; onToggleAudioImport() }
-                    )
+                    AddinCommandItems(addinCommands) { id -> systemOpen = false; host.invokeAddinCommand(id) }
                 }
             }
 
@@ -240,8 +190,72 @@ fun Toolbar(
                     DropdownMenuItem(text = { Text("Render To File") }, onClick = {
                         projectOpen = false; onToggleExporter()
                     })
+                    HorizontalDivider()
+                    DropdownMenuItem(text = { Text("Import MIDI Tracks (SMF)") }, onClick = {
+                        projectOpen = false
+                        scope.launch { pickMidiFileToOpen()?.let { host.importMidiTracks(it) } }
+                    })
+                    // The backend is whichever separator addin is enabled, so the
+                    // item only exists while at least one is, as in uapmd-app.
+                    val separators = remember(host.addinRevision, projectOpen) { host.stemSeparators() }
+                    if (separators.isNotEmpty()) {
+                        DropdownMenuItem(
+                            text = { Text("Import Split Audio Tracks") },
+                            onClick = { projectOpen = false; onToggleAudioImport() }
+                        )
+                    }
+                    // Project-wide commands contributed by addins: MIR analysis
+                    // and transcription of all audio clips.
+                    val commandTick = rememberTicker(projectOpen)
+                    val projectCommands = remember(host.addinRevision, projectOpen, commandTick) {
+                        host.projectCommands()
+                    }
+                    AddinCommandItems(projectCommands) { id -> projectOpen = false; host.invokeProjectCommand(id) }
                 }
             }
+
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text("UI: ", style = MaterialTheme.typography.labelMedium)
+                Box {
+                    Button(onClick = { scaleMenu = true }, contentPadding = Compact) { Text("×$uiScale") }
+                    DropdownMenu(expanded = scaleMenu, onDismissRequest = { scaleMenu = false }) {
+                        listOf(0.5f, 0.8f, 1f, 1.2f, 1.5f, 2f, 4f).forEach { v ->
+                            DropdownMenuItem(text = { Text("×$v") }, onClick = { onUiScaleChange(v); scaleMenu = false })
+                        }
+                    }
+                }
+            }
+            Button(onClick = onToggleTheme, contentPadding = Compact) { ThemeIcon(LocalContentColor.current, darkTheme) }
+        }
+
+        // Row 2: Plugins, the transport, and the level meters.
+        FlowRow(
+            horizontalArrangement = Arrangement.spacedBy(4.dp),
+            verticalArrangement = Arrangement.spacedBy(4.dp),
+            modifier = Modifier.padding(top = 4.dp)
+        ) {
+            // No Scan button here: uapmd-app scans from inside the Plugin
+            // Selector (PluginSelector.cpp:116), not the toolbar.
+            Button(onClick = onTogglePlugins, contentPadding = Compact) { Text("Plugins") }
+
+            // Record first, then Play/Stop, as uapmd-app orders them: the
+            // destructive button is not the one under the thumb.
+            Button(
+                onClick = { recordStatus = host.toggleRecording() },
+                enabled = host.isAudioEngineEnabled,
+                contentPadding = Compact,
+                colors = ButtonDefaults.buttonColors(
+                    containerColor = if (host.isRecording) RecordActive else MaterialTheme.colorScheme.primary
+                )
+            ) { RecordIcon(LocalContentColor.current) }
+            Button(onClick = { host.playOrStop() }, enabled = host.isAudioEngineEnabled, contentPadding = Compact) {
+                if (host.isPlaying) StopIcon(LocalContentColor.current) else PlayIcon(LocalContentColor.current)
+            }
+            Button(
+                onClick = { host.pauseOrResume() },
+                enabled = host.isAudioEngineEnabled && host.isPlaying,
+                contentPadding = Compact
+            ) { if (host.isPaused) PlayIcon(LocalContentColor.current) else PauseIcon(LocalContentColor.current) }
 
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Text("In ", style = MaterialTheme.typography.labelSmall)
@@ -257,6 +271,31 @@ fun Toolbar(
         host.lastProjectResult?.error?.let {
             Text(it, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.error)
         }
+    }
+}
+
+/** A panel toggle; the check mark says the panel is open. */
+@Composable
+private fun CheckedMenuItem(label: String, checked: Boolean, enabled: Boolean = true, onClick: () -> Unit) {
+    DropdownMenuItem(
+        text = { Text(label) },
+        enabled = enabled,
+        trailingIcon = { if (checked) CheckIcon(LocalContentColor.current) },
+        onClick = onClick
+    )
+}
+
+/** Addin commands after a separator, greyed out when disabled (renderCommandMenuItems). */
+@Composable
+private fun AddinCommandItems(commands: List<AddinCommandInfo>, onInvoke: (String) -> Unit) {
+    if (commands.isEmpty()) return
+    HorizontalDivider()
+    commands.forEach { command ->
+        DropdownMenuItem(
+            text = { Text(command.title) },
+            enabled = command.enabled,
+            onClick = { onInvoke(command.id) }
+        )
     }
 }
 
@@ -312,4 +351,14 @@ private fun ThemeIcon(tint: Color, dark: Boolean) = Canvas(Modifier.size(Transpo
     drawCircle(tint, r, c, style = androidx.compose.ui.graphics.drawscope.Stroke(1.4f))
     val left = if (dark) c.x - r else c.x
     clipRect(left, c.y - r, left + r, c.y + r) { drawCircle(tint, r, c) }
+}
+
+/** A check mark for toggled menu items; drawn, for the same reason as the rest. */
+@Composable
+private fun CheckIcon(tint: Color) = Canvas(Modifier.size(TransportIconSize)) {
+    drawPath(Path().apply {
+        moveTo(size.width * 0.12f, size.height * 0.55f)
+        lineTo(size.width * 0.4f, size.height * 0.82f)
+        lineTo(size.width * 0.9f, size.height * 0.2f)
+    }, tint, style = androidx.compose.ui.graphics.drawscope.Stroke(size.minDimension * 0.14f))
 }

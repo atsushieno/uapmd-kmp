@@ -14,6 +14,9 @@ class WasmJsAddinManager internal constructor(internal val handle: Int) : AddinM
     override fun registerCommandRegistry(registry: CommandRegistry) =
         wasmMod.uapmdAddinManagerRegisterCommandRegistry(handle, (registry as WasmJsCommandRegistry).handle)
 
+    override fun registerProjectCommandRegistry(registry: CommandRegistry) =
+        wasmMod.uapmdAddinManagerRegisterProjectCommandRegistry(handle, (registry as WasmJsCommandRegistry).handle)
+
     override fun registerClipCommandRegistry(registry: ClipCommandRegistry) =
         wasmMod.uapmdAddinManagerRegisterClipCommandRegistry(handle, (registry as WasmJsClipCommandRegistry).handle)
 
@@ -22,6 +25,12 @@ class WasmJsAddinManager internal constructor(internal val handle: Int) : AddinM
 
     override fun registerStemSeparatorRegistry(registry: StemSeparatorRegistry) =
         wasmMod.uapmdAddinManagerRegisterStemSeparatorRegistry(handle, (registry as WasmJsStemSeparatorRegistry).handle)
+
+    override fun registerPanelRegistry(registry: PanelRegistry) =
+        wasmMod.uapmdAddinManagerRegisterPanelRegistry(handle, (registry as WasmJsPanelRegistry).handle)
+
+    override fun registerAppModel(model: AppModel) =
+        wasmMod.uapmdAddinManagerRegisterAppModel(handle, (model as WasmJsAppModel).handle)
 
     override val directories: List<String>
         get() = (0 until wasmMod.uapmdAddinManagerDirectoryCount(handle)).map { i ->
@@ -208,3 +217,76 @@ internal actual fun createClipEditorRegistry(): ClipEditorRegistry =
 
 internal actual fun createStemSeparatorRegistry(): StemSeparatorRegistry =
     WasmJsStemSeparatorRegistry(wasmMod.uapmdStemSeparatorRegistryCreate())
+
+class WasmJsPanelRegistry internal constructor(internal val handle: Int) : PanelRegistry {
+    override fun update() = wasmMod.uapmdPanelRegistryUpdate(handle)
+    override fun clearRetainedPanels() = wasmMod.uapmdPanelRegistryClearRetainedPanels(handle)
+    override fun close() = wasmMod.uapmdPanelRegistryDestroy(handle)
+}
+
+internal actual fun createPanelRegistry(): PanelRegistry =
+    WasmJsPanelRegistry(wasmMod.uapmdPanelRegistryCreate())
+
+// ─── Augene2 ─────────────────────────────────────────────────────────────────
+
+// uapmd_augene2_source_t: path@0, external_path@4, compile@8, sizeof 12;
+// uapmd_augene2_track_mapping_t: key@0, track_index@4, sizeof 8 (emcc-verified).
+private const val AUGENE2_SOURCE_PATH = 0
+private const val AUGENE2_SOURCE_EXTERNAL_PATH = 4
+private const val AUGENE2_SOURCE_COMPILE = 8
+private const val AUGENE2_SOURCE_SIZE = 12
+private const val AUGENE2_MAPPING_KEY = 0
+private const val AUGENE2_MAPPING_TRACK_INDEX = 4
+private const val AUGENE2_MAPPING_SIZE = 8
+
+class WasmJsAugene2Integration internal constructor(internal val handle: Int) : Augene2Integration {
+    override var isOpen: Boolean
+        get() = wasmMod.uapmdAugene2IntegrationIsOpen(handle)
+        set(value) = wasmMod.uapmdAugene2IntegrationSetOpen(handle, value)
+    override val busy: Boolean get() = wasmMod.uapmdAugene2IntegrationBusy(handle)
+    override val compiling: Boolean get() = wasmMod.uapmdAugene2IntegrationCompiling(handle)
+    override val sources: List<Augene2IntegrationSource>
+        get() = withWasmStruct(AUGENE2_SOURCE_SIZE) { out ->
+            (0 until wasmMod.uapmdAugene2IntegrationSourceCount(handle)).mapNotNull { i ->
+                if (!wasmMod.uapmdAugene2IntegrationGetSource(handle, i, out)) return@mapNotNull null
+                Augene2IntegrationSource(
+                    wasmGetStr(out + AUGENE2_SOURCE_PATH),
+                    wasmGetStr(out + AUGENE2_SOURCE_EXTERNAL_PATH),
+                    wasmGetBool(out + AUGENE2_SOURCE_COMPILE)
+                )
+            }
+        }
+    override val trackMappings: List<Augene2TrackMapping>
+        get() = withWasmStruct(AUGENE2_MAPPING_SIZE) { out ->
+            (0 until wasmMod.uapmdAugene2IntegrationTrackMappingCount(handle)).mapNotNull { i ->
+                if (!wasmMod.uapmdAugene2IntegrationGetTrackMapping(handle, i, out)) return@mapNotNull null
+                Augene2TrackMapping(wasmGetStr(out + AUGENE2_MAPPING_KEY), wasmGetI32(out + AUGENE2_MAPPING_TRACK_INDEX))
+            }
+        }
+    override val status: String
+        get() = readString(handle) { h, buf, size -> uapmdAugene2IntegrationStatus(h, buf, size) }
+    override val diagnostics: List<String>
+        get() = (0 until wasmMod.uapmdAugene2IntegrationDiagnosticCount(handle)).map { i ->
+            readStringIndexed(handle, i) { h, idx, buf, size -> uapmdAugene2IntegrationGetDiagnostic(h, idx, buf, size) }
+        }
+    override var resourceFolder: String
+        get() = readString(handle) { h, buf, size -> uapmdAugene2IntegrationResourceFolder(h, buf, size) }
+        set(value) = withCStringKt(value) { p -> wasmMod.uapmdAugene2IntegrationSetResourceFolder(handle, p) }
+
+    override fun importSources(compile: Boolean) = wasmMod.uapmdAugene2IntegrationImportSources(handle, compile)
+    override fun relinkSource(path: String) =
+        withCStringKt(path) { p -> wasmMod.uapmdAugene2IntegrationRelinkSource(handle, p) }
+    override fun removeSource(path: String) =
+        withCStringKt(path) { p -> wasmMod.uapmdAugene2IntegrationRemoveSource(handle, p) }
+    override fun compile() = wasmMod.uapmdAugene2IntegrationCompile(handle)
+    override fun close() = wasmMod.uapmdAugene2IntegrationRelease(handle)
+}
+
+internal actual fun augene2Available(): Boolean = wasmMod.uapmdAugene2Available()
+
+internal actual fun augene2RegisterProjectService(timeline: TimelineFacade, panels: PanelRegistry) =
+    wasmMod.uapmdAugene2RegisterProjectService(
+        (timeline as WasmJsTimelineFacade).handle, (panels as WasmJsPanelRegistry).handle)
+
+internal actual fun augene2Integration(): Augene2Integration? =
+    wasmMod.uapmdAugene2Integration().takeIf { it != 0 }?.let { WasmJsAugene2Integration(it) }

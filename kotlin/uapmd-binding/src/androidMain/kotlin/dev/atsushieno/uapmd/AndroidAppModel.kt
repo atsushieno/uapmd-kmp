@@ -201,6 +201,24 @@ class AndroidAppModel internal constructor(internal val handle: Long) : AppModel
 
     override fun disableUmpDevice(instanceId: Int) = JniBridge.uapmdAppDisableUmpDevice(handle, instanceId)
 
+    override val virtualMidiDevicesEnabled: Boolean
+        get() = JniBridge.uapmdAppVirtualMidiDevicesEnabled(handle)
+
+    override var autoCreateVirtualMidiDevices: Boolean
+        get() = JniBridge.uapmdAppAutoCreateVirtualMidiDevices(handle)
+        set(value) = JniBridge.uapmdAppSetAutoCreateVirtualMidiDevices(handle, value)
+
+    override var showVirtualMidiDevices: (() -> Unit)?
+        get() = showVirtualMidiDevicesHandler
+        set(value) {
+            // AppModel is a process-wide singleton and this wrapper is not.
+            showVirtualMidiDevicesHandler = value
+            JniBridge.uapmdAppSetShowVirtualMidiDevicesCallback(handle, value?.let { Runnable { it() } })
+        }
+
+    override val documentProvider: DocumentProvider
+        get() = AndroidDocumentProvider(JniBridge.uapmdAppDocumentProvider(handle))
+
     override fun requestShowInstanceDetails(instanceId: Int) =
         JniBridge.uapmdAppRequestShowInstanceDetails(handle, instanceId)
 
@@ -740,6 +758,14 @@ actual fun getAppModel(): AppModel {
 }
 
 actual fun cleanupAppModel() = JniBridge.uapmdAppCleanup()
+
+actual fun registerVirtualMidiDevicesAddin() = JniBridge.uapmdAppRegisterVirtualMidiDevicesAddin()
+
+private var showVirtualMidiDevicesHandler: (() -> Unit)? = null
+
+class AndroidDocumentProvider internal constructor(internal val handle: Long) : DocumentProvider {
+    override fun tick() = JniBridge.uapmdDocumentProviderTick(handle)
+}
 
 /** The flat {trackIndex, clipId} pair encoding the JNI layer uses. */
 private fun IntArray.toClipTargets(): List<TimelineClipTarget> =

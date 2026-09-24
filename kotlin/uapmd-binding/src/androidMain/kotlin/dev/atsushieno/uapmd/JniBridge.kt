@@ -940,4 +940,57 @@ object JniBridge {
         markerStrings: Array<String>, markerOffsets: DoubleArray, markerRefTypes: IntArray,
         warpNums: DoubleArray, warpRefTypes: IntArray, warpStrings: Array<String>
     ): Array<Any>?
+
+    // ── uapmd f5d490d: audio workers, Virtual MIDI Devices addin, panels, Augene2 ──
+    // (uapmd_jni_services.cpp)
+
+    @JvmStatic external fun uapmdMidiApiSupportsDynamicUmpEndpoints(apiName: String): Boolean
+    @JvmStatic external fun uapmdEngineAudioWorkersConfigure(engine: Long, count: Int): Boolean
+    @JvmStatic external fun uapmdEngineAudioWorkersCount(engine: Long): Int
+    @JvmStatic external fun uapmdEngineAudioWorkersStopOnDeadline(engine: Long): Boolean
+    @JvmStatic external fun uapmdEngineAudioWorkersSetStopOnDeadline(engine: Long, enabled: Boolean)
+    @JvmStatic external fun uapmdEngineAudioWorkersWait(engine: Long)
+    @JvmStatic external fun uapmdEngineAudioWorkersFault(engine: Long): Int
+    @JvmStatic external fun uapmdEngineAudioWorkersResetFault(engine: Long)
+    @JvmStatic external fun uapmdEngineDroppedPluginParameterNotificationCount(engine: Long): Int
+    @JvmStatic external fun uapmdEngineDroppedPluginPresetRequestCount(engine: Long): Int
+
+    @JvmStatic external fun uapmdAppRegisterVirtualMidiDevicesAddin()
+    @JvmStatic external fun uapmdAddinManagerRegisterAppModel(mgr: Long, app: Long)
+    @JvmStatic external fun uapmdAppVirtualMidiDevicesEnabled(app: Long): Boolean
+    @JvmStatic external fun uapmdAppAutoCreateVirtualMidiDevices(app: Long): Boolean
+    @JvmStatic external fun uapmdAppSetAutoCreateVirtualMidiDevices(app: Long, enabled: Boolean)
+    @JvmStatic external fun uapmdAppSetShowVirtualMidiDevicesCallback(app: Long, callback: Runnable?)
+    @JvmStatic external fun uapmdAppDocumentProvider(app: Long): Long
+
+    @JvmStatic external fun uapmdAddinManagerRegisterProjectCommandRegistry(mgr: Long, reg: Long)
+    @JvmStatic external fun uapmdPanelRegistryCreate(): Long
+    @JvmStatic external fun uapmdPanelRegistryDestroy(reg: Long)
+    @JvmStatic external fun uapmdAddinManagerRegisterPanelRegistry(mgr: Long, reg: Long)
+    @JvmStatic external fun uapmdPanelRegistryUpdate(reg: Long)
+    @JvmStatic external fun uapmdPanelRegistryClearRetainedPanels(reg: Long)
+
+    @JvmStatic external fun uapmdAugene2Available(): Boolean
+    @JvmStatic external fun uapmdAugene2RegisterProjectService(timeline: Long, panels: Long)
+    @JvmStatic external fun uapmdAugene2Integration(): Long
+    @JvmStatic external fun uapmdAugene2IntegrationRelease(h: Long)
+    @JvmStatic external fun uapmdAugene2IntegrationIsOpen(h: Long): Boolean
+    @JvmStatic external fun uapmdAugene2IntegrationSetOpen(h: Long, open: Boolean)
+    @JvmStatic external fun uapmdAugene2IntegrationBusy(h: Long): Boolean
+    @JvmStatic external fun uapmdAugene2IntegrationCompiling(h: Long): Boolean
+    @JvmStatic external fun uapmdAugene2IntegrationSourceCount(h: Long): Int
+    /** Fills outStrings[0..1] = {path, externalPath}; returns {compile} or null. */
+    @JvmStatic external fun uapmdAugene2IntegrationGetSource(h: Long, index: Int, outStrings: Array<String?>): IntArray?
+    @JvmStatic external fun uapmdAugene2IntegrationTrackMappingCount(h: Long): Int
+    /** Fills outStrings[0] = key; returns {trackIndex} or null. */
+    @JvmStatic external fun uapmdAugene2IntegrationGetTrackMapping(h: Long, index: Int, outStrings: Array<String?>): IntArray?
+    @JvmStatic external fun uapmdAugene2IntegrationStatus(h: Long): String
+    @JvmStatic external fun uapmdAugene2IntegrationDiagnosticCount(h: Long): Int
+    @JvmStatic external fun uapmdAugene2IntegrationGetDiagnostic(h: Long, index: Int): String
+    @JvmStatic external fun uapmdAugene2IntegrationResourceFolder(h: Long): String
+    @JvmStatic external fun uapmdAugene2IntegrationSetResourceFolder(h: Long, folder: String)
+    @JvmStatic external fun uapmdAugene2IntegrationImportSources(h: Long, compile: Boolean)
+    @JvmStatic external fun uapmdAugene2IntegrationRelinkSource(h: Long, path: String)
+    @JvmStatic external fun uapmdAugene2IntegrationRemoveSource(h: Long, path: String)
+    @JvmStatic external fun uapmdAugene2IntegrationCompile(h: Long)
 }

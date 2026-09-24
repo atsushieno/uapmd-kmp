@@ -29,10 +29,16 @@ data class AddinInfo(
  * | Extension point | Published by | Addins |
  * |---|---|---|
  * | `/uapmd/engine/v1`, `/uapmd/audio-graph/provider/v1` | [SequencerEngine.registerAddinExtensionPoints] | ARA, graph providers |
- * | `/uapmd/app/command/v1` | [registerCommandRegistry] | MIR analysis, Basic Pitch, DrumScript |
+ * | `/uapmd/app/model/v1` | [registerAppModel] | Virtual MIDI Devices |
+ * | `/uapmd/app/command/v1` | [registerCommandRegistry] | application commands: Virtual MIDI Devices, Augene2 Integration |
+ * | `/uapmd/app/project-command/v1` | [registerProjectCommandRegistry] | project-wide commands: MIR analysis, Basic Pitch, DrumScript, pitch transcription |
  * | `/uapmd/app/clip-command/v1` | [registerClipCommandRegistry] | their clip-scoped counterparts |
  * | `/uapmd/app/timeline/clip-editor/v1` | [registerClipEditorRegistry] | timeline clip editors |
  * | `/uapmd/audio-import/stem-separator/v1` | [registerStemSeparatorRegistry] | Demucs, BS-Roformer |
+ * | `/uapmd/app/panel/v1` | [registerPanelRegistry] | Augene2 Integration |
+ *
+ * The Virtual MIDI Devices addin additionally has to be made known with
+ * [registerVirtualMidiDevicesAddin] before [initialize].
  *
  * Any other extension point still cannot be published from Kotlin: it would be
  * a C++ interface pointer with no meaningful representation here.
@@ -48,9 +54,13 @@ interface AddinManager : AutoCloseable {
      * dangle.
      */
     fun registerCommandRegistry(registry: CommandRegistry)
+    /** Project-wide commands are a [CommandRegistry] of their own. */
+    fun registerProjectCommandRegistry(registry: CommandRegistry)
     fun registerClipCommandRegistry(registry: ClipCommandRegistry)
     fun registerClipEditorRegistry(registry: ClipEditorRegistry)
     fun registerStemSeparatorRegistry(registry: StemSeparatorRegistry)
+    fun registerPanelRegistry(registry: PanelRegistry)
+    fun registerAppModel(model: AppModel)
 
     /** Directories scanned for installed addin packages. */
     val directories: List<String>
@@ -208,6 +218,29 @@ interface StemSeparatorRegistry : AutoCloseable {
     }
 }
 
+/**
+ * `uapmd_addin::PanelRegistry`: model-thread services with an optional panel.
+ *
+ * [update] runs every registered panel's service work; call it from the model
+ * thread on every UI tick, whether or not any panel is shown. Panels draw
+ * themselves inside the host's immediate-mode UI loop, which is not bound, for
+ * the same reason [ClipEditorRegistry]'s editors are not; an addin presented
+ * by other toolkits exposes a model of its own, as [Augene2Integration] does.
+ *
+ * Retained panels are project services that outlive their addin's UI: release
+ * them with [clearRetainedPanels] after [AddinManager.shutdown], while the
+ * sequencer engine is still alive.
+ */
+interface PanelRegistry : AutoCloseable {
+    fun update()
+    fun clearRetainedPanels()
+
+    companion object {
+        fun create(): PanelRegistry = createPanelRegistry()
+    }
+}
+
+internal expect fun createPanelRegistry(): PanelRegistry
 internal expect fun createCommandRegistry(): CommandRegistry
 internal expect fun createClipCommandRegistry(): ClipCommandRegistry
 internal expect fun createClipEditorRegistry(): ClipEditorRegistry

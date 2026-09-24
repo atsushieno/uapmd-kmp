@@ -1,4 +1,4 @@
-# UI action audit: uapmd-app 0.5.6 → uapmd-cmp
+# UI action audit: uapmd-app (`f5d490d5`) → uapmd-cmp
 
 What uapmd-app does that uapmd-cmp does not, verified against
 `external/uapmd/source/tools/uapmd-app/gui/` at the pinned commit. Only outstanding items are
@@ -8,13 +8,9 @@ listed; matched behaviour is not.
 
 | Feature | uapmd-app | What is missing |
 |---|---|---|
-| Script editor | Command ▸ Show/Hide Script | `UapmdJSRuntime` is not exposed by the C API |
-| MCP settings | Command ▸ Show/Hide MCP Settings | `McpServer` handle is not exposed |
-| Import split audio tracks (Demucs) | Import ▾ | no C entry point for the Demucs import path |
 | Why a freeze failed | freeze button tooltip | `FrozenTrackManager::errorMessageForTrack` has no C wrapper, so a failed freeze shows a red snowflake with no reason. Easy to reach: a clip long enough to exceed `kMaximumFrozenTrackBytes` lands in `Error` immediately |
 
-The menu entries for these exist in `Toolbar.kt`, disabled, so the gap is visible in the UI
-rather than silently absent. They belong in `uapmd-binding-missing-api.md` §2 as C API work.
+This belongs in `uapmd-binding-missing-api.md` §2 as C API work.
 
 ## Not yet built
 
@@ -24,6 +20,8 @@ rather than silently absent. They belong in `uapmd-binding-missing-api.md` §2 a
 | Rendering to a file on web | Project ▸ Render To File | The output path and the delivery are wired, but the render itself never finishes: the button stays on "Rendering…" with no progress and no file, on an empty project, for as long as it was left. Untested beyond that — it is the render, not the file handling |
 | Loading a packed project on the Kotlin/JS target | `jsMain`'s `prepareProjectLoad` is still the pass-through that wasmJs used to be, so a `.uapmdz` would reach the engine as a ZIP. Dormant — uapmd-cmp builds wasmJs, not js — but it is the same defect, and `jsMain` has no archive helper bound yet |
 | Details window opens for a newly created instance | after Instantiate Plugin | uapmd-app's `MainWindow::handleInstantiatePlugin` passes a completion that calls `instanceDetails().showWindow(result.instanceId)` on success, so creating a plug-in leaves its Details window open. uapmd-cmp now dismisses the selector on success (2026-09-16) but does not open Details — the other half of the same gesture, left out because it was not asked for |
+| JSFX Settings window | System ▸ JSFX Settings | uapmd-app's GUI registers its own `JsfxResourcesCommand` (not an addin) into the command registry; uapmd-cmp has no JSFX resources window yet |
+| Platform MIDI connections | System ▸ Device Settings | needs the MIDI port list, which the C API does not expose |
 | File pickers on iOS | — | `pickProjectFileToOpen`, `pickMidiFileToOpen` and `pickAudioFileToOpen` all return null on iOS; uapmd has `DocumentProviderIOS.mm`, so this is binding work, not new C API |
 
 ## Intentional divergences

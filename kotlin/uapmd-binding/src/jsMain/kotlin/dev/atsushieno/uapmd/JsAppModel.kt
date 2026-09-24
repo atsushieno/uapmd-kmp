@@ -236,6 +236,32 @@ class JsAppModel internal constructor(internal val handle: Int) : AppModel {
         jsMod._uapmd_app_disable_ump_device(handle, instanceId)
     }
 
+    override val virtualMidiDevicesEnabled: Boolean
+        get() = (jsMod._uapmd_app_virtual_midi_devices_enabled(handle) as Int) != 0
+
+    override var autoCreateVirtualMidiDevices: Boolean
+        get() = (jsMod._uapmd_app_auto_create_virtual_midi_devices(handle) as Int) != 0
+        set(value) { jsMod._uapmd_app_set_auto_create_virtual_midi_devices(handle, value) }
+
+    override var showVirtualMidiDevices: (() -> Unit)?
+        get() = jsShowVirtualMidiDevicesHandler
+        set(value) {
+            jsShowVirtualMidiDevicesHandler = value
+            if (value == null) {
+                jsMod._uapmd_app_set_show_virtual_midi_devices_callback(handle, 0, 0)
+                return
+            }
+            // One table entry serves every handler: it reads the current one.
+            if (jsShowVirtualMidiDevicesFnPtr == 0) {
+                val fn: (Int) -> Unit = { _ -> jsShowVirtualMidiDevicesHandler?.invoke() }
+                jsShowVirtualMidiDevicesFnPtr = addJsCallback(fn, "vi")
+            }
+            jsMod._uapmd_app_set_show_virtual_midi_devices_callback(handle, 0, jsShowVirtualMidiDevicesFnPtr)
+        }
+
+    override val documentProvider: DocumentProvider
+        get() = JsDocumentProvider(jsMod._uapmd_app_document_provider(handle) as Int)
+
     override fun requestShowInstanceDetails(instanceId: Int) {
         jsMod._uapmd_app_request_show_instance_details(handle, instanceId)
     }
@@ -1104,6 +1130,17 @@ actual fun getAppModel(): AppModel {
 
 actual fun cleanupAppModel() {
     jsMod._uapmd_app_cleanup()
+}
+
+actual fun registerVirtualMidiDevicesAddin() {
+    jsMod._uapmd_app_register_virtual_midi_devices_addin()
+}
+
+private var jsShowVirtualMidiDevicesHandler: (() -> Unit)? = null
+private var jsShowVirtualMidiDevicesFnPtr = 0
+
+class JsDocumentProvider internal constructor(internal val handle: Int) : DocumentProvider {
+    override fun tick() { jsMod._uapmd_document_provider_tick(handle) }
 }
 
 private fun readJsClipTargets(base: Int, count: Int): List<TimelineClipTarget> =

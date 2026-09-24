@@ -183,6 +183,31 @@ class NativeAppModel internal constructor(
 
     override fun disableUmpDevice(instanceId: Int) = uapmd_app_disable_ump_device(handle, instanceId)
 
+    override val virtualMidiDevicesEnabled: Boolean
+        get() = uapmd_app_virtual_midi_devices_enabled(handle)
+
+    override var autoCreateVirtualMidiDevices: Boolean
+        get() = uapmd_app_auto_create_virtual_midi_devices(handle)
+        set(value) = uapmd_app_set_auto_create_virtual_midi_devices(handle, value)
+
+    override var showVirtualMidiDevices: (() -> Unit)?
+        get() = showVirtualMidiDevicesRef?.get()
+        set(value) {
+            // AppModel is a process-wide singleton and this wrapper is not, so
+            // the handler's StableRef lives at file scope.
+            val previous = showVirtualMidiDevicesRef
+            showVirtualMidiDevicesRef = value?.let { StableRef.create(it) }
+            uapmd_app_set_show_virtual_midi_devices_callback(
+                handle,
+                showVirtualMidiDevicesRef?.asCPointer(),
+                if (value != null) showVirtualMidiDevicesTrampoline else null
+            )
+            previous?.dispose()
+        }
+
+    override val documentProvider: DocumentProvider
+        get() = NativeDocumentProvider(uapmd_app_document_provider(handle) ?: error("uapmd_app_document_provider returned null"))
+
     override fun requestShowInstanceDetails(instanceId: Int) =
         uapmd_app_request_show_instance_details(handle, instanceId)
 
@@ -788,6 +813,19 @@ actual fun getAppModel(): AppModel =
     NativeAppModel(uapmd_app_instance() ?: error("uapmd_app_instance returned null; call instantiateAppModel() first"))
 
 actual fun cleanupAppModel() = uapmd_app_cleanup()
+
+actual fun registerVirtualMidiDevicesAddin() = uapmd_app_register_virtual_midi_devices_addin()
+
+private var showVirtualMidiDevicesRef: StableRef<() -> Unit>? = null
+
+private val showVirtualMidiDevicesTrampoline =
+    staticCFunction<COpaquePointer?, Unit> { userData ->
+        userData?.asStableRef<() -> Unit>()?.get()?.invoke()
+    }
+
+class NativeDocumentProvider internal constructor(internal val handle: uapmd_document_provider_t) : DocumentProvider {
+    override fun tick() = uapmd_document_provider_tick(handle)
+}
 
 internal fun uapmd_piano_roll_note_t.toKotlin() = PianoRollNote(
     startSeconds = start_seconds,

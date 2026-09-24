@@ -12,6 +12,13 @@ expect fun createRealtimeSequencer(
 expect fun getDefaultDeviceIODispatcher(): DeviceIODispatcher
 expect fun getAudioDeviceManager(driverName: String = ""): AudioDeviceManager
 expect fun getMidiIODevice(driverName: String = ""): MidiIODevice
+
+/**
+ * `uapmd::midiApiSupportsDynamicUmpEndpoints()`: whether virtual MIDI 2.0
+ * devices can be created through [apiName] ("default" or a libremidi API name).
+ * Always false on Android.
+ */
+expect fun midiApiSupportsDynamicUmpEndpoints(apiName: String): Boolean
 expect fun createAudioFileReader(filepath: String): AudioFileReader
 
 /** A reader that yields silence, for clips with no source file. */
@@ -31,6 +38,13 @@ expect fun createAddinManager(): AddinManager
  */
 expect fun instantiateAppModel()
 expect fun getAppModel(): AppModel
+
+/**
+ * `uapmd_app::registerVirtualMidiDevicesAddin()`: makes the built-in Virtual
+ * MIDI Devices addin known to addin managers initialized afterwards. The addin
+ * also needs the model published ([AddinManager.registerAppModel]).
+ */
+expect fun registerVirtualMidiDevicesAddin()
 expect fun cleanupAppModel()
 
 /** Unpacks a `.uapmdz` archive (or passes a `.uapmd` through) before loading. */

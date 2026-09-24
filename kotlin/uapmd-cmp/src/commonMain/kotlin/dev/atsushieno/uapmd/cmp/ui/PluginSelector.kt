@@ -11,6 +11,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material3.Button
 import androidx.compose.material3.Checkbox
@@ -41,12 +42,11 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.Canvas
 
-private enum class SortColumn { Format, Name, Vendor, Id }
-
 /**
- * uapmd-app's Plugin Selector: scan controls, a filterable and sortable catalog
- * table, a destination selector and the device-name/API fields used when the
- * instance becomes a virtual MIDI 2.0 device.
+ * uapmd-app's Plugin Selector: scan controls, the catalog as a [PluginList]
+ * (flat and sortable, or grouped into a tree), and a destination selector.
+ * Instances get the default device configuration; their virtual MIDI 2.0
+ * devices are managed in the Virtual MIDI Devices window.
  *
  * [onInstantiated] is called once a plug-in has actually been created, so the
  * caller can dismiss the selector the way uapmd-app does
@@ -55,9 +55,6 @@ private enum class SortColumn { Format, Name, Vendor, Id }
  */
 @Composable
 fun PluginSelector(host: UapmdHost, onInstantiated: () -> Unit = {}) {
-    var filter by remember { mutableStateOf("") }
-    var sortBy by remember { mutableStateOf(SortColumn.Name) }
-    var ascending by remember { mutableStateOf(true) }
     var selected by remember { mutableStateOf<CatalogEntry?>(null) }
     // uapmd-app's defaults (`PluginSelector.hpp:39-42`): force a rescan, and scan in
     // a separate process wherever that exists. The remote scanner is not a nicety —
@@ -67,30 +64,11 @@ fun PluginSelector(host: UapmdHost, onInstantiated: () -> Unit = {}) {
     var remoteScanner by remember { mutableStateOf(platformSupportsRemoteScanner) }
     var remoteTimeoutSeconds by remember { mutableStateOf("20") }
 
-    var deviceName by remember { mutableStateOf("") }
-    var apiName by remember { mutableStateOf("default") }
     var destinationOpen by remember { mutableStateOf(false) }
 
     // The destination lives on the host so opening the selector from a track's
     // Add Plugin button pre-targets that track, as uapmd-app does.
     val destinationTrack = host.pluginDestinationTrack
-
-    val entries = remember(host.catalog, filter, sortBy, ascending) {
-        val f = filter.trim()
-        val filtered =
-            if (f.isEmpty()) host.catalog
-            else host.catalog.filter {
-                it.displayName.contains(f, true) || it.vendor.contains(f, true) ||
-                    it.format.contains(f, true) || it.pluginId.contains(f, true)
-            }
-        val sorted = when (sortBy) {
-            SortColumn.Format -> filtered.sortedBy { it.format }
-            SortColumn.Name -> filtered.sortedBy { it.displayName.lowercase() }
-            SortColumn.Vendor -> filtered.sortedBy { it.vendor.lowercase() }
-            SortColumn.Id -> filtered.sortedBy { it.pluginId }
-        }
-        if (ascending) sorted else sorted.reversed()
-    }
 
     val blockedByAudioEngine = platformNeedsAudioEngineForScan && !host.isAudioEngineEnabled
 
@@ -161,7 +139,7 @@ fun PluginSelector(host: UapmdHost, onInstantiated: () -> Unit = {}) {
         Text(
             when {
                 !host.isScanning && !progress.running ->
-                    "${entries.size} of ${host.catalog.size} plugins"
+                    "${host.catalog.size} plugins"
                 progress.totalBundles > 0u ->
                     "Scanning… ${progress.processedBundles} / ${progress.totalBundles} bundles"
                 progress.processedBundles > 0u ->
@@ -194,46 +172,20 @@ fun PluginSelector(host: UapmdHost, onInstantiated: () -> Unit = {}) {
             )
         }
 
-        OutlinedTextField(
-            value = filter,
-            onValueChange = { filter = it },
-            label = { Text("Search") },
-            singleLine = true,
-            modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp)
+        // The blocklist sits between the scan controls and the list, as in
+        // uapmd-app, with the hint about manual scans right above the list.
+        BlockedBundles(host)
+        Text(
+            "Missing plugins? They may appear after a manual scan.",
+            style = MaterialTheme.typography.labelSmall
         )
 
-        // ── Table ────────────────────────────────────────────────────────────
-        Row(Modifier.fillMaxWidth().padding(vertical = 2.dp)) {
-            HeaderCell("Format", SortColumn.Format, sortBy, ascending, Modifier.width(70.dp)) {
-                if (sortBy == it) ascending = !ascending else { sortBy = it; ascending = true }
-            }
-            HeaderCell("Name", SortColumn.Name, sortBy, ascending, Modifier.weight(1f)) {
-                if (sortBy == it) ascending = !ascending else { sortBy = it; ascending = true }
-            }
-            HeaderCell("Vendor", SortColumn.Vendor, sortBy, ascending, Modifier.weight(0.8f)) {
-                if (sortBy == it) ascending = !ascending else { sortBy = it; ascending = true }
-            }
-        }
-        HorizontalDivider()
-
-        LazyColumn(Modifier.fillMaxWidth().weight(1f)) {
-            items(entries) { entry ->
-                val isSelected = selected?.pluginId == entry.pluginId && selected?.format == entry.format
-                Row(
-                    Modifier.fillMaxWidth()
-                        .background(
-                            if (isSelected) MaterialTheme.colorScheme.primaryContainer
-                            else MaterialTheme.colorScheme.surface
-                        )
-                        .clickable { selected = entry }
-                        .padding(vertical = 3.dp)
-                ) {
-                    Text(entry.format, Modifier.width(70.dp), style = MaterialTheme.typography.bodySmall)
-                    Text(entry.displayName, Modifier.weight(1f), style = MaterialTheme.typography.bodySmall)
-                    Text(entry.vendor, Modifier.weight(0.8f), style = MaterialTheme.typography.bodySmall)
-                }
-            }
-        }
+        PluginList(
+            catalog = host.catalog,
+            selected = selected,
+            onSelect = { selected = it },
+            modifier = Modifier.fillMaxWidth().weight(1f)
+        )
 
         HorizontalDivider()
 
@@ -243,11 +195,7 @@ fun PluginSelector(host: UapmdHost, onInstantiated: () -> Unit = {}) {
                 onClick = {
                     selected?.let {
                         awaitingInstantiation = true
-                        host.instantiate(
-                            it,
-                            destinationTrack,
-                            PluginInstanceConfig(apiName = apiName, deviceName = deviceName)
-                        )
+                        host.instantiate(it, destinationTrack)
                     }
                 },
                 enabled = selected != null && !host.isInstantiating
@@ -272,19 +220,6 @@ fun PluginSelector(host: UapmdHost, onInstantiated: () -> Unit = {}) {
             }
         }
 
-        if (destinationTrack < 0) {
-            Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                OutlinedTextField(
-                    value = deviceName, onValueChange = { deviceName = it },
-                    label = { Text("Device Name") }, singleLine = true, modifier = Modifier.weight(1f)
-                )
-                OutlinedTextField(
-                    value = apiName, onValueChange = { apiName = it },
-                    label = { Text("API") }, singleLine = true, modifier = Modifier.width(120.dp)
-                )
-            }
-        }
-
         host.lastInstantiation?.let { r ->
             Text(
                 if (r.error != null) "Failed: ${r.error}" else "Created '${r.pluginName}' (id ${r.instanceId})",
@@ -293,12 +228,6 @@ fun PluginSelector(host: UapmdHost, onInstantiated: () -> Unit = {}) {
             )
         }
 
-        HorizontalDivider()
-        BlockedBundles(host)
-        Text(
-            "Missing plugins? They may appear after a manual scan.",
-            style = MaterialTheme.typography.labelSmall
-        )
     }
 }
 
@@ -345,46 +274,35 @@ private fun BlockedBundles(host: UapmdHost) {
         Spacer(Modifier.width(88.dp))
     }
     HorizontalDivider()
-    entries.forEach { entry ->
-        Row(
-            Modifier.fillMaxWidth().padding(vertical = 2.dp),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Text(entry.format, Modifier.width(70.dp), style = MaterialTheme.typography.bodySmall)
-            Text(entry.pluginId, Modifier.weight(1f), style = MaterialTheme.typography.bodySmall)
-            Text(entry.reason, Modifier.weight(1.4f), style = MaterialTheme.typography.bodySmall)
-            Button(
-                onClick = { host.unblockPlugin(entry.id) },
-                modifier = Modifier.width(88.dp)
-            ) { Text("Unblock", style = MaterialTheme.typography.labelSmall) }
+    // At most about eight rows tall, scrolling under a fixed header, as uapmd-app
+    // sizes its blocked_plugins_table.
+    LazyColumn(Modifier.fillMaxWidth().heightIn(max = BlockedRowHeight * 8)) {
+        items(entries) { entry ->
+            Row(
+                Modifier.fillMaxWidth().padding(vertical = 2.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text(entry.format, Modifier.width(70.dp), style = MaterialTheme.typography.bodySmall)
+                Text(entry.pluginId, Modifier.weight(1f), style = MaterialTheme.typography.bodySmall)
+                Text(entry.reason, Modifier.weight(1.4f), style = MaterialTheme.typography.bodySmall)
+                Button(
+                    onClick = { host.unblockPlugin(entry.id) },
+                    modifier = Modifier.width(88.dp)
+                ) { Text("Unblock", style = MaterialTheme.typography.labelSmall) }
+            }
+            HorizontalDivider()
         }
-        HorizontalDivider()
     }
 }
 
-@Composable
-private fun HeaderCell(
-    label: String,
-    column: SortColumn,
-    sortBy: SortColumn,
-    ascending: Boolean,
-    modifier: Modifier,
-    onClick: (SortColumn) -> Unit
-) {
-    Text(
-        text = if (sortBy == column) "$label ${if (ascending) "▲" else "▼"}" else label,
-        modifier = modifier.clickable { onClick(column) },
-        style = MaterialTheme.typography.labelMedium,
-        fontWeight = FontWeight.Bold
-    )
-}
+private val BlockedRowHeight = 44.dp
 
 /**
  * Disclosure triangle. Drawn rather than typed: U+25BE/U+25B8 have no glyph in
  * the web build's fallback font and rendered as tofu there.
  */
 @Composable
-private fun DisclosureIcon(expanded: Boolean, tint: Color) =
+internal fun DisclosureIcon(expanded: Boolean, tint: Color) =
     Canvas(Modifier.size(9.dp)) {
         drawPath(Path().apply {
             if (expanded) {

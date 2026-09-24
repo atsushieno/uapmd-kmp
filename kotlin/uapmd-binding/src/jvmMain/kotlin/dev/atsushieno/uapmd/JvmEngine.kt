@@ -3,6 +3,20 @@ package dev.atsushieno.uapmd
 import com.sun.jna.Pointer
 import dev.atsushieno.uapmd.jna.*
 
+/** Addressed through its engine: `AudioWorkers` has no C handle of its own. */
+class JvmAudioWorkers internal constructor(private val engine: Pointer) : AudioWorkers {
+    override fun configure(workerCount: UInt): Boolean =
+        lib.uapmd_engine_audio_workers_configure(engine, workerCount.toInt())
+    override val count: UInt get() = lib.uapmd_engine_audio_workers_count(engine).toUInt()
+    override var stopOnDeadline: Boolean
+        get() = lib.uapmd_engine_audio_workers_stop_on_deadline(engine)
+        set(value) = lib.uapmd_engine_audio_workers_set_stop_on_deadline(engine, value)
+    override fun waitForWorkers() = lib.uapmd_engine_audio_workers_wait(engine)
+    override val fault: AudioWorkerFault
+        get() = AudioWorkerFault.fromNative(lib.uapmd_engine_audio_workers_fault(engine))
+    override fun resetFault() = lib.uapmd_engine_audio_workers_reset_fault(engine)
+}
+
 // ─── JvmSequencerEngine ──────────────────────────────────────────────────────
 
 class JvmSequencerEngine internal constructor(
@@ -137,6 +151,12 @@ class JvmSequencerEngine internal constructor(
 
     override val timeline: TimelineFacade
         get() = JvmTimelineFacade(lib.uapmd_engine_timeline(handle) ?: error("uapmd_engine_timeline returned null"))
+
+    override val audioWorkers: AudioWorkers get() = JvmAudioWorkers(handle)
+    override val droppedPluginParameterNotificationCount: UInt
+        get() = lib.uapmd_engine_dropped_plugin_parameter_notification_count(handle).toUInt()
+    override val droppedPluginPresetRequestCount: UInt
+        get() = lib.uapmd_engine_dropped_plugin_preset_request_count(handle).toUInt()
 
     // ─── Project / track dirty state ────────────────────────────────────────
 
@@ -361,3 +381,6 @@ class JvmMidiRecorder internal constructor(private val handle: Pointer) : MidiRe
     override fun stop() = lib.uapmd_midi_recorder_stop(handle)
     override fun cancel() = lib.uapmd_midi_recorder_cancel(handle)
 }
+
+actual fun midiApiSupportsDynamicUmpEndpoints(apiName: String): Boolean =
+    lib.uapmd_midi_api_supports_dynamic_ump_endpoints(apiName)

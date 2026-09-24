@@ -2,6 +2,20 @@ package dev.atsushieno.uapmd
 
 // ─── WasmJsSequencerEngine ────────────────────────────────────────────────────
 
+/** Addressed through its engine: `AudioWorkers` has no C handle of its own. */
+class WasmJsAudioWorkers internal constructor(private val engine: Int) : AudioWorkers {
+    override fun configure(workerCount: UInt): Boolean =
+        wasmMod.uapmdEngineAudioWorkersConfigure(engine, workerCount.toInt())
+    override val count: UInt get() = wasmMod.uapmdEngineAudioWorkersCount(engine).toUInt()
+    override var stopOnDeadline: Boolean
+        get() = wasmMod.uapmdEngineAudioWorkersStopOnDeadline(engine)
+        set(value) = wasmMod.uapmdEngineAudioWorkersSetStopOnDeadline(engine, value)
+    override fun waitForWorkers() = wasmMod.uapmdEngineAudioWorkersWait(engine)
+    override val fault: AudioWorkerFault
+        get() = AudioWorkerFault.fromNative(wasmMod.uapmdEngineAudioWorkersFault(engine))
+    override fun resetFault() = wasmMod.uapmdEngineAudioWorkersResetFault(engine)
+}
+
 class WasmJsSequencerEngine internal constructor(
     internal val handle: Int
 ) : SequencerEngine {
@@ -168,6 +182,12 @@ class WasmJsSequencerEngine internal constructor(
 
     override val timeline: TimelineFacade
         get() = WasmJsTimelineFacade(wasmMod.uapmdEngineTimeline(handle))
+
+    override val audioWorkers: AudioWorkers get() = WasmJsAudioWorkers(handle)
+    override val droppedPluginParameterNotificationCount: UInt
+        get() = wasmMod.uapmdEngineDroppedPluginParameterNotificationCount(handle).toUInt()
+    override val droppedPluginPresetRequestCount: UInt
+        get() = wasmMod.uapmdEngineDroppedPluginPresetRequestCount(handle).toUInt()
 
     override fun renderOffline(
         settings: OfflineRenderSettings,
@@ -354,3 +374,6 @@ class WasmJsMidiRecorder internal constructor(private val handle: Int) : MidiRec
     override fun stop() = wasmMod.uapmdMidiRecorderStop(handle)
     override fun cancel() = wasmMod.uapmdMidiRecorderCancel(handle)
 }
+
+actual fun midiApiSupportsDynamicUmpEndpoints(apiName: String): Boolean =
+    withCStringKt(apiName) { p -> wasmMod.uapmdMidiApiSupportsDynamicUmpEndpoints(p) }

@@ -47,7 +47,7 @@ class JvmAudioFileReader internal constructor(
 // ─── JvmTimelineFacade ───────────────────────────────────────────────────────
 
 class JvmTimelineFacade internal constructor(
-    private val handle: Pointer
+    internal val handle: Pointer
 ) : TimelineFacade {
 
     private var tlChangedCbRef: dev.atsushieno.uapmd.jna.TimelineChangedCb? = null
