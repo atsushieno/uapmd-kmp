@@ -1036,6 +1036,8 @@ external interface UapmdCApiModule : JsAny {
     fun uapmdAppLastPluginScanError(app: Int, buf: Int, bufSize: Int): Int
     @JsName("_uapmd_app_cancel_plugin_scanning")
     fun uapmdAppCancelPluginScanning(app: Int)
+    @JsName("_uapmd_app_stop_plugin_scanning")
+    fun uapmdAppStopPluginScanning(app: Int)
     @JsName("_uapmd_app_generate_scan_report")
     fun uapmdAppGenerateScanReport(app: Int, buf: Int, bufSize: Int): Int
     @JsName("_uapmd_app_refresh_master_tempo_map")

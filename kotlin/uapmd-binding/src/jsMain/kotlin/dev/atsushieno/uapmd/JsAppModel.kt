@@ -73,6 +73,10 @@ class JsAppModel internal constructor(internal val handle: Int) : AppModel {
         jsMod._uapmd_app_cancel_plugin_scanning(handle)
     }
 
+    override fun stopPluginScanning() {
+        jsMod._uapmd_app_stop_plugin_scanning(handle)
+    }
+
     override fun generateScanReport(): String =
         readJsString(handle) { h, buf, size -> jsMod._uapmd_app_generate_scan_report(h, buf, size) as Int }
 

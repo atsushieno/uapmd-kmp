@@ -132,6 +132,9 @@ fun main() {
     }
 
     println("-- shutdown")
+    // Deliberately while the startup scan may still run: shutdown() has to stop
+    // it, or the process aborts on the way out.
+    println("   scanning at shutdown: ${host.isScanning}")
     host.shutdown()
     println(if (failures == 0) "ALL PASSED" else "$failures FAILED")
     kotlin.system.exitProcess(if (failures == 0) 0 else 1)

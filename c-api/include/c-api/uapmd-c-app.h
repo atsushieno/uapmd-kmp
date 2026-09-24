@@ -81,6 +81,11 @@ UAPMD_C_EXPORT void uapmd_app_perform_plugin_scanning(uapmd_app_model_t app,
                                                         double remote_timeout_seconds,
                                                         bool require_fast_scanning);
 UAPMD_C_EXPORT void uapmd_app_cancel_plugin_scanning(uapmd_app_model_t app);
+/* AppModel::stopPluginScanning(): cancels a scan in progress and waits for its
+ * worker to finish, running queued main-thread tasks meanwhile. Call on the main
+ * thread before tearing down anything the scan's completion callbacks reach;
+ * uapmd_app_cleanup() does it as a last resort. */
+UAPMD_C_EXPORT void uapmd_app_stop_plugin_scanning(uapmd_app_model_t app);
 UAPMD_C_EXPORT size_t uapmd_app_generate_scan_report(uapmd_app_model_t app, char* buf, size_t buf_size);
 
 /*

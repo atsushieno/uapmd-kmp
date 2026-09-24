@@ -44,6 +44,7 @@ class NativeAppModel internal constructor(
     )
 
     override fun cancelPluginScanning() = uapmd_app_cancel_plugin_scanning(handle)
+    override fun stopPluginScanning() = uapmd_app_stop_plugin_scanning(handle)
 
     override val slowScanProgress: SlowScanProgress
         get() = uapmd_app_slow_scan_progress(handle).useContents {

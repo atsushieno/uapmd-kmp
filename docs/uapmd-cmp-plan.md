@@ -5,7 +5,7 @@ versus uapmd-app are tracked in `uapmd-cmp-ui-audit.md`; binding gaps in
 `uapmd-binding-missing-api.md`.
 
 Reference for every question of behaviour: `external/uapmd/source/tools/uapmd-app/` at the pinned
-submodule commit (`f5d490d5`, 0.6.0 development).
+submodule commit (`ad5a046a`, 0.6.0 development).
 
 ---
 
@@ -350,10 +350,11 @@ menu item, it is an addin that fails to load:
 `uapmd_augene2::registerProjectService()` is called too, so Augene2 project data
 loads and saves whether or not its addin is enabled.
 
-Augene2 is built everywhere except Android (`cmake/UapmdFeatureOptions.cmake`): its
-ANTLR 4.13.2 C++ runtime inherits uapmd's C++23 and does not compile against NDK r28's
-libc++. The fix belongs in augene2. Until then `Augene2.isAvailable` is false on
-Android and uapmd-cmp shows no Augene2 command there.
+Augene2 is built on every target. Its ANTLR C++ runtime is pinned (in augene2
+`d3ce24bb`, picked up by uapmd `010813ac`) past 4.13.2, whose missing standard
+includes broke MSVC 14.51 and NDK r28 in C++23 mode. uapmd's own CI does not build
+Augene2 (`UAPMD_ENABLE_AUGENE2` defaults off), so uapmd-kmp is where such breakage
+shows first.
 
 Every poll tick runs `UapmdHost.tickModelServices()`, which is what uapmd-app's
 `MainWindow::update()` does per frame: `PanelRegistry::update()` (Augene2 applies
@@ -368,6 +369,21 @@ automatic creation is turned on there.
 `./gradlew :uapmd-cmp:runAddinProbe [-Duapmd.probe.instantiate=CLAP]` checks all of
 this headlessly: every addin Active, both command registries populated, both windows
 opening from their commands, audio worker resizing, and enabling/disabling a device.
+
+### 2.12 Stopping a scan at teardown
+
+A plug-in scan runs on an AppModel worker thread. Since uapmd `ad5a046a` the worker is
+joinable and `AppModel::stopPluginScanning()` cancels it and waits; `~AppModel()` calls it
+first, and `UapmdHost.shutdown()` calls it before tearing down addins, as uapmd-app does.
+Before that fix, quitting mid-scan aborted with "mutex lock failed".
+
+The wait runs `EventLoop::processQueuedTasks()`, because an in-process scan loads bundles
+through tasks it queues on the main thread and blocks on. The C API's event-loop adapter
+(`CApiEventLoop`, `c-api/src/uapmd-c-engine.cpp`) implements that itself: it keeps every
+task it hands the host and runs the pending ones when asked on the main thread, each
+exactly once. Without it, teardown on the loop's main thread (macOS Cmd+Q runs
+`shutdown()` on the AppKit thread; elsewhere the AWT event thread) deadlocks whenever an
+in-process scan is waiting there — the host's queue cannot drain while that thread waits.
 
 ## 3 · Window model
 

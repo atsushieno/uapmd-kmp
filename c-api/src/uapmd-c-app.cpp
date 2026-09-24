@@ -151,6 +151,7 @@ void uapmd_app_perform_plugin_scanning(uapmd_app_model_t app,
 }
 
 void uapmd_app_cancel_plugin_scanning(uapmd_app_model_t app) { AM(app)->cancelPluginScanning(); }
+void uapmd_app_stop_plugin_scanning(uapmd_app_model_t app) { AM(app)->stopPluginScanning(); }
 
 size_t uapmd_app_generate_scan_report(uapmd_app_model_t app, char* buf, size_t buf_size) {
     auto report = AM(app)->generateScanReport();

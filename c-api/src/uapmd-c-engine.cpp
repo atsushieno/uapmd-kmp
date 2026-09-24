@@ -8,6 +8,10 @@
 #include <cmath>
 #include <cstring>
 #include <functional>
+#include <memory>
+#include <mutex>
+#include <atomic>
+#include <deque>
 #include <future>
 #include <string>
 #include <vector>
@@ -843,10 +847,27 @@ uapmd_offline_render_result_t uapmd_render_offline(uapmd_sequencer_engine_t engi
 namespace {
 
 class CApiEventLoop : public remidy::EventLoop {
+    // A task is handed to the host's queue, and also kept here so that
+    // processQueuedTasks() can run it without waiting for the host: uapmd calls that
+    // while the main thread waits for work that may itself be waiting on a queued
+    // task (AppModel::stopPluginScanning() at teardown), and the host's queue does
+    // not drain while its main thread is blocked there. Whichever path comes first
+    // runs it; both only run on the main thread.
+    struct Task {
+        std::function<void()> func;
+        std::atomic<bool> claimed{false};
+        void runOnce() {
+            if (!claimed.exchange(true))
+                func();
+        }
+    };
+
     void* user_data_;
     uapmd_event_loop_initialize_fn_t    on_initialize_;
     uapmd_event_loop_is_main_thread_fn_t is_main_thread_;
     uapmd_event_loop_enqueue_fn_t        enqueue_task_;
+    std::mutex pending_mutex_;
+    std::deque<std::shared_ptr<Task>> pending_;
 
 protected:
     void initializeOnUIThreadImpl() override {
@@ -858,17 +879,41 @@ protected:
     }
 
     void enqueueTaskOnMainThreadImpl(std::function<void()>&& func) override {
-        // Heap-allocate so the task survives the C callback boundary.
-        auto* task = new std::function<void()>(std::move(func));
+        auto task = std::make_shared<Task>();
+        task->func = std::move(func);
+        {
+            std::lock_guard lock(pending_mutex_);
+            while (!pending_.empty() && pending_.front()->claimed.load())
+                pending_.pop_front();
+            pending_.push_back(task);
+        }
+        // Heap-allocated so the task survives the C callback boundary.
         enqueue_task_(
             [](void* ctx) {
-                auto* f = static_cast<std::function<void()>*>(ctx);
-                (*f)();
-                delete f;
+                auto* t = static_cast<std::shared_ptr<Task>*>(ctx);
+                (*t)->runOnce();
+                delete t;
             },
-            task,
+            new std::shared_ptr<Task>(std::move(task)),
             user_data_
         );
+    }
+
+    void processQueuedTasksImpl() override {
+        // Only the main thread may run them; elsewhere the host's queue will.
+        if (!is_main_thread_(user_data_))
+            return;
+        while (true) {
+            std::shared_ptr<Task> task;
+            {
+                std::lock_guard lock(pending_mutex_);
+                if (pending_.empty())
+                    return;
+                task = std::move(pending_.front());
+                pending_.pop_front();
+            }
+            task->runOnce();
+        }
     }
 
     void startImpl() override {}

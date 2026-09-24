@@ -555,7 +555,12 @@ typedef bool (*uapmd_event_loop_is_main_thread_fn_t)(void* user_data);
 
 /* The enqueue callback receives the task function pointer plus its opaque
  * context; the host must schedule task(task_ctx) on the main thread and
- * return immediately (the C++ side blocks until task() completes).         */
+ * return immediately (the C++ side blocks until task() completes).
+ *
+ * remidy's EventLoop::processQueuedTasks() needs no host support: the adapter
+ * keeps every task it enqueues and runs the pending ones itself when uapmd
+ * calls it on the main thread (e.g. AppModel::stopPluginScanning() while the
+ * main thread waits for a scan). A task runs once, whichever comes first.  */
 typedef void (*uapmd_event_loop_enqueue_fn_t)(
     uapmd_event_loop_task_fn_t task, void* task_ctx, void* user_data);
 

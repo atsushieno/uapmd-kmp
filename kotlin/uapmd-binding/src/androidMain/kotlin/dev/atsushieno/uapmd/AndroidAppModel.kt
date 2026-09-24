@@ -82,6 +82,7 @@ class AndroidAppModel internal constructor(internal val handle: Long) : AppModel
     )
 
     override fun cancelPluginScanning() = JniBridge.uapmdAppCancelPluginScanning(handle)
+    override fun stopPluginScanning() = JniBridge.uapmdAppStopPluginScanning(handle)
 
     override val slowScanProgress: SlowScanProgress
         get() {

@@ -1912,6 +1912,10 @@ class UapmdHost private constructor(val model: AppModel) {
         nativeUiPresentations.clear()
         nativeUiVisibleInstanceIds = emptySet()
         presentationsToClose.forEach { runCatching { it.close() } }
+        // A scan still running would call back into what is torn down below, and
+        // its worker would outlive the model; uapmd-app stops it at this point too
+        // (main_common.cpp, before MainWindow::shutdown).
+        runCatching { model.stopPluginScanning() }
         // uapmd-app's order (MainWindow::shutdown): addins first, then the
         // model's handler, then the project services retained past them.
         addins?.shutdown()

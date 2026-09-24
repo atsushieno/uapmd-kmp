@@ -1805,6 +1805,7 @@ interface UapmdLibrary : Library {
     fun uapmd_set_remote_scanner_executable(path: String?)
     fun uapmd_app_last_plugin_scan_error(app: Pointer?, buf: ByteArray?, bufSize: Long): Long
     fun uapmd_app_cancel_plugin_scanning(app: Pointer?)
+    fun uapmd_app_stop_plugin_scanning(app: Pointer?)
     fun uapmd_app_generate_scan_report(app: Pointer?, buf: ByteArray?, bufSize: Long): Long
     fun uapmd_app_clear_plugin_blocklist(app: Pointer?)
     fun uapmd_app_blocklist_count(app: Pointer?): Int

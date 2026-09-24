@@ -44,6 +44,7 @@ class JvmAppModel internal constructor(
     )
 
     override fun cancelPluginScanning() = lib.uapmd_app_cancel_plugin_scanning(handle)
+    override fun stopPluginScanning() = lib.uapmd_app_stop_plugin_scanning(handle)
 
     override val slowScanProgress: SlowScanProgress
         get() = lib.uapmd_app_slow_scan_progress(handle).let {

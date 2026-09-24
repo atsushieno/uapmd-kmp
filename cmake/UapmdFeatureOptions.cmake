@@ -39,16 +39,8 @@ option(UAPMD_ENABLE_DRUMSCRIPT
 # plugin format the bindings publish like any other: with it off there is no JSFX in
 # the catalogue for them to bind to. Its editor is a framebuffer rather than a native
 # window, which is what the framebuffer UI entry points in c-api/ exist for.
-# Off on Android for now: augene2's ANTLR 4.13.2 C++ runtime inherits uapmd's C++23
-# and fails to compile against NDK r28 libc++ (ParseTreePatternMatcher.cpp deletes an
-# incomplete antlr4::Token). It builds as C++17/20; the fix belongs in augene2. The
-# binding still links there and reports Augene2 as unavailable.
-set(_UAPMD_KMP_AUGENE2_DEFAULT ON)
-if(ANDROID)
-    set(_UAPMD_KMP_AUGENE2_DEFAULT OFF)
-endif()
 option(UAPMD_ENABLE_AUGENE2
-        "Build the Augene2 MML integration addin (MIT; augene2's own build runs ANTLR)" ${_UAPMD_KMP_AUGENE2_DEFAULT})
+        "Build the Augene2 MML integration addin (MIT; augene2's own build runs ANTLR)" ON)
 option(UAPMD_ENABLE_JSFX
         "Build the JSFX plugin format (Apache-2.0 ysfx, zlib-licensed WDL/EEL2)" ON)
 

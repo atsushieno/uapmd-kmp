@@ -350,6 +350,10 @@ JNI_FN(void, uapmdAppCancelPluginScanning)(JNIEnv*, jclass, jlong app) {
     uapmd_app_cancel_plugin_scanning(AM(app));
 }
 
+JNI_FN(void, uapmdAppStopPluginScanning)(JNIEnv*, jclass, jlong app) {
+    uapmd_app_stop_plugin_scanning(AM(app));
+}
+
 JNI_FN(jstring, uapmdAppGenerateScanReport)(JNIEnv* env, jclass, jlong app) {
     size_t needed = uapmd_app_generate_scan_report(AM(app), nullptr, 0);
     if (needed == 0) return env->NewStringUTF("");

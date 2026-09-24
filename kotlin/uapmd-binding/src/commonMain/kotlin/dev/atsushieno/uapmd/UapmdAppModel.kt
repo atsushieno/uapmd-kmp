@@ -52,6 +52,13 @@ interface AppModel {
         requireFastScanning: Boolean = false
     )
     fun cancelPluginScanning()
+    /**
+     * `AppModel::stopPluginScanning()`: cancels a scan in progress and waits for its
+     * worker to finish, running queued main-thread tasks meanwhile. Call on the
+     * main thread before tearing down anything the scan's completion callbacks
+     * reach; [cleanupAppModel] does it as a last resort.
+     */
+    fun stopPluginScanning()
 
     /**
      * Progress of the slow scan. [isScanning] alone cannot tell a long scan from a
