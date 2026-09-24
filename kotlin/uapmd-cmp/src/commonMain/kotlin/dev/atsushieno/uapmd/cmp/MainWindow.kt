@@ -206,8 +206,12 @@ fun MainWindow() {
                         HorizontalDivider()
                         BottomBar(host, windows)
                     }
-                    PlatformHostedPluginUiLayer(host, Modifier.fillMaxSize())
                 }
+                // Above the floating windows, as uapmd-app stacks its plug-in UI
+                // overlays over the ImGui windows. The plug-in surface itself is
+                // Z-ordered on top regardless, so anything drawn over its frame
+                // would split the window visually.
+                PlatformHostedPluginUiLayer(host, Modifier.fillMaxSize())
             }
         }
     }

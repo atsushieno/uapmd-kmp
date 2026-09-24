@@ -16,6 +16,7 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.wrapContentSize
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -23,6 +24,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
@@ -40,8 +42,6 @@ import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
-import androidx.compose.ui.window.Popup
-import androidx.compose.ui.window.PopupProperties
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import org.androidaudioplugin.hosting.GuiHelper
@@ -66,17 +66,21 @@ internal fun AndroidPlatformHostedPluginUiLayer(
     }
     Box(modifier = modifier) {
         hostedInfos.forEach { info ->
-            AapPluginUiPopup(
-                info = info,
-                onClose = { host.hidePluginUi(info.instanceId) },
-                onError = { host.reportPluginUiStatus(it) }
-            )
+            // Keyed so that closing one window cannot hand its composition slot -
+            // and the AndroidView holding its SurfaceView - to the next one.
+            key(info.instanceId) {
+                AapPluginUiWindow(
+                    info = info,
+                    onClose = { host.hidePluginUi(info.instanceId) },
+                    onError = { host.reportPluginUiStatus(it) }
+                )
+            }
         }
     }
 }
 
 @Composable
-private fun AapPluginUiPopup(
+private fun AapPluginUiWindow(
     info: HostedInstanceInfo,
     onClose: () -> Unit,
     onError: (String) -> Unit
@@ -151,7 +155,7 @@ private fun AapPluginUiPopup(
             }
             return
         }
-        is AapHostLoadState.Ready -> AapPluginSurfacePopup(
+        is AapHostLoadState.Ready -> AapPluginSurfaceWindow(
             title = info.displayName,
             state = state.state,
             available = available,
@@ -167,7 +171,7 @@ private data class AapHostState(
 )
 
 @Composable
-private fun AapPluginSurfacePopup(
+private fun AapPluginSurfaceWindow(
     title: String,
     state: AapHostState,
     available: IntSize,
@@ -316,14 +320,38 @@ private fun AapPluginSurfacePopup(
         )
     }
 
-    Popup(
-        alignment = Alignment.TopStart,
-        offset = IntOffset(offsetX.roundToInt(), offsetY.roundToInt()),
-        properties = PopupProperties(clippingEnabled = false)
+    // Drawn in the activity window, not in a Popup, so that text fields in the
+    // plug-in UI can get the IME. aap-core (0.11.2+) hands focus to the plug-in's
+    // embedded window through the SurfaceView's *host* window
+    // (SurfaceView.onFocusChanged -> grantEmbeddedWindowFocus), which only takes
+    // effect while that host window holds window focus. A Popup window is
+    // FLAG_NOT_FOCUSABLE, so it never did; a focusable one would instead keep
+    // window focus - and with it the IME and key shortcuts - away from the rest
+    // of the app for as long as any plug-in UI is open. In the activity window,
+    // view focus decides which side gets the keyboard, exactly as in uapmd-app's
+    // PluginUiOverlay: aap-core focuses the SurfaceView when the plug-in UI is
+    // touched, and Compose's interop takes that focus back when a Compose text
+    // field is focused.
+    Box(
+        modifier = Modifier
+            // Measured on its own terms, as the Popup was. The layer loses the IME
+            // height (safeDrawing insets) while a keyboard is up, and that must not
+            // squeeze the plug-in surface.
+            .wrapContentSize(Alignment.TopStart, unbounded = true)
+            .offset { IntOffset(offsetX.roundToInt(), offsetY.roundToInt()) }
     ) {
         Column(
             modifier = Modifier
                 .padding(12.dp)
+                // A separate popup window swallowed every press within its bounds;
+                // in-window, presses on the frame would fall through to the
+                // timeline underneath unless something here is hit.
+                .pointerInput(Unit) {
+                    awaitPointerEventScope {
+                        while (true)
+                            awaitPointerEvent()
+                    }
+                }
                 .background(MaterialTheme.colorScheme.surface)
                 .border(1.dp, MaterialTheme.colorScheme.outlineVariant)
         ) {
