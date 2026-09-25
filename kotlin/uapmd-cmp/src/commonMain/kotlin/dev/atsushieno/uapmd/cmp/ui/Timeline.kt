@@ -75,6 +75,7 @@ import dev.atsushieno.uapmd.ClipType
 import dev.atsushieno.uapmd.cmp.ClipLaneAssignment
 import dev.atsushieno.uapmd.cmp.LaneGeometry
 import dev.atsushieno.uapmd.cmp.TempoMap
+import dev.atsushieno.uapmd.cmp.TrackInstance
 import dev.atsushieno.uapmd.cmp.assignClipLanes
 import dev.atsushieno.uapmd.ClipCommandTarget
 import dev.atsushieno.uapmd.TimelineClipTarget
@@ -1628,39 +1629,7 @@ private fun TrackLegend(
                     )
                 }
                 DropdownMenu(expanded = pluginMenu, onDismissRequest = { pluginMenu = false }) {
-                    instances.forEachIndexed { i, instance ->
-                        val detailsKey = detailsWindowKey(instance.instanceId)
-                        val detailsOpen = windows.isOpen(detailsKey)
-                        DropdownMenuItem(
-                            text = { Text("${if (detailsOpen) "Hide" else "Show"} ${instance.displayName} Details") },
-                            onClick = {
-                                pluginMenu = false
-                                if (detailsOpen) windows.close(detailsKey)
-                                else windows.open(
-                                    detailsKey,
-                                    "${instance.displayName} (${instance.formatName}) - Details",
-                                    DpSize(460.dp, 420.dp)
-                                ) { InstanceDetails(host, instance) }
-                            }
-                        )
-                        val uiVisible = host.isPluginUiVisible(instance.instanceId)
-                        DropdownMenuItem(
-                            text = { Text("${if (uiVisible) "Hide" else "Show"} ${instance.displayName} GUI") },
-                            onClick = {
-                                pluginMenu = false
-                                if (uiVisible) host.hidePluginUi(instance.instanceId)
-                                else host.showPluginUi(instance.instanceId)
-                            }
-                        )
-                        DropdownMenuItem(
-                            text = { Text("Delete ${instance.displayName} (at [${i + 1}])") },
-                            onClick = {
-                                pluginMenu = false
-                                host.removeInstance(instance.instanceId)
-                            }
-                        )
-                        HorizontalDivider()
-                    }
+                    PluginInstanceMenuItems(host, windows, instances) { pluginMenu = false }
                     DropdownMenuItem(
                         text = { Text("Add Plugin") },
                         onClick = { pluginMenu = false; openSelectorForTrack() }
@@ -1689,6 +1658,54 @@ private fun TrackLegend(
                 }
             }
         }
+    }
+}
+
+/**
+ * The per-instance entries of a track's plugin menu: Details, GUI and Delete.
+ * uapmd-app builds the plugin popup in one place for both regular tracks and
+ * the master track (`renderTrackLegendContent`), so this is shared by
+ * [TrackLegend] and [MasterTrackLegend] as well.
+ */
+@Composable
+private fun PluginInstanceMenuItems(
+    host: UapmdHost,
+    windows: FloatingWindowManager,
+    instances: List<TrackInstance>,
+    onDismiss: () -> Unit
+) {
+    instances.forEachIndexed { i, instance ->
+        val detailsKey = detailsWindowKey(instance.instanceId)
+        val detailsOpen = windows.isOpen(detailsKey)
+        DropdownMenuItem(
+            text = { Text("${if (detailsOpen) "Hide" else "Show"} ${instance.displayName} Details") },
+            onClick = {
+                onDismiss()
+                if (detailsOpen) windows.close(detailsKey)
+                else windows.open(
+                    detailsKey,
+                    "${instance.displayName} (${instance.formatName}) - Details",
+                    DpSize(460.dp, 420.dp)
+                ) { InstanceDetails(host, instance) }
+            }
+        )
+        val uiVisible = host.isPluginUiVisible(instance.instanceId)
+        DropdownMenuItem(
+            text = { Text("${if (uiVisible) "Hide" else "Show"} ${instance.displayName} GUI") },
+            onClick = {
+                onDismiss()
+                if (uiVisible) host.hidePluginUi(instance.instanceId)
+                else host.showPluginUi(instance.instanceId)
+            }
+        )
+        DropdownMenuItem(
+            text = { Text("Delete ${instance.displayName} (at [${i + 1}])") },
+            onClick = {
+                onDismiss()
+                host.removeInstance(instance.instanceId)
+            }
+        )
+        HorizontalDivider()
     }
 }
 
@@ -1781,24 +1798,7 @@ private fun MasterTrackLegend(host: UapmdHost, windows: FloatingWindowManager, t
                     )
                 }
                 DropdownMenu(expanded = pluginMenu, onDismissRequest = { pluginMenu = false }) {
-                    instances.forEachIndexed { i, instance ->
-                        val key = detailsWindowKey(instance.instanceId)
-                        DropdownMenuItem(
-                            text = { Text("${if (windows.isOpen(key)) "Hide" else "Show"} ${instance.displayName} Details") },
-                            onClick = {
-                                pluginMenu = false
-                                if (windows.isOpen(key)) windows.close(key)
-                                else windows.open(key, "${instance.displayName} - Details", DpSize(460.dp, 420.dp)) {
-                                    InstanceDetails(host, instance)
-                                }
-                            }
-                        )
-                        DropdownMenuItem(
-                            text = { Text("Delete ${instance.displayName} (at [${i + 1}])") },
-                            onClick = { pluginMenu = false; host.removeInstance(instance.instanceId) }
-                        )
-                        HorizontalDivider()
-                    }
+                    PluginInstanceMenuItems(host, windows, instances) { pluginMenu = false }
                     DropdownMenuItem(text = { Text("Add Master Plugin") }, onClick = {
                         pluginMenu = false
                         host.targetPluginDestination(MasterTrackIndex)
