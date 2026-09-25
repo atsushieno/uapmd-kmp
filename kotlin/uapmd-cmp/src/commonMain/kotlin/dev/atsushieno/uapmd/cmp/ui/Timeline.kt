@@ -83,6 +83,7 @@ import dev.atsushieno.uapmd.cmp.pickAudioFileToOpen
 import dev.atsushieno.uapmd.cmp.pickMidiFileToOpen
 import kotlinx.coroutines.launch
 import kotlin.math.pow
+import kotlin.math.log2
 import kotlin.math.max
 import kotlin.math.abs
 
@@ -156,18 +157,31 @@ private val NavigatorHeight = 26.dp
 private const val ResizeGripPx = 6f
 
 /*
- * Zoom limits and law. uapmd-app clamps the timeline scale to
- * [kMinSafeTimelineScale, kMaxTimelineScale] and zooms exponentially —
- * `scale * 2^(wheel * kZoomWheelSensitivity)` (TimelineNavigator.cpp:147) — so a
- * step is a constant *ratio* rather than a constant number of pixels. Our unit is
- * dp-per-second rather than its scale factor, but the law is the same one, and
- * the bounds are the zoom slider's so the slider and the navigator cannot disagree.
+ * Zoom limits and law, as uapmd-app's (TimelineAxis.hpp, TimelineNavigator.cpp).
+ * The bounds are per *unit* of the current view -- per second, or per beat -- so
+ * the usable range is the same on both axes, and wide enough that the minimum fits
+ * any song on screen. The slider is logarithmic over them, and the wheel/drag zoom
+ * exponentially -- `scale * 2^(wheel * kZoomWheelSensitivity)` -- so a step is a
+ * constant *ratio*. uapmd-app's pixels map to dp here: our density already carries
+ * the UI scale, as uapmd-app multiplies its scale by it.
+ *
+ * The lanes are laid out in seconds, so the state stays in dp per second and the
+ * bounds are converted through the view's units per second.
  */
 /** Beats the timeline shows when a project finishes loading. */
 private const val InitialViewBeats = 32.0
 
-private const val MinDpPerSecond = 8f
-private const val MaxDpPerSecond = 240f
+private const val MinDpPerUnit = 0.05f
+private const val MaxDpPerUnit = 400f
+
+/**
+ * The widest the lane may be laid out, in px. The lanes are one layout as wide as
+ * the whole song at the current zoom, and Compose `Constraints` cannot represent a
+ * dimension of 2^18 px or more -- it throws, taking the app down. uapmd-app draws
+ * only the visible frames and has no such limit, so its maximum zoom holds here
+ * only while the song fits this budget; a long song gets less zoom-in instead.
+ */
+private const val MaxLaneWidthPx = 200_000f
 private const val ZoomWheelSensitivity = 0.2f
 
 /**
@@ -386,7 +400,9 @@ fun Timeline(
     windows: FloatingWindowManager,
     modifier: Modifier = Modifier
 ) {
-    var dpPerSecond by remember { mutableStateOf(40f) }
+    // The zoom asked for. What is laid out is [dpPerSecond], this kept inside
+    // bounds that move with the song length, the window and the view.
+    var requestedDpPerSecond by remember { mutableStateOf(40f) }
     // The second of the two things a zoom has to do: the lane is `contentSeconds *
     // dpPerSecond` wide, so changing the zoom alone leaves the scroll offset
     // pointing at a different moment in the song and the view slides sideways on
@@ -401,6 +417,33 @@ fun Timeline(
     val hScroll = rememberScrollState()
     val density = LocalDensity.current.density
 
+    // Show at least a minute, or the content plus a margin.
+    val contentSeconds = remember(host.trackClips, host.model.sampleRate) {
+        val sr = host.model.sampleRate.takeIf { it > 0 } ?: 48000
+        val last = host.trackClips.flatten().maxOfOrNull {
+            (it.positionSamples + it.durationSamples).toDouble() / sr
+        } ?: 0.0
+        maxOf(60.0, last + 10.0)
+    }
+
+    // Seconds per unit of the current view, for the per-unit zoom bounds. The beats
+    // axis is converted at the project tempo, as its lanes are laid out in seconds.
+    val unitsPerSecond = if (timeUnit == TimeUnit.Beats) beatsPerSecond.toFloat() else 1f
+    // The minimum shows the whole song across the lane viewport: anything smaller
+    // only shrinks it into an unreadable strip. The maximum is uapmd-app's, unless
+    // the lane would exceed what Compose can lay out.
+    val viewportPx = hScroll.viewportSize
+    val minDpPerSecond = maxOf(
+        MinDpPerUnit * unitsPerSecond,
+        if (viewportPx > 0) (viewportPx / density / contentSeconds).toFloat() else 0f
+    )
+    val maxDpPerSecond = maxOf(
+        minDpPerSecond * 1.01f,
+        minOf(MaxDpPerUnit * unitsPerSecond, (MaxLaneWidthPx / density / contentSeconds).toFloat())
+    )
+    fun clampZoom(dpPerSecondValue: Float): Float = dpPerSecondValue.coerceIn(minDpPerSecond, maxDpPerSecond)
+    val dpPerSecond = clampZoom(requestedDpPerSecond)
+
     // Layout widths and zoom are in dp; Canvas, pointer input and ScrollState
     // all use physical pixels. Convert once so every lane and the navigator
     // describe the same time range, including on high-density displays.
@@ -408,12 +451,12 @@ fun Timeline(
 
     fun zoomBy(factor: Float) {
         val previous = dpPerSecond
-        val next = (previous * factor).coerceIn(MinDpPerSecond, MaxDpPerSecond)
+        val next = clampZoom(previous * factor)
         if (next == previous) return
         val viewport = hScroll.viewportSize
         if (viewport > 0)
             recentreSeconds = (hScroll.value + viewport / 2f) / pixelsPerSecond
-        dpPerSecond = next
+        requestedDpPerSecond = next
     }
 
     // A freshly loaded project opens on the first 32 quarter-note beats rather
@@ -427,19 +470,9 @@ fun Timeline(
         appliedInitialViewFor = host.projectRevision
         val spanSeconds = host.tempoMap.beatsToSeconds(InitialViewBeats)
         if (spanSeconds <= 0.0) return@LaunchedEffect
-        dpPerSecond = (viewport / density / spanSeconds).toFloat()
-            .coerceIn(MinDpPerSecond, MaxDpPerSecond)
+        requestedDpPerSecond = clampZoom((viewport / density / spanSeconds).toFloat())
         recentreSeconds = null
         hScroll.scrollTo(0)
-    }
-
-    // Show at least a minute, or the content plus a margin.
-    val contentSeconds = remember(host.trackClips, host.model.sampleRate) {
-        val sr = host.model.sampleRate.takeIf { it > 0 } ?: 48000
-        val last = host.trackClips.flatten().maxOfOrNull {
-            (it.positionSamples + it.durationSamples).toDouble() / sr
-        } ?: 0.0
-        maxOf(60.0, last + 10.0)
     }
 
     LaunchedEffect(pixelsPerSecond, hScroll.maxValue) {
@@ -451,6 +484,14 @@ fun Timeline(
         // against the wrong extent and, because the value would have been consumed,
         // never be corrected. Wait for the extent that matches the new scale.
         val expectedContentPx = contentSeconds.toFloat() * pixelsPerSecond
+        // Zoomed out past the song, the lane no longer fills the viewport and there
+        // is nothing to scroll: settle at the start instead of waiting for an extent
+        // that will never match.
+        if (expectedContentPx <= viewport) {
+            recentreSeconds = null
+            hScroll.scrollTo(0)
+            return@LaunchedEffect
+        }
         if (abs((hScroll.maxValue + viewport) - expectedContentPx) > 2f) return@LaunchedEffect
         val target = (centre * pixelsPerSecond - viewport / 2f)
             .coerceIn(0f, hScroll.maxValue.toFloat())
@@ -473,13 +514,18 @@ fun Timeline(
             horizontalArrangement = Arrangement.spacedBy(8.dp)
         ) {
             Button(onClick = {
+                // The bounds are per unit, so they move with the view; the laid-out
+                // zoom is re-clamped on the next composition.
                 timeUnit = if (timeUnit == TimeUnit.Seconds) TimeUnit.Beats else TimeUnit.Seconds
             }) { Text(if (timeUnit == TimeUnit.Seconds) "View: Seconds" else "View: Beats") }
             Text("Zoom", style = MaterialTheme.typography.bodySmall)
+            // Logarithmic, as uapmd-app's (ImGuiSliderFlags_Logarithmic): the range
+            // spans four orders of magnitude, and a linear slider would crowd all the
+            // zoomed-out territory into its first few pixels.
             Slider(
-                value = dpPerSecond,
-                onValueChange = { zoomBy(it / dpPerSecond) },
-                valueRange = MinDpPerSecond..MaxDpPerSecond,
+                value = log2(dpPerSecond / unitsPerSecond),
+                onValueChange = { zoomBy(2f.pow(it) * unitsPerSecond / dpPerSecond) },
+                valueRange = log2(minDpPerSecond / unitsPerSecond)..log2(maxDpPerSecond / unitsPerSecond),
                 modifier = Modifier.width(140.dp)
             )
             Text(
