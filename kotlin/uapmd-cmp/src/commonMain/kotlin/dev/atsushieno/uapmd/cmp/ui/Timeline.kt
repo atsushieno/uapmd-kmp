@@ -393,7 +393,8 @@ fun Timeline(
     // every step. Remember where the middle of the viewport was, in seconds, and put
     // it back once the lane has been remeasured at the new scale.
     var recentreSeconds by remember { mutableStateOf<Float?>(null) }
-    var timeUnit by remember { mutableStateOf(TimeUnit.Seconds) }
+    // Beats first, as uapmd-app (TimelineEditor::timelineViewMode_ = BeatsTicks).
+    var timeUnit by remember { mutableStateOf(TimeUnit.Beats) }
     val tempo = host.timeline?.tempo ?: 120.0
     val beatsPerSecond = tempo / 60.0
     val vScroll = rememberScrollState()
