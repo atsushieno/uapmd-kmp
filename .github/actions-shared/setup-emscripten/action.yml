@@ -23,10 +23,15 @@ runs:
       shell: bash
       run: brew list ninja >/dev/null 2>&1 || brew install ninja
 
+    # Outside the workspace: emscripten caches the ports it builds (SDL3 among
+    # them, whose Android template carries its own gradle-wrapper.jar) inside the
+    # SDK, and setup-gradle's wrapper validation scans the whole workspace and
+    # fails on a wrapper it does not know. It was also polluting the uapmd
+    # submodule's working tree.
     - name: restore emsdk cache
       uses: actions/cache@v4
       with:
-        path: external/uapmd/source/tools/uapmd-app/web/.emsdk
+        path: ~/emsdk
         key: emsdk-${{ runner.os }}-${{ inputs.emsdk-version }}
         restore-keys: emsdk-${{ runner.os }}-
 
@@ -36,7 +41,7 @@ runs:
         EMSDK_VERSION: ${{ inputs.emsdk-version }}
       run: |
         set -euo pipefail
-        EMSDK_DIR="external/uapmd/source/tools/uapmd-app/web/.emsdk"
+        EMSDK_DIR="${HOME}/emsdk"
         if [[ ! -d "${EMSDK_DIR}/.git" ]]; then
           git clone --depth 1 https://github.com/emscripten-core/emsdk.git "${EMSDK_DIR}"
         else
