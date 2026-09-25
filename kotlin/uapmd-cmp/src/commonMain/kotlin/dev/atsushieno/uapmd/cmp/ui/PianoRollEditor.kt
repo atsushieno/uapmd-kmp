@@ -57,9 +57,12 @@ import kotlin.math.roundToInt
 
 
 
-private val SnapOptions = listOf("Free", "1/1", "1/2", "1/4", "1/8", "1/16", "1/32")
-/** Beat fractions matching [SnapOptions]; index 0 is Free. uapmd-app's kSnapValues. */
-private val SnapBeats = listOf(0f, 1f, 0.5f, 0.25f, 0.125f, 0.0625f, 0.03125f)
+/** Note durations relative to a whole note; "1/16" is a sixteenth-note grid. uapmd-app's kSnapLabels. */
+private val SnapOptions = listOf("Free", "1/8", "1/16", "1/24", "1/32", "1/48", "1/64")
+/** Quarter-note beats matching [SnapOptions]; index 0 is Free. uapmd-app's kSnapValues. */
+private val SnapBeats = listOf(0f, 4f / 8f, 4f / 16f, 4f / 24f, 4f / 32f, 4f / 48f, 4f / 64f)
+/** Defaults to 1/16, as uapmd-app does. */
+private const val DefaultSnapIndex = 2
 private val BlackKeys = setOf(1, 3, 6, 8, 10)
 
 private val KeyColumnWidth = 44.dp
@@ -134,7 +137,7 @@ fun PianoRollEditor(
     var visibleBeats by remember { mutableStateOf(16f) }
     var lastPixelsPerSecond by remember { mutableStateOf(0f) }
     var rowHeightDp by remember { mutableStateOf(11f) }
-    var snapIndex by remember { mutableStateOf(3) }
+    var snapIndex by remember { mutableStateOf(DefaultSnapIndex) }
     var snapMenu by remember { mutableStateOf(false) }
     // Bumped after every edit so the note list is re-read from the session.
     var revision by remember { mutableStateOf(0) }
