@@ -57,6 +57,7 @@ import dev.atsushieno.uapmd.cmp.ui.MixerMonitor
 import dev.atsushieno.uapmd.cmp.ui.Augene2Window
 import dev.atsushieno.uapmd.cmp.ui.VirtualMidiDevicesWindow
 import dev.atsushieno.uapmd.cmp.ui.PluginSelector
+import dev.atsushieno.uapmd.cmp.ui.PluginSelectorWindowSize
 import dev.atsushieno.uapmd.cmp.ui.Timeline
 import dev.atsushieno.uapmd.cmp.ui.Toolbar
 import dev.atsushieno.uapmd.cmp.ui.rememberFloatingWindowManager
@@ -214,7 +215,7 @@ fun MainWindow() {
                             },
                             onTogglePlugins = {
                                 host.targetPluginDestination(-1)
-                                windows.toggle("plugins", "Plugin Selector", DpSize(560.dp, 430.dp)) {
+                                windows.toggle("plugins", "Plugin Selector", PluginSelectorWindowSize) {
                                     PluginSelector(host) { windows.close("plugins") }
                                 }
                             },

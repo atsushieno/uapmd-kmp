@@ -5,11 +5,14 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material3.Button
@@ -93,7 +96,7 @@ private sealed interface PluginListRow {
  * matches name and vendor; while it is active every matching group starts
  * expanded, and collapsing one only lasts until the search changes.
  */
-@OptIn(ExperimentalMaterial3Api::class)
+@OptIn(ExperimentalMaterial3Api::class, ExperimentalLayoutApi::class)
 @Composable
 fun PluginList(
     catalog: List<CatalogEntry>,
@@ -198,7 +201,15 @@ fun PluginList(
 
     Column(modifier) {
         // ── Toolbar ──────────────────────────────────────────────────────────
-        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+        // Grouping and search share one line, so the list keeps the height; a
+        // FlowRow moves the search field to its own line when the window is
+        // too narrow for both.
+        FlowRow(
+            Modifier.fillMaxWidth().padding(bottom = 4.dp),
+            horizontalArrangement = Arrangement.spacedBy(6.dp),
+            verticalArrangement = Arrangement.spacedBy(4.dp),
+            itemVerticalAlignment = Alignment.CenterVertically
+        ) {
             Text("Group by:", style = MaterialTheme.typography.bodySmall)
             Box {
                 Button(onClick = { groupMenu = true }) { Text(groupMode.label) }
@@ -231,17 +242,17 @@ fun PluginList(
                     else expandedGroups[groupMode] = emptySet()
                 }) { Text("Collapse All") }
             }
+            OutlinedTextField(
+                value = search,
+                onValueChange = {
+                    search = it
+                    searchCollapsedGroups = emptySet()
+                },
+                label = { Text("Search") },
+                singleLine = true,
+                modifier = Modifier.weight(1f).widthIn(min = 200.dp)
+            )
         }
-        OutlinedTextField(
-            value = search,
-            onValueChange = {
-                search = it
-                searchCollapsedGroups = emptySet()
-            },
-            label = { Text("Search") },
-            singleLine = true,
-            modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp)
-        )
 
         // ── Header: stays put while the rows scroll ─────────────────────────
         Row(Modifier.fillMaxWidth().padding(vertical = 2.dp), verticalAlignment = Alignment.CenterVertically) {

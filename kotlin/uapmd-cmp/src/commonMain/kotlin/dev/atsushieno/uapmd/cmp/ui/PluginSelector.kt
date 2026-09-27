@@ -30,6 +30,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.unit.DpSize
 import androidx.compose.ui.unit.dp
 import dev.atsushieno.uapmd.CatalogEntry
 import dev.atsushieno.uapmd.PluginInstanceConfig
@@ -41,6 +42,13 @@ import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.Color
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.Canvas
+
+/**
+ * Initial size of the Plugin Selector window. Tall enough that the catalog list,
+ * which takes whatever height the scan controls leave, shows a dozen or so rows
+ * the way uapmd-app's default window does.
+ */
+val PluginSelectorWindowSize = DpSize(640.dp, 680.dp)
 
 /**
  * uapmd-app's Plugin Selector: scan controls, the catalog as a [PluginList]

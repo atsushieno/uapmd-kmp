@@ -1472,7 +1472,7 @@ private fun TrackLegend(
 
     fun openSelectorForTrack() {
         host.targetPluginDestination(trackIndex)
-        windows.open("plugins", "Plugin Selector", DpSize(560.dp, 430.dp)) {
+        windows.open("plugins", "Plugin Selector", PluginSelectorWindowSize) {
             PluginSelector(host) { windows.close("plugins") }
         }
     }
@@ -1785,7 +1785,7 @@ private fun MasterTrackLegend(host: UapmdHost, windows: FloatingWindowManager, t
                     onClick = {
                         if (instances.isEmpty()) {
                             host.targetPluginDestination(MasterTrackIndex)
-                            windows.open("plugins", "Plugin Selector", DpSize(560.dp, 430.dp)) {
+                            windows.open("plugins", "Plugin Selector", PluginSelectorWindowSize) {
                                 PluginSelector(host) { windows.close("plugins") }
                             }
                         } else pluginMenu = true
@@ -1802,7 +1802,7 @@ private fun MasterTrackLegend(host: UapmdHost, windows: FloatingWindowManager, t
                     DropdownMenuItem(text = { Text("Add Master Plugin") }, onClick = {
                         pluginMenu = false
                         host.targetPluginDestination(MasterTrackIndex)
-                        windows.open("plugins", "Plugin Selector", DpSize(560.dp, 430.dp)) {
+                        windows.open("plugins", "Plugin Selector", PluginSelectorWindowSize) {
                             PluginSelector(host) { windows.close("plugins") }
                         }
                     })
