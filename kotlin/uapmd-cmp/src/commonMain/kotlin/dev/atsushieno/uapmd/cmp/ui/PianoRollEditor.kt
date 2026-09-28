@@ -57,12 +57,6 @@ import kotlin.math.roundToInt
 
 
 
-/** Note durations relative to a whole note; "1/16" is a sixteenth-note grid. uapmd-app's kSnapLabels. */
-private val SnapOptions = listOf("Free", "1/8", "1/16", "1/24", "1/32", "1/48", "1/64")
-/** Quarter-note beats matching [SnapOptions]; index 0 is Free. uapmd-app's kSnapValues. */
-private val SnapBeats = listOf(0f, 4f / 8f, 4f / 16f, 4f / 24f, 4f / 32f, 4f / 48f, 4f / 64f)
-/** Defaults to 1/16, as uapmd-app does. */
-private const val DefaultSnapIndex = 2
 private val BlackKeys = setOf(1, 3, 6, 8, 10)
 
 private val KeyColumnWidth = 44.dp

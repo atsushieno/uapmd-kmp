@@ -390,6 +390,10 @@ JNI_FN(jboolean, uapmdCommandsResizeClip)(JNIEnv*, jclass, jlong h, jint t, jint
     return uapmd_commands_resize_clip(j2p<uapmd_project_commands_t>(h), t, c, v, static_cast<uapmd_mutation_origin_t>(o));
 }
 
+JNI_FN(jboolean, uapmdCommandsTrimClipStart)(JNIEnv*, jclass, jlong h, jint t, jint c, jlong v, jint o) {
+    return uapmd_commands_trim_clip_start(j2p<uapmd_project_commands_t>(h), t, c, v, static_cast<uapmd_mutation_origin_t>(o));
+}
+
 JNI_FN(jboolean, uapmdCommandsSetClipName)(JNIEnv* env, jclass, jlong h, jint t, jint c, jstring v, jint o) {
     const char* s = jstr(env, v);
     bool ok = uapmd_commands_set_clip_name(j2p<uapmd_project_commands_t>(h), t, c, s, static_cast<uapmd_mutation_origin_t>(o));
@@ -686,7 +690,8 @@ JNI_FN(jboolean, uapmdClipFragmentIsMidi)(JNIEnv*, jclass, jlong h) {
 
 /**
  * Fills outStrings[0..1] = {name, filepath} and returns
- * double[7] = {clipId, positionSamples, positionBeats, durationSamples, gain, muted, clipType},
+ * double[8] = {clipId, positionSamples, positionBeats, durationSamples, gain, muted, clipType,
+ *             sourceOffsetSamples},
  * matching the packing uapmdTtGetAllClips already uses.
  */
 JNI_FN(jdoubleArray, uapmdClipFragmentGetClip)(JNIEnv* env, jclass, jlong h, jobjectArray outStrings) {
@@ -696,14 +701,15 @@ JNI_FN(jdoubleArray, uapmdClipFragmentGetClip)(JNIEnv* env, jclass, jlong h, job
         env->SetObjectArrayElement(outStrings, 0, env->NewStringUTF(c.name ? c.name : ""));
         env->SetObjectArrayElement(outStrings, 1, env->NewStringUTF(c.filepath ? c.filepath : ""));
     }
-    jdouble vals[7] = {
+    jdouble vals[8] = {
         static_cast<jdouble>(c.clip_id),
         static_cast<jdouble>(c.position.samples), c.position.legacy_beats,
         static_cast<jdouble>(c.duration_samples), c.gain,
-        c.muted ? 1.0 : 0.0, static_cast<jdouble>(c.clip_type)
+        c.muted ? 1.0 : 0.0, static_cast<jdouble>(c.clip_type),
+        static_cast<jdouble>(c.source_offset_samples)
     };
-    jdoubleArray arr = env->NewDoubleArray(7);
-    env->SetDoubleArrayRegion(arr, 0, 7, vals);
+    jdoubleArray arr = env->NewDoubleArray(8);
+    env->SetDoubleArrayRegion(arr, 0, 8, vals);
     return arr;
 }
 

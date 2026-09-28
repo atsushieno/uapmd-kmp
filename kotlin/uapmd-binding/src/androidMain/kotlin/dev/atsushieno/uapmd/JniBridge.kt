@@ -497,6 +497,7 @@ object JniBridge {
     @JvmStatic external fun uapmdCommandsSetClipGain(h: Long, t: Int, c: Int, v: Double, o: Int): Boolean
     @JvmStatic external fun uapmdCommandsSetClipMuted(h: Long, t: Int, c: Int, v: Boolean, o: Int): Boolean
     @JvmStatic external fun uapmdCommandsResizeClip(h: Long, t: Int, c: Int, v: Long, o: Int): Boolean
+    @JvmStatic external fun uapmdCommandsTrimClipStart(h: Long, t: Int, c: Int, v: Long, o: Int): Boolean
     @JvmStatic external fun uapmdCommandsSetClipName(h: Long, t: Int, c: Int, v: String, o: Int): Boolean
     @JvmStatic external fun uapmdCommandsSetClipFilepath(h: Long, t: Int, c: Int, v: String, o: Int): Boolean
     @JvmStatic external fun uapmdCommandsSetClipNeedsFileSave(h: Long, t: Int, c: Int, v: Boolean, o: Int): Boolean

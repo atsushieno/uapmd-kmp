@@ -1575,6 +1575,10 @@ class UapmdHost private constructor(val model: AppModel) {
     fun resizeClip(trackIndex: Int, clipId: Int, durationSamples: Long) =
         commands.resizeClip(trackIndex, clipId, durationSamples).also { invalidateMidiCache() }
 
+    /** Moves the clip's start by [deltaSamples], leaving its content and end where they are. */
+    fun trimClipStart(trackIndex: Int, clipId: Int, deltaSamples: Long) =
+        commands.trimClipStart(trackIndex, clipId, deltaSamples).also { invalidateMidiCache() }
+
     fun setClipFilepath(trackIndex: Int, clipId: Int, path: String) =
         commands.setClipFilepath(trackIndex, clipId, path).also { invalidateMidiCache() }
 

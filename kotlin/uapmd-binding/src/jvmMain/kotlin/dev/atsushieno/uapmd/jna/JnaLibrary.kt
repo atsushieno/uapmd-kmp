@@ -366,7 +366,8 @@ open class UapmdMidiNote : Structure() {
     "source_node_instance_id", "gain", "muted", "name", "filepath",
     "needs_file_save", "clip_type", "tick_resolution", "clip_tempo",
     "nrpn_to_parameter_mapping", "anchor_reference_id", "anchor_origin",
-    "anchor_offset", "marker_count", "markers", "audio_warp_count", "audio_warps"
+    "anchor_offset", "marker_count", "markers", "audio_warp_count", "audio_warps",
+    "source_offset_samples"
 )
 open class UapmdClipData : Structure() {
     @JvmField var clip_id: Int = 0
@@ -390,6 +391,7 @@ open class UapmdClipData : Structure() {
     @JvmField var markers: Pointer? = null
     @JvmField var audio_warp_count: Int = 0
     @JvmField var audio_warps: Pointer? = null
+    @JvmField var source_offset_samples: Long = 0L
 }
 
 @FieldOrder("directions", "id", "name", "sample_rate", "channels")
@@ -1607,6 +1609,7 @@ interface UapmdLibrary : Library {
     fun uapmd_commands_set_clip_gain(cmd: Pointer?, trackIndex: Int, clipId: Int, gain: Double, origin: Int): Boolean
     fun uapmd_commands_set_clip_muted(cmd: Pointer?, trackIndex: Int, clipId: Int, muted: Boolean, origin: Int): Boolean
     fun uapmd_commands_resize_clip(cmd: Pointer?, trackIndex: Int, clipId: Int, newDurationSamples: Long, origin: Int): Boolean
+    fun uapmd_commands_trim_clip_start(cmd: Pointer?, trackIndex: Int, clipId: Int, deltaSamples: Long, origin: Int): Boolean
     fun uapmd_commands_set_clip_name(cmd: Pointer?, trackIndex: Int, clipId: Int, name: String?, origin: Int): Boolean
     fun uapmd_commands_set_clip_filepath(cmd: Pointer?, trackIndex: Int, clipId: Int, filepath: String?, origin: Int): Boolean
     fun uapmd_commands_set_clip_needs_file_save(cmd: Pointer?, trackIndex: Int, clipId: Int, needsSave: Boolean, origin: Int): Boolean

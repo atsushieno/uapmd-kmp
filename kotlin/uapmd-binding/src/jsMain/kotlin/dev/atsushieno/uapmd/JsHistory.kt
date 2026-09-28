@@ -189,7 +189,7 @@ internal object Off {
     const val ADDIN_MESSAGE = 28
     const val ADDIN_SIZE = 32
 
-    // uapmd_clip_data_t, sizeof 128
+    // uapmd_clip_data_t, sizeof 136
     const val CLIP_ID = 0
     const val CLIP_POSITION = 8
     const val CLIP_DURATION = 24
@@ -198,7 +198,8 @@ internal object Off {
     const val CLIP_NAME = 52
     const val CLIP_FILEPATH = 56
     const val CLIP_TYPE = 64
-    const val CLIP_SIZE = 128
+    const val CLIP_SOURCE_OFFSET = 128
+    const val CLIP_SIZE = 136
 }
 
 // ─── Memory helpers ──────────────────────────────────────────────────────────
@@ -437,6 +438,9 @@ class JsProjectCommands internal constructor(private val handle: Int) : ProjectC
 
     override fun resizeClip(trackIndex: Int, clipId: Int, newDurationSamples: Long, origin: MutationOrigin): Boolean =
         jsMod._uapmd_commands_resize_clip(handle, trackIndex, clipId, bigInt(newDurationSamples), origin.nativeValue) as Boolean
+
+    override fun trimClipStart(trackIndex: Int, clipId: Int, deltaSamples: Long, origin: MutationOrigin): Boolean =
+        jsMod._uapmd_commands_trim_clip_start(handle, trackIndex, clipId, bigInt(deltaSamples), origin.nativeValue) as Boolean
 
     override fun setClipName(trackIndex: Int, clipId: Int, name: String, origin: MutationOrigin): Boolean =
         withJsCString(name) { p -> jsMod._uapmd_commands_set_clip_name(handle, trackIndex, clipId, p, origin.nativeValue) as Boolean }
@@ -688,7 +692,8 @@ class JsClipFragment internal constructor(
                 muted = jsGetBool(p + Off.CLIP_MUTED),
                 name = jsGetStr(p + Off.CLIP_NAME),
                 filepath = jsGetStr(p + Off.CLIP_FILEPATH),
-                clipType = ClipType.fromNative(jsGetI32(p + Off.CLIP_TYPE))
+                clipType = ClipType.fromNative(jsGetI32(p + Off.CLIP_TYPE)),
+                sourceOffsetSamples = jsGetI64(p + Off.CLIP_SOURCE_OFFSET)
             )
         }
 

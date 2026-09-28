@@ -198,6 +198,9 @@ class JvmProjectCommands internal constructor(private val handle: Pointer) : Pro
     override fun resizeClip(trackIndex: Int, clipId: Int, newDurationSamples: Long, origin: MutationOrigin) =
         lib.uapmd_commands_resize_clip(handle, trackIndex, clipId, newDurationSamples, origin.nativeValue)
 
+    override fun trimClipStart(trackIndex: Int, clipId: Int, deltaSamples: Long, origin: MutationOrigin) =
+        lib.uapmd_commands_trim_clip_start(handle, trackIndex, clipId, deltaSamples, origin.nativeValue)
+
     override fun setClipName(trackIndex: Int, clipId: Int, name: String, origin: MutationOrigin) =
         lib.uapmd_commands_set_clip_name(handle, trackIndex, clipId, name, origin.nativeValue)
 
@@ -395,7 +398,8 @@ class JvmClipFragment internal constructor(
                 muted = c.muted != 0.toByte(),
                 name = c.name ?: "",
                 filepath = c.filepath ?: "",
-                clipType = ClipType.fromNative(c.clip_type)
+                clipType = ClipType.fromNative(c.clip_type),
+                sourceOffsetSamples = c.source_offset_samples
             )
         }
 

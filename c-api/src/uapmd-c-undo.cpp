@@ -242,6 +242,10 @@ bool uapmd_commands_resize_clip(uapmd_project_commands_t cmd, int32_t track_inde
     return PC(cmd)->resizeClip(track_index, clip_id, new_duration_samples, to_cpp_origin(origin));
 }
 
+bool uapmd_commands_trim_clip_start(uapmd_project_commands_t cmd, int32_t track_index, int32_t clip_id, int64_t delta_samples, uapmd_mutation_origin_t origin) {
+    return PC(cmd)->trimClipStart(track_index, clip_id, delta_samples, to_cpp_origin(origin));
+}
+
 bool uapmd_commands_set_clip_name(uapmd_project_commands_t cmd, int32_t track_index, int32_t clip_id, const char* name, uapmd_mutation_origin_t origin) {
     return PC(cmd)->setClipName(track_index, clip_id, name ? name : "", to_cpp_origin(origin));
 }
@@ -582,6 +586,7 @@ bool uapmd_clip_fragment_get_clip(uapmd_clip_fragment_t fragment, uapmd_clip_dat
     out->reference_id = src.referenceId.c_str();
     out->position = to_c(src.position);
     out->duration_samples = src.durationSamples;
+    out->source_offset_samples = src.sourceOffsetSamples;
     out->source_node_instance_id = src.sourceNodeInstanceId;
     out->gain = src.gain;
     out->muted = src.muted;

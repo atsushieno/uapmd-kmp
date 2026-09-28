@@ -251,7 +251,8 @@ class JvmTimelineTrack internal constructor(
                 referenceId         = c.reference_id ?: "",
                 anchorReferenceId   = c.anchor_reference_id ?: "",
                 anchorOrigin        = AnchorOrigin.fromNative(c.anchor_origin),
-                anchorOffsetSamples = c.anchor_offset.samples
+                anchorOffsetSamples = c.anchor_offset.samples,
+                sourceOffsetSamples = c.source_offset_samples
             )
         }
     }

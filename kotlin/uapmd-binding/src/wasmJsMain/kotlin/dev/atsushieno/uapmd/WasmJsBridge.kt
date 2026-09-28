@@ -1801,6 +1801,9 @@ internal external fun wasmCommandsDisconnectTrackGraphConnection(
 @JsFun("(mod, cmd, t, c, v, o) => mod._uapmd_commands_resize_clip(cmd, t, c, BigInt(v), o)")
 internal external fun wasmCommandsResizeClip(mod: UapmdCApiModule, cmd: Int, t: Int, c: Int, v: String, o: Int): Boolean
 
+@JsFun("(mod, cmd, t, c, v, o) => mod._uapmd_commands_trim_clip_start(cmd, t, c, BigInt(v), o)")
+internal external fun wasmCommandsTrimClipStart(mod: UapmdCApiModule, cmd: Int, t: Int, c: Int, v: String, o: Int): Boolean
+
 // ── Project history callback dispatch ───────────────────────────────────────
 
 internal val pendingUndoCompletions   = mutableMapOf<Int, (UndoResult) -> Unit>()

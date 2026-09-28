@@ -196,6 +196,11 @@ UAPMD_C_EXPORT bool uapmd_commands_set_clip_anchor(uapmd_project_commands_t cmd,
 UAPMD_C_EXPORT bool uapmd_commands_set_clip_gain(uapmd_project_commands_t cmd, int32_t track_index, int32_t clip_id, double gain, uapmd_mutation_origin_t origin);
 UAPMD_C_EXPORT bool uapmd_commands_set_clip_muted(uapmd_project_commands_t cmd, int32_t track_index, int32_t clip_id, bool muted, uapmd_mutation_origin_t origin);
 UAPMD_C_EXPORT bool uapmd_commands_resize_clip(uapmd_project_commands_t cmd, int32_t track_index, int32_t clip_id, int64_t new_duration_samples, uapmd_mutation_origin_t origin);
+/* Moves the clip's start by delta_samples, keeping its content and its end in
+ * place: positive cuts the beginning off, negative restores it. Past the start
+ * of a MIDI clip's content, the content is shifted along so the new room is
+ * part of it; an audio clip cannot start before its source. */
+UAPMD_C_EXPORT bool uapmd_commands_trim_clip_start(uapmd_project_commands_t cmd, int32_t track_index, int32_t clip_id, int64_t delta_samples, uapmd_mutation_origin_t origin);
 UAPMD_C_EXPORT bool uapmd_commands_set_clip_name(uapmd_project_commands_t cmd, int32_t track_index, int32_t clip_id, const char* name, uapmd_mutation_origin_t origin);
 UAPMD_C_EXPORT bool uapmd_commands_set_clip_filepath(uapmd_project_commands_t cmd, int32_t track_index, int32_t clip_id, const char* filepath, uapmd_mutation_origin_t origin);
 UAPMD_C_EXPORT bool uapmd_commands_set_clip_needs_file_save(uapmd_project_commands_t cmd, int32_t track_index, int32_t clip_id, bool needs_save, uapmd_mutation_origin_t origin);

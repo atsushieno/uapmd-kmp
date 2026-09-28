@@ -75,6 +75,7 @@ static void convert_clip_to_c(const uapmd::ClipData& src, uapmd_clip_data_t* out
     out->markers = nullptr;
     out->audio_warp_count = 0;
     out->audio_warps = nullptr;
+    out->source_offset_samples = src.sourceOffsetSamples;
 }
 
 static uapmd::ClipData convert_clip_from_c(const uapmd_clip_data_t* src) {
@@ -83,6 +84,7 @@ static uapmd::ClipData convert_clip_from_c(const uapmd_clip_data_t* src) {
     if (src->reference_id) clip.referenceId = src->reference_id;
     clip.position = to_cpp(src->position);
     clip.durationSamples = src->duration_samples;
+    clip.sourceOffsetSamples = src->source_offset_samples;
     clip.sourceNodeInstanceId = src->source_node_instance_id;
     clip.gain = src->gain;
     clip.muted = src->muted;

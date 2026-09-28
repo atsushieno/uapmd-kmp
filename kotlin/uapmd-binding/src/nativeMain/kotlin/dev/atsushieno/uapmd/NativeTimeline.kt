@@ -76,7 +76,8 @@ class NativeTimelineTrack internal constructor(
                 referenceId         = c.reference_id?.toKString() ?: "",
                 anchorReferenceId   = c.anchor_reference_id?.toKString() ?: "",
                 anchorOrigin        = AnchorOrigin.fromNative(c.anchor_origin.toInt()),
-                anchorOffsetSamples = c.anchor_offset.samples
+                anchorOffsetSamples = c.anchor_offset.samples,
+                sourceOffsetSamples = c.source_offset_samples
             )
         }
     }

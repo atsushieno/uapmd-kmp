@@ -237,6 +237,14 @@ interface ProjectCommands {
     fun setClipGain(trackIndex: Int, clipId: Int, gain: Double, origin: MutationOrigin = MutationOrigin.User): Boolean
     fun setClipMuted(trackIndex: Int, clipId: Int, muted: Boolean, origin: MutationOrigin = MutationOrigin.User): Boolean
     fun resizeClip(trackIndex: Int, clipId: Int, newDurationSamples: Long, origin: MutationOrigin = MutationOrigin.User): Boolean
+    /**
+     * Moves the clip's start by [deltaSamples] while its content and its end stay
+     * where they are: positive cuts the beginning off, negative brings back what an
+     * earlier trim cut. Past the start of a MIDI clip's content, the content is
+     * shifted along so the new room is part of it; an audio clip cannot start
+     * before its source.
+     */
+    fun trimClipStart(trackIndex: Int, clipId: Int, deltaSamples: Long, origin: MutationOrigin = MutationOrigin.User): Boolean
     fun setClipName(trackIndex: Int, clipId: Int, name: String, origin: MutationOrigin = MutationOrigin.User): Boolean
     fun setClipFilepath(trackIndex: Int, clipId: Int, filepath: String, origin: MutationOrigin = MutationOrigin.User): Boolean
     fun setClipNeedsFileSave(trackIndex: Int, clipId: Int, needsSave: Boolean, origin: MutationOrigin = MutationOrigin.User): Boolean

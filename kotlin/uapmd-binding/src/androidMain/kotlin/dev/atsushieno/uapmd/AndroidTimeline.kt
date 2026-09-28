@@ -31,11 +31,11 @@ class AndroidTimelineTrack internal constructor(
     override fun getClips(): List<ClipData> {
         val count = JniBridge.uapmdTtClipCount(handle)
         if (count == 0) return emptyList()
-        // 4 strings and 9 numerics per clip; see uapmdTtGetAllClips in uapmd_jni.cpp.
+        // 4 strings and 10 numerics per clip; see uapmdTtGetAllClips in uapmd_jni.cpp.
         val outStrings = arrayOfNulls<String>(count * 4)
         val numerics = JniBridge.uapmdTtGetAllClips(handle, outStrings) ?: return emptyList()
         return (0 until count).map { i ->
-            val base = i * 9
+            val base = i * 10
             ClipData(
                 clipId               = numerics[base + 0].toInt(),
                 positionSamples      = numerics[base + 1].toLong(),
@@ -49,7 +49,8 @@ class AndroidTimelineTrack internal constructor(
                 referenceId          = outStrings[i * 4 + 2] ?: "",
                 anchorReferenceId    = outStrings[i * 4 + 3] ?: "",
                 anchorOrigin         = AnchorOrigin.fromNative(numerics[base + 7].toInt()),
-                anchorOffsetSamples  = numerics[base + 8].toLong()
+                anchorOffsetSamples  = numerics[base + 8].toLong(),
+                sourceOffsetSamples  = numerics[base + 9].toLong()
             )
         }
     }

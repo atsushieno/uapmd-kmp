@@ -144,6 +144,9 @@ class AndroidProjectCommands internal constructor(private val handle: Long) : Pr
     override fun resizeClip(trackIndex: Int, clipId: Int, newDurationSamples: Long, origin: MutationOrigin) =
         JniBridge.uapmdCommandsResizeClip(handle, trackIndex, clipId, newDurationSamples, origin.nativeValue)
 
+    override fun trimClipStart(trackIndex: Int, clipId: Int, deltaSamples: Long, origin: MutationOrigin) =
+        JniBridge.uapmdCommandsTrimClipStart(handle, trackIndex, clipId, deltaSamples, origin.nativeValue)
+
     override fun setClipName(trackIndex: Int, clipId: Int, name: String, origin: MutationOrigin) =
         JniBridge.uapmdCommandsSetClipName(handle, trackIndex, clipId, name, origin.nativeValue)
 
@@ -300,7 +303,8 @@ class AndroidClipFragment internal constructor(
                 muted = n[5] != 0.0,
                 name = strings[0] ?: "",
                 filepath = strings[1] ?: "",
-                clipType = ClipType.fromNative(n[6].toInt())
+                clipType = ClipType.fromNative(n[6].toInt()),
+                sourceOffsetSamples = n[7].toLong()
             )
         }
 

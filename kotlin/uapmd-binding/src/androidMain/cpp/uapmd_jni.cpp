@@ -1543,7 +1543,8 @@ JNIEXPORT jint JNICALL Java_dev_atsushieno_uapmd_JniBridge_uapmdTtClipCount(
     return static_cast<jint>(uapmd_cm_clip_count(cm));
 }
 
-// Returns double[count*7]: per clip [clipId, posSamples, posBeats, durSamples, gain, muted, clipType]
+// Returns double[count*10]: per clip [clipId, posSamples, posBeats, durSamples, gain, muted, clipType,
+//   anchorOrigin, anchorOffsetSamples, sourceOffsetSamples]
 // Fills outStrings[count*2]: per clip [name, filepath]
 JNIEXPORT jdoubleArray JNICALL Java_dev_atsushieno_uapmd_JniBridge_uapmdTtGetAllClips(
         JNIEnv* env, jclass, jlong h, jobjectArray outStrings) {
@@ -1552,7 +1553,7 @@ JNIEXPORT jdoubleArray JNICALL Java_dev_atsushieno_uapmd_JniBridge_uapmdTtGetAll
     if (count == 0) return env->NewDoubleArray(0);
     std::vector<uapmd_clip_data_t> clips(count);
     auto actual = uapmd_cm_get_all_clips(cm, clips.data(), count);
-    constexpr uint32_t kNumerics = 9;   // keep in sync with AndroidTimelineTrack.getClips
+    constexpr uint32_t kNumerics = 10;  // keep in sync with AndroidTimelineTrack.getClips
     constexpr uint32_t kStrings  = 4;
     std::vector<jdouble> numerics(actual * kNumerics);
     for (uint32_t i = 0; i < actual; i++) {
@@ -1566,6 +1567,7 @@ JNIEXPORT jdoubleArray JNICALL Java_dev_atsushieno_uapmd_JniBridge_uapmdTtGetAll
         numerics[i*kNumerics + 6] = static_cast<jdouble>(c.clip_type);
         numerics[i*kNumerics + 7] = static_cast<jdouble>(c.anchor_origin);
         numerics[i*kNumerics + 8] = static_cast<jdouble>(c.anchor_offset.samples);
+        numerics[i*kNumerics + 9] = static_cast<jdouble>(c.source_offset_samples);
         env->SetObjectArrayElement(outStrings, i*kStrings,   env->NewStringUTF(c.name     ? c.name     : ""));
         env->SetObjectArrayElement(outStrings, i*kStrings+1, env->NewStringUTF(c.filepath ? c.filepath : ""));
         env->SetObjectArrayElement(outStrings, i*kStrings+2, env->NewStringUTF(c.reference_id ? c.reference_id : ""));

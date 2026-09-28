@@ -116,6 +116,9 @@ typedef struct uapmd_clip_data {
     const uapmd_clip_marker_t* markers;
     uint32_t audio_warp_count;
     const uapmd_audio_warp_point_t* audio_warps;
+    /* Where in the source the clip starts; non-zero once its start is trimmed.
+     * Last, so the layout before it is unchanged. */
+    int64_t source_offset_samples;
 } uapmd_clip_data_t;
 
 typedef struct uapmd_timeline_state {

@@ -91,6 +91,41 @@ fun main() {
         }
     }
 
+    // Where a MIDI clip's first notes sit in absolute time across a move and
+    // resizes: only the move may shift them.
+    if (System.getProperty("uapmd.cmp.resizeProbe") != null) {
+        val timeline = model.sequencer.engine.timeline
+        val sr = (model.sampleRate.takeIf { it > 0 } ?: 48000).toDouble()
+        val track = (0 until timeline.trackCount.toInt()).first { t ->
+            timeline.getTrack(t.toUInt()).getClips().any { it.clipType == dev.atsushieno.uapmd.ClipType.Midi }
+        }
+        val clipId = timeline.getTrack(track.toUInt()).getClips().first { it.clipType == dev.atsushieno.uapmd.ClipType.Midi }.clipId
+        fun report(label: String) {
+            val clip = timeline.getTrack(track.toUInt()).getClips().first { it.clipId == clipId }
+            val start = clip.positionSamples / sr
+            val content = start - clip.sourceOffsetSamples / sr
+            val notes = timeline.getMidiClipNotes(track, clipId).orEmpty().sortedBy { it.startSeconds }.take(3)
+            println("resize probe [$label] start=${"%.4f".format(start)} offset=${clip.sourceOffsetSamples} len=${clip.durationSamples} " +
+                "notes@" + notes.joinToString { "%.4f".format(content + it.startSeconds) })
+        }
+        val cmds = timeline.commands
+        report("loaded")
+        val clip0 = timeline.getTrack(track.toUInt()).getClips().first { it.clipId == clipId }
+        cmds.setClipAnchor(track, clipId, dev.atsushieno.uapmd.TimeReference(dev.atsushieno.uapmd.TimeReferenceType.ContainerStart, "", clip0.positionSamples / sr + 7.3))
+        report("moved +7.3s")
+        cmds.resizeClip(track, clipId, clip0.durationSamples - (sr * 2).toLong())
+        report("end -2s")
+        cmds.trimClipStart(track, clipId, (sr * 1.5).toLong())
+        report("start +1.5s")
+        cmds.trimClipStart(track, clipId, -(sr * 4).toLong())
+        report("start -4s")
+        // What the timing should have been all along: adding and removing a clip
+        // makes uapmd re-apply the tempo map to every MIDI clip where it is now.
+        val dummy = model.createEmptyMidiClip(track, (sr * 600).toLong(), tickResolution = 480u, bpm = 120.0)
+        timeline.removeClip(track, dummy.clipId)
+        report("tempo re-applied")
+    }
+
     val view = System.getProperty("uapmd.cmp.snapshotView")
     // The addin windows need the addins the app starts with.
     val sceneHost = UapmdHost.attach(model)
@@ -108,6 +143,39 @@ fun main() {
         listOf(0, 2, 4, 6, 8, 10, 12, 14).forEach { pattern = pattern.toggle(42, it, 0.45f, 0.25f) }
         val err = setupHost.applyStepPattern(0, stepClip, pattern)
         println("step sequencer snapshot: clip ${added.clipId} ok=${added.success} apply=${err ?: "ok"}")
+        java.awt.EventQueue.invokeAndWait { }
+    }
+    // The clip grips: two butted clips, as in the layout that used to make a grab
+    // at one clip's end land on its neighbour, and a clip whose start was trimmed.
+    if (view == "clipgrips") {
+        val sampleRate = model.sampleRate.takeIf { it > 0 } ?: 48000
+        val setupHost = UapmdHost.attach(model)
+        fun patternClip(track: Int, atSeconds: Double): Int {
+            val added = model.createEmptyMidiClip(track, (atSeconds * sampleRate).toLong(), tickResolution = 480u, bpm = 120.0)
+            var pattern = dev.atsushieno.uapmd.cmp.StepSequencerModel
+                .emptyPattern(setupHost.clipTickResolution(track, added.clipId))
+            (0 until 16).forEach { pattern = pattern.toggle(48 + (it * 5) % 12, it, 0.8f, 0.5f) }
+            setupHost.applyStepPattern(track, added.clipId, pattern)
+            return added.clipId
+        }
+        val first = patternClip(0, 0.0)
+        val firstClip = model.sequencer.engine.timeline.getTrack(0u).getClips().first { it.clipId == first }
+        patternClip(0, (firstClip.positionSamples + firstClip.durationSamples).toDouble() / sampleRate)
+        val trimmed = patternClip(1, 1.0)
+        val ok = model.sequencer.engine.timeline.commands.trimClipStart(1, trimmed, sampleRate / 2L)
+        val after = model.sequencer.engine.timeline.getTrack(1u).getClips().first { it.clipId == trimmed }
+        println("clip grips snapshot: trim ok=$ok start=${after.positionSamples} offset=${after.sourceOffsetSamples} length=${after.durationSamples}")
+        // A trim has to survive a save and a reload, which starts every clip over
+        // from its source's full length.
+        System.getProperty("uapmd.cmp.snapshotRoundTrip")?.let { dir ->
+            val file = java.io.File(dir, "clipgrips.uapmd").absolutePath
+            val saved = model.saveProjectSync(file)
+            val loaded = model.loadProject(file)
+            java.awt.EventQueue.invokeAndWait { }
+            val reloaded = model.sequencer.engine.timeline.getTrack(1u).getClips().firstOrNull()
+            println("clip grips round trip: saved=${saved.success} ${saved.error ?: ""} loaded=${loaded.success} ${loaded.error ?: ""} " +
+                "start=${reloaded?.positionSamples} offset=${reloaded?.sourceOffsetSamples} length=${reloaded?.durationSamples}")
+        }
         java.awt.EventQueue.invokeAndWait { }
     }
     if (view == "pianoroll") {

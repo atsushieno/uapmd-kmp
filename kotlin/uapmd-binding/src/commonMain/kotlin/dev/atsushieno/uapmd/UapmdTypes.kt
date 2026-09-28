@@ -179,7 +179,9 @@ data class ClipData(
     /** Empty when the clip is anchored to its track rather than to another clip. */
     val anchorReferenceId: String = "",
     val anchorOrigin: AnchorOrigin = AnchorOrigin.Start,
-    val anchorOffsetSamples: Long = 0L
+    val anchorOffsetSamples: Long = 0L,
+    /** Where in the source the clip starts; non-zero once its start is trimmed. */
+    val sourceOffsetSamples: Long = 0L
 )
 
 /**

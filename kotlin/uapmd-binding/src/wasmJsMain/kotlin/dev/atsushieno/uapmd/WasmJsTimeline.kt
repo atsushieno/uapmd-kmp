@@ -30,9 +30,10 @@ class WasmJsTimelineTrack internal constructor(
         //  +60  bool     needs_file_save
         //  +61  [3 pad]
         //  +64  int32_t  clip_type
-        //  ... (68+ not needed for display)
-        //  Total: 128 bytes
-        val STRUCT_SIZE = 128
+        //  ... (68..127 partly read below)
+        //  +128 i64      source_offset_samples
+        //  Total: 136 bytes
+        val STRUCT_SIZE = 136
         val buf = mod.malloc(count * STRUCT_SIZE)
         return try {
             val actual = mod.uapmdCmGetAllClips(cm, buf, count)
@@ -63,7 +64,8 @@ class WasmJsTimelineTrack internal constructor(
                     referenceId         = getStr(4),
                     anchorReferenceId   = getStr(84),
                     anchorOrigin        = AnchorOrigin.fromNative(getI32(88)),
-                    anchorOffsetSamples = getI64(96)
+                    anchorOffsetSamples = getI64(96),
+                    sourceOffsetSamples = getI64(128)
                 )
             }
         } finally { mod.free(buf) }

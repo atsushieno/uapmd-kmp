@@ -166,6 +166,9 @@ class NativeProjectCommands internal constructor(private val handle: uapmd_proje
     override fun resizeClip(trackIndex: Int, clipId: Int, newDurationSamples: Long, origin: MutationOrigin) =
         uapmd_commands_resize_clip(handle, trackIndex, clipId, newDurationSamples, origin.nativeValue.toUInt())
 
+    override fun trimClipStart(trackIndex: Int, clipId: Int, deltaSamples: Long, origin: MutationOrigin) =
+        uapmd_commands_trim_clip_start(handle, trackIndex, clipId, deltaSamples, origin.nativeValue.toUInt())
+
     override fun setClipName(trackIndex: Int, clipId: Int, name: String, origin: MutationOrigin) =
         uapmd_commands_set_clip_name(handle, trackIndex, clipId, name, origin.nativeValue.toUInt())
 
@@ -374,7 +377,8 @@ class NativeClipFragment internal constructor(
                 muted = c.muted,
                 name = c.name?.toKString() ?: "",
                 filepath = c.filepath?.toKString() ?: "",
-                clipType = ClipType.fromNative(c.clip_type.toInt())
+                clipType = ClipType.fromNative(c.clip_type.toInt()),
+                sourceOffsetSamples = c.source_offset_samples
             )
         }
 
