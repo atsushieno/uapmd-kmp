@@ -336,7 +336,48 @@ class NativePluginNode internal constructor(
     }
 
     override fun sendAllNotesOff() = uapmd_node_send_all_notes_off(handle)
+
+    override fun addParameterUpdateListener(listener: (Int, Double) -> Unit): Long {
+        val ref = StableRef.create(listener)
+        val id = uapmd_node_add_parameter_update_listener(
+            handle, ref.asCPointer(),
+            staticCFunction { index, value, userData ->
+                userData?.asStableRef<(Int, Double) -> Unit>()?.get()?.invoke(index, value)
+            }
+        )
+        if (id == 0L) ref.dispose()
+        else nodeListenerRefs[NodeListenerKey(handle.rawValue.toLong(), id, false)] = ref
+        return id
+    }
+
+    override fun removeParameterUpdateListener(listenerId: Long) {
+        uapmd_node_remove_parameter_update_listener(handle, listenerId)
+        nodeListenerRefs.remove(NodeListenerKey(handle.rawValue.toLong(), listenerId, false))?.dispose()
+    }
+
+    override fun addParameterMetadataRefreshListener(listener: () -> Unit): Long {
+        val ref = StableRef.create(listener)
+        val id = uapmd_node_add_parameter_metadata_refresh_listener(
+            handle, ref.asCPointer(),
+            staticCFunction { userData ->
+                userData?.asStableRef<() -> Unit>()?.get()?.invoke()
+            }
+        )
+        if (id == 0L) ref.dispose()
+        else nodeListenerRefs[NodeListenerKey(handle.rawValue.toLong(), id, true)] = ref
+        return id
+    }
+
+    override fun removeParameterMetadataRefreshListener(listenerId: Long) {
+        uapmd_node_remove_parameter_metadata_refresh_listener(handle, listenerId)
+        nodeListenerRefs.remove(NodeListenerKey(handle.rawValue.toLong(), listenerId, true))?.dispose()
+    }
 }
+
+// getPluginNode() hands out a fresh wrapper per call, so listener StableRefs are kept
+// here, keyed by native node + listener id, until the listener is removed.
+private data class NodeListenerKey(val node: Long, val listenerId: Long, val metadata: Boolean)
+private val nodeListenerRefs = mutableMapOf<NodeListenerKey, StableRef<*>>()
 
 // ---------------------------------------------------------------------------
 

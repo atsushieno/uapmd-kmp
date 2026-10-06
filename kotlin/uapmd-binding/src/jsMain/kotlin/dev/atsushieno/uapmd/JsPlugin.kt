@@ -304,7 +304,38 @@ class JsPluginNode internal constructor(
     }
 
     override fun sendAllNotesOff() = jsMod._uapmd_node_send_all_notes_off(handle)
+
+    // -sWASM_BIGINT: the int64_t listener ids cross as BigInt.
+    override fun addParameterUpdateListener(listener: (Int, Double) -> Unit): Long {
+        val fn: (dynamic, dynamic, dynamic) -> Unit = { index, value, _ -> listener(index as Int, value as Double) }
+        val fnPtr = addJsCallback(fn.asDynamic(), "vidi")
+        val id = (jsMod._uapmd_node_add_parameter_update_listener(handle, 0, fnPtr)).toString().toLong()
+        if (id == 0L) removeJsCallback(fnPtr) else jsNodeListenerFnPtrs["$handle:u:$id"] = fnPtr
+        return id
+    }
+
+    override fun removeParameterUpdateListener(listenerId: Long) {
+        jsMod._uapmd_node_remove_parameter_update_listener(handle, js("BigInt")(listenerId.toString()))
+        jsNodeListenerFnPtrs.remove("$handle:u:$listenerId")?.let { removeJsCallback(it) }
+    }
+
+    override fun addParameterMetadataRefreshListener(listener: () -> Unit): Long {
+        val fn: (dynamic) -> Unit = { _ -> listener() }
+        val fnPtr = addJsCallback(fn.asDynamic(), "vi")
+        val id = (jsMod._uapmd_node_add_parameter_metadata_refresh_listener(handle, 0, fnPtr)).toString().toLong()
+        if (id == 0L) removeJsCallback(fnPtr) else jsNodeListenerFnPtrs["$handle:m:$id"] = fnPtr
+        return id
+    }
+
+    override fun removeParameterMetadataRefreshListener(listenerId: Long) {
+        jsMod._uapmd_node_remove_parameter_metadata_refresh_listener(handle, js("BigInt")(listenerId.toString()))
+        jsNodeListenerFnPtrs.remove("$handle:m:$listenerId")?.let { removeJsCallback(it) }
+    }
 }
+
+// getPluginNode() hands out a fresh wrapper per call, so table entries are tracked
+// here, keyed by node handle + listener id, until the listener is removed.
+private val jsNodeListenerFnPtrs = mutableMapOf<String, Int>()
 
 // ─── JsPluginGraph ────────────────────────────────────────────────────────────
 

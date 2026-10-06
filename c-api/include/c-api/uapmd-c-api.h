@@ -154,6 +154,21 @@ UAPMD_C_EXPORT uapmd_plugin_instance_t uapmd_node_instance(uapmd_plugin_node_t n
 UAPMD_C_EXPORT bool  uapmd_node_schedule_events(uapmd_plugin_node_t node, uapmd_timestamp_t timestamp, void* events, size_t size);
 UAPMD_C_EXPORT void  uapmd_node_send_all_notes_off(uapmd_plugin_node_t node);
 
+/* AudioGraphNode::parameterUpdateEvent() / parameterMetadataRefreshEvent().
+ * The add functions return the EventListenerId (0 when callback is NULL); pass it
+ * to the matching remove function. Listeners run on whichever thread the event is
+ * notified from: value updates may arrive from a non-main (even realtime) thread,
+ * metadata refreshes typically arrive on the main thread. */
+typedef void (*uapmd_parameter_update_cb_t)(int32_t parameter_index, double value, void* user_data);
+typedef void (*uapmd_parameter_metadata_refresh_cb_t)(void* user_data);
+
+UAPMD_C_EXPORT int64_t uapmd_node_add_parameter_update_listener(uapmd_plugin_node_t node, void* user_data,
+                                                                  uapmd_parameter_update_cb_t callback);
+UAPMD_C_EXPORT void    uapmd_node_remove_parameter_update_listener(uapmd_plugin_node_t node, int64_t listener_id);
+UAPMD_C_EXPORT int64_t uapmd_node_add_parameter_metadata_refresh_listener(uapmd_plugin_node_t node, void* user_data,
+                                                                            uapmd_parameter_metadata_refresh_cb_t callback);
+UAPMD_C_EXPORT void    uapmd_node_remove_parameter_metadata_refresh_listener(uapmd_plugin_node_t node, int64_t listener_id);
+
 /* ═══════════════════════════════════════════════════════════════════════════
  *  AudioPluginGraph
  * ═══════════════════════════════════════════════════════════════════════════ */

@@ -416,7 +416,51 @@ class WasmJsPluginNode internal constructor(
     }
 
     override fun sendAllNotesOff() = wasmMod.uapmdNodeSendAllNotesOff(handle)
+
+    override fun addParameterUpdateListener(listener: (Int, Double) -> Unit): Long {
+        val cbId = nextCallbackId()
+        parameterUpdateListeners[cbId] = listener
+        val fnPtr = makeCFunctionPtr(cbId, "uapmdDispatchParameterUpdate", "vidi")
+        val id = wasmNodeAddParameterUpdateListener(wasmMod, handle, fnPtr).toLong()
+        if (id == 0L) {
+            parameterUpdateListeners.remove(cbId)
+            removeCFunctionPtr(fnPtr)
+        } else wasmNodeListenerRegs["$handle:u:$id"] = cbId to fnPtr
+        return id
+    }
+
+    override fun removeParameterUpdateListener(listenerId: Long) {
+        wasmNodeRemoveParameterUpdateListener(wasmMod, handle, listenerId.toString())
+        wasmNodeListenerRegs.remove("$handle:u:$listenerId")?.let { (cbId, fnPtr) ->
+            parameterUpdateListeners.remove(cbId)
+            removeCFunctionPtr(fnPtr)
+        }
+    }
+
+    override fun addParameterMetadataRefreshListener(listener: () -> Unit): Long {
+        val cbId = nextCallbackId()
+        parameterMetadataRefreshListeners[cbId] = listener
+        val fnPtr = makeCFunctionPtr(cbId, "uapmdDispatchParameterMetadataRefresh", "vi")
+        val id = wasmNodeAddParameterMetadataRefreshListener(wasmMod, handle, fnPtr).toLong()
+        if (id == 0L) {
+            parameterMetadataRefreshListeners.remove(cbId)
+            removeCFunctionPtr(fnPtr)
+        } else wasmNodeListenerRegs["$handle:m:$id"] = cbId to fnPtr
+        return id
+    }
+
+    override fun removeParameterMetadataRefreshListener(listenerId: Long) {
+        wasmNodeRemoveParameterMetadataRefreshListener(wasmMod, handle, listenerId.toString())
+        wasmNodeListenerRegs.remove("$handle:m:$listenerId")?.let { (cbId, fnPtr) ->
+            parameterMetadataRefreshListeners.remove(cbId)
+            removeCFunctionPtr(fnPtr)
+        }
+    }
 }
+
+// getPluginNode() hands out a fresh wrapper per call, so registrations are tracked
+// here, keyed by node handle + listener id, until the listener is removed.
+private val wasmNodeListenerRegs = mutableMapOf<String, Pair<Int, Int>>()
 
 // ─── WasmJsPluginGraph ───────────────────────────────────────────────────────
 

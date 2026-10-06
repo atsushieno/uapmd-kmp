@@ -292,6 +292,19 @@ class AndroidPluginNode internal constructor(
         JniBridge.uapmdNodeScheduleEvents(handle, timestamp, events)
 
     override fun sendAllNotesOff() = JniBridge.uapmdNodeSendAllNotesOff(handle)
+
+    // The JNI layer holds a global ref to each listener until it is removed.
+    override fun addParameterUpdateListener(listener: (Int, Double) -> Unit): Long =
+        JniBridge.uapmdNodeAddParameterUpdateListener(handle) { index, value -> listener(index, value) }
+
+    override fun removeParameterUpdateListener(listenerId: Long) =
+        JniBridge.uapmdNodeRemoveParameterUpdateListener(handle, listenerId)
+
+    override fun addParameterMetadataRefreshListener(listener: () -> Unit): Long =
+        JniBridge.uapmdNodeAddParameterMetadataRefreshListener(handle) { listener() }
+
+    override fun removeParameterMetadataRefreshListener(listenerId: Long) =
+        JniBridge.uapmdNodeRemoveParameterMetadataRefreshListener(handle, listenerId)
 }
 
 // ─── AndroidPluginGraph ──────────────────────────────────────────────────────

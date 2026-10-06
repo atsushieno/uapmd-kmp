@@ -40,6 +40,14 @@ interface EventOutputCb : Callback {
     fun invoke(instanceId: Int, data: Pointer?, dataSizeInBytes: Long, userData: Pointer?)
 }
 
+interface ParameterUpdateCb : Callback {
+    fun invoke(parameterIndex: Int, value: Double, userData: Pointer?)
+}
+
+interface ParameterMetadataRefreshCb : Callback {
+    fun invoke(userData: Pointer?)
+}
+
 interface AddPluginCb : Callback {
     fun invoke(instanceId: Int, trackIndex: Int, error: String?, userData: Pointer?)
 }
@@ -1242,6 +1250,10 @@ interface UapmdLibrary : Library {
     fun uapmd_node_instance(node: Pointer?): Pointer?
     fun uapmd_node_schedule_events(node: Pointer?, timestamp: Long, events: ByteArray, size: Long): Boolean
     fun uapmd_node_send_all_notes_off(node: Pointer?)
+    fun uapmd_node_add_parameter_update_listener(node: Pointer?, userData: Pointer?, cb: ParameterUpdateCb?): Long
+    fun uapmd_node_remove_parameter_update_listener(node: Pointer?, listenerId: Long)
+    fun uapmd_node_add_parameter_metadata_refresh_listener(node: Pointer?, userData: Pointer?, cb: ParameterMetadataRefreshCb?): Long
+    fun uapmd_node_remove_parameter_metadata_refresh_listener(node: Pointer?, listenerId: Long)
 
     // ── PluginGraph ──────────────────────────────────────────────────────────
 

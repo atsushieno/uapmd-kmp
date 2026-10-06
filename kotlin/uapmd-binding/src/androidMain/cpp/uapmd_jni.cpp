@@ -830,6 +830,96 @@ JNIEXPORT jboolean JNICALL Java_dev_atsushieno_uapmd_JniBridge_uapmdNodeSchedule
 JNIEXPORT void JNICALL Java_dev_atsushieno_uapmd_JniBridge_uapmdNodeSendAllNotesOff(
         JNIEnv*, jclass, jlong h) { uapmd_node_send_all_notes_off(j2p<uapmd_plugin_node_t>(h)); }
 
+// Node parameter listeners. Each context owns a global ref to the Kotlin listener and
+// lives until the listener is removed; the map ties (node, kind, id) to its context.
+struct NodeListenerCtx {
+    jobject obj;
+    jmethodID mid;
+};
+
+static std::mutex g_node_listener_mu;
+static std::unordered_map<std::string, NodeListenerCtx*> g_node_listeners;
+
+static std::string node_listener_key(jlong node, bool metadata, int64_t id) {
+    return std::to_string(node) + (metadata ? ":m:" : ":u:") + std::to_string(id);
+}
+
+static void node_parameter_update_trampoline(int32_t index, double value, void* user_data) {
+    auto* ctx = static_cast<NodeListenerCtx*>(user_data);
+    JNIEnv* env = jni_env();
+    if (!env) return;
+    env->CallVoidMethod(ctx->obj, ctx->mid, static_cast<jint>(index), static_cast<jdouble>(value));
+    if (env->ExceptionCheck()) env->ExceptionClear();
+}
+
+static void node_parameter_metadata_refresh_trampoline(void* user_data) {
+    auto* ctx = static_cast<NodeListenerCtx*>(user_data);
+    JNIEnv* env = jni_env();
+    if (!env) return;
+    env->CallVoidMethod(ctx->obj, ctx->mid);
+    if (env->ExceptionCheck()) env->ExceptionClear();
+}
+
+static void remove_node_listener_ctx(JNIEnv* env, jlong h, bool metadata, jlong id) {
+    NodeListenerCtx* ctx = nullptr;
+    {
+        std::lock_guard lock(g_node_listener_mu);
+        auto it = g_node_listeners.find(node_listener_key(h, metadata, id));
+        if (it == g_node_listeners.end()) return;
+        ctx = it->second;
+        g_node_listeners.erase(it);
+    }
+    env->DeleteGlobalRef(ctx->obj);
+    delete ctx;
+}
+
+JNIEXPORT jlong JNICALL Java_dev_atsushieno_uapmd_JniBridge_uapmdNodeAddParameterUpdateListener(
+        JNIEnv* env, jclass, jlong h, jobject listener) {
+    if (!listener) return 0;
+    jclass cls = env->GetObjectClass(listener);
+    auto* ctx = new NodeListenerCtx{env->NewGlobalRef(listener), env->GetMethodID(cls, "onParameterUpdate", "(ID)V")};
+    env->DeleteLocalRef(cls);
+    auto id = uapmd_node_add_parameter_update_listener(j2p<uapmd_plugin_node_t>(h), ctx, node_parameter_update_trampoline);
+    if (id == 0) {
+        env->DeleteGlobalRef(ctx->obj);
+        delete ctx;
+        return 0;
+    }
+    std::lock_guard lock(g_node_listener_mu);
+    g_node_listeners[node_listener_key(h, false, id)] = ctx;
+    return static_cast<jlong>(id);
+}
+
+JNIEXPORT void JNICALL Java_dev_atsushieno_uapmd_JniBridge_uapmdNodeRemoveParameterUpdateListener(
+        JNIEnv* env, jclass, jlong h, jlong id) {
+    uapmd_node_remove_parameter_update_listener(j2p<uapmd_plugin_node_t>(h), id);
+    remove_node_listener_ctx(env, h, false, id);
+}
+
+JNIEXPORT jlong JNICALL Java_dev_atsushieno_uapmd_JniBridge_uapmdNodeAddParameterMetadataRefreshListener(
+        JNIEnv* env, jclass, jlong h, jobject listener) {
+    if (!listener) return 0;
+    jclass cls = env->GetObjectClass(listener);
+    auto* ctx = new NodeListenerCtx{env->NewGlobalRef(listener), env->GetMethodID(cls, "run", "()V")};
+    env->DeleteLocalRef(cls);
+    auto id = uapmd_node_add_parameter_metadata_refresh_listener(j2p<uapmd_plugin_node_t>(h), ctx,
+                                                                 node_parameter_metadata_refresh_trampoline);
+    if (id == 0) {
+        env->DeleteGlobalRef(ctx->obj);
+        delete ctx;
+        return 0;
+    }
+    std::lock_guard lock(g_node_listener_mu);
+    g_node_listeners[node_listener_key(h, true, id)] = ctx;
+    return static_cast<jlong>(id);
+}
+
+JNIEXPORT void JNICALL Java_dev_atsushieno_uapmd_JniBridge_uapmdNodeRemoveParameterMetadataRefreshListener(
+        JNIEnv* env, jclass, jlong h, jlong id) {
+    uapmd_node_remove_parameter_metadata_refresh_listener(j2p<uapmd_plugin_node_t>(h), id);
+    remove_node_listener_ctx(env, h, true, id);
+}
+
 // ─── PluginGraph ──────────────────────────────────────────────────────────────
 
 JNIEXPORT jlong JNICALL Java_dev_atsushieno_uapmd_JniBridge_uapmdGraphCreate(

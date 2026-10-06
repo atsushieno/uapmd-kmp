@@ -17,6 +17,7 @@ import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Slider
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -32,6 +33,8 @@ import dev.atsushieno.uapmd.cmp.UapmdHost
 import dev.atsushieno.uapmd.cmp.pickProjectFileToOpen
 import dev.atsushieno.uapmd.cmp.deliverSavedFile
 import dev.atsushieno.uapmd.cmp.pickProjectFileToSave
+import dev.atsushieno.uapmd.PluginNode
+import dev.atsushieno.uapmd.SequencerEngine
 import kotlinx.coroutines.launch
 
 /**
@@ -62,6 +65,19 @@ fun InstanceDetails(host: UapmdHost, inst: TrackInstance) {
 
     val parameters = remember(inst.instanceId, revision) {
         (0 until instance.parameterCount.toInt()).mapNotNull { instance.getParameterMetadata(it.toUInt()) }
+    }
+    // uapmd-app re-reads the parameter list on the node's
+    // parameterMetadataRefreshEvent (InstanceDetails.cpp), which is how a plug-in
+    // that reshapes its parameters (e.g. on preset/program change) gets reflected.
+    DisposableEffect(inst.instanceId) {
+        val listenerId = findPluginNode(engine, inst.instanceId)
+            ?.addParameterMetadataRefreshListener { scope.launch { revision++ } } ?: 0L
+        onDispose {
+            // Look the node up again: if the instance is gone its node (and the
+            // listener with it) is already destroyed.
+            if (listenerId != 0L)
+                findPluginNode(engine, inst.instanceId)?.removeParameterMetadataRefreshListener(listenerId)
+        }
     }
     val presets = remember(inst.instanceId) {
         (0 until instance.presetCount.toInt()).mapNotNull { instance.getPresetMetadata(it.toUInt()) }
@@ -190,7 +206,7 @@ fun InstanceDetails(host: UapmdHost, inst: TrackInstance) {
         // ── Parameters ───────────────────────────────────────────────────────
         val shown = parameters.filter { filter.isBlank() || it.name.contains(filter, true) }
         LazyColumn(Modifier.fillMaxWidth()) {
-            items(shown) { meta -> ParameterRow(host, inst.instanceId, instance, meta) { revision++ } }
+            items(shown, key = { it.index.toInt() }) { meta -> ParameterRow(host, inst.instanceId, instance, meta, revision) { revision++ } }
         }
     }
 }
@@ -201,10 +217,12 @@ private fun ParameterRow(
     instanceId: Int,
     instance: dev.atsushieno.uapmd.PluginInstance,
     meta: ParameterMetadata,
+    revision: Int,
     onReset: () -> Unit
 ) {
     val index = meta.index.toInt()
-    var value by remember(instanceId, index) { mutableStateOf(instance.getParameterValue(index).toFloat()) }
+    // Keyed on revision so a metadata refresh / preset load re-reads the value.
+    var value by remember(instanceId, index, revision) { mutableStateOf(instance.getParameterValue(index).toFloat()) }
     val range = (meta.maxPlainValue - meta.minPlainValue).toFloat()
 
     Row(Modifier.fillMaxWidth().padding(vertical = 1.dp), verticalAlignment = Alignment.CenterVertically) {
@@ -233,6 +251,12 @@ private fun ParameterRow(
             onReset()
         }) { Text("Reset") }
     }
+}
+
+private fun findPluginNode(engine: SequencerEngine, instanceId: Int): PluginNode? {
+    for (i in 0u until engine.trackCount)
+        engine.getTrack(i).graph.getPluginNode(instanceId)?.let { return it }
+    return engine.masterTrack.graph.getPluginNode(instanceId)
 }
 
 private fun formatValue(v: Float): String {

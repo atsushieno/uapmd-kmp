@@ -367,7 +367,40 @@ class JvmPluginNode internal constructor(
         lib.uapmd_node_schedule_events(handle, timestamp, events, events.size.toLong())
 
     override fun sendAllNotesOff() = lib.uapmd_node_send_all_notes_off(handle)
+
+    override fun addParameterUpdateListener(listener: (Int, Double) -> Unit): Long {
+        val cb = object : ParameterUpdateCb {
+            override fun invoke(parameterIndex: Int, value: Double, userData: Pointer?) = listener(parameterIndex, value)
+        }
+        val id = lib.uapmd_node_add_parameter_update_listener(handle, null, cb)
+        if (id != 0L) nodeListenerRefs[NodeListenerKey(Pointer.nativeValue(handle), id, false)] = cb
+        return id
+    }
+
+    override fun removeParameterUpdateListener(listenerId: Long) {
+        lib.uapmd_node_remove_parameter_update_listener(handle, listenerId)
+        nodeListenerRefs.remove(NodeListenerKey(Pointer.nativeValue(handle), listenerId, false))
+    }
+
+    override fun addParameterMetadataRefreshListener(listener: () -> Unit): Long {
+        val cb = object : ParameterMetadataRefreshCb {
+            override fun invoke(userData: Pointer?) = listener()
+        }
+        val id = lib.uapmd_node_add_parameter_metadata_refresh_listener(handle, null, cb)
+        if (id != 0L) nodeListenerRefs[NodeListenerKey(Pointer.nativeValue(handle), id, true)] = cb
+        return id
+    }
+
+    override fun removeParameterMetadataRefreshListener(listenerId: Long) {
+        lib.uapmd_node_remove_parameter_metadata_refresh_listener(handle, listenerId)
+        nodeListenerRefs.remove(NodeListenerKey(Pointer.nativeValue(handle), listenerId, true))
+    }
 }
+
+// getPluginNode() hands out a fresh wrapper per call, so the JNA callbacks are kept
+// alive here, keyed by native node + listener id, until the listener is removed.
+private data class NodeListenerKey(val node: Long, val listenerId: Long, val metadata: Boolean)
+private val nodeListenerRefs = java.util.concurrent.ConcurrentHashMap<NodeListenerKey, Any>()
 
 // ─── JvmPluginGraph ──────────────────────────────────────────────────────────
 

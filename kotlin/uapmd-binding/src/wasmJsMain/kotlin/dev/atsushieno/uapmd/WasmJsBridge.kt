@@ -1708,6 +1708,19 @@ fun uapmdDispatchEventOutput(cbId: Int, instanceId: Int, dataPtr: Int, size: Int
     cb(instanceId, data, size)
 }
 
+internal val parameterUpdateListeners = mutableMapOf<Int, (Int, Double) -> Unit>()
+internal val parameterMetadataRefreshListeners = mutableMapOf<Int, () -> Unit>()
+
+@JsExport
+fun uapmdDispatchParameterUpdate(cbId: Int, parameterIndex: Int, value: Double) {
+    parameterUpdateListeners[cbId]?.invoke(parameterIndex, value)
+}
+
+@JsExport
+fun uapmdDispatchParameterMetadataRefresh(cbId: Int) {
+    parameterMetadataRefreshListeners[cbId]?.invoke()
+}
+
 @JsExport
 fun uapmdDispatchMidiInput(cbId: Int, messagesPtr: Int, count: Int, timestamp: Double) {
     val handler = midiInputHandlers[cbId] ?: return
@@ -2104,3 +2117,16 @@ fun uapmdDispatchTrackFragment(cbId: Int, fragmentPtr: Int, errorPtr: Int) {
     val fragment = if (fragmentPtr != 0) WasmJsTrackFragment(fragmentPtr) else null
     pendingTrackFragments.remove(cbId)?.invoke(fragment, error)
 }
+
+// AudioGraphNode parameter listeners: the int64_t listener ids cross as BigInt.
+@JsFun("(mod, node, fn) => mod._uapmd_node_add_parameter_update_listener(node, 0, fn).toString()")
+internal external fun wasmNodeAddParameterUpdateListener(mod: UapmdCApiModule, node: Int, fnPtr: Int): String
+
+@JsFun("(mod, node, id) => mod._uapmd_node_remove_parameter_update_listener(node, BigInt(id))")
+internal external fun wasmNodeRemoveParameterUpdateListener(mod: UapmdCApiModule, node: Int, listenerId: String)
+
+@JsFun("(mod, node, fn) => mod._uapmd_node_add_parameter_metadata_refresh_listener(node, 0, fn).toString()")
+internal external fun wasmNodeAddParameterMetadataRefreshListener(mod: UapmdCApiModule, node: Int, fnPtr: Int): String
+
+@JsFun("(mod, node, id) => mod._uapmd_node_remove_parameter_metadata_refresh_listener(node, BigInt(id))")
+internal external fun wasmNodeRemoveParameterMetadataRefreshListener(mod: UapmdCApiModule, node: Int, listenerId: String)

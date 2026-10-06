@@ -129,6 +129,17 @@ interface PluginNode {
     val instance: PluginInstance
     fun scheduleEvents(timestamp: Long, events: ByteArray): Boolean
     fun sendAllNotesOff()
+
+    /**
+     * `AudioGraphNode::parameterUpdateEvent()`. Returns the listener id (0 if not added).
+     * The listener may run on a non-main (even realtime) thread.
+     */
+    fun addParameterUpdateListener(listener: (parameterIndex: Int, value: Double) -> Unit): Long
+    fun removeParameterUpdateListener(listenerId: Long)
+
+    /** `AudioGraphNode::parameterMetadataRefreshEvent()`. Returns the listener id (0 if not added). */
+    fun addParameterMetadataRefreshListener(listener: () -> Unit): Long
+    fun removeParameterMetadataRefreshListener(listenerId: Long)
 }
 
 interface PluginGraph : AutoCloseable {

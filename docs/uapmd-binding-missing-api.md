@@ -65,6 +65,11 @@ first. All predate 0.5.6 — they were simply never needed by a KMP app before.
 | `restoreNodeId` parameter on `addPluginToTrack()` | same | 0.5.6 delta not covered by `13dac10` |
 | `FrozenTrackManager::errorMessageForTrack` | `uapmd-engine/…/FrozenTrackManager.hpp` | showing why a freeze failed; the runtime state alone says only that it did |
 
+Bound since (2026-10-06): `AudioGraphNode::parameterUpdateEvent()` / `parameterMetadataRefreshEvent()`
+as `uapmd_node_{add,remove}_parameter_{update,metadata_refresh}_listener` → `PluginNode.add/remove…Listener`
+on all platforms. uapmd-cmp's Details window needs the metadata one to follow plug-ins that reshape
+their parameter list (AAP `notify_parameters_changed`, e.g. BYOD presets, ysfx script loads).
+
 Deliberately **not** wanted, for the record: `setEngineActive` / `setOutputMuted` /
 `resetProcessingState` / `outputAnalyser`. They are internals of a sequence
 `uapmd_app_set_audio_engine_enabled` already performs correctly; exposing them would only invite

@@ -708,6 +708,32 @@ bool uapmd_node_schedule_events(uapmd_plugin_node_t node, uapmd_timestamp_t time
 
 void uapmd_node_send_all_notes_off(uapmd_plugin_node_t node) { N(node)->sendAllNotesOff(); }
 
+int64_t uapmd_node_add_parameter_update_listener(uapmd_plugin_node_t node, void* user_data,
+                                                 uapmd_parameter_update_cb_t callback) {
+    if (!callback)
+        return 0;
+    return N(node)->parameterUpdateEvent().addListener([callback, user_data](int32_t index, double value) {
+        callback(index, value, user_data);
+    });
+}
+
+void uapmd_node_remove_parameter_update_listener(uapmd_plugin_node_t node, int64_t listener_id) {
+    N(node)->parameterUpdateEvent().removeListener(listener_id);
+}
+
+int64_t uapmd_node_add_parameter_metadata_refresh_listener(uapmd_plugin_node_t node, void* user_data,
+                                                           uapmd_parameter_metadata_refresh_cb_t callback) {
+    if (!callback)
+        return 0;
+    return N(node)->parameterMetadataRefreshEvent().addListener([callback, user_data]() {
+        callback(user_data);
+    });
+}
+
+void uapmd_node_remove_parameter_metadata_refresh_listener(uapmd_plugin_node_t node, int64_t listener_id) {
+    N(node)->parameterMetadataRefreshEvent().removeListener(listener_id);
+}
+
 /* ═══════════════════════════════════════════════════════════════════════════
  *  AudioPluginGraph
  * ═══════════════════════════════════════════════════════════════════════════ */
