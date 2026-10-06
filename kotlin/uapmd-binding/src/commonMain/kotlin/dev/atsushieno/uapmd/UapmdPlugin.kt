@@ -134,12 +134,21 @@ interface PluginNode {
      * `AudioGraphNode::parameterUpdateEvent()`. Returns the listener id (0 if not added).
      * The listener may run on a non-main (even realtime) thread.
      */
-    fun addParameterUpdateListener(listener: (parameterIndex: Int, value: Double) -> Unit): Long
+    fun addParameterUpdateListener(listener: ParameterUpdateListener): Long
     fun removeParameterUpdateListener(listenerId: Long)
 
     /** `AudioGraphNode::parameterMetadataRefreshEvent()`. Returns the listener id (0 if not added). */
     fun addParameterMetadataRefreshListener(listener: () -> Unit): Long
     fun removeParameterMetadataRefreshListener(listenerId: Long)
+}
+
+/**
+ * Listener of `AudioGraphNode::ParameterUpdateEvent` (`EventBase<int32_t, double>`).
+ * A primitive interface rather than a function type, so that a notification on a
+ * realtime thread does not box its arguments.
+ */
+fun interface ParameterUpdateListener {
+    fun onParameterUpdate(parameterIndex: Int, value: Double)
 }
 
 interface PluginGraph : AutoCloseable {

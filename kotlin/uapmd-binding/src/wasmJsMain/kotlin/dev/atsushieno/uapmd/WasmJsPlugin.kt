@@ -417,7 +417,7 @@ class WasmJsPluginNode internal constructor(
 
     override fun sendAllNotesOff() = wasmMod.uapmdNodeSendAllNotesOff(handle)
 
-    override fun addParameterUpdateListener(listener: (Int, Double) -> Unit): Long {
+    override fun addParameterUpdateListener(listener: ParameterUpdateListener): Long {
         val cbId = nextCallbackId()
         parameterUpdateListeners[cbId] = listener
         val fnPtr = makeCFunctionPtr(cbId, "uapmdDispatchParameterUpdate", "vidi")

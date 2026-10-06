@@ -188,6 +188,7 @@ typedef struct uapmd_plugin_instance_result {
     const char* error;
 } uapmd_plugin_instance_result_t;
 
+/* Invoked exactly once per uapmd_app_create_plugin_instance() call, on success or failure. */
 typedef void (*uapmd_instance_created_cb_t)(uapmd_plugin_instance_result_t result, void* user_data);
 
 UAPMD_C_EXPORT void uapmd_app_create_plugin_instance(uapmd_app_model_t app,

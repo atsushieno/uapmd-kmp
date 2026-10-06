@@ -368,9 +368,10 @@ class JvmPluginNode internal constructor(
 
     override fun sendAllNotesOff() = lib.uapmd_node_send_all_notes_off(handle)
 
-    override fun addParameterUpdateListener(listener: (Int, Double) -> Unit): Long {
+    override fun addParameterUpdateListener(listener: ParameterUpdateListener): Long {
         val cb = object : ParameterUpdateCb {
-            override fun invoke(parameterIndex: Int, value: Double, userData: Pointer?) = listener(parameterIndex, value)
+            override fun invoke(parameterIndex: Int, value: Double, userData: Pointer?) =
+                listener.onParameterUpdate(parameterIndex, value)
         }
         val id = lib.uapmd_node_add_parameter_update_listener(handle, null, cb)
         if (id != 0L) nodeListenerRefs[NodeListenerKey(Pointer.nativeValue(handle), id, false)] = cb

@@ -844,9 +844,27 @@ static std::string node_listener_key(jlong node, bool metadata, int64_t id) {
     return std::to_string(node) + (metadata ? ":m:" : ":u:") + std::to_string(id);
 }
 
+// Parameter updates can arrive on audio threads, which come and go with the audio
+// stream. ART aborts when a thread that is still attached exits, so a thread this
+// attaches is detached again by a thread_local guard when it ends.
+static JNIEnv* node_listener_jni_env() {
+    struct Detacher {
+        bool attached{false};
+        ~Detacher() { if (attached && g_jvm) g_jvm->DetachCurrentThread(); }
+    };
+    thread_local Detacher detacher;
+    JNIEnv* env = nullptr;
+    jint rc = g_jvm->GetEnv(reinterpret_cast<void**>(&env), JNI_VERSION_1_6);
+    if (rc == JNI_EDETACHED) {
+        if (g_jvm->AttachCurrentThread(&env, nullptr) != JNI_OK) return nullptr;
+        detacher.attached = true;
+    }
+    return env;
+}
+
 static void node_parameter_update_trampoline(int32_t index, double value, void* user_data) {
     auto* ctx = static_cast<NodeListenerCtx*>(user_data);
-    JNIEnv* env = jni_env();
+    JNIEnv* env = node_listener_jni_env();
     if (!env) return;
     env->CallVoidMethod(ctx->obj, ctx->mid, static_cast<jint>(index), static_cast<jdouble>(value));
     if (env->ExceptionCheck()) env->ExceptionClear();
@@ -854,7 +872,7 @@ static void node_parameter_update_trampoline(int32_t index, double value, void* 
 
 static void node_parameter_metadata_refresh_trampoline(void* user_data) {
     auto* ctx = static_cast<NodeListenerCtx*>(user_data);
-    JNIEnv* env = jni_env();
+    JNIEnv* env = node_listener_jni_env();
     if (!env) return;
     env->CallVoidMethod(ctx->obj, ctx->mid);
     if (env->ExceptionCheck()) env->ExceptionClear();

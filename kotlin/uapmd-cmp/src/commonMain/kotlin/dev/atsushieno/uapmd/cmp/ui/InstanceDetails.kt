@@ -18,6 +18,10 @@ import androidx.compose.material3.Slider
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.SideEffect
+import androidx.compose.runtime.mutableStateMapOf
+import androidx.compose.runtime.snapshots.SnapshotStateMap
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -35,7 +39,9 @@ import dev.atsushieno.uapmd.cmp.deliverSavedFile
 import dev.atsushieno.uapmd.cmp.pickProjectFileToSave
 import dev.atsushieno.uapmd.PluginNode
 import dev.atsushieno.uapmd.SequencerEngine
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
+import kotlin.concurrent.Volatile
 
 /**
  * uapmd-app's per-instance Details window: pitch bend, channel pressure, a
@@ -66,17 +72,44 @@ fun InstanceDetails(host: UapmdHost, inst: TrackInstance) {
     val parameters = remember(inst.instanceId, revision) {
         (0 until instance.parameterCount.toInt()).mapNotNull { instance.getParameterMetadata(it.toUInt()) }
     }
-    // uapmd-app re-reads the parameter list on the node's
-    // parameterMetadataRefreshEvent (InstanceDetails.cpp), which is how a plug-in
-    // that reshapes its parameters (e.g. on preset/program change) gets reflected.
+    // Values the plug-in (or anything else) changed since the list was last read,
+    // keyed by parameter index. Reset together with the list.
+    val liveValues = remember(inst.instanceId, revision) { mutableStateMapOf<Int, Double>() }
+    val mailbox = remember(parameters) {
+        val maxIndex = parameters.maxOfOrNull { it.index.toInt() } ?: -1
+        ParameterValueMailbox((maxIndex + 1).coerceIn(0, ParameterValueMailbox.MAX_CAPACITY))
+    }
+    val mailboxRef = remember(inst.instanceId) { MailboxRef(mailbox) }
+    SideEffect { mailboxRef.current = mailbox }
+
+    // uapmd-app listens to the node's parameterUpdateEvent and
+    // parameterMetadataRefreshEvent (InstanceDetails.cpp): the former moves single
+    // values, the latter re-reads the whole list, which is how a plug-in that
+    // reshapes its parameters (e.g. on preset/program change) gets reflected.
     DisposableEffect(inst.instanceId) {
-        val listenerId = findPluginNode(engine, inst.instanceId)
-            ?.addParameterMetadataRefreshListener { scope.launch { revision++ } } ?: 0L
+        val node = findPluginNode(engine, inst.instanceId)
+        // May run on the audio thread: only post to the lock-free mailbox.
+        val updateListenerId = node?.addParameterUpdateListener { index, value ->
+            mailboxRef.current.post(index, value)
+        } ?: 0L
+        val metadataListenerId = node?.addParameterMetadataRefreshListener { scope.launch { revision++ } } ?: 0L
+        // The list above was read during composition, before these listeners
+        // existed. A plug-in that publishes its parameters late (aap-cmajor JIT-loads
+        // its patch at prepare()) can notify in between, so read once more now.
+        if (node != null) revision++
         onDispose {
             // Look the node up again: if the instance is gone its node (and the
-            // listener with it) is already destroyed.
-            if (listenerId != 0L)
-                findPluginNode(engine, inst.instanceId)?.removeParameterMetadataRefreshListener(listenerId)
+            // listeners with it) is already destroyed.
+            findPluginNode(engine, inst.instanceId)?.let {
+                if (updateListenerId != 0L) it.removeParameterUpdateListener(updateListenerId)
+                if (metadataListenerId != 0L) it.removeParameterMetadataRefreshListener(metadataListenerId)
+            }
+        }
+    }
+    LaunchedEffect(mailbox, liveValues) {
+        while (true) {
+            mailbox.drain { index, value -> liveValues[index] = value }
+            delay(VALUE_DRAIN_INTERVAL_MS)
         }
     }
     val presets = remember(inst.instanceId) {
@@ -206,7 +239,7 @@ fun InstanceDetails(host: UapmdHost, inst: TrackInstance) {
         // ── Parameters ───────────────────────────────────────────────────────
         val shown = parameters.filter { filter.isBlank() || it.name.contains(filter, true) }
         LazyColumn(Modifier.fillMaxWidth()) {
-            items(shown, key = { it.index.toInt() }) { meta -> ParameterRow(host, inst.instanceId, instance, meta, revision) { revision++ } }
+            items(shown, key = { it.index.toInt() }) { meta -> ParameterRow(host, inst.instanceId, instance, meta, revision, liveValues) { revision++ } }
         }
     }
 }
@@ -218,11 +251,14 @@ private fun ParameterRow(
     instance: dev.atsushieno.uapmd.PluginInstance,
     meta: ParameterMetadata,
     revision: Int,
+    liveValues: SnapshotStateMap<Int, Double>,
     onReset: () -> Unit
 ) {
     val index = meta.index.toInt()
-    // Keyed on revision so a metadata refresh / preset load re-reads the value.
-    var value by remember(instanceId, index, revision) { mutableStateOf(instance.getParameterValue(index).toFloat()) }
+    // Keyed on revision so a metadata refresh / preset load re-reads the value;
+    // changes in between arrive through liveValues.
+    val initialValue = remember(instanceId, index, revision) { instance.getParameterValue(index) }
+    val value = (liveValues[index] ?: initialValue).toFloat()
     val range = (meta.maxPlainValue - meta.minPlainValue).toFloat()
 
     Row(Modifier.fillMaxWidth().padding(vertical = 1.dp), verticalAlignment = Alignment.CenterVertically) {
@@ -230,7 +266,7 @@ private fun ParameterRow(
         Slider(
             value = value,
             onValueChange = {
-                value = it
+                liveValues[index] = it.toDouble()
                 // Route through ProjectCommands so the edit is undoable, the way
                 // uapmd-app does it, rather than poking the instance directly.
                 host.model.sequencer.engine.timeline.commands
@@ -245,12 +281,18 @@ private fun ParameterRow(
             style = MaterialTheme.typography.bodySmall
         )
         Button(onClick = {
-            value = meta.defaultPlainValue.toFloat()
+            liveValues[index] = meta.defaultPlainValue
             host.model.sequencer.engine.timeline.commands
                 .setPluginParameterValue(instanceId, index, meta.defaultPlainValue)
             onReset()
         }) { Text("Reset") }
     }
+}
+
+private const val VALUE_DRAIN_INTERVAL_MS = 33L
+
+private class MailboxRef(initial: ParameterValueMailbox) {
+    @Volatile var current: ParameterValueMailbox = initial
 }
 
 private fun findPluginNode(engine: SequencerEngine, instanceId: Int): PluginNode? {

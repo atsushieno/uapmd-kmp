@@ -294,8 +294,8 @@ class AndroidPluginNode internal constructor(
     override fun sendAllNotesOff() = JniBridge.uapmdNodeSendAllNotesOff(handle)
 
     // The JNI layer holds a global ref to each listener until it is removed.
-    override fun addParameterUpdateListener(listener: (Int, Double) -> Unit): Long =
-        JniBridge.uapmdNodeAddParameterUpdateListener(handle) { index, value -> listener(index, value) }
+    override fun addParameterUpdateListener(listener: ParameterUpdateListener): Long =
+        JniBridge.uapmdNodeAddParameterUpdateListener(handle, listener)
 
     override fun removeParameterUpdateListener(listenerId: Long) =
         JniBridge.uapmdNodeRemoveParameterUpdateListener(handle, listenerId)

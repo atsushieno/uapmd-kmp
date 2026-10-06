@@ -337,12 +337,12 @@ class NativePluginNode internal constructor(
 
     override fun sendAllNotesOff() = uapmd_node_send_all_notes_off(handle)
 
-    override fun addParameterUpdateListener(listener: (Int, Double) -> Unit): Long {
+    override fun addParameterUpdateListener(listener: ParameterUpdateListener): Long {
         val ref = StableRef.create(listener)
         val id = uapmd_node_add_parameter_update_listener(
             handle, ref.asCPointer(),
             staticCFunction { index, value, userData ->
-                userData?.asStableRef<(Int, Double) -> Unit>()?.get()?.invoke(index, value)
+                userData?.asStableRef<ParameterUpdateListener>()?.get()?.onParameterUpdate(index, value)
             }
         )
         if (id == 0L) ref.dispose()

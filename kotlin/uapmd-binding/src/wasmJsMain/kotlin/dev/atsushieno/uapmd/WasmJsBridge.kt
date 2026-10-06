@@ -1708,12 +1708,12 @@ fun uapmdDispatchEventOutput(cbId: Int, instanceId: Int, dataPtr: Int, size: Int
     cb(instanceId, data, size)
 }
 
-internal val parameterUpdateListeners = mutableMapOf<Int, (Int, Double) -> Unit>()
+internal val parameterUpdateListeners = mutableMapOf<Int, ParameterUpdateListener>()
 internal val parameterMetadataRefreshListeners = mutableMapOf<Int, () -> Unit>()
 
 @JsExport
 fun uapmdDispatchParameterUpdate(cbId: Int, parameterIndex: Int, value: Double) {
-    parameterUpdateListeners[cbId]?.invoke(parameterIndex, value)
+    parameterUpdateListeners[cbId]?.onParameterUpdate(parameterIndex, value)
 }
 
 @JsExport

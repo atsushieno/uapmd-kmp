@@ -152,7 +152,7 @@ object JniBridge {
     @JvmStatic external fun uapmdNodeScheduleEvents(h: Long, ts: Long, data: ByteArray): Boolean
     @JvmStatic external fun uapmdNodeSendAllNotesOff(h: Long)
     /** Returns the listener id (0 if not added). */
-    @JvmStatic external fun uapmdNodeAddParameterUpdateListener(h: Long, listener: JniParameterUpdateListener): Long
+    @JvmStatic external fun uapmdNodeAddParameterUpdateListener(h: Long, listener: ParameterUpdateListener): Long
     @JvmStatic external fun uapmdNodeRemoveParameterUpdateListener(h: Long, listenerId: Long)
     /** Returns the listener id (0 if not added). */
     @JvmStatic external fun uapmdNodeAddParameterMetadataRefreshListener(h: Long, listener: Runnable): Long
@@ -1001,9 +1001,4 @@ object JniBridge {
     @JvmStatic external fun uapmdAugene2IntegrationRelinkSource(h: Long, path: String)
     @JvmStatic external fun uapmdAugene2IntegrationRemoveSource(h: Long, path: String)
     @JvmStatic external fun uapmdAugene2IntegrationCompile(h: Long)
-}
-
-/** Receiver for `uapmd_parameter_update_cb_t`; invoked by uapmd_jni.cpp. */
-fun interface JniParameterUpdateListener {
-    fun onParameterUpdate(parameterIndex: Int, value: Double)
 }
