@@ -131,6 +131,19 @@ val os           = org.gradle.internal.os.OperatingSystem.current()
 val cmakeBuildDir = repoRoot.resolve("cmake-build-debug")
 val cApiDylibDir  = File(cmakeBuildDir, "c-api")
 
+// Gradle daemons launched from an IDE/GUI often lack Homebrew etc. on PATH, so
+// resolve cmake explicitly and prepend its directory (Ninja usually lives there too).
+val cmakeExecutable: String by lazy {
+    val name = if (os.isWindows) "cmake.exe" else "cmake"
+    val pathDirs = System.getenv("PATH").orEmpty().split(File.pathSeparator)
+    val fallbackDirs = listOf("/opt/homebrew/bin", "/usr/local/bin", "/usr/bin")
+    (pathDirs + fallbackDirs).map { File(it, name) }.firstOrNull { it.canExecute() }?.absolutePath
+        ?: name
+}
+val cmakePathEnv: String
+    get() = File(cmakeExecutable).parent?.let { it + File.pathSeparator + System.getenv("PATH").orEmpty() }
+        ?: System.getenv("PATH").orEmpty()
+
 tasks.register("buildUapmdCApiDesktop") {
     group       = "build"
     description = "Builds libuapmd-c-api shared library for JVM desktop via cmake"
@@ -147,7 +160,7 @@ tasks.register("buildUapmdCApiDesktop") {
         // Configure if this is a fresh build directory.
         if (!File(cmakeBuildDir, "CMakeCache.txt").exists()) {
             val configureArgs = mutableListOf(
-                "cmake", "-B", cmakeBuildDir.absolutePath,
+                cmakeExecutable, "-B", cmakeBuildDir.absolutePath,
                 "-DCMAKE_BUILD_TYPE=RelWithDebInfo",
                 "-DCPM_SOURCE_CACHE=${cpmCacheDir.absolutePath}",
                 "-DUAPMD_BUILD_TESTS=OFF",
@@ -162,13 +175,15 @@ tasks.register("buildUapmdCApiDesktop") {
             }
             buildServices.exec.exec {
                 workingDir = repoRoot
+                environment("PATH", cmakePathEnv)
                 commandLine(configureArgs)
             }
         }
         buildServices.exec.exec {
             workingDir = repoRoot
+            environment("PATH", cmakePathEnv)
             commandLine(
-                "cmake", "--build", cmakeBuildDir.absolutePath,
+                cmakeExecutable, "--build", cmakeBuildDir.absolutePath,
                 "--target", "uapmd-c-api",
                 "--parallel"
             )
