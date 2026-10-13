@@ -287,6 +287,52 @@ bool uapmd_document_provider_restore_handle(uapmd_document_provider_t provider,
     return true;
 }
 
+/* ── Folders ─────────────────────────────────────────────────────────────── */
+
+static uapmd::IDocumentProvider::FolderPickCallback folder_callback(void* user_data,
+                                                                    uapmd_folder_pick_callback_t callback) {
+    return [callback, user_data](uapmd::FolderPickResult result) {
+        if (!callback)
+            return;
+        /* The C view borrows from `result`, which outlives the call. */
+        auto path = result.path.string();
+        std::vector<uapmd_document_handle_t> documents;
+        documents.reserve(result.documents.size());
+        for (auto& d : result.documents)
+            documents.push_back({d.id.c_str(), d.display_name.c_str(), d.mime_type.c_str()});
+        uapmd_folder_pick_result_t c_result{};
+        c_result.success = result.success;
+        c_result.path = path.c_str();
+        c_result.document_count = static_cast<uint32_t>(documents.size());
+        c_result.documents = documents.empty() ? nullptr : documents.data();
+        c_result.token = result.token.c_str();
+        c_result.display_name = result.display_name.c_str();
+        c_result.error = result.error.empty() ? nullptr : result.error.c_str();
+        callback(&c_result, user_data);
+    };
+}
+
+void uapmd_document_provider_pick_folder(uapmd_document_provider_t provider,
+                                          void* user_data,
+                                          uapmd_folder_pick_callback_t callback) {
+    DP(provider)->pickFolder(folder_callback(user_data, callback));
+}
+
+bool uapmd_document_provider_folder_paths_are_usable(uapmd_document_provider_t provider) {
+    return DP(provider)->folderPathsAreUsable();
+}
+
+void uapmd_document_provider_list_folder_documents(uapmd_document_provider_t provider,
+                                                    const char* token,
+                                                    void* user_data,
+                                                    uapmd_folder_pick_callback_t callback) {
+    DP(provider)->listFolderDocuments(token ? token : "", folder_callback(user_data, callback));
+}
+
+void uapmd_document_provider_release_folder(uapmd_document_provider_t provider, const char* token) {
+    DP(provider)->releaseFolder(token ? token : "");
+}
+
 void uapmd_document_pick_result_free(uapmd_document_pick_result_t* result) {
     /* Currently a no-op since we delete storage in the callback.
      * This function exists as a future-proof API entry point. */

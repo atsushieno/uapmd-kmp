@@ -17,7 +17,7 @@ private class AppTrackMutationCallback(private val callback: (Int, String?) -> U
     fun invoke(trackIndex: Int, error: String?) = callback(trackIndex, error)
 }
 
-private class AppErrorCallback(private val callback: (String?) -> Unit) {
+internal class AppErrorCallback(private val callback: (String?) -> Unit) {
     @Suppress("unused")
     fun invoke(error: String?) = callback(error)
 }
@@ -99,6 +99,18 @@ class AndroidAppModel internal constructor(internal val handle: Long) : AppModel
     override val lastPluginScanError: String?
         get() = JniBridge.uapmdAppLastPluginScanError(handle)?.ifEmpty { null }
     override fun generateScanReport(): String = JniBridge.uapmdAppGenerateScanReport(handle)
+
+    override fun refreshFastScannedPlugins(completed: ((error: String?) -> Unit)?) =
+        JniBridge.uapmdAppRefreshFastScannedPlugins(handle, completed?.let { AppErrorCallback(it) })
+
+    override val pluginScanTool: ScanTool
+        get() = AndroidScanTool(JniBridge.uapmdAppPluginScanTool(handle))
+
+    override val jsfxPluginFormat: JsfxPluginFormat?
+        get() = JniBridge.uapmdAppJsfxPluginFormat(handle).takeIf { it != 0L }?.let { AndroidJsfxPluginFormat(it) }
+
+    override fun syncJsfxRegisteredFolders(completed: (filesWritten: UInt, error: String?) -> Unit) =
+        JniBridge.uapmdAppSyncJsfxRegisteredFolders(handle, JsfxFolderSyncCallback(completed))
     override fun clearPluginBlocklist() = JniBridge.uapmdAppClearPluginBlocklist(handle)
 
     override val blocklist: List<BlocklistEntry>
@@ -763,10 +775,6 @@ actual fun cleanupAppModel() = JniBridge.uapmdAppCleanup()
 actual fun registerVirtualMidiDevicesAddin() = JniBridge.uapmdAppRegisterVirtualMidiDevicesAddin()
 
 private var showVirtualMidiDevicesHandler: (() -> Unit)? = null
-
-class AndroidDocumentProvider internal constructor(internal val handle: Long) : DocumentProvider {
-    override fun tick() = JniBridge.uapmdDocumentProviderTick(handle)
-}
 
 /** The flat {trackIndex, clipId} pair encoding the JNI layer uses. */
 private fun IntArray.toClipTargets(): List<TimelineClipTarget> =

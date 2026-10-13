@@ -1478,6 +1478,73 @@ external interface UapmdCApiModule : JsAny {
     fun uapmdAugene2IntegrationRemoveSource(h: Int, path: Int)
     @JsName("_uapmd_augene2_integration_compile")
     fun uapmdAugene2IntegrationCompile(h: Int)
+
+    /* ── JSFX, catalog refresh, document provider folders ─────────────────── */
+    /** Callback: void(uapmd_document_io_result_t result, const uint8_t* data, size_t size, void* user_data) */
+    @JsName("_uapmd_document_provider_read")
+    fun uapmdDocumentProviderRead(provider: Int, handle: Int, userData: Int, callback: Int)
+    /** Callback: void(const uapmd_folder_pick_result_t* result, void* user_data) */
+    @JsName("_uapmd_document_provider_pick_folder")
+    fun uapmdDocumentProviderPickFolder(provider: Int, userData: Int, callback: Int)
+    @JsName("_uapmd_document_provider_folder_paths_are_usable")
+    fun uapmdDocumentProviderFolderPathsAreUsable(provider: Int): Boolean
+    @JsName("_uapmd_document_provider_list_folder_documents")
+    fun uapmdDocumentProviderListFolderDocuments(provider: Int, token: Int, userData: Int, callback: Int)
+    @JsName("_uapmd_document_provider_release_folder")
+    fun uapmdDocumentProviderReleaseFolder(provider: Int, token: Int)
+    @JsName("_uapmd_app_plugin_scan_tool")
+    fun uapmdAppPluginScanTool(app: Int): Int
+    /** Callback: void(const char* error, void* user_data) */
+    @JsName("_uapmd_app_refresh_fast_scanned_plugins")
+    fun uapmdAppRefreshFastScannedPlugins(app: Int, userData: Int, callback: Int)
+
+    @JsName("_uapmd_jsfx_available")
+    fun uapmdJsfxAvailable(): Boolean
+    @JsName("_uapmd_jsfx_set_editor_font_data")
+    fun uapmdJsfxSetEditorFontData(data: Int, size: Int)
+    @JsName("_uapmd_jsfx_uses_own_font_backend")
+    fun uapmdJsfxUsesOwnFontBackend(): Boolean
+    @JsName("_uapmd_jsfx_user_content_directory")
+    fun uapmdJsfxUserContentDirectory(): Int
+    @JsName("_uapmd_jsfx_looks_like_archive")
+    fun uapmdJsfxLooksLikeArchive(fileName: Int): Boolean
+    @JsName("_uapmd_jsfx_import_content")
+    fun uapmdJsfxImportContent(fileName: Int, data: Int, size: Int, subdirectory: Int, out: Int)
+    @JsName("_uapmd_jsfx_folder_mirror_root")
+    fun uapmdJsfxFolderMirrorRoot(): Int
+    @JsName("_uapmd_jsfx_registered_folder_count")
+    fun uapmdJsfxRegisteredFolderCount(): Int
+    @JsName("_uapmd_jsfx_get_registered_folder")
+    fun uapmdJsfxGetRegisteredFolder(index: Int, out: Int): Boolean
+    @JsName("_uapmd_jsfx_register_folder")
+    fun uapmdJsfxRegisterFolder(token: Int, name: Int): Int
+    @JsName("_uapmd_jsfx_unregister_folder")
+    fun uapmdJsfxUnregisterFolder(token: Int)
+    @JsName("_uapmd_jsfx_clear_folder_mirror")
+    fun uapmdJsfxClearFolderMirror(name: Int): Boolean
+    @JsName("_uapmd_jsfx_write_folder_mirror_file")
+    fun uapmdJsfxWriteFolderMirrorFile(name: Int, relativePath: Int, data: Int, size: Int, out: Int)
+    @JsName("_uapmd_app_jsfx_plugin_format")
+    fun uapmdAppJsfxPluginFormat(app: Int): Int
+    @JsName("_uapmd_jsfx_format_set_search_paths")
+    fun uapmdJsfxFormatSetSearchPaths(format: Int, paths: Int, count: Int, alsoUseDefaults: Boolean)
+    @JsName("_uapmd_jsfx_format_search_path_count")
+    fun uapmdJsfxFormatSearchPathCount(format: Int): Int
+    @JsName("_uapmd_jsfx_format_get_search_path")
+    fun uapmdJsfxFormatGetSearchPath(format: Int, index: Int): Int
+    @JsName("_uapmd_jsfx_format_use_default_search_paths")
+    fun uapmdJsfxFormatUseDefaultSearchPaths(format: Int): Boolean
+    @JsName("_uapmd_jsfx_format_default_search_path_count")
+    fun uapmdJsfxFormatDefaultSearchPathCount(format: Int): Int
+    @JsName("_uapmd_jsfx_format_get_default_search_path")
+    fun uapmdJsfxFormatGetDefaultSearchPath(format: Int, index: Int): Int
+    @JsName("_uapmd_jsfx_format_duplicate_listing")
+    fun uapmdJsfxFormatDuplicateListing(format: Int): Int
+    @JsName("_uapmd_jsfx_format_set_duplicate_listing")
+    fun uapmdJsfxFormatSetDuplicateListing(format: Int, value: Int)
+    /** Callback: void(uint32_t files_written, const char* error, void* user_data) */
+    @JsName("_uapmd_app_sync_jsfx_registered_folders")
+    fun uapmdAppSyncJsfxRegisteredFolders(app: Int, userData: Int, callback: Int)
 }
 
 

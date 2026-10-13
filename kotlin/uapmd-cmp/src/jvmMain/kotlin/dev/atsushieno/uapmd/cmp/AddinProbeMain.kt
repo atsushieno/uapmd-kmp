@@ -3,6 +3,7 @@ package dev.atsushieno.uapmd.cmp
 import dev.atsushieno.uapmd.AddinState
 import dev.atsushieno.uapmd.AudioWorkerFault
 import dev.atsushieno.uapmd.Augene2
+import dev.atsushieno.uapmd.Jsfx
 
 /**
  * Headless check of the addin wiring of uapmd f5d490d, booted through [UapmdHost]
@@ -85,6 +86,36 @@ fun main() {
         check("resource folder round-trips", augene2.resourceFolder == "mml")
         host.openAugene2(false)
         check("panel closes", !augene2.isOpen)
+    }
+
+    println("-- JSFX")
+    check("JSFX is in this build", Jsfx.isAvailable)
+    val jsfx = host.jsfxResources
+    check("the JSFX format is registered", jsfx != null)
+    check("the scan tool knows the JSFX format",
+        host.model.pluginScanTool.let { t -> (0u until t.formatCount).any { t.getFormatName(it) == "JSFX" } })
+    check("archives are told from scripts", Jsfx.looksLikeArchive("effects.zip") && !Jsfx.looksLikeArchive("effect.jsfx"))
+    if (jsfx != null) {
+        host.toggleJsfxSettings()
+        check("JSFX Settings opens", host.isJsfxSettingsOpen)
+        val format = host.model.jsfxPluginFormat!!
+        check("search paths are loaded", jsfx.searchPaths == format.searchPaths && jsfx.useDefaults == format.useDefaultSearchPaths)
+        println("   search paths: ${jsfx.searchPaths}, defaults (${jsfx.useDefaults}): ${jsfx.defaultSearchPaths}")
+        println("   content directory: ${jsfx.contentDirectory}; registered folders: ${jsfx.registeredFolders}")
+        println("   duplicate listing: ${jsfx.duplicateListing}; folder paths usable: ${jsfx.provider?.folderPathsAreUsable}")
+        // A refresh while the startup scan runs is turned away, so wait it out.
+        var waited = 0
+        while (host.isScanning && waited < 120_000) { pump(500); waited += 500 }
+        jsfx.syncRegisteredFolders()
+        check("refresh reports it is busy", jsfx.busy)
+        waited = 0
+        while (jsfx.busy && waited < 60_000) { pump(100); waited += 100 }
+        println("   status: ${jsfx.status}")
+        check("refresh completes", !jsfx.busy)
+        check("refresh reports the effect count", !jsfx.statusIsError && jsfx.status.endsWith("JSFX effects available."))
+        check("the plugin list was re-read", jsfx.status.startsWith("${host.catalog.count { it.format == "JSFX" }} "))
+        host.toggleJsfxSettings()
+        check("JSFX Settings closes", !host.isJsfxSettingsOpen)
     }
 
     println("-- audio workers")

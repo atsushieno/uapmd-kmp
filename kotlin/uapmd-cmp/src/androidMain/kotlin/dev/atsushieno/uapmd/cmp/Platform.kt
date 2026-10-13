@@ -20,3 +20,5 @@ actual val platformSupportsAudioWorkerSettings: Boolean = false
 
 actual val platformHardwareConcurrency: Int
     get() = Runtime.getRuntime().availableProcessors()
+
+actual val platformIsAndroid: Boolean = true

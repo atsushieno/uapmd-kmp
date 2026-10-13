@@ -17,6 +17,7 @@ import dev.atsushieno.uapmd.cmp.ui.Toolbar
 import dev.atsushieno.uapmd.cmp.ui.DeviceSettings
 import dev.atsushieno.uapmd.cmp.ui.VirtualMidiDevicesWindow
 import dev.atsushieno.uapmd.cmp.ui.Augene2Window
+import dev.atsushieno.uapmd.cmp.ui.JsfxSettingsWindow
 import dev.atsushieno.uapmd.cmp.ui.StepSequencerEditor
 import dev.atsushieno.uapmd.cmp.ui.Timeline
 import dev.atsushieno.uapmd.cmp.ui.InstanceDetails
@@ -251,6 +252,10 @@ fun main() {
                         "devices" -> DeviceSettings(host)
                         "vmidi" -> VirtualMidiDevicesWindow(host, rememberFloatingWindowManager())
                         "augene2" -> host.augene2?.let { Augene2Window(it) }
+                        "jsfx" -> host.jsfxResources?.let {
+                            remember { it.loadFromFormat() }
+                            JsfxSettingsWindow(it)
+                        }
                         "steps" -> StepSequencerEditor(host, 0, stepClip)
                         "graph" -> TrackGraphEditor(host, graphTrack)
                         "pianoroll" -> PianoRollEditor(

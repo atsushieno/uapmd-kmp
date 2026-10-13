@@ -46,6 +46,7 @@ import androidx.compose.ui.unit.dp
 import dev.atsushieno.uapmd.cmp.ui.FloatingWindowLayer
 import dev.atsushieno.uapmd.cmp.ui.closeDetailsWindowsExcept
 import dev.atsushieno.uapmd.cmp.ui.AddinManagerWindow
+import dev.atsushieno.uapmd.cmp.ui.JsfxSettingsWindow
 import dev.atsushieno.uapmd.cmp.ui.McpSettingsWindow
 import dev.atsushieno.uapmd.cmp.ui.ScriptEditorWindow
 import dev.atsushieno.uapmd.cmp.ui.AudioImportWindow
@@ -162,6 +163,18 @@ fun MainWindow() {
                         windows.open(key, "Virtual MIDI Devices", DpSize(620.dp, 420.dp),
                             onClose = { host.isVirtualMidiDevicesOpen = false }) {
                             VirtualMidiDevicesWindow(host, windows)
+                        }
+                    else windows.close(key)
+                }
+                // JSFX Settings is uapmd-app's own command rather than an
+                // addin's, but it opens its window the same way.
+                LaunchedEffect(host.isJsfxSettingsOpen) {
+                    val key = "jsfxSettings"
+                    val resources = host.jsfxResources
+                    if (host.isJsfxSettingsOpen && resources != null)
+                        windows.open(key, "JSFX Effects", DpSize(660.dp, 460.dp),
+                            onClose = { host.isJsfxSettingsOpen = false }) {
+                            JsfxSettingsWindow(resources)
                         }
                     else windows.close(key)
                 }

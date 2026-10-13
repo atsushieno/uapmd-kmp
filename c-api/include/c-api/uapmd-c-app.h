@@ -35,6 +35,9 @@ UAPMD_C_EXPORT void uapmd_app_cleanup(void);
 UAPMD_C_EXPORT uapmd_realtime_sequencer_t uapmd_app_sequencer(uapmd_app_model_t app);
 UAPMD_C_EXPORT uapmd_transport_controller_t uapmd_app_transport(uapmd_app_model_t app);
 UAPMD_C_EXPORT uapmd_document_provider_t uapmd_app_document_provider(uapmd_app_model_t app);
+/* AppModel::pluginScanTool(). Owned by the model: uapmd_scan_tool_destroy() on it
+ * does nothing, as on any scan tool uapmd_scan_tool_create() did not make. */
+UAPMD_C_EXPORT uapmd_scan_tool_t uapmd_app_plugin_scan_tool(uapmd_app_model_t app);
 
 /*
  * Saves the current project into a document handle obtained from
@@ -87,6 +90,17 @@ UAPMD_C_EXPORT void uapmd_app_cancel_plugin_scanning(uapmd_app_model_t app);
  * uapmd_app_cleanup() does it as a last resort. */
 UAPMD_C_EXPORT void uapmd_app_stop_plugin_scanning(uapmd_app_model_t app);
 UAPMD_C_EXPORT size_t uapmd_app_generate_scan_report(uapmd_app_model_t app, char* buf, size_t buf_size);
+
+typedef void (*uapmd_app_catalog_refresh_cb_t)(const char* error, void* user_data);
+
+/* AppModel::refreshFastScannedPlugins(): rebuilds the catalog entries of the
+ * formats that scan by reading files (JSFX among them), re-reading registered
+ * JSFX folders first. The callback runs on the main thread once the catalog is
+ * rebuilt; `error` is why re-reading a registered folder failed, or NULL.
+ * `callback` may be NULL. */
+UAPMD_C_EXPORT void uapmd_app_refresh_fast_scanned_plugins(uapmd_app_model_t app,
+                                                             void* user_data,
+                                                             uapmd_app_catalog_refresh_cb_t callback);
 
 /*
  * Progress of the slow scan, mirroring `AppModel::SlowScanProgressState`.

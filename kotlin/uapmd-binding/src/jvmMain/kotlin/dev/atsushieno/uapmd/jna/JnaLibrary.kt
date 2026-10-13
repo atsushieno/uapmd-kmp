@@ -491,6 +491,8 @@ open class UapmdDocumentHandle(p: Pointer? = null) : Structure(p) {
     @JvmField var id: String? = null
     @JvmField var display_name: String? = null
     @JvmField var mime_type: String? = null
+
+    class ByValue : UapmdDocumentHandle(), Structure.ByValue
 }
 
 @FieldOrder("label", "mime_types", "mime_type_count", "extensions", "extension_count")
@@ -1029,6 +1031,49 @@ open class UapmdAugene2TrackMapping : Structure() {
     @JvmField var track_index: Int = -1
 }
 
+// ─── JSFX and document provider folders ──────────────────────────────────────
+
+@FieldOrder("success", "files_written", "destination", "error")
+open class UapmdJsfxImportResult : Structure() {
+    @JvmField var success: Byte = 0
+    @JvmField var files_written: Int = 0
+    @JvmField var destination: String? = null
+    @JvmField var error: String? = null
+}
+
+@FieldOrder("token", "name")
+open class UapmdJsfxRegisteredFolder : Structure() {
+    @JvmField var token: String? = null
+    @JvmField var name: String? = null
+}
+
+@FieldOrder("success", "path", "document_count", "documents", "token", "display_name", "error")
+open class UapmdFolderPickResult(p: Pointer? = null) : Structure(p) {
+    @JvmField var success: Byte = 0
+    @JvmField var path: String? = null
+    @JvmField var document_count: Int = 0
+    @JvmField var documents: Pointer? = null
+    @JvmField var token: String? = null
+    @JvmField var display_name: String? = null
+    @JvmField var error: String? = null
+}
+
+interface FolderPickCb : Callback {
+    fun invoke(result: Pointer?, userData: Pointer?)
+}
+
+interface DocumentReadCb : Callback {
+    fun invoke(result: UapmdDocumentIoResult.ByValue, data: Pointer?, dataSize: Long, userData: Pointer?)
+}
+
+interface CatalogRefreshCb : Callback {
+    fun invoke(error: String?, userData: Pointer?)
+}
+
+interface JsfxFolderSyncCb : Callback {
+    fun invoke(filesWritten: Int, error: String?, userData: Pointer?)
+}
+
 interface UapmdLibrary : Library {
 
     companion object {
@@ -1078,7 +1123,7 @@ interface UapmdLibrary : Library {
     fun uapmd_document_provider_destroy(provider: Pointer?)
     fun uapmd_document_provider_pick_open(
         provider: Pointer?,
-        filters: Array<UapmdDocumentFilter>,
+        filters: Array<UapmdDocumentFilter>?,
         filterCount: Int,
         allowMultiple: Boolean,
         userData: Pointer?,
@@ -2056,4 +2101,37 @@ interface UapmdLibrary : Library {
     fun uapmd_augene2_integration_relink_source(integration: Pointer?, path: String?)
     fun uapmd_augene2_integration_remove_source(integration: Pointer?, path: String?)
     fun uapmd_augene2_integration_compile(integration: Pointer?)
+
+    fun uapmd_document_provider_read(provider: Pointer?, handle: UapmdDocumentHandle.ByValue, userData: Pointer?, callback: DocumentReadCb?)
+    fun uapmd_document_provider_pick_folder(provider: Pointer?, userData: Pointer?, callback: FolderPickCb?)
+    fun uapmd_document_provider_folder_paths_are_usable(provider: Pointer?): Boolean
+    fun uapmd_document_provider_list_folder_documents(provider: Pointer?, token: String?, userData: Pointer?, callback: FolderPickCb?)
+    fun uapmd_document_provider_release_folder(provider: Pointer?, token: String?)
+
+    fun uapmd_app_plugin_scan_tool(app: Pointer?): Pointer?
+    fun uapmd_app_refresh_fast_scanned_plugins(app: Pointer?, userData: Pointer?, callback: CatalogRefreshCb?)
+
+    fun uapmd_jsfx_available(): Boolean
+    fun uapmd_jsfx_set_editor_font_data(data: ByteArray?, size: Long)
+    fun uapmd_jsfx_uses_own_font_backend(): Boolean
+    fun uapmd_jsfx_user_content_directory(): String?
+    fun uapmd_jsfx_looks_like_archive(fileName: String?): Boolean
+    fun uapmd_jsfx_import_content(fileName: String?, data: ByteArray?, size: Long, subdirectory: String?, out: UapmdJsfxImportResult)
+    fun uapmd_jsfx_folder_mirror_root(): String?
+    fun uapmd_jsfx_registered_folder_count(): Int
+    fun uapmd_jsfx_get_registered_folder(index: Int, out: UapmdJsfxRegisteredFolder): Boolean
+    fun uapmd_jsfx_register_folder(token: String?, name: String?): String?
+    fun uapmd_jsfx_unregister_folder(token: String?)
+    fun uapmd_jsfx_clear_folder_mirror(name: String?): Boolean
+    fun uapmd_jsfx_write_folder_mirror_file(name: String?, relativePath: String?, data: ByteArray?, size: Long, out: UapmdJsfxImportResult)
+    fun uapmd_app_jsfx_plugin_format(app: Pointer?): Pointer?
+    fun uapmd_jsfx_format_set_search_paths(format: Pointer?, paths: Array<String>?, count: Int, alsoUseDefaults: Boolean)
+    fun uapmd_jsfx_format_search_path_count(format: Pointer?): Int
+    fun uapmd_jsfx_format_get_search_path(format: Pointer?, index: Int): String?
+    fun uapmd_jsfx_format_use_default_search_paths(format: Pointer?): Boolean
+    fun uapmd_jsfx_format_default_search_path_count(format: Pointer?): Int
+    fun uapmd_jsfx_format_get_default_search_path(format: Pointer?, index: Int): String?
+    fun uapmd_jsfx_format_duplicate_listing(format: Pointer?): Int
+    fun uapmd_jsfx_format_set_duplicate_listing(format: Pointer?, value: Int)
+    fun uapmd_app_sync_jsfx_registered_folders(app: Pointer?, userData: Pointer?, callback: JsfxFolderSyncCb?)
 }

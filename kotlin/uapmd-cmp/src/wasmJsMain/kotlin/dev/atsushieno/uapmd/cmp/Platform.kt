@@ -25,3 +25,5 @@ actual val platformSupportsAudioWorkerSettings: Boolean = false
 
 actual val platformHardwareConcurrency: Int
     get() = 0
+
+actual val platformIsAndroid: Boolean = false

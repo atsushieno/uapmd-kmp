@@ -80,6 +80,20 @@ class JsAppModel internal constructor(internal val handle: Int) : AppModel {
     override fun generateScanReport(): String =
         readJsString(handle) { h, buf, size -> jsMod._uapmd_app_generate_scan_report(h, buf, size) as Int }
 
+    override fun refreshFastScannedPlugins(completed: ((error: String?) -> Unit)?) {
+        jsMod._uapmd_app_refresh_fast_scanned_plugins(handle, 0, completed?.let { makeJsErrorOnly(it) } ?: 0)
+    }
+
+    override val pluginScanTool: ScanTool
+        get() = JsScanTool(jsMod._uapmd_app_plugin_scan_tool(handle) as Int)
+
+    override val jsfxPluginFormat: JsfxPluginFormat?
+        get() = (jsMod._uapmd_app_jsfx_plugin_format(handle) as Int).takeIf { it != 0 }?.let { JsJsfxPluginFormat(it) }
+
+    override fun syncJsfxRegisteredFolders(completed: (filesWritten: UInt, error: String?) -> Unit) {
+        jsMod._uapmd_app_sync_jsfx_registered_folders(handle, 0, makeJsFolderSync(completed))
+    }
+
     override fun clearPluginBlocklist() {
         jsMod._uapmd_app_clear_plugin_blocklist(handle)
     }
@@ -1142,10 +1156,6 @@ actual fun registerVirtualMidiDevicesAddin() {
 
 private var jsShowVirtualMidiDevicesHandler: (() -> Unit)? = null
 private var jsShowVirtualMidiDevicesFnPtr = 0
-
-class JsDocumentProvider internal constructor(internal val handle: Int) : DocumentProvider {
-    override fun tick() { jsMod._uapmd_document_provider_tick(handle) }
-}
 
 private fun readJsClipTargets(base: Int, count: Int): List<TimelineClipTarget> =
     (0 until count).map {

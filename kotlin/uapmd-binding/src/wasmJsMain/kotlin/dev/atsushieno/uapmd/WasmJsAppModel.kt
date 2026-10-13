@@ -59,6 +59,18 @@ class WasmJsAppModel internal constructor(internal val handle: Int) : AppModel {
     override fun generateScanReport(): String =
         readString(handle) { h, buf, size -> uapmdAppGenerateScanReport(h, buf, size) }
 
+    override fun refreshFastScannedPlugins(completed: ((error: String?) -> Unit)?) =
+        wasmMod.uapmdAppRefreshFastScannedPlugins(handle, 0, completed?.let { appErrorOnlyPtr(it) } ?: 0)
+
+    override val pluginScanTool: ScanTool
+        get() = WasmJsScanTool(wasmMod.uapmdAppPluginScanTool(handle))
+
+    override val jsfxPluginFormat: JsfxPluginFormat?
+        get() = wasmMod.uapmdAppJsfxPluginFormat(handle).takeIf { it != 0 }?.let { WasmJsJsfxPluginFormat(it) }
+
+    override fun syncJsfxRegisteredFolders(completed: (filesWritten: UInt, error: String?) -> Unit) =
+        wasmMod.uapmdAppSyncJsfxRegisteredFolders(handle, 0, jsfxFolderSyncPtr(completed))
+
     override fun clearPluginBlocklist() = wasmMod.uapmdAppClearPluginBlocklist(handle)
 
     override val blocklist: List<BlocklistEntry>
@@ -1102,9 +1114,6 @@ actual fun registerVirtualMidiDevicesAddin() = wasmMod.uapmdAppRegisterVirtualMi
 
 private var showVirtualMidiDevicesFnPtr = 0
 
-class WasmJsDocumentProvider internal constructor(internal val handle: Int) : DocumentProvider {
-    override fun tick() = wasmMod.uapmdDocumentProviderTick(handle)
-}
 
 private fun readClipTargets(base: Int, count: Int): List<TimelineClipTarget> =
     (0 until count).map {

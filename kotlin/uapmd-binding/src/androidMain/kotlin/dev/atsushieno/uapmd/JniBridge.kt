@@ -1001,4 +1001,48 @@ object JniBridge {
     @JvmStatic external fun uapmdAugene2IntegrationRelinkSource(h: Long, path: String)
     @JvmStatic external fun uapmdAugene2IntegrationRemoveSource(h: Long, path: String)
     @JvmStatic external fun uapmdAugene2IntegrationCompile(h: Long)
+
+    // ─── JSFX, catalog refresh, document provider folders (uapmd_jni_jsfx.cpp) ──
+
+    /** labels[i], mimeTypes[i] and extensions[i] describe filter i. cb: invoke(Boolean, Array<String?>, String?) */
+    @JvmStatic external fun uapmdDocumentProviderPickOpen(
+        provider: Long, labels: Array<String>, mimeTypes: Array<Array<String>>,
+        extensions: Array<Array<String>>, allowMultiple: Boolean, cb: Any
+    )
+    /** cb: invoke(success: Boolean, error: String?, data: ByteArray) */
+    @JvmStatic external fun uapmdDocumentProviderRead(provider: Long, id: String, displayName: String, mimeType: String, cb: Any)
+    /** cb: invoke(success, path, documents: Array<String?>, token, displayName, error: String?) */
+    @JvmStatic external fun uapmdDocumentProviderPickFolder(provider: Long, cb: Any)
+    @JvmStatic external fun uapmdDocumentProviderFolderPathsAreUsable(provider: Long): Boolean
+    @JvmStatic external fun uapmdDocumentProviderListFolderDocuments(provider: Long, token: String, cb: Any)
+    @JvmStatic external fun uapmdDocumentProviderReleaseFolder(provider: Long, token: String)
+
+    @JvmStatic external fun uapmdAppPluginScanTool(app: Long): Long
+    /** cb: invoke(error: String?), or null. */
+    @JvmStatic external fun uapmdAppRefreshFastScannedPlugins(app: Long, cb: Any?)
+    @JvmStatic external fun uapmdAppJsfxPluginFormat(app: Long): Long
+    /** cb: invoke(filesWritten: Int, error: String?) */
+    @JvmStatic external fun uapmdAppSyncJsfxRegisteredFolders(app: Long, cb: Any)
+
+    @JvmStatic external fun uapmdJsfxAvailable(): Boolean
+    @JvmStatic external fun uapmdJsfxSetEditorFontData(data: ByteArray?)
+    @JvmStatic external fun uapmdJsfxUsesOwnFontBackend(): Boolean
+    @JvmStatic external fun uapmdJsfxUserContentDirectory(): String
+    @JvmStatic external fun uapmdJsfxLooksLikeArchive(fileName: String): Boolean
+    /** Fills outStrings[0..1] = {destination, error}; returns {success, filesWritten}. */
+    @JvmStatic external fun uapmdJsfxImportContent(fileName: String, data: ByteArray, subdirectory: String, outStrings: Array<String?>): IntArray
+    @JvmStatic external fun uapmdJsfxFolderMirrorRoot(): String
+    /** Flat {token, name} pairs. */
+    @JvmStatic external fun uapmdJsfxRegisteredFolders(): Array<String?>
+    @JvmStatic external fun uapmdJsfxRegisterFolder(token: String, name: String): String
+    @JvmStatic external fun uapmdJsfxUnregisterFolder(token: String)
+    @JvmStatic external fun uapmdJsfxClearFolderMirror(name: String): Boolean
+    /** Fills outStrings[0..1] = {destination, error}; returns {success, filesWritten}. */
+    @JvmStatic external fun uapmdJsfxWriteFolderMirrorFile(name: String, relativePath: String, data: ByteArray, outStrings: Array<String?>): IntArray
+    @JvmStatic external fun uapmdJsfxFormatSetSearchPaths(format: Long, paths: Array<String>, alsoUseDefaults: Boolean)
+    @JvmStatic external fun uapmdJsfxFormatSearchPaths(format: Long): Array<String?>
+    @JvmStatic external fun uapmdJsfxFormatUseDefaultSearchPaths(format: Long): Boolean
+    @JvmStatic external fun uapmdJsfxFormatDefaultSearchPaths(format: Long): Array<String?>
+    @JvmStatic external fun uapmdJsfxFormatDuplicateListing(format: Long): Int
+    @JvmStatic external fun uapmdJsfxFormatSetDuplicateListing(format: Long, value: Int)
 }

@@ -63,6 +63,40 @@ class JvmAppModel internal constructor(
     override fun generateScanReport(): String =
         readJvmString { buf, size -> lib.uapmd_app_generate_scan_report(handle, buf, size) }
 
+    override fun refreshFastScannedPlugins(completed: ((error: String?) -> Unit)?) {
+        if (completed == null) {
+            lib.uapmd_app_refresh_fast_scanned_plugins(handle, null, null)
+            return
+        }
+        lateinit var cb: CatalogRefreshCb
+        cb = object : CatalogRefreshCb {
+            override fun invoke(error: String?, userData: Pointer?) {
+                liveAppCallbacks.remove(cb)
+                completed(error)
+            }
+        }
+        liveAppCallbacks.add(cb)
+        lib.uapmd_app_refresh_fast_scanned_plugins(handle, null, cb)
+    }
+
+    override val pluginScanTool: ScanTool
+        get() = JvmScanTool(lib.uapmd_app_plugin_scan_tool(handle) ?: error("uapmd_app_plugin_scan_tool returned null"))
+
+    override val jsfxPluginFormat: JsfxPluginFormat?
+        get() = lib.uapmd_app_jsfx_plugin_format(handle)?.let { JvmJsfxPluginFormat(it) }
+
+    override fun syncJsfxRegisteredFolders(completed: (filesWritten: UInt, error: String?) -> Unit) {
+        lateinit var cb: JsfxFolderSyncCb
+        cb = object : JsfxFolderSyncCb {
+            override fun invoke(filesWritten: Int, error: String?, userData: Pointer?) {
+                liveAppCallbacks.remove(cb)
+                completed(filesWritten.toUInt(), error)
+            }
+        }
+        liveAppCallbacks.add(cb)
+        lib.uapmd_app_sync_jsfx_registered_folders(handle, null, cb)
+    }
+
     override fun clearPluginBlocklist() = lib.uapmd_app_clear_plugin_blocklist(handle)
 
     override val blocklist: List<BlocklistEntry>
@@ -731,7 +765,7 @@ private fun historyMutationCb(callback: (String?) -> Unit): HistoryMutationCb {
     return cb
 }
 
-private val liveAppCallbacks = java.util.Collections.synchronizedSet(mutableSetOf<Any>())
+internal val liveAppCallbacks = java.util.Collections.synchronizedSet(mutableSetOf<Any>())
 
 class JvmTransportController internal constructor(
     internal val handle: Pointer
@@ -764,10 +798,6 @@ actual fun registerVirtualMidiDevicesAddin() = lib.uapmd_app_register_virtual_mi
 
 private var showVirtualMidiDevicesHandler: (() -> Unit)? = null
 private var showVirtualMidiDevicesCb: ShowVirtualMidiDevicesCb? = null
-
-class JvmDocumentProvider internal constructor(internal val handle: Pointer) : DocumentProvider {
-    override fun tick() = lib.uapmd_document_provider_tick(handle)
-}
 
 internal fun UapmdPianoRollNote.toKotlin() = PianoRollNote(
     startSeconds = start_seconds,

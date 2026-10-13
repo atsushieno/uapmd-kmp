@@ -110,6 +110,37 @@ UAPMD_C_EXPORT bool uapmd_document_provider_restore_handle(uapmd_document_provid
                                                              const char* token,
                                                              uapmd_document_handle_t* out);
 
+/* ── Folders ─────────────────────────────────────────────────────────────── */
+
+/*
+ * uapmd::FolderPickResult. Exactly one of `path` and `documents` is populated on
+ * success; both empty means the user cancelled. Each document's display_name is
+ * its path relative to the folder. Everything it points to is valid only for the
+ * duration of the callback.
+ */
+typedef struct uapmd_folder_pick_result {
+    bool success;
+    const char* path;
+    uint32_t document_count;
+    const uapmd_document_handle_t* documents;
+    const char* token;
+    const char* display_name;
+    const char* error;
+} uapmd_folder_pick_result_t;
+
+typedef void (*uapmd_folder_pick_callback_t)(const uapmd_folder_pick_result_t* result, void* user_data);
+
+UAPMD_C_EXPORT void uapmd_document_provider_pick_folder(uapmd_document_provider_t provider,
+                                                          void* user_data,
+                                                          uapmd_folder_pick_callback_t callback);
+UAPMD_C_EXPORT bool uapmd_document_provider_folder_paths_are_usable(uapmd_document_provider_t provider);
+UAPMD_C_EXPORT void uapmd_document_provider_list_folder_documents(uapmd_document_provider_t provider,
+                                                                    const char* token,
+                                                                    void* user_data,
+                                                                    uapmd_folder_pick_callback_t callback);
+UAPMD_C_EXPORT void uapmd_document_provider_release_folder(uapmd_document_provider_t provider,
+                                                             const char* token);
+
 /* Result cleanup */
 UAPMD_C_EXPORT void uapmd_document_pick_result_free(uapmd_document_pick_result_t* result);
 

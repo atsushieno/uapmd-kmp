@@ -14,6 +14,7 @@ set(UAPMD_C_API_HEADERS
     include/c-api/uapmd-c-undo.h
     include/c-api/uapmd-c-addin.h
     include/c-api/uapmd-c-augene2.h
+    include/c-api/uapmd-c-jsfx.h
 )
 
 set(UAPMD_C_API_SOURCES
@@ -29,6 +30,7 @@ set(UAPMD_C_API_SOURCES
     src/uapmd-c-addin.cpp
     src/uapmd-c-script.cpp
     src/uapmd-c-augene2.cpp
+    src/uapmd-c-jsfx.cpp
 )
 
 if(ANDROID OR IOS OR EMSCRIPTEN)

@@ -20,3 +20,5 @@ actual val platformSupportsAudioWorkerSettings: Boolean = false
 
 actual val platformHardwareConcurrency: Int
     get() = platform.Foundation.NSProcessInfo.processInfo.activeProcessorCount.toInt()
+
+actual val platformIsAndroid: Boolean = false

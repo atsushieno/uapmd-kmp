@@ -108,7 +108,7 @@ class UapmdHost private constructor(val model: AppModel) {
      * `main`). Compose state must only change on the UI thread, so every
      * callback routes its state update through here.
      */
-    private fun onUiThread(block: () -> Unit) {
+    internal fun onUiThread(block: () -> Unit) {
         scope.launch { block() }
     }
 
@@ -369,7 +369,7 @@ class UapmdHost private constructor(val model: AppModel) {
     }
 
     /** `AppModel::documentProvider()`; addins pick documents through it. */
-    private val documentProvider: DocumentProvider? by lazy {
+    internal val documentProvider: DocumentProvider? by lazy {
         runCatching { model.documentProvider }.getOrNull()
     }
 
@@ -455,6 +455,26 @@ class UapmdHost private constructor(val model: AppModel) {
     fun disableVirtualMidiDevice(instanceId: Int) {
         model.disableUmpDevice(instanceId)
         refresh()
+    }
+
+    // ── JSFX ────────────────────────────────────────────────────────────────
+
+    /** The JSFX Settings window's model; null when the build has no JSFX. */
+    val jsfxResources: JsfxResources? by lazy {
+        runCatching { model.jsfxPluginFormat }.getOrNull()?.let { JsfxResources(this, model, it) }
+    }
+
+    /**
+     * uapmd-app's GUI registers its own "JSFX Settings" command, which toggles the
+     * window. JSFX is built in rather than an addin, so it has nothing of its own
+     * to contribute a command from.
+     */
+    var isJsfxSettingsOpen by mutableStateOf(false)
+
+    fun toggleJsfxSettings() {
+        val resources = jsfxResources ?: return
+        if (!isJsfxSettingsOpen) resources.loadFromFormat()
+        isJsfxSettingsOpen = !isJsfxSettingsOpen
     }
 
     // ── Augene2 ─────────────────────────────────────────────────────────────
@@ -2034,6 +2054,9 @@ expect val platformSupportsAudioWorkerSettings: Boolean
 
 /** `std::thread::hardware_concurrency()`: 0 when unknown. */
 expect val platformHardwareConcurrency: Int
+
+/** For the few texts uapmd-app writes for Android alone (`#if defined(__ANDROID__)`). */
+expect val platformIsAndroid: Boolean
 
 /**
  * Desktop/mobile call `notifyPersistentStorageReady()` directly. On web the

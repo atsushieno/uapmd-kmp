@@ -69,6 +69,10 @@ uapmd_transport_controller_t uapmd_app_transport(uapmd_app_model_t app) {
     return reinterpret_cast<uapmd_transport_controller_t>(&AM(app)->transport());
 }
 
+uapmd_scan_tool_t uapmd_app_plugin_scan_tool(uapmd_app_model_t app) {
+    return reinterpret_cast<uapmd_scan_tool_t>(&AM(app)->pluginScanTool());
+}
+
 uapmd_document_provider_t uapmd_app_document_provider(uapmd_app_model_t app) {
     return reinterpret_cast<uapmd_document_provider_t>(AM(app)->documentProvider());
 }
@@ -156,6 +160,18 @@ void uapmd_app_stop_plugin_scanning(uapmd_app_model_t app) { AM(app)->stopPlugin
 size_t uapmd_app_generate_scan_report(uapmd_app_model_t app, char* buf, size_t buf_size) {
     auto report = AM(app)->generateScanReport();
     return copy_string(report, buf, buf_size);
+}
+
+void uapmd_app_refresh_fast_scanned_plugins(uapmd_app_model_t app,
+                                             void* user_data,
+                                             uapmd_app_catalog_refresh_cb_t callback) {
+    if (!callback) {
+        AM(app)->refreshFastScannedPlugins();
+        return;
+    }
+    AM(app)->refreshFastScannedPlugins([callback, user_data](std::string error) {
+        callback(error.empty() ? nullptr : error.c_str(), user_data);
+    });
 }
 
 /*

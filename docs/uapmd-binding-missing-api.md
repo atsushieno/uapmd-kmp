@@ -44,7 +44,7 @@ uint32@8, ptr@12, sizeof 16; `uapmd_ump_event_t` tick@0, word_count@8, words@12,
 |---|---|---|
 | Plugin UI | `show_plugin_ui` (the parent-handle/resize-handler form) | no |
 | Plugin state | `save_plugin_state`, `load_plugin_state` | **yes** — `uapmd_plugin_state_result_t` |
-| Project I/O | `document_provider` beyond `tick()` — `AppModel.documentProvider` is bound with `tick()` only, which is all a host needs for addins' picks to complete; pick/read/write still go through the per-platform file pickers | no |
+| Project I/O | `document_provider` `pick_save`, `write`, `resolve_to_path`, `persist_handle`, `restore_handle` on `AppModel.documentProvider` — `tick()`, `pickOpenDocuments`, `readDocument` and the folder calls are bound (the JSFX Settings window needs them); saving still goes through the per-platform file pickers | **yes** — `uapmd_document_handle_t` in, `uapmd_document_io_result_t` in callbacks |
 | Clips | `add_clip_to_track`, `add_midi_clip_to_track`, `add_midi_clip_from_data` | **yes** — `uapmd_clip_add_result_t`. Note `TimelineFacade.addMidiClipFromFile()` / `addAudioClip()` were already bound and cover the common cases |
 | Offline render | `start_render`, `cancel_render`, `get_render_status`, `clear_render_status` | **yes**. Not needed so far: `SequencerEngine.renderOffline()` was already bound and drives the Exporter directly |
 | Track graph | `request_show_track_graph` (the request/serve indirection; not needed — the app opens its own window) | no |

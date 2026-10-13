@@ -72,6 +72,32 @@ interface AppModel {
     fun clearPluginBlocklist()
 
     /**
+     * `AppModel::refreshFastScannedPlugins()`: rebuilds the catalog entries of the
+     * formats that scan by reading files rather than loading them (JSFX among
+     * them), re-reading registered JSFX folders first. It is what a change to
+     * where those formats look needs. [completed] runs on the main thread once the
+     * catalog is rebuilt, with why re-reading a registered folder failed, or null.
+     */
+    fun refreshFastScannedPlugins(completed: ((error: String?) -> Unit)? = null)
+
+    /**
+     * `AppModel::pluginScanTool()`. Borrowed: the model owns it, and closing it
+     * does nothing.
+     */
+    val pluginScanTool: ScanTool
+
+    /** `AppModel::jsfxPluginFormat()`; null when the build has no JSFX. */
+    val jsfxPluginFormat: JsfxPluginFormat?
+
+    /**
+     * `AppModel::syncJsfxRegisteredFolders()`: re-reads every registered JSFX
+     * folder and rebuilds its mirror. [completed] runs on the main thread, with
+     * the number of files written and the first error, or null. It completes at
+     * once when no folder is registered, or without JSFX.
+     */
+    fun syncJsfxRegisteredFolders(completed: (filesWritten: UInt, error: String?) -> Unit)
+
+    /**
      * AppModel's own blocklist — the list the Plugin Selector shows. A standalone
      * `ScanTool` keeps a separate one. `BlocklistEntry.timestamp` in uapmd has no
      * counterpart in `uapmd_blocklist_entry_t`, so it is not carried across.
@@ -790,10 +816,75 @@ data class RenderToFileStatus(
 )
 
 /**
- * `uapmd::IDocumentProvider`, as far as a host that only needs to keep it
- * running has to see it. Picks complete from [tick], so a host ticks the
- * provider on every UI update, as uapmd-app does.
+ * `uapmd::DocumentHandle`: an opaque reference to a user-selected document.
+ * Obtain one from a pick; never construct it.
+ */
+data class DocumentHandle(
+    val id: String,
+    val displayName: String,
+    val mimeType: String
+)
+
+/** `uapmd::DocumentFilter`. Android and the web use [mimeTypes]; desktop uses [extensions] (`*.wav`). */
+data class DocumentFilter(
+    val label: String,
+    val mimeTypes: List<String>,
+    val extensions: List<String>
+)
+
+/** `uapmd::DocumentPickResult`. Cancelled: success with no handles. */
+data class DocumentPickResult(
+    val success: Boolean,
+    val handles: List<DocumentHandle>,
+    val error: String?
+)
+
+/** `uapmd::DocumentIOResult`. */
+data class DocumentIOResult(
+    val success: Boolean,
+    val error: String?
+)
+
+/**
+ * `uapmd::FolderPickResult`. On success exactly one of [path] (desktop) and
+ * [documents] (Android, iOS, web) is populated; both empty means the user
+ * cancelled. Each document's display name is its path relative to the folder.
+ * [token] names the folder again for [DocumentProvider.listFolderDocuments],
+ * and is empty where a folder cannot be returned to (the web).
+ */
+data class FolderPickResult(
+    val success: Boolean,
+    val path: String,
+    val documents: List<DocumentHandle>,
+    val token: String,
+    val displayName: String,
+    val error: String?
+)
+
+/**
+ * `uapmd::IDocumentProvider`. Picks complete from [tick], so a host ticks the
+ * provider on every UI update, as uapmd-app does. Callbacks are dispatched on
+ * the calling thread or the platform's main thread.
  */
 interface DocumentProvider {
     fun tick()
+
+    fun pickOpenDocuments(
+        filters: List<DocumentFilter>,
+        allowMultiple: Boolean,
+        callback: (DocumentPickResult) -> Unit
+    )
+
+    fun readDocument(handle: DocumentHandle, callback: (DocumentIOResult, ByteArray) -> Unit)
+
+    fun pickFolder(callback: (FolderPickResult) -> Unit)
+
+    /** Whether [pickFolder] yields a path that stays valid after the call. */
+    val folderPathsAreUsable: Boolean
+
+    /** Re-reads a folder picked earlier, named by its [FolderPickResult.token]. */
+    fun listFolderDocuments(token: String, callback: (FolderPickResult) -> Unit)
+
+    /** Gives up a folder token, releasing any grant behind it. */
+    fun releaseFolder(token: String)
 }

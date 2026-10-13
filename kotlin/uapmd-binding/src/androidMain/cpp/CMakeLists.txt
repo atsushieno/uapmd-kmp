@@ -43,7 +43,7 @@ endif()
 add_subdirectory("${CAPI_DIR}" "${CMAKE_CURRENT_BINARY_DIR}/uapmd-c-api")
 
 # JNI bridge
-add_library(uapmd-jni SHARED uapmd_jni.cpp uapmd_jni_history.cpp uapmd_jni_app.cpp uapmd_jni_script.cpp uapmd_jni_services.cpp)
+add_library(uapmd-jni SHARED uapmd_jni.cpp uapmd_jni_history.cpp uapmd_jni_app.cpp uapmd_jni_script.cpp uapmd_jni_services.cpp uapmd_jni_jsfx.cpp)
 
 target_include_directories(uapmd-jni PRIVATE
     "${CAPI_DIR}/include")

@@ -9,6 +9,7 @@ listed; matched behaviour is not.
 | Feature | uapmd-app | What is missing |
 |---|---|---|
 | Why a freeze failed | freeze button tooltip | `FrozenTrackManager::errorMessageForTrack` has no C wrapper, so a failed freeze shows a red snowflake with no reason. Easy to reach: a clip long enough to exceed `kMaximumFrozenTrackBytes` lands in `Error` immediately |
+| JSFX effect count | JSFX Settings status line | uapmd-app counts the JSFX entries of `pluginScanTool().catalog()`, the whole catalog; the C API has `uapmd_scan_tool_catalog_entry_count` but no per-entry getter, so uapmd-cmp counts the listed plugins instead, which leaves out duplicates the listing policy hides |
 
 This belongs in `uapmd-binding-missing-api.md` §2 as C API work.
 
@@ -20,7 +21,6 @@ This belongs in `uapmd-binding-missing-api.md` §2 as C API work.
 | Rendering to a file on web | Project ▸ Render To File | The output path and the delivery are wired, but the render itself never finishes: the button stays on "Rendering…" with no progress and no file, on an empty project, for as long as it was left. Untested beyond that — it is the render, not the file handling |
 | Loading a packed project on the Kotlin/JS target | `jsMain`'s `prepareProjectLoad` is still the pass-through that wasmJs used to be, so a `.uapmdz` would reach the engine as a ZIP. Dormant — uapmd-cmp builds wasmJs, not js — but it is the same defect, and `jsMain` has no archive helper bound yet |
 | Details window opens for a newly created instance | after Instantiate Plugin | uapmd-app's `MainWindow::handleInstantiatePlugin` passes a completion that calls `instanceDetails().showWindow(result.instanceId)` on success, so creating a plug-in leaves its Details window open. uapmd-cmp now dismisses the selector on success (2026-09-16) but does not open Details — the other half of the same gesture, left out because it was not asked for |
-| JSFX Settings window | System ▸ JSFX Settings | uapmd-app's GUI registers its own `JsfxResourcesCommand` (not an addin) into the command registry; uapmd-cmp has no JSFX resources window yet |
 | Platform MIDI connections | System ▸ Device Settings | needs the MIDI port list, which the C API does not expose |
 | File pickers on iOS | — | `pickProjectFileToOpen`, `pickMidiFileToOpen` and `pickAudioFileToOpen` all return null on iOS; uapmd has `DocumentProviderIOS.mm`, so this is binding work, not new C API |
 

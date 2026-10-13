@@ -158,16 +158,27 @@ fun Toolbar(
                         systemOpen = false; onToggleMcp()
                     }
 
-                    // Application commands contributed by addins (Virtual MIDI
-                    // Devices, Augene2 Integration), after a separator, in the
-                    // order the registry reports (renderCommandMenuItems).
-                    // Re-read while the menu is open: a running command keeps
-                    // its progress in its own title.
+                    // Application commands, after a separator, in the order the
+                    // registry reports (renderCommandMenuItems). uapmd-app's GUI
+                    // registers "JSFX Settings" itself before any addin loads, so
+                    // it comes first; the rest are contributed by addins (Virtual
+                    // MIDI Devices, Augene2 Integration). Re-read while the menu
+                    // is open: a running command keeps its progress in its own title.
                     val commandTick = rememberTicker(systemOpen)
                     val addinCommands = remember(host.addinRevision, systemOpen, commandTick) {
                         host.addinCommands()
                     }
-                    AddinCommandItems(addinCommands) { id -> systemOpen = false; host.invokeAddinCommand(id) }
+                    val hasJsfx = host.jsfxResources != null
+                    if (hasJsfx) {
+                        HorizontalDivider()
+                        DropdownMenuItem(
+                            text = { Text("JSFX Settings") },
+                            onClick = { systemOpen = false; host.toggleJsfxSettings() }
+                        )
+                    }
+                    AddinCommandItems(addinCommands, separated = !hasJsfx) { id ->
+                        systemOpen = false; host.invokeAddinCommand(id)
+                    }
                 }
             }
 
@@ -287,9 +298,13 @@ private fun CheckedMenuItem(label: String, checked: Boolean, enabled: Boolean = 
 
 /** Addin commands after a separator, greyed out when disabled (renderCommandMenuItems). */
 @Composable
-private fun AddinCommandItems(commands: List<AddinCommandInfo>, onInvoke: (String) -> Unit) {
+private fun AddinCommandItems(
+    commands: List<AddinCommandInfo>,
+    separated: Boolean = true,
+    onInvoke: (String) -> Unit
+) {
     if (commands.isEmpty()) return
-    HorizontalDivider()
+    if (separated) HorizontalDivider()
     commands.forEach { command ->
         DropdownMenuItem(
             text = { Text(command.title) },

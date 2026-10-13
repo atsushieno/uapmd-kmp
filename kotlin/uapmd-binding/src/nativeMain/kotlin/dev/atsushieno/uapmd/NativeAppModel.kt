@@ -63,6 +63,22 @@ class NativeAppModel internal constructor(
     override fun generateScanReport(): String =
         readCString { buf, size -> uapmd_app_generate_scan_report(handle, buf, size) }
 
+    override fun refreshFastScannedPlugins(completed: ((error: String?) -> Unit)?) {
+        if (completed == null)
+            uapmd_app_refresh_fast_scanned_plugins(handle, null, null)
+        else
+            uapmd_app_refresh_fast_scanned_plugins(handle, StableRef.create(completed).asCPointer(), appCatalogRefreshTrampoline)
+    }
+
+    override val pluginScanTool: ScanTool
+        get() = NativeScanTool(uapmd_app_plugin_scan_tool(handle) ?: error("uapmd_app_plugin_scan_tool returned null"))
+
+    override val jsfxPluginFormat: JsfxPluginFormat?
+        get() = uapmd_app_jsfx_plugin_format(handle)?.let { NativeJsfxPluginFormat(it) }
+
+    override fun syncJsfxRegisteredFolders(completed: (filesWritten: UInt, error: String?) -> Unit) =
+        uapmd_app_sync_jsfx_registered_folders(handle, StableRef.create(completed).asCPointer(), jsfxFolderSyncTrampoline)
+
     override fun clearPluginBlocklist() = uapmd_app_clear_plugin_blocklist(handle)
 
     override val blocklist: List<BlocklistEntry>
@@ -823,10 +839,6 @@ private val showVirtualMidiDevicesTrampoline =
     staticCFunction<COpaquePointer?, Unit> { userData ->
         userData?.asStableRef<() -> Unit>()?.get()?.invoke()
     }
-
-class NativeDocumentProvider internal constructor(internal val handle: uapmd_document_provider_t) : DocumentProvider {
-    override fun tick() = uapmd_document_provider_tick(handle)
-}
 
 internal fun uapmd_piano_roll_note_t.toKotlin() = PianoRollNote(
     startSeconds = start_seconds,
