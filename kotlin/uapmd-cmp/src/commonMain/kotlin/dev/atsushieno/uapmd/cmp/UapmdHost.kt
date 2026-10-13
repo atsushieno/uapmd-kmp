@@ -1765,6 +1765,26 @@ class UapmdHost private constructor(val model: AppModel) {
             model.sequencer.engine.timeline.getMidiClipNotes(trackIndex, clipId) ?: emptyList()
         }
 
+    /**
+     * Audio clip waveform peaks, per source file, as `createAudioClipPreview`
+     * builds them in uapmd-app: channels mixed down to mono, min/max per bucket.
+     * Decoding a whole file is slow, so it happens off the UI thread and the
+     * entry appears (redrawing the lane) once it is ready. A file's content does
+     * not change under the same path, so entries outlive project reloads.
+     */
+    private val waveformCache = androidx.compose.runtime.mutableStateMapOf<String, WaveformPeaks>()
+    private val waveformPending = mutableSetOf<String>()
+
+    fun waveform(filepath: String): WaveformPeaks? {
+        if (filepath.isEmpty()) return null
+        waveformCache[filepath]?.let { return it }
+        if (waveformPending.add(filepath)) offUiThread {
+            val peaks = runCatching { WaveformPeaks.read(filepath) }.getOrNull() ?: WaveformPeaks.Empty
+            onUiThread { waveformCache[filepath] = peaks }
+        }
+        return null
+    }
+
     fun setTrackBypassed(trackIndex: Int, bypassed: Boolean) {
         model.sequencer.engine.timeline.commands.setTrackBypassed(trackIndex, bypassed)
         refresh()

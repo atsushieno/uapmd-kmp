@@ -1066,7 +1066,12 @@ private fun TrackLane(
                 if (isMidi) drawMidiNotes(
                     host, trackIndex, clip, x, w, y, h, pixelsPerSecond,
                     clip.sourceOffsetSamples / sampleRate + trimShift, c.note
-                )
+                ) else host.waveform(clip.filepath)?.let { peaks ->
+                    drawWaveform(
+                        peaks, x, w, y + titlebarHeightPx, h - titlebarHeightPx, pixelsPerSecond,
+                        clip.sourceOffsetSamples / sampleRate + trimShift, c.note.copy(alpha = 0.7f)
+                    )
+                }
                 // The title bar lets the notes show through: it names the clip
                 // without hiding what is in it.
                 drawRect(c.clipBorder.copy(alpha = 0.5f), Offset(x, y), Size(w, titlebarHeightPx.coerceAtMost(h)))
@@ -1495,6 +1500,43 @@ private fun androidx.compose.ui.graphics.drawscope.DrawScope.drawMidiNotes(
         val nw = noteEnd - nx
         val ny = top + usable * (1f - (n.note - lo).toFloat() / span) * 0.85f
         drawRect(noteColor, Offset(nx, ny), Size(nw, 2.5f))
+    }
+}
+
+/**
+ * An audio clip's waveform, one vertical min-max line per pixel column, as
+ * `ClipContentNode::drawWaveform` draws it. The source is timed from
+ * [contentOffsetSeconds], so a trimmed clip shows only what is left.
+ */
+private fun androidx.compose.ui.graphics.drawscope.DrawScope.drawWaveform(
+    peaks: dev.atsushieno.uapmd.cmp.WaveformPeaks,
+    clipX: Float,
+    clipW: Float,
+    top: Float,
+    height: Float,
+    pixelsPerSecond: Float,
+    contentOffsetSeconds: Double,
+    color: Color) {
+    if (peaks.bucketCount == 0 || height <= 0f || pixelsPerSecond <= 0f) return
+    val centerY = top + height / 2f
+    val half = height / 2f
+    val bucketsPerSecond = peaks.sampleRate / peaks.framesPerBucket
+    // Only the columns on screen; a long clip at high zoom is mostly off it.
+    val firstCol = maxOf(0, (-clipX).toInt())
+    val lastCol = minOf(clipW.toInt(), (size.width - clipX).toInt())
+    for (col in firstCol until lastCol) {
+        val s0 = contentOffsetSeconds + col / pixelsPerSecond
+        val b0 = (s0 * bucketsPerSecond).toInt().coerceAtLeast(0)
+        val b1 = ((s0 + 1.0 / pixelsPerSecond) * bucketsPerSecond).toInt().coerceAtMost(peaks.bucketCount - 1)
+        if (b0 >= peaks.bucketCount) break
+        var lo = peaks.min[b0]
+        var hi = peaks.max[b0]
+        for (b in b0 + 1..b1) {
+            if (peaks.min[b] < lo) lo = peaks.min[b]
+            if (peaks.max[b] > hi) hi = peaks.max[b]
+        }
+        val px = clipX + col + 0.5f
+        drawLine(color, Offset(px, centerY - hi * half), Offset(px, centerY - lo * half + 1f), 1f)
     }
 }
 
