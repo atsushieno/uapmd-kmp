@@ -30,6 +30,8 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import dev.atsushieno.uapmd.ParameterMetadata
+import dev.atsushieno.uapmd.ParameterMetadataSnapshot
+import dev.atsushieno.uapmd.addParameterMetadataChangedListener
 import dev.atsushieno.uapmd.PresetMetadata
 import dev.atsushieno.uapmd.cmp.TrackInstance
 import androidx.compose.runtime.rememberCoroutineScope
@@ -64,17 +66,16 @@ fun InstanceDetails(host: UapmdHost, inst: TrackInstance) {
     var filter by remember { mutableStateOf("") }
     var presetsOpen by remember { mutableStateOf(false) }
     var selectedPreset by remember { mutableStateOf<PresetMetadata?>(null) }
-    var revision by remember { mutableStateOf(0) }
+    var revision by remember(inst.instanceId) { mutableStateOf(0) }
+    var metadata by remember(inst.instanceId) { mutableStateOf<ParameterMetadataSnapshot?>(null) }
     var groupMenu by remember { mutableStateOf(false) }
     var stateStatus by remember { mutableStateOf<String?>(null) }
     val scope = rememberCoroutineScope()
 
-    val parameters = remember(inst.instanceId, revision) {
-        (0 until instance.parameterCount.toInt()).mapNotNull { instance.getParameterMetadata(it.toUInt()) }
-    }
+    val parameters = metadata?.parameters.orEmpty()
     // Values the plug-in (or anything else) changed since the list was last read,
     // keyed by parameter index. Reset together with the list.
-    val liveValues = remember(inst.instanceId, revision) { mutableStateMapOf<Int, Double>() }
+    val liveValues = remember(inst.instanceId, metadata?.revision, revision) { mutableStateMapOf<Int, Double>() }
     val mailbox = remember(parameters) {
         val maxIndex = parameters.maxOfOrNull { it.index.toInt() } ?: -1
         ParameterValueMailbox((maxIndex + 1).coerceIn(0, ParameterValueMailbox.MAX_CAPACITY))
@@ -92,17 +93,18 @@ fun InstanceDetails(host: UapmdHost, inst: TrackInstance) {
         val updateListenerId = node?.addParameterUpdateListener { index, value ->
             mailboxRef.current.post(index, value)
         } ?: 0L
-        val metadataListenerId = node?.addParameterMetadataRefreshListener { scope.launch { revision++ } } ?: 0L
-        // The list above was read during composition, before these listeners
-        // existed. A plug-in that publishes its parameters late (aap-cmajor JIT-loads
-        // its patch at prepare()) can notify in between, so read once more now.
-        if (node != null) revision++
+        val metadataListener = engine.addParameterMetadataChangedListener(
+            inst.instanceId, dispatch = { task -> scope.launch { task() } }
+        ) { snapshot ->
+            metadata = snapshot
+            revision++
+        }
         onDispose {
+            metadataListener.close()
             // Look the node up again: if the instance is gone its node (and the
             // listeners with it) is already destroyed.
             findPluginNode(engine, inst.instanceId)?.let {
                 if (updateListenerId != 0L) it.removeParameterUpdateListener(updateListenerId)
-                if (metadataListenerId != 0L) it.removeParameterMetadataRefreshListener(metadataListenerId)
             }
         }
     }
