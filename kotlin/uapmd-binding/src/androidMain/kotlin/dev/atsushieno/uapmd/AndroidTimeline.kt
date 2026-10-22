@@ -167,6 +167,8 @@ class AndroidTimelineFacade internal constructor(
 
     override val commands get() = history.commands
     override val addresses get() = history.addresses
+    override val selections: ProjectSelectionService
+        get() = AndroidProjectSelectionService(handle, JniBridge.uapmdTlSelections(handle))
 
     override fun <T> documentTransaction(block: () -> T): T = history.documentTransaction(block)
 

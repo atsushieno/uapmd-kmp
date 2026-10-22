@@ -39,6 +39,9 @@ class WasmJsSequencerEngine internal constructor(
     override val pluginHost: PluginHost
         get() = WasmJsPluginHost(wasmMod.uapmdEnginePluginHost(handle))
 
+    override fun notifyPluginEditorVisibilityChanged(instanceId: Int, visible: Boolean) =
+        wasmMod.uapmdEngineNotifyPluginEditorVisibilityChanged(handle, instanceId, visible)
+
     override fun getPluginInstance(instanceId: Int): PluginInstance? {
         val inst = wasmMod.uapmdEngineGetPluginInstance(handle, instanceId)
         return if (inst == 0) null else WasmJsPluginInstance(inst)

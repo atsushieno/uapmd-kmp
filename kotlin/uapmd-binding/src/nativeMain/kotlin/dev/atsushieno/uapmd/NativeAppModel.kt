@@ -888,6 +888,18 @@ class NativePianoRollSession internal constructor(
 
     override fun isNoteSelected(index: Int) =
         uapmd_piano_roll_session_is_note_selected(handle, index.toUInt())
+
+    override val selectionContext: SelectionContextId?
+        get() = uapmd_piano_roll_session_selection_context(handle).takeIf { it >= 0 }
+    override val clipReferenceId: String? get() = uapmd_piano_roll_session_clip_reference_id(handle)?.toKString()
+    override fun noteReferenceId(index: Int): String? =
+        uapmd_piano_roll_session_note_reference_id(handle, index.toUInt())?.toKString()
+    override fun isObjectSelected(referenceId: String) =
+        uapmd_piano_roll_session_is_object_selected(handle, referenceId)
+    override fun selectObject(referenceId: String, additive: Boolean, toggle: Boolean) =
+        uapmd_piano_roll_session_select_object(handle, referenceId, additive, toggle)
+    override fun syncSelection() = uapmd_piano_roll_session_sync_selection(handle)
+
     override val selectedNoteCount: Int
         get() = uapmd_piano_roll_session_selected_note_count(handle).toInt()
 

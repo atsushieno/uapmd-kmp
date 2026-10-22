@@ -842,6 +842,17 @@ class JvmPianoRollSession internal constructor(private val handle: Pointer) : Pi
         }
 
     override fun isNoteSelected(index: Int) = lib.uapmd_piano_roll_session_is_note_selected(handle, index)
+
+    override val selectionContext: SelectionContextId?
+        get() = lib.uapmd_piano_roll_session_selection_context(handle).takeIf { it >= 0 }
+    override val clipReferenceId: String? get() = lib.uapmd_piano_roll_session_clip_reference_id(handle)
+    override fun noteReferenceId(index: Int): String? = lib.uapmd_piano_roll_session_note_reference_id(handle, index)
+    override fun isObjectSelected(referenceId: String) =
+        lib.uapmd_piano_roll_session_is_object_selected(handle, referenceId)
+    override fun selectObject(referenceId: String, additive: Boolean, toggle: Boolean) =
+        lib.uapmd_piano_roll_session_select_object(handle, referenceId, additive, toggle)
+    override fun syncSelection() = lib.uapmd_piano_roll_session_sync_selection(handle)
+
     override val selectedNoteCount: Int get() = lib.uapmd_piano_roll_session_selected_note_count(handle)
 
     override var focusedNote: Int

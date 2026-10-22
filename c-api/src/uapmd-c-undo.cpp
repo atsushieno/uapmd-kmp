@@ -447,10 +447,6 @@ uapmd_timeline_track_t uapmd_addresses_timeline_track(uapmd_address_book_t ab, c
     return reinterpret_cast<uapmd_timeline_track_t>(AB(ab)->timelineTrack(track_reference_id ? track_reference_id : ""));
 }
 
-uapmd_sequencer_track_t uapmd_addresses_sequencer_track(uapmd_address_book_t ab, const char* track_reference_id) {
-    return reinterpret_cast<uapmd_sequencer_track_t>(AB(ab)->sequencerTrack(track_reference_id ? track_reference_id : ""));
-}
-
 int32_t uapmd_addresses_track_index(uapmd_address_book_t ab, const char* track_reference_id) {
     return AB(ab)->trackIndex(track_reference_id ? track_reference_id : "");
 }
@@ -461,14 +457,6 @@ int32_t uapmd_addresses_clip_id(uapmd_address_book_t ab, uapmd_clip_address_t ad
         address.clip_reference_id ? address.clip_reference_id : ""
     };
     return AB(ab)->clipId(a);
-}
-
-int32_t uapmd_addresses_plugin_instance_id(uapmd_address_book_t ab, uapmd_plugin_address_t address) {
-    uapmd::PluginAddress a{
-        address.track_reference_id ? address.track_reference_id : "",
-        address.node_id ? address.node_id : ""
-    };
-    return AB(ab)->pluginInstanceId(a);
 }
 
 const char* uapmd_addresses_track_reference_id(uapmd_address_book_t ab, int32_t track_index) {
@@ -486,17 +474,6 @@ bool uapmd_addresses_clip_address(uapmd_address_book_t ab, int32_t track_index, 
     tl_addr_clip_ref = address->clipReferenceId;
     out->track_reference_id = tl_addr_track_ref.c_str();
     out->clip_reference_id = tl_addr_clip_ref.c_str();
-    return true;
-}
-
-bool uapmd_addresses_plugin_address(uapmd_address_book_t ab, int32_t instance_id, uapmd_plugin_address_t* out) {
-    if (!out) return false;
-    auto address = AB(ab)->pluginAddress(instance_id);
-    if (!address) return false;
-    tl_addr_track_ref = address->trackReferenceId;
-    tl_addr_node_id = address->nodeId;
-    out->track_reference_id = tl_addr_track_ref.c_str();
-    out->node_id = tl_addr_node_id.c_str();
     return true;
 }
 

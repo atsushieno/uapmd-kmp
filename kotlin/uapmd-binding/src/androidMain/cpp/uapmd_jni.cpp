@@ -891,6 +891,46 @@ static void remove_node_listener_ctx(JNIEnv* env, jlong h, bool metadata, jlong 
     delete ctx;
 }
 
+// Node event-output observer. One context per node (keyed by node handle) owns a global ref
+// to the Kotlin observer until it is replaced or cleared. The observer runs on the audio
+// thread, which node_listener_jni_env() attaches (and later detaches) on demand.
+static std::unordered_map<jlong, NodeListenerCtx*> g_node_event_observers;
+
+static void node_event_output_trampoline(int32_t, const uapmd_ump_t* data, size_t size_in_bytes, void* user_data) {
+    auto* ctx = static_cast<NodeListenerCtx*>(user_data);
+    JNIEnv* env = node_listener_jni_env();
+    if (!env) return;
+    jint count = static_cast<jint>(size_in_bytes / sizeof(uint32_t));
+    jintArray arr = env->NewIntArray(count);
+    if (!arr) return;
+    env->SetIntArrayRegion(arr, 0, count, reinterpret_cast<const jint*>(data));
+    env->CallVoidMethod(ctx->obj, ctx->mid, arr);
+    if (env->ExceptionCheck()) env->ExceptionClear();
+    env->DeleteLocalRef(arr);
+}
+
+JNIEXPORT void JNICALL Java_dev_atsushieno_uapmd_JniBridge_uapmdNodeSetEventOutputObserver(
+        JNIEnv* env, jclass, jlong h, jobject observer) {
+    NodeListenerCtx* fresh = nullptr;
+    if (observer) {
+        jclass cls = env->GetObjectClass(observer);
+        fresh = new NodeListenerCtx{env->NewGlobalRef(observer), env->GetMethodID(cls, "invoke", "([I)V")};
+        env->DeleteLocalRef(cls);
+    }
+    // Install the new context (or clear) before releasing the old one, so the audio thread
+    // never sees a deleted context.
+    uapmd_node_set_event_output_observer(j2p<uapmd_plugin_node_t>(h), fresh,
+                                         fresh ? node_event_output_trampoline : nullptr);
+    NodeListenerCtx* old = nullptr;
+    {
+        std::lock_guard lock(g_node_listener_mu);
+        auto it = g_node_event_observers.find(h);
+        if (it != g_node_event_observers.end()) { old = it->second; g_node_event_observers.erase(it); }
+        if (fresh) g_node_event_observers[h] = fresh;
+    }
+    if (old) { env->DeleteGlobalRef(old->obj); delete old; }
+}
+
 JNIEXPORT jlong JNICALL Java_dev_atsushieno_uapmd_JniBridge_uapmdNodeAddParameterUpdateListener(
         JNIEnv* env, jclass, jlong h, jobject listener) {
     if (!listener) return 0;
@@ -973,31 +1013,10 @@ JNIEXPORT jlong JNICALL Java_dev_atsushieno_uapmd_JniBridge_uapmdGraphGetPluginN
     return p2j(uapmd_graph_get_plugin_node(j2p<uapmd_plugin_graph_t>(h), id));
 }
 
-// Persistent event-output callback — store in a global to allow clearing.
-static AsyncCtx* g_graph_event_output_ctx = nullptr;
-
-JNIEXPORT void JNICALL Java_dev_atsushieno_uapmd_JniBridge_uapmdGraphSetEventOutputCallback(
-        JNIEnv* env, jclass, jlong h, jobject cb) {
-    delete g_graph_event_output_ctx;
-    g_graph_event_output_ctx = nullptr;
-    if (!cb) {
-        uapmd_graph_set_event_output_callback(j2p<uapmd_plugin_graph_t>(h), nullptr, nullptr);
-        return;
-    }
-    jmethodID mid = env->GetMethodID(env->GetObjectClass(cb), "invoke", "(I[II)V");
-    g_graph_event_output_ctx = new AsyncCtx(env, cb, mid);
-    uapmd_graph_set_event_output_callback(
-        j2p<uapmd_plugin_graph_t>(h), g_graph_event_output_ctx,
-        [](int32_t instId, const uapmd_ump_t* data, size_t sz, void* ud) {
-            auto* ctx = static_cast<AsyncCtx*>(ud);
-            JNIEnv* e = ctx->env();
-            jint count = static_cast<jint>(sz / sizeof(uint32_t));
-            jintArray arr = e->NewIntArray(count);
-            e->SetIntArrayRegion(arr, 0, count, reinterpret_cast<const jint*>(data));
-            e->CallVoidMethod(ctx->obj, ctx->mid, instId, arr, static_cast<jint>(sz));
-            e->DeleteLocalRef(arr);
-        });
-}
+JNIEXPORT void JNICALL Java_dev_atsushieno_uapmd_JniBridge_uapmdGraphNotifyLatencyChanged(
+        JNIEnv*, jclass, jlong h) { uapmd_graph_notify_latency_changed(j2p<uapmd_plugin_graph_t>(h)); }
+JNIEXPORT void JNICALL Java_dev_atsushieno_uapmd_JniBridge_uapmdGraphNotifyTailLengthChanged(
+        JNIEnv*, jclass, jlong h) { uapmd_graph_notify_tail_length_changed(j2p<uapmd_plugin_graph_t>(h)); }
 JNIEXPORT jint JNICALL Java_dev_atsushieno_uapmd_JniBridge_uapmdGraphOutputBusCount(
         JNIEnv*, jclass, jlong h) {
     return static_cast<jint>(uapmd_graph_output_bus_count(j2p<uapmd_plugin_graph_t>(h)));
@@ -1108,8 +1127,8 @@ JNIEXPORT jdouble JNICALL Java_dev_atsushieno_uapmd_JniBridge_uapmdUmpInGetParam
         JNIEnv*, jclass, jlong h, jint idx) { return uapmd_ump_in_get_parameter_value(j2p<uapmd_ump_input_mapper_t>(h), idx); }
 JNIEXPORT void JNICALL Java_dev_atsushieno_uapmd_JniBridge_uapmdUmpInSetPerNoteControllerValue(
         JNIEnv*, jclass, jlong h, jbyte note, jbyte idx, jdouble v) { uapmd_ump_in_set_per_note_controller_value(j2p<uapmd_ump_input_mapper_t>(h), note, idx, v); }
-JNIEXPORT void JNICALL Java_dev_atsushieno_uapmd_JniBridge_uapmdUmpInLoadPreset(
-        JNIEnv*, jclass, jlong h, jint idx) { uapmd_ump_in_load_preset(j2p<uapmd_ump_input_mapper_t>(h), idx); }
+JNIEXPORT void JNICALL Java_dev_atsushieno_uapmd_JniBridge_uapmdUmpInRequestPresetLoad(
+        JNIEnv*, jclass, jlong h, jint idx) { uapmd_ump_in_request_preset_load(j2p<uapmd_ump_input_mapper_t>(h), idx); }
 JNIEXPORT void JNICALL Java_dev_atsushieno_uapmd_JniBridge_uapmdUmpOutSendParameterValue(
         JNIEnv*, jclass, jlong h, jint idx, jdouble v) { uapmd_ump_out_send_parameter_value(j2p<uapmd_ump_output_mapper_t>(h), idx, v); }
 JNIEXPORT void JNICALL Java_dev_atsushieno_uapmd_JniBridge_uapmdUmpOutSendPerNoteControllerValue(
@@ -1137,6 +1156,10 @@ JNIEXPORT jlong JNICALL Java_dev_atsushieno_uapmd_JniBridge_uapmdEnginePluginHos
         JNIEnv*, jclass, jlong h) { return p2j(uapmd_engine_plugin_host(j2p<uapmd_sequencer_engine_t>(h))); }
 JNIEXPORT jlong JNICALL Java_dev_atsushieno_uapmd_JniBridge_uapmdEngineGetPluginInstance(
         JNIEnv*, jclass, jlong h, jint id) { return p2j(uapmd_engine_get_plugin_instance(j2p<uapmd_sequencer_engine_t>(h), id)); }
+JNIEXPORT void JNICALL Java_dev_atsushieno_uapmd_JniBridge_uapmdEngineNotifyPluginEditorVisibilityChanged(
+        JNIEnv*, jclass, jlong h, jint id, jboolean visible) {
+    uapmd_engine_notify_plugin_editor_visibility_changed(j2p<uapmd_sequencer_engine_t>(h), id, visible);
+}
 JNIEXPORT jlong JNICALL Java_dev_atsushieno_uapmd_JniBridge_uapmdEngineFunctionBlockManager(
         JNIEnv*, jclass, jlong h) { return p2j(uapmd_engine_function_block_manager(j2p<uapmd_sequencer_engine_t>(h))); }
 JNIEXPORT jint JNICALL Java_dev_atsushieno_uapmd_JniBridge_uapmdEngineTrackCount(

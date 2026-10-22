@@ -55,6 +55,17 @@ interface TimelineFacade {
     fun loadProject(filePath: String): ProjectResult
 
     /**
+     * Starts the load and reports the outcome through [callback], without holding the calling
+     * thread. A load instantiates plug-ins, and some formats do that through the host's event
+     * loop -- WebCLAP in a browser is fetched and compiled by JavaScript -- so a thread that has
+     * to keep that loop running (the browser's main thread) must use this: [loadProject] would
+     * wait for work that can only run once it returns. The callback may run before this returns,
+     * and on another thread. Elsewhere this is [loadProject] followed by the callback.
+     */
+    fun loadProjectAsync(filePath: String, callback: (ProjectResult) -> Unit) =
+        callback(loadProject(filePath))
+
+    /**
      * Discards the current document and starts an empty one: no tracks, a fresh
      * master track, no undo history, nothing dirty. Observers see the same
      * closing/loaded pair a load emits, so state owned outside the timeline is
@@ -93,6 +104,8 @@ interface TimelineFacade {
     val commands: ProjectCommands
     /** Translation between persistent document identities and runtime indexes. */
     val addresses: ProjectAddressBook
+    /** The project selection service (`TimelineFacade::document().selections()`). */
+    val selections: ProjectSelectionService
 
     /**
      * Groups the document events produced by everything inside [block] into a

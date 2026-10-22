@@ -77,6 +77,10 @@ android {
         targetSdk = libs.versions.android.targetSdk.get().toInt()
         versionCode = 1
         versionName = "1.0"
+        // androidaudioplugin-ara ships arm64-v8a and x86_64 only (ARA_API has no 32-bit ARM
+        // support), and Gradle resolves its prefab package for every ABI built. uapmd's own
+        // Android app builds the same two.
+        ndk { abiFilters += listOf("arm64-v8a", "x86_64") }
     }
     packaging {
         resources {
@@ -213,6 +217,33 @@ tasks.register<JavaExec>("runFreezeProbe") {
     classpath(files(tasks.named("jvmJar")), jvmMainCompilation.runtimeDependencyFiles)
     jvmArgs("-Dapple.awt.application.name=uapmd-cmp", "-Xdock:name=uapmd-cmp")
     System.getProperty("uapmd.probe.smf")?.let { systemProperty("uapmd.probe.smf", it) }
+}
+
+tasks.register<JavaExec>("runSelectionProbe") {
+    group = "verification"
+    description = "Headless check of the project selection bindings against the real native library."
+    dependsOn("jvmJar")
+    mainClass.set("dev.atsushieno.uapmd.cmp.SelectionProbeMainKt")
+    forwardScannerExecutable()
+    classpath(
+        files(tasks.named("jvmJar")),
+        jvmMainCompilation.runtimeDependencyFiles
+    )
+    jvmArgs("-Dapple.awt.application.name=uapmd-cmp", "-Xdock:name=uapmd-cmp")
+}
+
+tasks.register<JavaExec>("runMissingPluginLoadProbe") {
+    group = "verification"
+    description = "Loads a project whose plug-ins are not in the catalogue and checks that the load returns."
+    dependsOn("jvmJar")
+    mainClass.set("dev.atsushieno.uapmd.cmp.MissingPluginLoadProbeMainKt")
+    System.getProperty("uapmd.probe.project")?.let { systemProperty("uapmd.probe.project", it) }
+    forwardScannerExecutable()
+    classpath(
+        files(tasks.named("jvmJar")),
+        jvmMainCompilation.runtimeDependencyFiles
+    )
+    jvmArgs("-Dapple.awt.application.name=uapmd-cmp", "-Xdock:name=uapmd-cmp")
 }
 
 tasks.register<JavaExec>("runClipMoveProbe") {

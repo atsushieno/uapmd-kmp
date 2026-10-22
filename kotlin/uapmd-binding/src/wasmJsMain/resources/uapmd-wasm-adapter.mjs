@@ -250,7 +250,11 @@ export function makeCFunctionPtr(cbId, dispatchName, sig) {
         return _mod.addFunction(function() {}, sig);
     }
     const dispatcher = _ktDisp[dispatchName];
-    const fn = function(...args) { return dispatcher(cbId, ...args); };
+    // -sWASM_BIGINT: int64_t arguments ('j' in the signature) arrive as BigInt, which the Kotlin
+    // dispatchers take as decimal strings.
+    const fn = function(...args) {
+        return dispatcher(cbId, ...args.map(a => typeof a === 'bigint' ? a.toString() : a));
+    };
     return _mod.addFunction(fn, sig);
 }
 

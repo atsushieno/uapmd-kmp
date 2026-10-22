@@ -151,6 +151,8 @@ object JniBridge {
     @JvmStatic external fun uapmdNodeInstance(h: Long): Long
     @JvmStatic external fun uapmdNodeScheduleEvents(h: Long, ts: Long, data: ByteArray): Boolean
     @JvmStatic external fun uapmdNodeSendAllNotesOff(h: Long)
+    /** [observer] is an object with `invoke(IntArray)`; null clears. */
+    @JvmStatic external fun uapmdNodeSetEventOutputObserver(h: Long, observer: Any?)
     /** Returns the listener id (0 if not added). */
     @JvmStatic external fun uapmdNodeAddParameterUpdateListener(h: Long, listener: ParameterUpdateListener): Long
     @JvmStatic external fun uapmdNodeRemoveParameterUpdateListener(h: Long, listenerId: Long)
@@ -168,7 +170,8 @@ object JniBridge {
     @JvmStatic external fun uapmdGraphPluginCount(h: Long): Int
     @JvmStatic external fun uapmdGraphGetPluginNode(h: Long, id: Int): Long
     /** cb: (instanceId: Int, data: IntArray, sizeInBytes: Int) -> Unit, nullable */
-    @JvmStatic external fun uapmdGraphSetEventOutputCallback(h: Long, cb: Any?)
+    @JvmStatic external fun uapmdGraphNotifyLatencyChanged(h: Long)
+    @JvmStatic external fun uapmdGraphNotifyTailLengthChanged(h: Long)
     @JvmStatic external fun uapmdGraphOutputBusCount(h: Long): Int
     @JvmStatic external fun uapmdGraphOutputLatencyInSamples(h: Long, bus: Int): Int
     @JvmStatic external fun uapmdGraphOutputTailLengthInSeconds(h: Long, bus: Int): Double
@@ -206,7 +209,7 @@ object JniBridge {
     @JvmStatic external fun uapmdUmpInSetParameterValue(h: Long, idx: Int, v: Double)
     @JvmStatic external fun uapmdUmpInGetParameterValue(h: Long, idx: Int): Double
     @JvmStatic external fun uapmdUmpInSetPerNoteControllerValue(h: Long, note: Byte, idx: Byte, v: Double)
-    @JvmStatic external fun uapmdUmpInLoadPreset(h: Long, idx: Int)
+    @JvmStatic external fun uapmdUmpInRequestPresetLoad(h: Long, idx: Int)
     @JvmStatic external fun uapmdUmpOutSendParameterValue(h: Long, idx: Int, v: Double)
     @JvmStatic external fun uapmdUmpOutSendPerNoteControllerValue(h: Long, note: Byte, idx: Byte, v: Double)
     @JvmStatic external fun uapmdUmpOutSendPresetIndexChange(h: Long, idx: Int)
@@ -218,6 +221,7 @@ object JniBridge {
     @JvmStatic external fun uapmdEngineEnqueueUmp(h: Long, instId: Int, ump: IntArray, ts: Long)
     @JvmStatic external fun uapmdEnginePluginHost(h: Long): Long
     @JvmStatic external fun uapmdEngineGetPluginInstance(h: Long, id: Int): Long
+    @JvmStatic external fun uapmdEngineNotifyPluginEditorVisibilityChanged(h: Long, id: Int, visible: Boolean)
     @JvmStatic external fun uapmdEngineFunctionBlockManager(h: Long): Long
     @JvmStatic external fun uapmdEngineTrackCount(h: Long): Int
     @JvmStatic external fun uapmdEngineGetTrack(h: Long, idx: Int): Long
@@ -535,13 +539,78 @@ object JniBridge {
     // ══ Project history: ProjectAddressBook ═════════════════════════════════
 
     @JvmStatic external fun uapmdAddressesTimelineTrack(h: Long, refId: String): Long
-    @JvmStatic external fun uapmdAddressesSequencerTrack(h: Long, refId: String): Long
     @JvmStatic external fun uapmdAddressesTrackIndex(h: Long, refId: String): Int
     @JvmStatic external fun uapmdAddressesClipId(h: Long, trackRef: String, clipRef: String): Int
-    @JvmStatic external fun uapmdAddressesPluginInstanceId(h: Long, trackRef: String, nodeId: String): Int
     @JvmStatic external fun uapmdAddressesTrackReferenceId(h: Long, trackIndex: Int): String?
     @JvmStatic external fun uapmdAddressesClipAddress(h: Long, trackIndex: Int, clipId: Int): Array<String>?
-    @JvmStatic external fun uapmdAddressesPluginAddress(h: Long, instanceId: Int): Array<String>?
+
+    // ══ Project selection ═══════════════════════════════════════════════════
+
+    @JvmStatic external fun uapmdTlSelections(tl: Long): Long
+    @JvmStatic external fun uapmdSelectionServiceDefaultContext(h: Long): Long
+    @JvmStatic external fun uapmdSelectionServiceCreateContext(h: Long, owner: String?): Long
+    @JvmStatic external fun uapmdSelectionServiceHasContext(h: Long, context: Long): Boolean
+    @JvmStatic external fun uapmdSelectionServiceRemoveContext(h: Long, context: Long)
+    @JvmStatic external fun uapmdSelectionServiceSnapshot(h: Long, context: Long): Long
+    @JvmStatic external fun uapmdSelectionServiceActiveSelection(h: Long): Long
+    @JvmStatic external fun uapmdSelectionServiceReplace(h: Long, context: Long, selection: Long): Boolean
+    @JvmStatic external fun uapmdSelectionServiceClear(h: Long, context: Long)
+    @JvmStatic external fun uapmdSelectionServiceLastError(): String
+    @JvmStatic external fun uapmdSelectionServiceActiveContext(h: Long): Long
+    @JvmStatic external fun uapmdSelectionServiceSetActiveContext(h: Long, context: Long): Boolean
+    /** [listener] has `onSelectionChanged(J, J, J)`, `onActiveContextChanged(J, J)` and `onContextRemoved(J)`. */
+    @JvmStatic external fun uapmdSelectionServiceAddListener(h: Long, listener: Any): Long
+    @JvmStatic external fun uapmdSelectionServiceRemoveListener(h: Long, token: Long)
+
+    @JvmStatic external fun uapmdSelectionDestroy(h: Long)
+    @JvmStatic external fun uapmdSelectionObjectCount(h: Long): Int
+    @JvmStatic external fun uapmdSelectionObjectAt(h: Long, i: Int): String?
+    @JvmStatic external fun uapmdSelectionRegionCount(h: Long): Int
+    @JvmStatic external fun uapmdSelectionRegionKind(h: Long, r: Int): Int
+    @JvmStatic external fun uapmdSelectionRegionStartSeconds(h: Long, r: Int): Double
+    @JvmStatic external fun uapmdSelectionRegionEndSeconds(h: Long, r: Int): Double
+    @JvmStatic external fun uapmdSelectionRegionTracksRestricted(h: Long, r: Int): Boolean
+    @JvmStatic external fun uapmdSelectionRegionTrackCount(h: Long, r: Int): Int
+    @JvmStatic external fun uapmdSelectionRegionTrackAt(h: Long, r: Int, i: Int): String?
+    @JvmStatic external fun uapmdSelectionRegionClipId(h: Long, r: Int): String?
+    @JvmStatic external fun uapmdSelectionRegionStartTick(h: Long, r: Int): Long
+    @JvmStatic external fun uapmdSelectionRegionEndTick(h: Long, r: Int): Long
+    @JvmStatic external fun uapmdSelectionRegionPitchMin(h: Long, r: Int): Int
+    @JvmStatic external fun uapmdSelectionRegionPitchMax(h: Long, r: Int): Int
+    @JvmStatic external fun uapmdSelectionRegionNoteGroup(h: Long, r: Int): Int
+    @JvmStatic external fun uapmdSelectionRegionNoteChannel(h: Long, r: Int): Int
+    @JvmStatic external fun uapmdSelectionRegionLaneNoteId(h: Long, r: Int): String?
+    @JvmStatic external fun uapmdSelectionRegionLaneGroup(h: Long, r: Int): Int
+    @JvmStatic external fun uapmdSelectionRegionLaneChannel(h: Long, r: Int): Int
+    @JvmStatic external fun uapmdSelectionRegionLaneStatus(h: Long, r: Int): Int
+    @JvmStatic external fun uapmdSelectionRegionLaneParameter(h: Long, r: Int): Int
+    @JvmStatic external fun uapmdSelectionRegionHasValues(h: Long, r: Int): Boolean
+    @JvmStatic external fun uapmdSelectionRegionValueMin(h: Long, r: Int): Double
+    @JvmStatic external fun uapmdSelectionRegionValueMax(h: Long, r: Int): Double
+
+    @JvmStatic external fun uapmdSelectionCreate(): Long
+    @JvmStatic external fun uapmdSelectionAddObject(h: Long, id: String)
+    @JvmStatic external fun uapmdSelectionAddTimelineRegion(h: Long, start: Double, end: Double): Int
+    @JvmStatic external fun uapmdSelectionRegionRestrictTracks(h: Long, r: Int)
+    @JvmStatic external fun uapmdSelectionRegionAddTrack(h: Long, r: Int, trackId: String)
+    @JvmStatic external fun uapmdSelectionAddMidiNoteRegion(
+        h: Long, clipId: String, startTick: Long, endTick: Long,
+        pitchMin: Int, pitchMax: Int, group: Int, channel: Int
+    ): Int
+    @JvmStatic external fun uapmdSelectionAddMidiAutomationRegion(
+        h: Long, clipId: String, noteId: String?, group: Int, channel: Int, status: Int, parameter: Int,
+        startTick: Long, endTick: Long, hasValues: Boolean, valueMin: Double, valueMax: Double
+    ): Int
+
+    @JvmStatic external fun uapmdSelectionProject(tl: Long, selection: Long): Long
+    @JvmStatic external fun uapmdSelectionProjectionDestroy(h: Long)
+    @JvmStatic external fun uapmdSelectionProjectionClipCount(h: Long): Int
+    @JvmStatic external fun uapmdSelectionProjectionClipAt(h: Long, i: Int): String?
+    @JvmStatic external fun uapmdSelectionProjectionTrackCount(h: Long): Int
+    @JvmStatic external fun uapmdSelectionProjectionTrackAt(h: Long, i: Int): String?
+    @JvmStatic external fun uapmdSelectionProjectionHasTimeRange(h: Long): Boolean
+    @JvmStatic external fun uapmdSelectionProjectionRangeStartSeconds(h: Long): Double
+    @JvmStatic external fun uapmdSelectionProjectionRangeEndSeconds(h: Long): Double
 
     // ══ Fragments ═══════════════════════════════════════════════════════════
 
@@ -853,6 +922,12 @@ object JniBridge {
     @JvmStatic external fun uapmdPianoRollSessionNoteCount(h: Long): Int
     @JvmStatic external fun uapmdPianoRollSessionGetNote(h: Long, index: Int, outDoubles: DoubleArray, outLongs: LongArray): Boolean
     @JvmStatic external fun uapmdPianoRollSessionIsNoteSelected(h: Long, index: Int): Boolean
+    @JvmStatic external fun uapmdPianoRollSessionSelectionContext(h: Long): Long
+    @JvmStatic external fun uapmdPianoRollSessionClipReferenceId(h: Long): String?
+    @JvmStatic external fun uapmdPianoRollSessionNoteReferenceId(h: Long, index: Int): String?
+    @JvmStatic external fun uapmdPianoRollSessionIsObjectSelected(h: Long, referenceId: String): Boolean
+    @JvmStatic external fun uapmdPianoRollSessionSelectObject(h: Long, referenceId: String, additive: Boolean, toggle: Boolean)
+    @JvmStatic external fun uapmdPianoRollSessionSyncSelection(h: Long)
     @JvmStatic external fun uapmdPianoRollSessionSelectedNoteCount(h: Long): Int
     @JvmStatic external fun uapmdPianoRollSessionFocusedNote(h: Long): Int
     @JvmStatic external fun uapmdPianoRollSessionSetFocusedNote(h: Long, index: Int)

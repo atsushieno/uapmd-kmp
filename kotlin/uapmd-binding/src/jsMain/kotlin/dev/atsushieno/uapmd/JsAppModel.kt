@@ -1213,6 +1213,22 @@ class JsPianoRollSession internal constructor(private val handle: Int) : PianoRo
 
     override fun isNoteSelected(index: Int) =
         jsMod._uapmd_piano_roll_session_is_note_selected(handle, index) as Boolean
+
+    // -sWASM_BIGINT: the int64_t context id crosses as BigInt.
+    override val selectionContext: SelectionContextId?
+        get() = jsMod._uapmd_piano_roll_session_selection_context(handle).toString().toLong().takeIf { it >= 0 }
+    override val clipReferenceId: String?
+        get() = (jsMod._uapmd_piano_roll_session_clip_reference_id(handle) as Int)
+            .takeIf { it != 0 }?.let { jsMod.UTF8ToString(it) as String }
+    override fun noteReferenceId(index: Int): String? =
+        (jsMod._uapmd_piano_roll_session_note_reference_id(handle, index) as Int)
+            .takeIf { it != 0 }?.let { jsMod.UTF8ToString(it) as String }
+    override fun isObjectSelected(referenceId: String) =
+        withJsCString(referenceId) { p -> jsMod._uapmd_piano_roll_session_is_object_selected(handle, p) as Boolean }
+    override fun selectObject(referenceId: String, additive: Boolean, toggle: Boolean) {
+        withJsCString(referenceId) { p -> jsMod._uapmd_piano_roll_session_select_object(handle, p, additive, toggle) }
+    }
+    override fun syncSelection() { jsMod._uapmd_piano_roll_session_sync_selection(handle) }
     override val selectedNoteCount: Int
         get() = jsMod._uapmd_piano_roll_session_selected_note_count(handle) as Int
 

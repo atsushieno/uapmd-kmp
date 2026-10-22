@@ -709,6 +709,24 @@ interface PianoRollSession {
     val error: String
 
     /**
+     * The selection context this session publishes its note selection in; hand it to
+     * [ProjectSelectionService.snapshot] and friends. `null` when the session has none.
+     */
+    val selectionContext: SelectionContextId?
+    /** The document reference id of the clip being edited, or `null`. */
+    val clipReferenceId: String?
+    /** The document reference id of the note at [index], or `null` for an unknown index. */
+    fun noteReferenceId(index: Int): String?
+    fun isObjectSelected(referenceId: String): Boolean
+    /**
+     * Selects (or, with [toggle], flips) a note or automation point by reference id, then makes
+     * this session's context the active one. [additive] keeps the rest of the selection.
+     */
+    fun selectObject(referenceId: String, additive: Boolean = false, toggle: Boolean = false)
+    /** Re-reads the session's selection from the selection service, for when it changed elsewhere. */
+    fun syncSelection()
+
+    /**
      * Whether this session was built from that snapshot's UMP stream. False
      * means the clip changed underneath and the session must be reloaded —
      * which is what stops an edit being applied to a clip it was not made

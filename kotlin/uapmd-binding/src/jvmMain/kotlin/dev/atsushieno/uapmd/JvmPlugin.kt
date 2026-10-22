@@ -396,12 +396,32 @@ class JvmPluginNode internal constructor(
         lib.uapmd_node_remove_parameter_metadata_refresh_listener(handle, listenerId)
         nodeListenerRefs.remove(NodeListenerKey(Pointer.nativeValue(handle), listenerId, true))
     }
+
+    override fun setEventOutputObserver(observer: ((UIntArray) -> Unit)?) {
+        val key = Pointer.nativeValue(handle)
+        if (observer == null) {
+            lib.uapmd_node_set_event_output_observer(handle, null, null)
+            nodeEventOutputRefs.remove(key)
+            return
+        }
+        val cb = object : EventOutputCb {
+            override fun invoke(instanceId: Int, data: Pointer?, dataSizeInBytes: Long, userData: Pointer?) {
+                if (data == null) return
+                val count = (dataSizeInBytes / 4).toInt()
+                observer(UIntArray(count) { i -> data.getInt((i * 4).toLong()).toUInt() })
+            }
+        }
+        nodeEventOutputRefs[key] = cb
+        lib.uapmd_node_set_event_output_observer(handle, null, cb)
+    }
 }
 
 // getPluginNode() hands out a fresh wrapper per call, so the JNA callbacks are kept
 // alive here, keyed by native node + listener id, until the listener is removed.
 private data class NodeListenerKey(val node: Long, val listenerId: Long, val metadata: Boolean)
 private val nodeListenerRefs = java.util.concurrent.ConcurrentHashMap<NodeListenerKey, Any>()
+// Same for the event-output observer, one per native node.
+private val nodeEventOutputRefs = java.util.concurrent.ConcurrentHashMap<Long, EventOutputCb>()
 
 // ─── JvmPluginGraph ──────────────────────────────────────────────────────────
 
@@ -411,7 +431,6 @@ class JvmPluginGraph internal constructor(
 
     // Keep strong references to prevent JNA Callback objects from being GC'd.
     private val deleteCallbacks = mutableListOf<GraphDeleteCb>()
-    private var eventOutputCb: EventOutputCb? = null
 
     override fun appendNode(instanceId: Int, instance: PluginInstance, onDelete: (() -> Unit)?): Int {
         val cb: GraphDeleteCb? = onDelete?.let { fn ->
@@ -433,23 +452,8 @@ class JvmPluginGraph internal constructor(
         return JvmPluginNode(nodeHandle, JvmPluginInstance(instHandle))
     }
 
-    override fun setEventOutputCallback(callback: ((Int, UIntArray, Int) -> Unit)?) {
-        if (callback == null) {
-            lib.uapmd_graph_set_event_output_callback(handle, null, null)
-            eventOutputCb = null
-            return
-        }
-        val cb = object : EventOutputCb {
-            override fun invoke(instanceId: Int, data: Pointer?, dataSizeInBytes: Long, userData: Pointer?) {
-                if (data == null) return
-                val count = (dataSizeInBytes / 4).toInt()
-                val arr = UIntArray(count) { i -> data.getInt((i * 4).toLong()).toUInt() }
-                callback(instanceId, arr, dataSizeInBytes.toInt())
-            }
-        }
-        eventOutputCb = cb
-        lib.uapmd_graph_set_event_output_callback(handle, null, cb)
-    }
+    override fun notifyLatencyChanged() = lib.uapmd_graph_notify_latency_changed(handle)
+    override fun notifyTailLengthChanged() = lib.uapmd_graph_notify_tail_length_changed(handle)
 
     override val outputBusCount: UInt get() = lib.uapmd_graph_output_bus_count(handle).toUInt()
     override fun getOutputLatencyInSamples(busIndex: UInt): UInt =
@@ -461,7 +465,6 @@ class JvmPluginGraph internal constructor(
     override val mainOutputTailLengthInSeconds: Double get() = lib.uapmd_graph_main_output_tail_length_in_seconds(handle)
 
     override fun close() {
-        eventOutputCb = null
         lib.uapmd_graph_destroy(handle)
     }
 }

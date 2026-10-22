@@ -136,6 +136,21 @@ target_link_options(uapmd-c-api-web PRIVATE
     "-sPTHREAD_POOL_SIZE=8"
     # 8 MB stack for C++ deep call stacks
     "-sSTACK_SIZE=8388608"
+    # Emscripten gives every pthread 64 KB of stack by default, which is far too little
+    # for a C++ parser: loading a large JSFX script recurses deeply enough to run off the
+    # end, and a stack that overruns in wasm surfaces as "memory access out of bounds".
+    # Plugin scanning parses every script it finds, and it runs on a worker.
+    # (uapmd-app's UAPMD_WASM_LINK_OPTIONS sets the same.)
+    "-sDEFAULT_PTHREAD_STACK_SIZE=4MB"
+    # The remaining runtime settings uapmd-app links with, so that the library behaves the
+    # same way inside the Kotlin hosts.
+    "-sMAXIMUM_MEMORY=2GB"
+    "-sDISABLE_EXCEPTION_CATCHING=0"
+    "-sNO_EXIT_RUNTIME=1"
+    # Backfills AudioWorkletGlobalScope (Chrome does not expose it as a named property, so
+    # Emscripten skips registering the worklet bootstrap and the audio engine cannot start),
+    # and provides the navigator shim the runtime expects inside the worklet.
+    "--pre-js=${UAPMD_SOURCE_DIR}/tools/uapmd-app/web/audioworklet-env-fix.js"
     # IndexedDB-backed filesystem: uapmd persists its plugin list cache and the
     # blocklist under /browser, which the app mounts as IDBFS at startup.
     "-lidbfs.js"
@@ -145,6 +160,9 @@ target_link_options(uapmd-c-api-web PRIVATE
     # Comment this out if file I/O is needed at the C layer:
     # "-sNO_FILESYSTEM=1"
 )
+
+set_property(TARGET uapmd-c-api-web APPEND PROPERTY LINK_DEPENDS
+    "${UAPMD_SOURCE_DIR}/tools/uapmd-app/web/audioworklet-env-fix.js")
 
 # Emscripten may auto-inject a narrower -sEXPORTED_RUNTIME_METHODS after ours
 # (from inline JS in dependencies that use HEAPU8/UTF8ToString etc.), which would

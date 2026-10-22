@@ -614,11 +614,6 @@ class WasmJsProjectAddressBook internal constructor(private val handle: Int) : P
             wasmMod.uapmdAddressesTimelineTrack(handle, p).takeIf { it != 0 }?.let { WasmJsTimelineTrack(it) }
         }
 
-    override fun sequencerTrack(trackReferenceId: String): SequencerTrack? =
-        withCStringKt(trackReferenceId) { p ->
-            wasmMod.uapmdAddressesSequencerTrack(handle, p).takeIf { it != 0 }?.let { WasmJsSequencerTrack(it) }
-        }
-
     override fun trackIndex(trackReferenceId: String): Int =
         withCStringKt(trackReferenceId) { p -> wasmMod.uapmdAddressesTrackIndex(handle, p) }
 
@@ -631,15 +626,6 @@ class WasmJsProjectAddressBook internal constructor(private val handle: Int) : P
             }
         }
 
-    override fun pluginInstanceId(address: PluginAddress): Int =
-        withWasmStruct(WasmOff.ADDRESS_SIZE) { s ->
-            withTwoCStringsKt(address.trackReferenceId, address.nodeId) { a, b ->
-                wasmSetI32(s, a)
-                wasmSetI32(s + 4, b)
-                wasmMod.uapmdAddressesPluginInstanceId(handle, s)
-            }
-        }
-
     override fun trackReferenceId(trackIndex: Int): String? =
         wasmMod.uapmdAddressesTrackReferenceId(handle, trackIndex).takeIf { it != 0 }?.let { wasmMod.utf8ToString(it) }
 
@@ -647,12 +633,6 @@ class WasmJsProjectAddressBook internal constructor(private val handle: Int) : P
         withWasmStruct(WasmOff.ADDRESS_SIZE) { out ->
             if (!wasmMod.uapmdAddressesClipAddress(handle, trackIndex, clipId, out)) null
             else ClipAddress(wasmGetStr(out), wasmGetStr(out + 4))
-        }
-
-    override fun pluginAddress(instanceId: Int): PluginAddress? =
-        withWasmStruct(WasmOff.ADDRESS_SIZE) { out ->
-            if (!wasmMod.uapmdAddressesPluginAddress(handle, instanceId, out)) null
-            else PluginAddress(wasmGetStr(out), wasmGetStr(out + 4))
         }
 }
 

@@ -120,6 +120,10 @@ uapmd_plugin_instance_t uapmd_engine_get_plugin_instance(uapmd_sequencer_engine_
     return reinterpret_cast<uapmd_plugin_instance_t>(E(engine)->getPluginInstance(instance_id));
 }
 
+void uapmd_engine_notify_plugin_editor_visibility_changed(uapmd_sequencer_engine_t engine, int32_t instance_id, bool visible) {
+    E(engine)->notifyPluginEditorVisibilityChanged(instance_id, visible);
+}
+
 uapmd_function_block_mgr_t uapmd_engine_function_block_manager(uapmd_sequencer_engine_t engine) {
     return reinterpret_cast<uapmd_function_block_mgr_t>(E(engine)->functionBlockManager());
 }
@@ -570,6 +574,15 @@ uapmd_project_result_t uapmd_tl_load_project(uapmd_timeline_facade_t tl, const c
     auto r = promise->get_future().get();
     tl_error = r.error;
     return { r.success, tl_error.empty() ? nullptr : tl_error.c_str() };
+}
+
+void uapmd_tl_load_project_async(uapmd_timeline_facade_t tl, const char* file_path,
+                                 void* user_data, uapmd_project_load_cb_t callback) {
+    TF(tl)->loadProject(file_path ? file_path : "", [callback, user_data](uapmd::TimelineFacade::ProjectResult r) {
+        if (!callback)
+            return;
+        callback(r.success, r.error.empty() ? nullptr : r.error.c_str(), user_data);
+    });
 }
 
 uapmd_project_result_t uapmd_tl_new_project(uapmd_timeline_facade_t tl) {

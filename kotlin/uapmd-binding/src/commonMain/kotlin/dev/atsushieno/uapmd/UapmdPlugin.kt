@@ -140,6 +140,16 @@ interface PluginNode {
     /** `AudioGraphNode::parameterMetadataRefreshEvent()`. Returns the listener id (0 if not added). */
     fun addParameterMetadataRefreshListener(listener: () -> Unit): Long
     fun removeParameterMetadataRefreshListener(listenerId: Long)
+
+    /**
+     * `AudioPluginNode::setEventOutputObserver()`: the UMP words the plug-in emitted in each
+     * render, delivered on the audio thread (copy; do not block). `null` clears it.
+     *
+     * The sequencer engine installs its own observer on every node it hosts, so setting one on
+     * an engine-managed node replaces the engine's capture of that plug-in's output. Use it on
+     * nodes of a graph you built yourself.
+     */
+    fun setEventOutputObserver(observer: ((data: UIntArray) -> Unit)?)
 }
 
 /**
@@ -156,7 +166,12 @@ interface PluginGraph : AutoCloseable {
     fun removeNode(instanceId: Int): Boolean
     val pluginCount: UInt
     fun getPluginNode(instanceId: Int): PluginNode?
-    fun setEventOutputCallback(callback: ((instanceId: Int, data: UIntArray, dataSizeInBytes: Int) -> Unit)?)
+    /**
+     * `AudioGraph::notifyLatencyChanged()` / `notifyTailLengthChanged()`. Call after a plug-in
+     * reports a changed latency or tail so the graph refreshes the values it reports.
+     */
+    fun notifyLatencyChanged()
+    fun notifyTailLengthChanged()
     val outputBusCount: UInt
     fun getOutputLatencyInSamples(busIndex: UInt): UInt
     fun getOutputTailLengthInSeconds(busIndex: UInt): Double

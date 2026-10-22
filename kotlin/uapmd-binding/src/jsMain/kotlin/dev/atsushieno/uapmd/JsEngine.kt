@@ -39,6 +39,10 @@ class JsSequencerEngine internal constructor(
     override val pluginHost: PluginHost
         get() = JsPluginHost(jsMod._uapmd_engine_plugin_host(handle) as Int)
 
+    override fun notifyPluginEditorVisibilityChanged(instanceId: Int, visible: Boolean) {
+        jsMod._uapmd_engine_notify_plugin_editor_visibility_changed(handle, instanceId, visible)
+    }
+
     override fun getPluginInstance(instanceId: Int): PluginInstance? {
         val inst = jsMod._uapmd_engine_get_plugin_instance(handle, instanceId) as Int
         return if (inst == 0) null else JsPluginInstance(inst)

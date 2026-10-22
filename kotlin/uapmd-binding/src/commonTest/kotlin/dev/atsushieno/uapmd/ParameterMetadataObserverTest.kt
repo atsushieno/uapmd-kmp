@@ -46,6 +46,7 @@ class ParameterMetadataObserverTest {
         var removed = 0
         override fun scheduleEvents(timestamp: Long, events: ByteArray) = true
         override fun sendAllNotesOff() {}
+        override fun setEventOutputObserver(observer: ((UIntArray) -> Unit)?) {}
         override fun addParameterUpdateListener(listener: ParameterUpdateListener) = 0L
         override fun removeParameterUpdateListener(listenerId: Long) {}
         override fun addParameterMetadataRefreshListener(listener: () -> Unit): Long {

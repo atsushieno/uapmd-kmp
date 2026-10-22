@@ -305,6 +305,16 @@ class AndroidPluginNode internal constructor(
 
     override fun removeParameterMetadataRefreshListener(listenerId: Long) =
         JniBridge.uapmdNodeRemoveParameterMetadataRefreshListener(handle, listenerId)
+
+    // The JNI layer holds a global ref to the observer until it is replaced or cleared.
+    override fun setEventOutputObserver(observer: ((UIntArray) -> Unit)?) {
+        JniBridge.uapmdNodeSetEventOutputObserver(handle, observer?.let { fn ->
+            object : Any() {
+                @Suppress("unused")
+                fun invoke(data: IntArray) = fn(UIntArray(data.size) { data[it].toUInt() })
+            }
+        })
+    }
 }
 
 // ─── AndroidPluginGraph ──────────────────────────────────────────────────────
@@ -315,7 +325,6 @@ class AndroidPluginGraph internal constructor(
 
     // Keep strong references so the JVM won't GC them before C++ calls them.
     private val deleteCallbacks = mutableListOf<Any>()
-    private var eventOutputCbRef: Any? = null
 
     override fun appendNode(instanceId: Int, instance: PluginInstance, onDelete: (() -> Unit)?): Int {
         val cb: Any? = onDelete?.let { fn ->
@@ -342,16 +351,8 @@ class AndroidPluginGraph internal constructor(
         return AndroidPluginNode(nh, inst)
     }
 
-    override fun setEventOutputCallback(callback: ((Int, UIntArray, Int) -> Unit)?) {
-        eventOutputCbRef = callback?.let { fn ->
-            object : Any() {
-                @Suppress("unused")
-                fun invoke(instId: Int, data: IntArray, sizeInBytes: Int) =
-                    fn(instId, UIntArray(data.size) { data[it].toUInt() }, sizeInBytes)
-            }
-        }
-        JniBridge.uapmdGraphSetEventOutputCallback(handle, eventOutputCbRef)
-    }
+    override fun notifyLatencyChanged() = JniBridge.uapmdGraphNotifyLatencyChanged(handle)
+    override fun notifyTailLengthChanged() = JniBridge.uapmdGraphNotifyTailLengthChanged(handle)
 
     override val outputBusCount: UInt get() = JniBridge.uapmdGraphOutputBusCount(handle).toUInt()
 

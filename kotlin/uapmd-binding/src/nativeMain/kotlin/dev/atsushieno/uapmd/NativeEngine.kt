@@ -29,6 +29,9 @@ class NativeSequencerEngine internal constructor(
     override val pluginHost: PluginHost
         get() = NativePluginHost(uapmd_engine_plugin_host(handle)!!)
 
+    override fun notifyPluginEditorVisibilityChanged(instanceId: Int, visible: Boolean) =
+        uapmd_engine_notify_plugin_editor_visibility_changed(handle, instanceId, visible)
+
     override fun getPluginInstance(instanceId: Int): PluginInstance? =
         uapmd_engine_get_plugin_instance(handle, instanceId)?.let { NativePluginInstance(it) }
 

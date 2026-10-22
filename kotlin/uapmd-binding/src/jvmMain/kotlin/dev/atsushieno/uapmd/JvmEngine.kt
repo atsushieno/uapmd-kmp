@@ -31,6 +31,9 @@ class JvmSequencerEngine internal constructor(
     override val pluginHost: PluginHost
         get() = JvmPluginHost(lib.uapmd_engine_plugin_host(handle) ?: error("uapmd_engine_plugin_host returned null"))
 
+    override fun notifyPluginEditorVisibilityChanged(instanceId: Int, visible: Boolean) =
+        lib.uapmd_engine_notify_plugin_editor_visibility_changed(handle, instanceId, visible)
+
     override fun getPluginInstance(instanceId: Int): PluginInstance? =
         lib.uapmd_engine_get_plugin_instance(handle, instanceId)?.let {
             val host = lib.uapmd_engine_plugin_host(handle)

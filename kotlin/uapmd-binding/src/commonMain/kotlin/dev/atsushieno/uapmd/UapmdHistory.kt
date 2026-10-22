@@ -102,12 +102,6 @@ data class AudioWarpPointData(
 /** Stable document identity of one clip. */
 data class ClipAddress(val trackReferenceId: String, val clipReferenceId: String)
 
-/**
- * Stable document identity of one plug-in node. A runtime instance id is not
- * usable in history: removing and restoring a plug-in produces a new one.
- */
-data class PluginAddress(val trackReferenceId: String, val nodeId: String)
-
 /** Which parts of a captured track are applied when it is attached. */
 data class TrackAttachOptions(
     val idPolicy: ObjectIdPolicy = ObjectIdPolicy.Mint,
@@ -349,20 +343,17 @@ data class LatencyCompensationSettings(
 
 /**
  * Translation between the persistent identities a history step carries and the
- * runtime indexes the engine works with. Not thread safe; call on the model
+ * authored track and clip indexes of the timeline. Not thread safe; call on the model
  * thread only.
  */
 interface ProjectAddressBook {
     fun timelineTrack(trackReferenceId: String): TimelineTrack?
-    fun sequencerTrack(trackReferenceId: String): SequencerTrack?
     /** Returns [MASTER_TRACK_INDEX] for the master track, -1 when unknown. */
     fun trackIndex(trackReferenceId: String): Int
     fun clipId(address: ClipAddress): Int
-    fun pluginInstanceId(address: PluginAddress): Int
 
     fun trackReferenceId(trackIndex: Int): String?
     fun clipAddress(trackIndex: Int, clipId: Int): ClipAddress?
-    fun pluginAddress(instanceId: Int): PluginAddress?
 
     companion object {
         /** Mirrors `UAPMD_MASTER_TRACK_INDEX`. */

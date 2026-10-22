@@ -40,6 +40,18 @@ interface EventOutputCb : Callback {
     fun invoke(instanceId: Int, data: Pointer?, dataSizeInBytes: Long, userData: Pointer?)
 }
 
+interface SelectionChangedCb : Callback {
+    fun invoke(context: Long, previous: Pointer?, current: Pointer?, userData: Pointer?)
+}
+
+interface SelectionActiveContextChangedCb : Callback {
+    fun invoke(previousContext: Long, currentContext: Long, userData: Pointer?)
+}
+
+interface SelectionContextRemovedCb : Callback {
+    fun invoke(context: Long, userData: Pointer?)
+}
+
 interface ParameterUpdateCb : Callback {
     fun invoke(parameterIndex: Int, value: Double, userData: Pointer?)
 }
@@ -578,14 +590,6 @@ open class UapmdClipAddress : Structure() {
     @JvmField var clip_reference_id: String? = null
 
     class ByVal : UapmdClipAddress(), Structure.ByValue
-}
-
-@FieldOrder("track_reference_id", "node_id")
-open class UapmdPluginAddress : Structure() {
-    @JvmField var track_reference_id: String? = null
-    @JvmField var node_id: String? = null
-
-    class ByVal : UapmdPluginAddress(), Structure.ByValue
 }
 
 @FieldOrder("id_policy", "insertion_index", "include_plugins", "include_plugin_state", "include_clips")
@@ -1295,6 +1299,7 @@ interface UapmdLibrary : Library {
     fun uapmd_node_instance(node: Pointer?): Pointer?
     fun uapmd_node_schedule_events(node: Pointer?, timestamp: Long, events: ByteArray, size: Long): Boolean
     fun uapmd_node_send_all_notes_off(node: Pointer?)
+    fun uapmd_node_set_event_output_observer(node: Pointer?, userData: Pointer?, callback: EventOutputCb?)
     fun uapmd_node_add_parameter_update_listener(node: Pointer?, userData: Pointer?, cb: ParameterUpdateCb?): Long
     fun uapmd_node_remove_parameter_update_listener(node: Pointer?, listenerId: Long)
     fun uapmd_node_add_parameter_metadata_refresh_listener(node: Pointer?, userData: Pointer?, cb: ParameterMetadataRefreshCb?): Long
@@ -1317,7 +1322,8 @@ interface UapmdLibrary : Library {
     fun uapmd_graph_plugin_count(graph: Pointer?): Int
     fun uapmd_graph_get_plugin_node(graph: Pointer?, instanceId: Int): Pointer?
 
-    fun uapmd_graph_set_event_output_callback(graph: Pointer?, userData: Pointer?, callback: EventOutputCb?)
+    fun uapmd_graph_notify_latency_changed(graph: Pointer?)
+    fun uapmd_graph_notify_tail_length_changed(graph: Pointer?)
 
     fun uapmd_graph_output_bus_count(graph: Pointer?): Int
     fun uapmd_graph_output_latency_in_samples(graph: Pointer?, busIndex: Int): Int
@@ -1355,7 +1361,7 @@ interface UapmdLibrary : Library {
     fun uapmd_ump_in_set_parameter_value(m: Pointer?, index: Int, value: Double)
     fun uapmd_ump_in_get_parameter_value(m: Pointer?, index: Int): Double
     fun uapmd_ump_in_set_per_note_controller_value(m: Pointer?, note: Byte, index: Byte, value: Double)
-    fun uapmd_ump_in_load_preset(m: Pointer?, index: Int)
+    fun uapmd_ump_in_request_preset_load(m: Pointer?, index: Int)
 
     // ── UmpOutputMapper ──────────────────────────────────────────────────────
 
@@ -1372,6 +1378,7 @@ interface UapmdLibrary : Library {
 
     fun uapmd_engine_plugin_host(engine: Pointer?): Pointer?
     fun uapmd_engine_get_plugin_instance(engine: Pointer?, instanceId: Int): Pointer?
+    fun uapmd_engine_notify_plugin_editor_visibility_changed(engine: Pointer?, instanceId: Int, visible: Boolean)
     fun uapmd_engine_function_block_manager(engine: Pointer?): Pointer?
 
     fun uapmd_engine_track_count(engine: Pointer?): Int
@@ -1698,13 +1705,83 @@ interface UapmdLibrary : Library {
     // ══ Project history: ProjectAddressBook ═════════════════════════════════
 
     fun uapmd_addresses_timeline_track(ab: Pointer?, trackReferenceId: String?): Pointer?
-    fun uapmd_addresses_sequencer_track(ab: Pointer?, trackReferenceId: String?): Pointer?
     fun uapmd_addresses_track_index(ab: Pointer?, trackReferenceId: String?): Int
     fun uapmd_addresses_clip_id(ab: Pointer?, address: UapmdClipAddress.ByVal): Int
-    fun uapmd_addresses_plugin_instance_id(ab: Pointer?, address: UapmdPluginAddress.ByVal): Int
     fun uapmd_addresses_track_reference_id(ab: Pointer?, trackIndex: Int): String?
     fun uapmd_addresses_clip_address(ab: Pointer?, trackIndex: Int, clipId: Int, out: UapmdClipAddress): Boolean
-    fun uapmd_addresses_plugin_address(ab: Pointer?, instanceId: Int, out: UapmdPluginAddress): Boolean
+
+    // ══ Project selection ═══════════════════════════════════════════════════
+
+    fun uapmd_tl_selections(tl: Pointer?): Pointer?
+    fun uapmd_selection_service_default_context(svc: Pointer?): Long
+    fun uapmd_selection_service_create_context(svc: Pointer?, ownerObjectId: String?): Long
+    fun uapmd_selection_service_has_context(svc: Pointer?, context: Long): Boolean
+    fun uapmd_selection_service_remove_context(svc: Pointer?, context: Long)
+    fun uapmd_selection_service_snapshot(svc: Pointer?, context: Long): Pointer?
+    fun uapmd_selection_service_active_selection(svc: Pointer?): Pointer?
+    fun uapmd_selection_service_replace(svc: Pointer?, context: Long, selection: Pointer?): Boolean
+    fun uapmd_selection_service_clear(svc: Pointer?, context: Long)
+    fun uapmd_selection_service_last_error(): String?
+    fun uapmd_selection_service_active_context(svc: Pointer?): Long
+    fun uapmd_selection_service_set_active_context(svc: Pointer?, context: Long): Boolean
+    fun uapmd_selection_service_add_listener(
+        svc: Pointer?, userData: Pointer?,
+        selectionChanged: SelectionChangedCb?,
+        activeContextChanged: SelectionActiveContextChangedCb?,
+        contextRemoved: SelectionContextRemovedCb?
+    ): Long
+    fun uapmd_selection_service_remove_listener(svc: Pointer?, token: Long)
+
+    fun uapmd_selection_destroy(selection: Pointer?)
+    fun uapmd_selection_object_count(selection: Pointer?): Int
+    fun uapmd_selection_object_at(selection: Pointer?, index: Int): String?
+    fun uapmd_selection_region_count(selection: Pointer?): Int
+    fun uapmd_selection_region_kind(selection: Pointer?, region: Int): Int
+    fun uapmd_selection_region_start_seconds(selection: Pointer?, region: Int): Double
+    fun uapmd_selection_region_end_seconds(selection: Pointer?, region: Int): Double
+    fun uapmd_selection_region_tracks_restricted(selection: Pointer?, region: Int): Boolean
+    fun uapmd_selection_region_track_count(selection: Pointer?, region: Int): Int
+    fun uapmd_selection_region_track_at(selection: Pointer?, region: Int, index: Int): String?
+    fun uapmd_selection_region_clip_id(selection: Pointer?, region: Int): String?
+    fun uapmd_selection_region_start_tick(selection: Pointer?, region: Int): Long
+    fun uapmd_selection_region_end_tick(selection: Pointer?, region: Int): Long
+    fun uapmd_selection_region_pitch_min(selection: Pointer?, region: Int): Int
+    fun uapmd_selection_region_pitch_max(selection: Pointer?, region: Int): Int
+    fun uapmd_selection_region_note_group(selection: Pointer?, region: Int): Int
+    fun uapmd_selection_region_note_channel(selection: Pointer?, region: Int): Int
+    fun uapmd_selection_region_lane_note_id(selection: Pointer?, region: Int): String?
+    fun uapmd_selection_region_lane_group(selection: Pointer?, region: Int): Int
+    fun uapmd_selection_region_lane_channel(selection: Pointer?, region: Int): Int
+    fun uapmd_selection_region_lane_status(selection: Pointer?, region: Int): Int
+    fun uapmd_selection_region_lane_parameter(selection: Pointer?, region: Int): Int
+    fun uapmd_selection_region_has_values(selection: Pointer?, region: Int): Boolean
+    fun uapmd_selection_region_value_min(selection: Pointer?, region: Int): Double
+    fun uapmd_selection_region_value_max(selection: Pointer?, region: Int): Double
+
+    fun uapmd_selection_create(): Pointer?
+    fun uapmd_selection_add_object(selection: Pointer?, objectId: String?)
+    fun uapmd_selection_add_timeline_region(selection: Pointer?, startSeconds: Double, endSeconds: Double): Int
+    fun uapmd_selection_region_restrict_tracks(selection: Pointer?, region: Int)
+    fun uapmd_selection_region_add_track(selection: Pointer?, region: Int, trackId: String?)
+    fun uapmd_selection_add_midi_note_region(
+        selection: Pointer?, clipId: String?, startTick: Long, endTick: Long,
+        pitchMin: Int, pitchMax: Int, group: Int, channel: Int
+    ): Int
+    fun uapmd_selection_add_midi_automation_region(
+        selection: Pointer?, clipId: String?, noteId: String?, group: Int, channel: Int,
+        status: Int, parameter: Int, startTick: Long, endTick: Long,
+        hasValues: Boolean, valueMin: Double, valueMax: Double
+    ): Int
+
+    fun uapmd_selection_project(tl: Pointer?, selection: Pointer?): Pointer?
+    fun uapmd_selection_projection_destroy(projection: Pointer?)
+    fun uapmd_selection_projection_clip_count(projection: Pointer?): Int
+    fun uapmd_selection_projection_clip_at(projection: Pointer?, index: Int): String?
+    fun uapmd_selection_projection_track_count(projection: Pointer?): Int
+    fun uapmd_selection_projection_track_at(projection: Pointer?, index: Int): String?
+    fun uapmd_selection_projection_has_time_range(projection: Pointer?): Boolean
+    fun uapmd_selection_projection_range_start_seconds(projection: Pointer?): Double
+    fun uapmd_selection_projection_range_end_seconds(projection: Pointer?): Double
 
     // ══ Fragments ═══════════════════════════════════════════════════════════
 
@@ -1976,6 +2053,12 @@ interface UapmdLibrary : Library {
     fun uapmd_piano_roll_session_note_count(session: Pointer?): Int
     fun uapmd_piano_roll_session_get_note(session: Pointer?, index: Int, out: UapmdPianoRollNote): Boolean
     fun uapmd_piano_roll_session_is_note_selected(session: Pointer?, index: Int): Boolean
+    fun uapmd_piano_roll_session_selection_context(session: Pointer?): Long
+    fun uapmd_piano_roll_session_clip_reference_id(session: Pointer?): String?
+    fun uapmd_piano_roll_session_note_reference_id(session: Pointer?, index: Int): String?
+    fun uapmd_piano_roll_session_is_object_selected(session: Pointer?, referenceId: String?): Boolean
+    fun uapmd_piano_roll_session_select_object(session: Pointer?, referenceId: String?, additive: Boolean, toggle: Boolean)
+    fun uapmd_piano_roll_session_sync_selection(session: Pointer?)
     fun uapmd_piano_roll_session_selected_note_count(session: Pointer?): Int
     fun uapmd_piano_roll_session_focused_note(session: Pointer?): Int
     fun uapmd_piano_roll_session_set_focused_note(session: Pointer?, index: Int)

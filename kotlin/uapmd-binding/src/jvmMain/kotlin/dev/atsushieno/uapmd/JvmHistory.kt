@@ -7,7 +7,6 @@ import dev.atsushieno.uapmd.jna.UapmdClipAddress
 import dev.atsushieno.uapmd.jna.UapmdClipData
 import dev.atsushieno.uapmd.jna.UapmdClipMarker
 import dev.atsushieno.uapmd.jna.UapmdLatencyCompensationSettings
-import dev.atsushieno.uapmd.jna.UapmdPluginAddress
 import dev.atsushieno.uapmd.jna.UapmdTimeReference
 import dev.atsushieno.uapmd.jna.UapmdTrackAttachOptions
 import dev.atsushieno.uapmd.jna.UapmdTrackPluginFragment
@@ -340,9 +339,6 @@ class JvmProjectAddressBook internal constructor(private val handle: Pointer) : 
     override fun timelineTrack(trackReferenceId: String): TimelineTrack? =
         lib.uapmd_addresses_timeline_track(handle, trackReferenceId)?.let { JvmTimelineTrack(it) }
 
-    override fun sequencerTrack(trackReferenceId: String): SequencerTrack? =
-        lib.uapmd_addresses_sequencer_track(handle, trackReferenceId)?.let { JvmSequencerTrack(it) }
-
     override fun trackIndex(trackReferenceId: String): Int =
         lib.uapmd_addresses_track_index(handle, trackReferenceId)
 
@@ -352,12 +348,6 @@ class JvmProjectAddressBook internal constructor(private val handle: Pointer) : 
             it.clip_reference_id = address.clipReferenceId
         })
 
-    override fun pluginInstanceId(address: PluginAddress): Int =
-        lib.uapmd_addresses_plugin_instance_id(handle, UapmdPluginAddress.ByVal().also {
-            it.track_reference_id = address.trackReferenceId
-            it.node_id = address.nodeId
-        })
-
     override fun trackReferenceId(trackIndex: Int): String? =
         lib.uapmd_addresses_track_reference_id(handle, trackIndex)
 
@@ -365,12 +355,6 @@ class JvmProjectAddressBook internal constructor(private val handle: Pointer) : 
         val out = UapmdClipAddress()
         if (!lib.uapmd_addresses_clip_address(handle, trackIndex, clipId, out)) return null
         return ClipAddress(out.track_reference_id ?: "", out.clip_reference_id ?: "")
-    }
-
-    override fun pluginAddress(instanceId: Int): PluginAddress? {
-        val out = UapmdPluginAddress()
-        if (!lib.uapmd_addresses_plugin_address(handle, instanceId, out)) return null
-        return PluginAddress(out.track_reference_id ?: "", out.node_id ?: "")
     }
 }
 

@@ -238,14 +238,14 @@ internal fun makeJsStateCallback(callback: (ByteArray?, String?) -> Unit): Int {
 internal fun makeJsEventOutputCallback(
     callback: (instanceId: Int, data: IntArray, dataSizeInBytes: Int) -> Unit
 ): Int {
-    val fn: (dynamic, dynamic, dynamic) -> Unit = { instanceId, dataPtr, size ->
+    val fn: (dynamic, dynamic, dynamic, dynamic) -> Unit = { instanceId, dataPtr, size, _ ->
         val iid = instanceId as Int
         val ptr = dataPtr as Int
         val sz  = size as Int
         val data = IntArray(sz / 4) { i -> jsMod.getValue(ptr + i * 4, "i32") as Int }
         callback(iid, data, sz)
     }
-    return addJsCallback(fn.asDynamic(), "viii")
+    return addJsCallback(fn.asDynamic(), "viiii")
 }
 
 /** Make a table entry for a MIDI input handler. */

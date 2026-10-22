@@ -86,6 +86,10 @@ android {
     ndkVersion = "28.2.13676358"
     defaultConfig {
         minSdk = libs.versions.android.minSdk.get().toInt()
+        // androidaudioplugin-ara ships arm64-v8a and x86_64 only (ARA_API has no 32-bit ARM
+        // support), and Gradle resolves its prefab package for every ABI built. uapmd's own
+        // Android app builds the same two.
+        ndk { abiFilters += listOf("arm64-v8a", "x86_64") }
         externalNativeBuild {
             cmake {
                 arguments.addAll(listOf(

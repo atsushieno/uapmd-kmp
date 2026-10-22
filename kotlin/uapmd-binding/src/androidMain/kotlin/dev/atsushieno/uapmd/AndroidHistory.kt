@@ -259,24 +259,15 @@ class AndroidProjectAddressBook internal constructor(private val handle: Long) :
     override fun timelineTrack(trackReferenceId: String): TimelineTrack? =
         JniBridge.uapmdAddressesTimelineTrack(handle, trackReferenceId).takeIf { it != 0L }?.let { AndroidTimelineTrack(it) }
 
-    override fun sequencerTrack(trackReferenceId: String): SequencerTrack? =
-        JniBridge.uapmdAddressesSequencerTrack(handle, trackReferenceId).takeIf { it != 0L }?.let { AndroidSequencerTrack(it) }
-
     override fun trackIndex(trackReferenceId: String) = JniBridge.uapmdAddressesTrackIndex(handle, trackReferenceId)
 
     override fun clipId(address: ClipAddress) =
         JniBridge.uapmdAddressesClipId(handle, address.trackReferenceId, address.clipReferenceId)
 
-    override fun pluginInstanceId(address: PluginAddress) =
-        JniBridge.uapmdAddressesPluginInstanceId(handle, address.trackReferenceId, address.nodeId)
-
     override fun trackReferenceId(trackIndex: Int) = JniBridge.uapmdAddressesTrackReferenceId(handle, trackIndex)
 
     override fun clipAddress(trackIndex: Int, clipId: Int): ClipAddress? =
         JniBridge.uapmdAddressesClipAddress(handle, trackIndex, clipId)?.let { ClipAddress(it[0], it[1]) }
-
-    override fun pluginAddress(instanceId: Int): PluginAddress? =
-        JniBridge.uapmdAddressesPluginAddress(handle, instanceId)?.let { PluginAddress(it[0], it[1]) }
 }
 
 // ─── Fragments ───────────────────────────────────────────────────────────────

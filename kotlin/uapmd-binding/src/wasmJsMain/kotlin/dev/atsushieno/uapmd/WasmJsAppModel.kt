@@ -1175,6 +1175,19 @@ class WasmJsPianoRollSession internal constructor(private val handle: Int) : Pia
         }
 
     override fun isNoteSelected(index: Int) = wasmMod.uapmdPianoRollSessionIsNoteSelected(handle, index)
+
+    override val selectionContext: SelectionContextId?
+        get() = wasmPianoRollSessionSelectionContext(wasmMod, handle).toLong().takeIf { it >= 0 }
+    override val clipReferenceId: String?
+        get() = wasmMod.uapmdPianoRollSessionClipReferenceId(handle).takeIf { it != 0 }?.let { wasmMod.utf8ToString(it) }
+    override fun noteReferenceId(index: Int): String? =
+        wasmMod.uapmdPianoRollSessionNoteReferenceId(handle, index).takeIf { it != 0 }?.let { wasmMod.utf8ToString(it) }
+    override fun isObjectSelected(referenceId: String) =
+        withCStringKt(referenceId) { p -> wasmMod.uapmdPianoRollSessionIsObjectSelected(handle, p) }
+    override fun selectObject(referenceId: String, additive: Boolean, toggle: Boolean) {
+        withCStringKt(referenceId) { p -> wasmMod.uapmdPianoRollSessionSelectObject(handle, p, additive, toggle) }
+    }
+    override fun syncSelection() = wasmMod.uapmdPianoRollSessionSyncSelection(handle)
     override val selectedNoteCount: Int get() = wasmMod.uapmdPianoRollSessionSelectedNoteCount(handle)
 
     override var focusedNote: Int

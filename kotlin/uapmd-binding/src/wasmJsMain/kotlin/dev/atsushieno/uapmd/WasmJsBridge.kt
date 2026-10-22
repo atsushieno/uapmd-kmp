@@ -250,9 +250,10 @@ external interface UapmdCApiModule : JsAny {
     fun uapmdGraphMainOutputTailLengthInSeconds(handle: Int): Double
     @JsName("_uapmd_graph_render_lead_in_samples")
     fun uapmdGraphRenderLeadInSamples(handle: Int): Int
-    /** Callback: void(int instanceId, const uint32_t* data, size_t size, void* ctx) */
-    @JsName("_uapmd_graph_set_event_output_callback")
-    fun uapmdGraphSetEventOutputCallback(handle: Int, callback: Int, ctx: Int)
+    @JsName("_uapmd_graph_notify_latency_changed")
+    fun uapmdGraphNotifyLatencyChanged(handle: Int)
+    @JsName("_uapmd_graph_notify_tail_length_changed")
+    fun uapmdGraphNotifyTailLengthChanged(handle: Int)
 
     // ── Plugin node ────────────────────────────────────────────────────────
     @JsName("_uapmd_node_instance")
@@ -263,6 +264,9 @@ external interface UapmdCApiModule : JsAny {
     fun uapmdNodeScheduleEvents(handle: Int, timestamp: Long, eventsPtr: Int, eventsSize: Int): Boolean
     @JsName("_uapmd_node_send_all_notes_off")
     fun uapmdNodeSendAllNotesOff(handle: Int)
+    /** Callback: void(int instanceId, const uint32_t* data, size_t size, void* ctx); 0 clears. */
+    @JsName("_uapmd_node_set_event_output_observer")
+    fun uapmdNodeSetEventOutputObserver(handle: Int, ctx: Int, callback: Int)
 
     // ── Sequencer engine ───────────────────────────────────────────────────
     @JsName("_uapmd_engine_create")
@@ -295,6 +299,8 @@ external interface UapmdCApiModule : JsAny {
     fun uapmdEngineFindTrackForInstance(handle: Int, instanceId: Int): Int
     @JsName("_uapmd_engine_get_plugin_instance")
     fun uapmdEngineGetPluginInstance(handle: Int, instanceId: Int): Int
+    @JsName("_uapmd_engine_notify_plugin_editor_visibility_changed")
+    fun uapmdEngineNotifyPluginEditorVisibilityChanged(handle: Int, instanceId: Int, visible: Boolean)
     @JsName("_uapmd_engine_get_instance_group")
     fun uapmdEngineGetInstanceGroup(handle: Int, instanceId: Int): Int
     @JsName("_uapmd_engine_set_instance_group")
@@ -402,6 +408,9 @@ external interface UapmdCApiModule : JsAny {
     fun uapmdTlRemoveClip(handle: Int, trackIndex: Int, clipId: Int): Boolean
     @JsName("_uapmd_tl_load_project")
     fun uapmdTlLoadProject(outPtr: Int, handle: Int, filePathPtr: Int)
+    /** Callback: void(bool success, const char* error, void* user_data) */
+    @JsName("_uapmd_tl_load_project_async")
+    fun uapmdTlLoadProjectAsync(handle: Int, filePathPtr: Int, userData: Int, callback: Int)
     @JsName("_uapmd_tl_new_project")
     fun uapmdTlNewProject(outPtr: Int, handle: Int)
 
@@ -750,20 +759,14 @@ external interface UapmdCApiModule : JsAny {
 
     @JsName("_uapmd_addresses_timeline_track")
     fun uapmdAddressesTimelineTrack(ab: Int, refIdPtr: Int): Int
-    @JsName("_uapmd_addresses_sequencer_track")
-    fun uapmdAddressesSequencerTrack(ab: Int, refIdPtr: Int): Int
     @JsName("_uapmd_addresses_track_index")
     fun uapmdAddressesTrackIndex(ab: Int, refIdPtr: Int): Int
     @JsName("_uapmd_addresses_clip_id")
     fun uapmdAddressesClipId(ab: Int, addressPtr: Int): Int
-    @JsName("_uapmd_addresses_plugin_instance_id")
-    fun uapmdAddressesPluginInstanceId(ab: Int, addressPtr: Int): Int
     @JsName("_uapmd_addresses_track_reference_id")
     fun uapmdAddressesTrackReferenceId(ab: Int, trackIndex: Int): Int
     @JsName("_uapmd_addresses_clip_address")
     fun uapmdAddressesClipAddress(ab: Int, trackIndex: Int, clipId: Int, outPtr: Int): Boolean
-    @JsName("_uapmd_addresses_plugin_address")
-    fun uapmdAddressesPluginAddress(ab: Int, instanceId: Int, outPtr: Int): Boolean
 
     // ── Fragments ──────────────────────────────────────────────────────────
 
@@ -815,6 +818,87 @@ external interface UapmdCApiModule : JsAny {
     fun uapmdTlHistory(tl: Int): Int
     @JsName("_uapmd_tl_addresses")
     fun uapmdTlAddresses(tl: Int): Int
+    // ── Project selection (int64 parameters live in WasmJsSelection.kt as @JsFun) ──
+
+    @JsName("_uapmd_tl_selections")
+    fun uapmdTlSelections(tl: Int): Int
+    @JsName("_uapmd_selection_service_last_error")
+    fun uapmdSelectionServiceLastError(): Int
+    @JsName("_uapmd_selection_destroy")
+    fun uapmdSelectionDestroy(sel: Int)
+    @JsName("_uapmd_selection_object_count")
+    fun uapmdSelectionObjectCount(sel: Int): Int
+    @JsName("_uapmd_selection_object_at")
+    fun uapmdSelectionObjectAt(sel: Int, i: Int): Int
+    @JsName("_uapmd_selection_region_count")
+    fun uapmdSelectionRegionCount(sel: Int): Int
+    @JsName("_uapmd_selection_region_kind")
+    fun uapmdSelectionRegionKind(sel: Int, r: Int): Int
+    @JsName("_uapmd_selection_region_start_seconds")
+    fun uapmdSelectionRegionStartSeconds(sel: Int, r: Int): Double
+    @JsName("_uapmd_selection_region_end_seconds")
+    fun uapmdSelectionRegionEndSeconds(sel: Int, r: Int): Double
+    @JsName("_uapmd_selection_region_tracks_restricted")
+    fun uapmdSelectionRegionTracksRestricted(sel: Int, r: Int): Boolean
+    @JsName("_uapmd_selection_region_track_count")
+    fun uapmdSelectionRegionTrackCount(sel: Int, r: Int): Int
+    @JsName("_uapmd_selection_region_track_at")
+    fun uapmdSelectionRegionTrackAt(sel: Int, r: Int, i: Int): Int
+    @JsName("_uapmd_selection_region_clip_id")
+    fun uapmdSelectionRegionClipId(sel: Int, r: Int): Int
+    @JsName("_uapmd_selection_region_pitch_min")
+    fun uapmdSelectionRegionPitchMin(sel: Int, r: Int): Int
+    @JsName("_uapmd_selection_region_pitch_max")
+    fun uapmdSelectionRegionPitchMax(sel: Int, r: Int): Int
+    @JsName("_uapmd_selection_region_note_group")
+    fun uapmdSelectionRegionNoteGroup(sel: Int, r: Int): Int
+    @JsName("_uapmd_selection_region_note_channel")
+    fun uapmdSelectionRegionNoteChannel(sel: Int, r: Int): Int
+    @JsName("_uapmd_selection_region_lane_note_id")
+    fun uapmdSelectionRegionLaneNoteId(sel: Int, r: Int): Int
+    @JsName("_uapmd_selection_region_lane_group")
+    fun uapmdSelectionRegionLaneGroup(sel: Int, r: Int): Int
+    @JsName("_uapmd_selection_region_lane_channel")
+    fun uapmdSelectionRegionLaneChannel(sel: Int, r: Int): Int
+    @JsName("_uapmd_selection_region_lane_status")
+    fun uapmdSelectionRegionLaneStatus(sel: Int, r: Int): Int
+    @JsName("_uapmd_selection_region_lane_parameter")
+    fun uapmdSelectionRegionLaneParameter(sel: Int, r: Int): Int
+    @JsName("_uapmd_selection_region_has_values")
+    fun uapmdSelectionRegionHasValues(sel: Int, r: Int): Boolean
+    @JsName("_uapmd_selection_region_value_min")
+    fun uapmdSelectionRegionValueMin(sel: Int, r: Int): Double
+    @JsName("_uapmd_selection_region_value_max")
+    fun uapmdSelectionRegionValueMax(sel: Int, r: Int): Double
+    @JsName("_uapmd_selection_create")
+    fun uapmdSelectionCreate(): Int
+    @JsName("_uapmd_selection_add_object")
+    fun uapmdSelectionAddObject(sel: Int, idPtr: Int)
+    @JsName("_uapmd_selection_add_timeline_region")
+    fun uapmdSelectionAddTimelineRegion(sel: Int, start: Double, end: Double): Int
+    @JsName("_uapmd_selection_region_restrict_tracks")
+    fun uapmdSelectionRegionRestrictTracks(sel: Int, r: Int)
+    @JsName("_uapmd_selection_region_add_track")
+    fun uapmdSelectionRegionAddTrack(sel: Int, r: Int, idPtr: Int)
+    @JsName("_uapmd_selection_project")
+    fun uapmdSelectionProject(tl: Int, sel: Int): Int
+    @JsName("_uapmd_selection_projection_destroy")
+    fun uapmdSelectionProjectionDestroy(prj: Int)
+    @JsName("_uapmd_selection_projection_clip_count")
+    fun uapmdSelectionProjectionClipCount(prj: Int): Int
+    @JsName("_uapmd_selection_projection_clip_at")
+    fun uapmdSelectionProjectionClipAt(prj: Int, i: Int): Int
+    @JsName("_uapmd_selection_projection_track_count")
+    fun uapmdSelectionProjectionTrackCount(prj: Int): Int
+    @JsName("_uapmd_selection_projection_track_at")
+    fun uapmdSelectionProjectionTrackAt(prj: Int, i: Int): Int
+    @JsName("_uapmd_selection_projection_has_time_range")
+    fun uapmdSelectionProjectionHasTimeRange(prj: Int): Boolean
+    @JsName("_uapmd_selection_projection_range_start_seconds")
+    fun uapmdSelectionProjectionRangeStartSeconds(prj: Int): Double
+    @JsName("_uapmd_selection_projection_range_end_seconds")
+    fun uapmdSelectionProjectionRangeEndSeconds(prj: Int): Double
+
     @JsName("_uapmd_tl_begin_document_transaction")
     fun uapmdTlBeginDocumentTransaction(tl: Int)
     @JsName("_uapmd_tl_end_document_transaction")
@@ -1244,6 +1328,16 @@ external interface UapmdCApiModule : JsAny {
     fun uapmdPianoRollSessionGetNote(h: Int, index: Int, outPtr: Int): Boolean
     @JsName("_uapmd_piano_roll_session_is_note_selected")
     fun uapmdPianoRollSessionIsNoteSelected(h: Int, index: Int): Boolean
+    @JsName("_uapmd_piano_roll_session_clip_reference_id")
+    fun uapmdPianoRollSessionClipReferenceId(h: Int): Int
+    @JsName("_uapmd_piano_roll_session_note_reference_id")
+    fun uapmdPianoRollSessionNoteReferenceId(h: Int, index: Int): Int
+    @JsName("_uapmd_piano_roll_session_is_object_selected")
+    fun uapmdPianoRollSessionIsObjectSelected(h: Int, referenceIdPtr: Int): Boolean
+    @JsName("_uapmd_piano_roll_session_select_object")
+    fun uapmdPianoRollSessionSelectObject(h: Int, referenceIdPtr: Int, additive: Boolean, toggle: Boolean)
+    @JsName("_uapmd_piano_roll_session_sync_selection")
+    fun uapmdPianoRollSessionSyncSelection(h: Int)
     @JsName("_uapmd_piano_roll_session_selected_note_count")
     fun uapmdPianoRollSessionSelectedNoteCount(h: Int): Int
     @JsName("_uapmd_piano_roll_session_focused_note")
@@ -1611,6 +1705,10 @@ internal external fun makeCFunctionPtr(cbId: Int, dispatchName: String, sig: Str
 @JsFun("(ptr) => globalThis.__uapmdWasmAdapter.removeCFunctionPtr(ptr)")
 internal external fun removeCFunctionPtr(ptr: Int)
 
+/** For a table entry that is executing right now: removed on the next turn of the event loop. */
+@JsFun("(ptr) => { setTimeout(() => globalThis.__uapmdWasmAdapter.removeCFunctionPtr(ptr), 0); }")
+internal external fun deferRemoveCFunctionPtr(ptr: Int)
+
 @JsFun("(cbId, dispatchName) => globalThis.__uapmdWasmAdapter.makeStateCallbackPtr(cbId, dispatchName)")
 internal external fun makeStateCallbackPtr(cbId: Int, dispatchName: String): Int
 
@@ -1829,6 +1927,10 @@ fun uapmdDispatchLoadState(cbId: Int, errorPtr: Int) {
 }
 
 
+// The piano roll session's selection context is an int64_t; it crosses as BigInt.
+@JsFun("(mod, session) => mod._uapmd_piano_roll_session_selection_context(session).toString()")
+internal external fun wasmPianoRollSessionSelectionContext(mod: UapmdCApiModule, session: Int): String
+
 // ── Project history: BigInt-valued parameters ────────────────────────────────
 //
 // The Wasm module is linked with -sWASM_BIGINT=1, so scalar i64 parameters must
@@ -1892,6 +1994,8 @@ internal val pendingTrackFragments    = mutableMapOf<Int, (TrackFragment?, Strin
 /** For C callbacks shaped (const char* error, void* user_data). */
 internal val pendingErrorOnlyCallbacks = mutableMapOf<Int, (String?) -> Unit>()
 internal val pendingInstanceCreations = mutableMapOf<Int, (PluginInstanceResult) -> Unit>()
+internal class PendingProjectLoad(val tablePtr: Int, val callback: (ProjectResult) -> Unit)
+internal val pendingProjectLoads = mutableMapOf<Int, PendingProjectLoad>()
 internal val pendingProjectSaves = mutableMapOf<Int, (AppProjectResult) -> Unit>()
 internal val pendingPluginStates = mutableMapOf<Int, (PluginStateResult) -> Unit>()
 internal val pendingJsModuleResolvers = mutableMapOf<Int, (String) -> Int>()
@@ -2148,6 +2252,16 @@ private fun allocCString(s: String): Int {
 }
 
 /** uapmd_app_project_result_t by value = a pointer. wasm32: bool @0, char* @4. */
+// C: void(bool success, const char* error, void* user_data)
+@JsExport
+fun uapmdDispatchProjectLoad(cbId: Int, success: Int, errorPtr: Int, userData: Int) {
+    val pending = pendingProjectLoads.remove(cbId) ?: return
+    val error = if (errorPtr != 0) wasmMod.utf8ToString(errorPtr) else null
+    // This table entry is what is running; it goes once this call has unwound.
+    deferRemoveCFunctionPtr(pending.tablePtr)
+    pending.callback(ProjectResult(success != 0, error))
+}
+
 @JsExport
 fun uapmdDispatchProjectSave(cbId: Int, resultPtr: Int) {
     val mod = wasmMod

@@ -154,6 +154,15 @@ UAPMD_C_EXPORT uapmd_plugin_instance_t uapmd_node_instance(uapmd_plugin_node_t n
 UAPMD_C_EXPORT bool  uapmd_node_schedule_events(uapmd_plugin_node_t node, uapmd_timestamp_t timestamp, void* events, size_t size);
 UAPMD_C_EXPORT void  uapmd_node_send_all_notes_off(uapmd_plugin_node_t node);
 
+/* AudioPluginNode::setEventOutputObserver(). Receives the UMP words the plug-in emitted
+ * in each render, on the audio thread (copy; do not block). NULL callback clears it.
+ * The sequencer engine installs its own observer on every node it hosts, so setting one
+ * on an engine-managed node replaces the engine's capture of that plug-in's output;
+ * use it on nodes of a graph you built yourself. */
+typedef void (*uapmd_event_output_cb_t)(int32_t instance_id, const uapmd_ump_t* data, size_t data_size_in_bytes, void* user_data);
+UAPMD_C_EXPORT void  uapmd_node_set_event_output_observer(uapmd_plugin_node_t node, void* user_data,
+                                                           uapmd_event_output_cb_t callback);
+
 /* AudioGraphNode::parameterUpdateEvent() / parameterMetadataRefreshEvent().
  * The add functions return the EventListenerId (0 when callback is NULL); pass it
  * to the matching remove function. Listeners run on whichever thread the event is
@@ -188,11 +197,11 @@ UAPMD_C_EXPORT bool uapmd_graph_remove_node(uapmd_plugin_graph_t graph, int32_t 
 UAPMD_C_EXPORT uint32_t           uapmd_graph_plugin_count(uapmd_plugin_graph_t graph);
 UAPMD_C_EXPORT uapmd_plugin_node_t uapmd_graph_get_plugin_node(uapmd_plugin_graph_t graph, int32_t instance_id);
 
-typedef void (*uapmd_event_output_cb_t)(int32_t instance_id, const uapmd_ump_t* data, size_t data_size_in_bytes, void* user_data);
-
-UAPMD_C_EXPORT void uapmd_graph_set_event_output_callback(uapmd_plugin_graph_t graph,
-                                                            void* user_data,
-                                                            uapmd_event_output_cb_t callback);
+/* AudioGraph::notifyLatencyChanged() / notifyTailLengthChanged(). Call after a plug-in
+ * reports a changed latency or tail so that the graph refreshes the values it reports
+ * (this replaces AudioPluginGraph::refreshTimingInfo()). */
+UAPMD_C_EXPORT void uapmd_graph_notify_latency_changed(uapmd_plugin_graph_t graph);
+UAPMD_C_EXPORT void uapmd_graph_notify_tail_length_changed(uapmd_plugin_graph_t graph);
 
 UAPMD_C_EXPORT uint32_t uapmd_graph_output_bus_count(uapmd_plugin_graph_t graph);
 UAPMD_C_EXPORT uint32_t uapmd_graph_output_latency_in_samples(uapmd_plugin_graph_t graph, uint32_t bus_index);
@@ -238,7 +247,7 @@ UAPMD_C_EXPORT void    uapmd_fbm_clear_all_devices(uapmd_function_block_mgr_t mg
 UAPMD_C_EXPORT void   uapmd_ump_in_set_parameter_value(uapmd_ump_input_mapper_t m, uint16_t index, double value);
 UAPMD_C_EXPORT double uapmd_ump_in_get_parameter_value(uapmd_ump_input_mapper_t m, uint16_t index);
 UAPMD_C_EXPORT void   uapmd_ump_in_set_per_note_controller_value(uapmd_ump_input_mapper_t m, uint8_t note, uint8_t index, double value);
-UAPMD_C_EXPORT void   uapmd_ump_in_load_preset(uapmd_ump_input_mapper_t m, uint32_t index);
+UAPMD_C_EXPORT void   uapmd_ump_in_request_preset_load(uapmd_ump_input_mapper_t m, uint32_t index);
 
 UAPMD_C_EXPORT void uapmd_ump_out_send_parameter_value(uapmd_ump_output_mapper_t m, uint16_t index, double value);
 UAPMD_C_EXPORT void uapmd_ump_out_send_per_note_controller_value(uapmd_ump_output_mapper_t m, uint8_t note, uint8_t index, double value);

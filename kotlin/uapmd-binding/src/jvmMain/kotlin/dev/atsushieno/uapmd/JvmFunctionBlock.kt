@@ -97,8 +97,8 @@ class JvmUmpInputMapper internal constructor(
     override fun setPerNoteControllerValue(note: UByte, index: UByte, value: Double) =
         lib.uapmd_ump_in_set_per_note_controller_value(handle, note.toByte(), index.toByte(), value)
 
-    override fun loadPreset(index: UInt) =
-        lib.uapmd_ump_in_load_preset(handle, index.toInt())
+    override fun requestPresetLoad(index: UInt) =
+        lib.uapmd_ump_in_request_preset_load(handle, index.toInt())
 }
 
 // ─── JvmUmpOutputMapper ──────────────────────────────────────────────────────

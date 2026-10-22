@@ -102,13 +102,6 @@ typedef struct uapmd_clip_address {
     const char* clip_reference_id;
 } uapmd_clip_address_t;
 
-/* Stable document identity of one plug-in node. A runtime instance id is not
- * usable in history: removing and restoring a plug-in produces a new one. */
-typedef struct uapmd_plugin_address {
-    const char* track_reference_id;
-    const char* node_id;
-} uapmd_plugin_address_t;
-
 /* Which parts of a captured track are applied when it is attached. */
 typedef struct uapmd_track_attach_options {
     uapmd_object_id_policy_t id_policy;
@@ -349,20 +342,17 @@ UAPMD_C_EXPORT bool uapmd_commands_set_latency_compensation_settings(uapmd_proje
                                                                         uapmd_mutation_origin_t origin);
 
 /* ═══════════════════════════════════════════════════════════════════════════
- *  ProjectAddressBook — persistent identity <-> runtime index
+ *  ProjectAddressBook — persistent identity <-> authored track/clip index
  * ═══════════════════════════════════════════════════════════════════════════ */
 
 UAPMD_C_EXPORT uapmd_timeline_track_t  uapmd_addresses_timeline_track(uapmd_address_book_t ab, const char* track_reference_id);
-UAPMD_C_EXPORT uapmd_sequencer_track_t uapmd_addresses_sequencer_track(uapmd_address_book_t ab, const char* track_reference_id);
 /* Returns UAPMD_MASTER_TRACK_INDEX for the master track, -1 when unknown. */
 UAPMD_C_EXPORT int32_t uapmd_addresses_track_index(uapmd_address_book_t ab, const char* track_reference_id);
 UAPMD_C_EXPORT int32_t uapmd_addresses_clip_id(uapmd_address_book_t ab, uapmd_clip_address_t address);
-UAPMD_C_EXPORT int32_t uapmd_addresses_plugin_instance_id(uapmd_address_book_t ab, uapmd_plugin_address_t address);
 
 /* Capture. Each yields NULL / false when the live object does not exist. */
 UAPMD_C_EXPORT const char* uapmd_addresses_track_reference_id(uapmd_address_book_t ab, int32_t track_index);
 UAPMD_C_EXPORT bool uapmd_addresses_clip_address(uapmd_address_book_t ab, int32_t track_index, int32_t clip_id, uapmd_clip_address_t* out);
-UAPMD_C_EXPORT bool uapmd_addresses_plugin_address(uapmd_address_book_t ab, int32_t instance_id, uapmd_plugin_address_t* out);
 
 /* ═══════════════════════════════════════════════════════════════════════════
  *  Fragments — detached clips and tracks (undo payload and clipboard)

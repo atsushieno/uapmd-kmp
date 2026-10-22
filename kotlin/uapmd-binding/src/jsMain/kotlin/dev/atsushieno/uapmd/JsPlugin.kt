@@ -333,6 +333,17 @@ class JsPluginNode internal constructor(
         jsMod._uapmd_node_remove_parameter_metadata_refresh_listener(handle, js("BigInt")(listenerId.toString()))
         jsNodeListenerFnPtrs.remove("$handle:m:$listenerId")?.let { removeJsCallback(it) }
     }
+
+    override fun setEventOutputObserver(observer: ((UIntArray) -> Unit)?) {
+        jsNodeListenerFnPtrs.remove("$handle:o")?.let { removeJsCallback(it) }
+        if (observer == null) {
+            jsMod._uapmd_node_set_event_output_observer(handle, 0, 0)
+            return
+        }
+        val fnPtr = makeJsEventOutputCallback { _, data, _ -> observer(data.toUIntArray()) }
+        jsNodeListenerFnPtrs["$handle:o"] = fnPtr
+        jsMod._uapmd_node_set_event_output_observer(handle, 0, fnPtr)
+    }
 }
 
 // getPluginNode() hands out a fresh wrapper per call, so table entries are tracked
@@ -345,7 +356,6 @@ class JsPluginGraph internal constructor(
     internal val handle: Int
 ) : PluginGraph {
 
-    private var eventOutputFnPtr: Int = 0
     private val deleteCallbackPtrs = mutableListOf<Int>()
 
     override fun appendNode(instanceId: Int, instance: PluginInstance, onDelete: (() -> Unit)?): Int {
@@ -371,15 +381,8 @@ class JsPluginGraph internal constructor(
         return JsPluginNode(nodeHandle, JsPluginInstance(instHandle))
     }
 
-    override fun setEventOutputCallback(callback: ((instanceId: Int, data: UIntArray, dataSizeInBytes: Int) -> Unit)?) {
-        if (eventOutputFnPtr != 0) { removeJsCallback(eventOutputFnPtr); eventOutputFnPtr = 0 }
-        if (callback != null) {
-            eventOutputFnPtr = makeJsEventOutputCallback { id, data, sz -> callback(id, data.toUIntArray(), sz) }
-            jsMod._uapmd_graph_set_event_output_callback(handle, eventOutputFnPtr, 0)
-        } else {
-            jsMod._uapmd_graph_set_event_output_callback(handle, 0, 0)
-        }
-    }
+    override fun notifyLatencyChanged() { jsMod._uapmd_graph_notify_latency_changed(handle) }
+    override fun notifyTailLengthChanged() { jsMod._uapmd_graph_notify_tail_length_changed(handle) }
 
     override val outputBusCount: UInt
         get() = (jsMod._uapmd_graph_output_bus_count(handle) as Int).toUInt()
@@ -400,7 +403,6 @@ class JsPluginGraph internal constructor(
         get() = jsMod._uapmd_graph_main_output_tail_length_in_seconds(handle) as Double
 
     override fun close() {
-        if (eventOutputFnPtr != 0) removeJsCallback(eventOutputFnPtr)
         deleteCallbackPtrs.forEach { removeJsCallback(it) }
         jsMod._uapmd_graph_destroy(handle)
     }

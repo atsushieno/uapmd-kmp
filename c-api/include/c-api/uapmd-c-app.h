@@ -523,6 +523,27 @@ UAPMD_C_EXPORT bool     uapmd_piano_roll_session_dirty(uapmd_piano_roll_session_
 /* Never NULL; empty when the last edit succeeded. */
 UAPMD_C_EXPORT const char* uapmd_piano_roll_session_error(uapmd_piano_roll_session_t session);
 
+/* ── Document selection ──────────────────────────────────────────────────────
+ *
+ * Note selection is published to the project's selection service (uapmd-c-selection.h) in the
+ * session's own selection context, so the timeline and other editors see it, and a selection
+ * made there shows up here. Notes and automation points are addressed by their document
+ * reference ids rather than by index. */
+
+/* The selection context this session works in, or UAPMD_SELECTION_NO_CONTEXT (-1) when the session
+ * has none. Pass it to uapmd_selection_service_snapshot() and friends. */
+UAPMD_C_EXPORT int64_t     uapmd_piano_roll_session_selection_context(uapmd_piano_roll_session_t session);
+/* The reference id of the clip being edited; NULL when the session has none. Valid until the next call. */
+UAPMD_C_EXPORT const char* uapmd_piano_roll_session_clip_reference_id(uapmd_piano_roll_session_t session);
+/* The note's document reference id; NULL for an unknown index. Valid until the next call. */
+UAPMD_C_EXPORT const char* uapmd_piano_roll_session_note_reference_id(uapmd_piano_roll_session_t session, uint32_t index);
+UAPMD_C_EXPORT bool uapmd_piano_roll_session_is_object_selected(uapmd_piano_roll_session_t session, const char* reference_id);
+/* Selects (or, with `toggle`, flips) a note or automation point by reference id, then makes this
+ * session's context the active one. `additive` keeps the rest of the selection. */
+UAPMD_C_EXPORT void uapmd_piano_roll_session_select_object(uapmd_piano_roll_session_t session, const char* reference_id, bool additive, bool toggle);
+/* Re-reads the session's selection from the selection service, for when it changed elsewhere. */
+UAPMD_C_EXPORT void uapmd_piano_roll_session_sync_selection(uapmd_piano_roll_session_t session);
+
 /* ── Editing ─────────────────────────────────────────────────────────────── */
 
 /* `index` -1 clears the selection. */

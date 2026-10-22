@@ -224,6 +224,13 @@ class WasmJsTimelineFacade internal constructor(
         } finally { mod.free(outPtr) }
     }
 
+    override fun loadProjectAsync(filePath: String, callback: (ProjectResult) -> Unit) {
+        val cbId = nextCallbackId()
+        val fnPtr = makeCFunctionPtr(cbId, "uapmdDispatchProjectLoad", "viii")
+        pendingProjectLoads[cbId] = PendingProjectLoad(fnPtr, callback)
+        withCStringKt(filePath) { fpPtr -> wasmMod.uapmdTlLoadProjectAsync(handle, fpPtr, 0, fnPtr) }
+    }
+
     override fun newProject(): ProjectResult {
         val mod = wasmMod
         // uapmd_project_result_t: { bool success (+0), const char* error (+4) } = 8 bytes
@@ -320,6 +327,8 @@ class WasmJsTimelineFacade internal constructor(
 
     override val commands get() = history.commands
     override val addresses get() = history.addresses
+    override val selections: ProjectSelectionService
+        get() = WasmJsProjectSelectionService(handle, wasmMod.uapmdTlSelections(handle))
 
     override fun <T> documentTransaction(block: () -> T): T = history.documentTransaction(block)
 

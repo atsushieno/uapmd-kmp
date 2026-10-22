@@ -840,6 +840,37 @@ JNI_FN(jboolean, uapmdPianoRollSessionIsNoteSelected)(JNIEnv*, jclass, jlong h, 
     return uapmd_piano_roll_session_is_note_selected(j2p<uapmd_piano_roll_session_t>(h), static_cast<uint32_t>(index));
 }
 
+JNI_FN(jlong, uapmdPianoRollSessionSelectionContext)(JNIEnv*, jclass, jlong h) {
+    return uapmd_piano_roll_session_selection_context(j2p<uapmd_piano_roll_session_t>(h));
+}
+
+JNI_FN(jstring, uapmdPianoRollSessionClipReferenceId)(JNIEnv* env, jclass, jlong h) {
+    const char* id = uapmd_piano_roll_session_clip_reference_id(j2p<uapmd_piano_roll_session_t>(h));
+    return id ? env->NewStringUTF(id) : nullptr;
+}
+
+JNI_FN(jstring, uapmdPianoRollSessionNoteReferenceId)(JNIEnv* env, jclass, jlong h, jint index) {
+    const char* id = uapmd_piano_roll_session_note_reference_id(j2p<uapmd_piano_roll_session_t>(h), static_cast<uint32_t>(index));
+    return id ? env->NewStringUTF(id) : nullptr;
+}
+
+JNI_FN(jboolean, uapmdPianoRollSessionIsObjectSelected)(JNIEnv* env, jclass, jlong h, jstring referenceId) {
+    const char* id = env->GetStringUTFChars(referenceId, nullptr);
+    bool result = uapmd_piano_roll_session_is_object_selected(j2p<uapmd_piano_roll_session_t>(h), id);
+    env->ReleaseStringUTFChars(referenceId, id);
+    return result;
+}
+
+JNI_FN(void, uapmdPianoRollSessionSelectObject)(JNIEnv* env, jclass, jlong h, jstring referenceId, jboolean additive, jboolean toggle) {
+    const char* id = env->GetStringUTFChars(referenceId, nullptr);
+    uapmd_piano_roll_session_select_object(j2p<uapmd_piano_roll_session_t>(h), id, additive, toggle);
+    env->ReleaseStringUTFChars(referenceId, id);
+}
+
+JNI_FN(void, uapmdPianoRollSessionSyncSelection)(JNIEnv*, jclass, jlong h) {
+    uapmd_piano_roll_session_sync_selection(j2p<uapmd_piano_roll_session_t>(h));
+}
+
 JNI_FN(jint, uapmdPianoRollSessionSelectedNoteCount)(JNIEnv*, jclass, jlong h) {
     return static_cast<jint>(uapmd_piano_roll_session_selected_note_count(j2p<uapmd_piano_roll_session_t>(h)));
 }

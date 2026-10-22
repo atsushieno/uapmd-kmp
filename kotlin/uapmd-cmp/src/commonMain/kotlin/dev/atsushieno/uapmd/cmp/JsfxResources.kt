@@ -210,7 +210,18 @@ class JsfxResources internal constructor(
         report("Choosing a folder...", false)
 
         provider.pickFolder { picked ->
-            host.onUiThread { folderPicked(picked, destination) }
+            // A folder that comes as bare documents (a browser's) was staged for the duration
+            // of this very callback: the provider deletes the copies as soon as it returns,
+            // exactly as uapmd-app copies them inside it. Deferring to the UI thread first
+            // reads nothing -- every document is already gone -- so the reads are issued here.
+            // Only the outcome, which touches UI state, is handled later.
+            if (picked.success && picked.path.isEmpty() && picked.token.isEmpty() && picked.documents.isNotEmpty()) {
+                host.onUiThread {
+                    report("This platform cannot keep a folder; copying its effects in.", false)
+                }
+                importDocuments(picked.documents, destination.ifEmpty { picked.displayName })
+            } else
+                host.onUiThread { folderPicked(picked, destination) }
         }
     }
 
@@ -249,11 +260,8 @@ class JsfxResources internal constructor(
             return
         }
 
-        // And a platform that gives neither -- a browser -- cannot keep a folder at
-        // all, so the files it handed over are copied in instead. It is the same
-        // copy the archive import does, under the folder's own name.
-        report("This platform cannot keep a folder; copying its effects in.", false)
-        importDocuments(picked.documents, destination.ifEmpty { picked.displayName })
+        // A platform that gives neither a path nor a grant -- a browser -- is handled in
+        // [beginFolderPick], while the documents still exist.
     }
 
     private fun importDocuments(documents: List<DocumentHandle>, subdirectory: String) {

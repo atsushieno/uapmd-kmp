@@ -615,13 +615,6 @@ JNI_FN(jlong, uapmdAddressesTimelineTrack)(JNIEnv* env, jclass, jlong h, jstring
     return result;
 }
 
-JNI_FN(jlong, uapmdAddressesSequencerTrack)(JNIEnv* env, jclass, jlong h, jstring refId) {
-    const char* r = jstr(env, refId);
-    jlong result = p2j(uapmd_addresses_sequencer_track(j2p<uapmd_address_book_t>(h), r));
-    jstr_release(env, refId, r);
-    return result;
-}
-
 JNI_FN(jint, uapmdAddressesTrackIndex)(JNIEnv* env, jclass, jlong h, jstring refId) {
     const char* r = jstr(env, refId);
     jint result = uapmd_addresses_track_index(j2p<uapmd_address_book_t>(h), r);
@@ -639,16 +632,6 @@ JNI_FN(jint, uapmdAddressesClipId)(JNIEnv* env, jclass, jlong h, jstring trackRe
     return result;
 }
 
-JNI_FN(jint, uapmdAddressesPluginInstanceId)(JNIEnv* env, jclass, jlong h, jstring trackRef, jstring nodeId) {
-    const char* t = jstr(env, trackRef);
-    const char* n = jstr(env, nodeId);
-    uapmd_plugin_address_t addr{t, n};
-    jint result = uapmd_addresses_plugin_instance_id(j2p<uapmd_address_book_t>(h), addr);
-    jstr_release(env, trackRef, t);
-    jstr_release(env, nodeId, n);
-    return result;
-}
-
 JNI_FN(jstring, uapmdAddressesTrackReferenceId)(JNIEnv* env, jclass, jlong h, jint trackIndex) {
     const char* id = uapmd_addresses_track_reference_id(j2p<uapmd_address_book_t>(h), trackIndex);
     return id ? env->NewStringUTF(id) : nullptr;
@@ -662,17 +645,6 @@ JNI_FN(jobjectArray, uapmdAddressesClipAddress)(JNIEnv* env, jclass, jlong h, ji
     jobjectArray arr = env->NewObjectArray(2, stringClass, nullptr);
     env->SetObjectArrayElement(arr, 0, env->NewStringUTF(out.track_reference_id ? out.track_reference_id : ""));
     env->SetObjectArrayElement(arr, 1, env->NewStringUTF(out.clip_reference_id ? out.clip_reference_id : ""));
-    return arr;
-}
-
-/** Returns String[2] {trackReferenceId, nodeId} or null. */
-JNI_FN(jobjectArray, uapmdAddressesPluginAddress)(JNIEnv* env, jclass, jlong h, jint instanceId) {
-    uapmd_plugin_address_t out{};
-    if (!uapmd_addresses_plugin_address(j2p<uapmd_address_book_t>(h), instanceId, &out)) return nullptr;
-    jclass stringClass = env->FindClass("java/lang/String");
-    jobjectArray arr = env->NewObjectArray(2, stringClass, nullptr);
-    env->SetObjectArrayElement(arr, 0, env->NewStringUTF(out.track_reference_id ? out.track_reference_id : ""));
-    env->SetObjectArrayElement(arr, 1, env->NewStringUTF(out.node_id ? out.node_id : ""));
     return arr;
 }
 

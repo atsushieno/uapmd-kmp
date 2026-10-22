@@ -126,6 +126,20 @@ class JsTimelineFacade internal constructor(
             ProjectResult(jsGetBool(out), jsGetPtr(out + 4).let { if (it != 0) jsMod.UTF8ToString(it) as String else null })
         }
 
+    // The callback is a table entry that stays until it has fired.
+    override fun loadProjectAsync(filePath: String, callback: (ProjectResult) -> Unit) {
+        var fnPtr = 0
+        val fn: (dynamic, dynamic, dynamic) -> Unit = { success, errorPtr, _ ->
+            val error = if ((errorPtr as Int) != 0) jsMod.UTF8ToString(errorPtr) as String else null
+            // The table entry is removed once this call has returned, not from inside it.
+            val ptr = fnPtr
+            js("setTimeout")({ removeJsCallback(ptr) }, 0)
+            callback(ProjectResult(success as Boolean, error))
+        }
+        fnPtr = addJsCallback(fn.asDynamic(), "viii")
+        withJsCString(filePath) { fpPtr -> jsMod._uapmd_tl_load_project_async(handle, fpPtr, 0, fnPtr) }
+    }
+
     override fun newProject(): ProjectResult =
         withWasmMem(8) { out ->
             jsMod._uapmd_tl_new_project(out, handle)
@@ -154,6 +168,8 @@ class JsTimelineFacade internal constructor(
 
     override val commands get() = history.commands
     override val addresses get() = history.addresses
+    override val selections: ProjectSelectionService
+        get() = JsProjectSelectionService(handle, jsMod._uapmd_tl_selections(handle) as Int)
 
     override fun <T> documentTransaction(block: () -> T): T = history.documentTransaction(block)
 

@@ -91,8 +91,8 @@ class NativeUmpInputMapper internal constructor(
     override fun setPerNoteControllerValue(note: UByte, index: UByte, value: Double) =
         uapmd_ump_in_set_per_note_controller_value(handle, note, index, value)
 
-    override fun loadPreset(index: UInt) =
-        uapmd_ump_in_load_preset(handle, index)
+    override fun requestPresetLoad(index: UInt) =
+        uapmd_ump_in_request_preset_load(handle, index)
 }
 
 // ---------------------------------------------------------------------------

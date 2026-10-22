@@ -26,6 +26,9 @@ class AndroidSequencerEngine internal constructor(
     override val pluginHost: PluginHost
         get() = AndroidPluginHost(JniBridge.uapmdEnginePluginHost(handle))
 
+    override fun notifyPluginEditorVisibilityChanged(instanceId: Int, visible: Boolean) =
+        JniBridge.uapmdEngineNotifyPluginEditorVisibilityChanged(handle, instanceId, visible)
+
     override fun getPluginInstance(instanceId: Int): PluginInstance? {
         val h = JniBridge.uapmdEngineGetPluginInstance(handle, instanceId)
         return if (h == 0L) null else AndroidPluginInstance(h)

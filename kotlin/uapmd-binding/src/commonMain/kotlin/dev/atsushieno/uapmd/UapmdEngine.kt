@@ -4,6 +4,13 @@ interface SequencerEngine {
     fun enqueueUmp(instanceId: Int, ump: UIntArray, timestamp: Long)
     val pluginHost: PluginHost
     fun getPluginInstance(instanceId: Int): PluginInstance?
+    /**
+     * `SequencerEngine::notifyPluginEditorVisibilityChanged()`. A host that shows or hides a
+     * plug-in editor itself (not through [AppModel]'s plug-in UI requests, which notify on its
+     * behalf) must call this: `true` before the editor is shown, so an ARA editor view receives
+     * the current selection during setup, and `false` when it is hidden or fails to show.
+     */
+    fun notifyPluginEditorVisibilityChanged(instanceId: Int, visible: Boolean)
     val functionBlockManager: FunctionBlockManager
 
     val trackCount: UInt

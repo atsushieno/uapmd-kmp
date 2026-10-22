@@ -30,6 +30,7 @@ import dev.atsushieno.uapmd.CommandRegistry
 import dev.atsushieno.uapmd.StemSeparatorRegistry
 import dev.atsushieno.uapmd.AppModel
 import dev.atsushieno.uapmd.AppProjectResult
+import dev.atsushieno.uapmd.ProjectResult
 import dev.atsushieno.uapmd.AudioIoDirection
 import dev.atsushieno.uapmd.BlocklistEntry
 import dev.atsushieno.uapmd.createAddinManager
@@ -802,6 +803,20 @@ class UapmdHost private constructor(val model: AppModel) {
         private set
 
     /**
+     * True while a load has set the timeline up and is only waiting for plug-ins that finish on
+     * their own (a WebCLAP plug-in in a browser needs the audio worklet, which does not exist
+     * until the engine is on). That wait holds no engine lock and nothing is being replaced, so
+     * the poll may read the timeline: uapmd-app shows the clips at this point too. It is only
+     * ever set by a load that returned without finishing, which means one that runs on this
+     * thread; a load on another thread has already completed by the time its call returns.
+     */
+    var isLoadAwaitingPlugins by mutableStateOf(false)
+        private set
+
+    /** Whether the poll may read the engine's state right now. */
+    val canPollEngine: Boolean get() = !isLoadingProject || isLoadAwaitingPlugins
+
+    /**
      * Bumped whenever the engine's tracks are replaced wholesale. UI state
      * derived from track values keys on this so a load re-reads them; native
      * handles are never cached across it.
@@ -871,9 +886,19 @@ class UapmdHost private constructor(val model: AppModel) {
         }
         presentationsToClose.forEach { runCatching { it.close() } }
 
+        // Asynchronously: a load can be waiting on the browser's own event loop (a WebCLAP plug-in
+        // is fetched and compiled by JavaScript), which cannot run while this thread holds it.
         val result = try {
-            engine.timeline.loadProject(prepared.path)
+            kotlinx.coroutines.suspendCancellableCoroutine<ProjectResult> { continuation ->
+                var finished = false
+                engine.timeline.loadProjectAsync(prepared.path) { r ->
+                    finished = true
+                    if (continuation.isActive) continuation.resumeWith(Result.success(r))
+                }
+                if (!finished) isLoadAwaitingPlugins = true
+            }
         } finally {
+            isLoadAwaitingPlugins = false
             if (wasRunning) {
                 engine.setActive(true)
                 sequencer.startAudio()
@@ -1039,7 +1064,25 @@ class UapmdHost private constructor(val model: AppModel) {
             else nativeUiVisibleInstanceIds - instanceId
     }
 
+    /**
+     * This path bypasses AppModel's plug-in UI requests, which tell the engine about editor
+     * visibility; the ARA addin relies on that notification (an ARA editor view receives the
+     * current selection during setup), so it is sent here: before the editor is shown, and
+     * again as hidden when it did not come up.
+     */
     fun showPluginUi(instanceId: Int) {
+        if (isLoadingProject) {
+            presentPluginUi(instanceId)
+            return
+        }
+        val engine = model.sequencer.engine
+        engine.notifyPluginEditorVisibilityChanged(instanceId, true)
+        presentPluginUi(instanceId)
+        if (!isPluginUiVisible(instanceId))
+            engine.notifyPluginEditorVisibilityChanged(instanceId, false)
+    }
+
+    private fun presentPluginUi(instanceId: Int) {
         if (isLoadingProject) {
             pluginUiStatusMessage = "Wait for the project to finish loading before opening a plug-in UI."
             return
@@ -1116,6 +1159,7 @@ class UapmdHost private constructor(val model: AppModel) {
      * [destroyPluginUi] to actually tear the UI down.
      */
     fun hidePluginUi(instanceId: Int) {
+        model.sequencer.engine.notifyPluginEditorVisibilityChanged(instanceId, false)
         platformHostedUiInstanceIds = platformHostedUiInstanceIds - instanceId
         framebufferUiInstanceIds = framebufferUiInstanceIds - instanceId
         nativeUiPresentations[instanceId]?.hide()
@@ -1124,6 +1168,8 @@ class UapmdHost private constructor(val model: AppModel) {
 
     /** Destroys the UI. For teardown — removing the instance, replacing the project. */
     fun destroyPluginUi(instanceId: Int) {
+        // The instance may already be gone when a project is being replaced.
+        runCatching { model.sequencer.engine.notifyPluginEditorVisibilityChanged(instanceId, false) }
         platformHostedUiInstanceIds = platformHostedUiInstanceIds - instanceId
         nativeUiPresentations.remove(instanceId)?.let { runCatching { it.close() } }
         markNativeUiVisible(instanceId, false)
@@ -2093,11 +2139,11 @@ fun rememberUapmdHost(): UapmdHost {
             // Skip the poll while a project load owns the engine; refreshing
             // through it is what froze the UI. Teardown owns it the same way.
             if (host.isShuttingDown) break
-            if (!host.isLoadingProject && !startupSuppressPolling()) {
+            if (host.canPollEngine && !startupSuppressPolling()) {
                 pollTick++
                 host.refresh(structural = pollTick % 5 == 0)
             }
-            if (!host.isLoadingProject) host.tickModelServices()
+            if (host.canPollEngine) host.tickModelServices()
             tickPlatformFilePicker()
             if (pendingFormat != null && !host.isScanning && host.catalog.isNotEmpty()) {
                 val format = pendingFormat

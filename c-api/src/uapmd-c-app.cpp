@@ -888,6 +888,39 @@ uint32_t uapmd_piano_roll_session_selected_note_count(uapmd_piano_roll_session_t
     return session ? static_cast<uint32_t>(PRS(session)->selected_notes.size()) : 0;
 }
 
+int64_t uapmd_piano_roll_session_selection_context(uapmd_piano_roll_session_t session) {
+    if (!session || !PRS(session)->project) return -1;
+    return static_cast<int64_t>(PRS(session)->selection_context);
+}
+
+const char* uapmd_piano_roll_session_clip_reference_id(uapmd_piano_roll_session_t session) {
+    thread_local std::string s;
+    if (!session || PRS(session)->clip_reference_id.empty()) return nullptr;
+    s = PRS(session)->clip_reference_id;
+    return s.c_str();
+}
+
+const char* uapmd_piano_roll_session_note_reference_id(uapmd_piano_roll_session_t session, uint32_t index) {
+    thread_local std::string s;
+    if (!session) return nullptr;
+    const auto& notes = PRS(session)->editNotes;
+    if (index >= notes.size()) return nullptr;
+    s = notes[index].reference_id;
+    return s.c_str();
+}
+
+bool uapmd_piano_roll_session_is_object_selected(uapmd_piano_roll_session_t session, const char* reference_id) {
+    return session && reference_id && PRS(session)->isObjectSelected(reference_id);
+}
+
+void uapmd_piano_roll_session_select_object(uapmd_piano_roll_session_t session, const char* reference_id, bool additive, bool toggle) {
+    if (session && reference_id) PRS(session)->selectObject(reference_id, additive, toggle);
+}
+
+void uapmd_piano_roll_session_sync_selection(uapmd_piano_roll_session_t session) {
+    if (session) PRS(session)->syncSelection();
+}
+
 int32_t uapmd_piano_roll_session_focused_note(uapmd_piano_roll_session_t session) {
     return session ? PRS(session)->selectedNoteIdx : -1;
 }

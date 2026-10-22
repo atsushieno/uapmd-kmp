@@ -316,9 +316,6 @@ class NativeProjectAddressBook internal constructor(private val handle: uapmd_ad
     override fun timelineTrack(trackReferenceId: String): TimelineTrack? =
         uapmd_addresses_timeline_track(handle, trackReferenceId)?.let { NativeTimelineTrack(it) }
 
-    override fun sequencerTrack(trackReferenceId: String): SequencerTrack? =
-        uapmd_addresses_sequencer_track(handle, trackReferenceId)?.let { NativeSequencerTrack(it) }
-
     override fun trackIndex(trackReferenceId: String): Int =
         uapmd_addresses_track_index(handle, trackReferenceId)
 
@@ -330,14 +327,6 @@ class NativeProjectAddressBook internal constructor(private val handle: uapmd_ad
         uapmd_addresses_clip_id(handle, a)
     }
 
-    override fun pluginInstanceId(address: PluginAddress): Int = memScoped {
-        val a = cValue<uapmd_plugin_address_t> {
-            track_reference_id = address.trackReferenceId.cstr.getPointer(this@memScoped)
-            node_id = address.nodeId.cstr.getPointer(this@memScoped)
-        }
-        uapmd_addresses_plugin_instance_id(handle, a)
-    }
-
     override fun trackReferenceId(trackIndex: Int): String? =
         uapmd_addresses_track_reference_id(handle, trackIndex)?.toKString()
 
@@ -345,12 +334,6 @@ class NativeProjectAddressBook internal constructor(private val handle: uapmd_ad
         val out = alloc<uapmd_clip_address_t>()
         if (!uapmd_addresses_clip_address(handle, trackIndex, clipId, out.ptr)) return null
         ClipAddress(out.track_reference_id?.toKString() ?: "", out.clip_reference_id?.toKString() ?: "")
-    }
-
-    override fun pluginAddress(instanceId: Int): PluginAddress? = memScoped {
-        val out = alloc<uapmd_plugin_address_t>()
-        if (!uapmd_addresses_plugin_address(handle, instanceId, out.ptr)) return null
-        PluginAddress(out.track_reference_id?.toKString() ?: "", out.node_id?.toKString() ?: "")
     }
 }
 

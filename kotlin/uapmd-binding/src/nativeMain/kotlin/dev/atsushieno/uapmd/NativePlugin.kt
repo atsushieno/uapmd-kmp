@@ -372,12 +372,34 @@ class NativePluginNode internal constructor(
         uapmd_node_remove_parameter_metadata_refresh_listener(handle, listenerId)
         nodeListenerRefs.remove(NodeListenerKey(handle.rawValue.toLong(), listenerId, true))?.dispose()
     }
+
+    override fun setEventOutputObserver(observer: ((UIntArray) -> Unit)?) {
+        val key = handle.rawValue.toLong()
+        nodeEventOutputRefs.remove(key)?.dispose()
+        if (observer == null) {
+            uapmd_node_set_event_output_observer(handle, null, null)
+            return
+        }
+        val ref = StableRef.create(observer)
+        nodeEventOutputRefs[key] = ref
+        uapmd_node_set_event_output_observer(
+            handle, ref.asCPointer(),
+            staticCFunction { _, data, dataSizeBytes, userData ->
+                if (userData == null || data == null) return@staticCFunction
+                val cb = userData.asStableRef<(UIntArray) -> Unit>().get()
+                val count = (dataSizeBytes / 4u).toInt()
+                cb(UIntArray(count) { i -> data[i] })
+            }
+        )
+    }
 }
 
 // getPluginNode() hands out a fresh wrapper per call, so listener StableRefs are kept
 // here, keyed by native node + listener id, until the listener is removed.
 private data class NodeListenerKey(val node: Long, val listenerId: Long, val metadata: Boolean)
 private val nodeListenerRefs = mutableMapOf<NodeListenerKey, StableRef<*>>()
+// One event-output observer per native node, for the same reason.
+private val nodeEventOutputRefs = mutableMapOf<Long, StableRef<*>>()
 
 // ---------------------------------------------------------------------------
 
@@ -416,27 +438,8 @@ class NativePluginGraph internal constructor(
         return NativePluginNode(nodeHandle, NativePluginInstance(instHandle))
     }
 
-    private var eventOutputRef: StableRef<(Int, UIntArray, Int) -> Unit>? = null
-
-    override fun setEventOutputCallback(callback: ((Int, UIntArray, Int) -> Unit)?) {
-        eventOutputRef?.dispose()
-        eventOutputRef = null
-        if (callback == null) {
-            uapmd_graph_set_event_output_callback(handle, null, null)
-            return
-        }
-        val ref = StableRef.create(callback)
-        eventOutputRef = ref
-        uapmd_graph_set_event_output_callback(
-            handle, ref.asCPointer(),
-            staticCFunction { instanceId, data, dataSizeBytes, userData ->
-                if (userData == null || data == null) return@staticCFunction
-                val cb = userData.asStableRef<(Int, UIntArray, Int) -> Unit>().get()
-                val count = (dataSizeBytes / 4u).toInt()
-                cb(instanceId, UIntArray(count) { i -> data[i] }, dataSizeBytes.toInt())
-            }
-        )
-    }
+    override fun notifyLatencyChanged() = uapmd_graph_notify_latency_changed(handle)
+    override fun notifyTailLengthChanged() = uapmd_graph_notify_tail_length_changed(handle)
 
     override val outputBusCount: UInt get() = uapmd_graph_output_bus_count(handle)
     override fun getOutputLatencyInSamples(busIndex: UInt): UInt = uapmd_graph_output_latency_in_samples(handle, busIndex)
@@ -446,8 +449,6 @@ class NativePluginGraph internal constructor(
     override val mainOutputTailLengthInSeconds: Double get() = uapmd_graph_main_output_tail_length_in_seconds(handle)
 
     override fun close() {
-        eventOutputRef?.dispose()
-        eventOutputRef = null
         uapmd_graph_destroy(handle)
     }
 }

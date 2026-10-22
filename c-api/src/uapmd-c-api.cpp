@@ -708,6 +708,18 @@ bool uapmd_node_schedule_events(uapmd_plugin_node_t node, uapmd_timestamp_t time
 
 void uapmd_node_send_all_notes_off(uapmd_plugin_node_t node) { N(node)->sendAllNotesOff(); }
 
+void uapmd_node_set_event_output_observer(uapmd_plugin_node_t node, void* user_data,
+                                          uapmd_event_output_cb_t callback) {
+    if (!callback) {
+        N(node)->setEventOutputObserver({});
+        return;
+    }
+    const int32_t instance_id = N(node)->instanceId();
+    N(node)->setEventOutputObserver([callback, user_data, instance_id](std::span<const uapmd_ump_t> events) {
+        callback(instance_id, events.data(), events.size_bytes(), user_data);
+    });
+}
+
 int64_t uapmd_node_add_parameter_update_listener(uapmd_plugin_node_t node, void* user_data,
                                                  uapmd_parameter_update_cb_t callback) {
     if (!callback)
@@ -783,14 +795,8 @@ uapmd_plugin_node_t uapmd_graph_get_plugin_node(uapmd_plugin_graph_t graph, int3
     return reinterpret_cast<uapmd_plugin_node_t>(G(graph)->getPluginNode(instance_id));
 }
 
-void uapmd_graph_set_event_output_callback(uapmd_plugin_graph_t graph,
-                                            void* user_data,
-                                            uapmd_event_output_cb_t callback) {
-    G(graph)->setEventOutputCallback([callback, user_data](int32_t instanceId, const uapmd_ump_t* data, size_t dataSizeInBytes) {
-        if (callback)
-            callback(instanceId, data, dataSizeInBytes, user_data);
-    });
-}
+void uapmd_graph_notify_latency_changed(uapmd_plugin_graph_t graph)     { G(graph)->notifyLatencyChanged(); }
+void uapmd_graph_notify_tail_length_changed(uapmd_plugin_graph_t graph) { G(graph)->notifyTailLengthChanged(); }
 
 uint32_t uapmd_graph_output_bus_count(uapmd_plugin_graph_t graph)                            { return G(graph)->outputBusCount(); }
 uint32_t uapmd_graph_output_latency_in_samples(uapmd_plugin_graph_t graph, uint32_t idx)    { return G(graph)->outputLatencyInSamples(idx); }
@@ -851,7 +857,7 @@ void uapmd_fbm_clear_all_devices(uapmd_function_block_mgr_t mgr)      { FBM(mgr)
 void   uapmd_ump_in_set_parameter_value(uapmd_ump_input_mapper_t m, uint16_t index, double value)     { UIN(m)->setParameterValue(index, value); }
 double uapmd_ump_in_get_parameter_value(uapmd_ump_input_mapper_t m, uint16_t index)                   { return UIN(m)->getParameterValue(index); }
 void   uapmd_ump_in_set_per_note_controller_value(uapmd_ump_input_mapper_t m, uint8_t note, uint8_t index, double value) { UIN(m)->setPerNoteControllerValue(note, index, value); }
-void   uapmd_ump_in_load_preset(uapmd_ump_input_mapper_t m, uint32_t index)                           { UIN(m)->loadPreset(index); }
+void   uapmd_ump_in_request_preset_load(uapmd_ump_input_mapper_t m, uint32_t index)                    { UIN(m)->requestPresetLoad(index); }
 
 void uapmd_ump_out_send_parameter_value(uapmd_ump_output_mapper_t m, uint16_t index, double value)     { UOUT(m)->sendParameterValue(index, value); }
 void uapmd_ump_out_send_per_note_controller_value(uapmd_ump_output_mapper_t m, uint8_t note, uint8_t index, double value) { UOUT(m)->sendPerNoteControllerValue(note, index, value); }

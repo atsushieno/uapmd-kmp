@@ -90,8 +90,8 @@ class AndroidUmpInputMapper internal constructor(
     override fun setPerNoteControllerValue(note: UByte, index: UByte, value: Double) =
         JniBridge.uapmdUmpInSetPerNoteControllerValue(handle, note.toByte(), index.toByte(), value)
 
-    override fun loadPreset(index: UInt) =
-        JniBridge.uapmdUmpInLoadPreset(handle, index.toInt())
+    override fun requestPresetLoad(index: UInt) =
+        JniBridge.uapmdUmpInRequestPresetLoad(handle, index.toInt())
 }
 
 // ─── AndroidUmpOutputMapper ──────────────────────────────────────────────────

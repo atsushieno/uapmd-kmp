@@ -31,7 +31,11 @@ interface UmpInputMapper {
     fun setParameterValue(index: UShort, value: Double)
     fun getParameterValue(index: UShort): Double
     fun setPerNoteControllerValue(note: UByte, index: UByte, value: Double)
-    fun loadPreset(index: UInt)
+    /**
+     * `UapmdUmpInputMapper::requestPresetLoad()`. Hands the request to the host's preset sink;
+     * it is applied later on the host's control thread, not synchronously.
+     */
+    fun requestPresetLoad(index: UInt)
 }
 
 interface UmpOutputMapper {

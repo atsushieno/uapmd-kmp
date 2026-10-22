@@ -99,3 +99,44 @@ Not bound, deliberately or for now:
 | `MidiClipReader` in Kotlin | `uapmd-data` | C has `read_any_format` and now `read_smf2_clip` plus `ClipInfo.name`; Kotlin has never bound the reader |
 | `PanelRegistry::render()` | `uapmd-addin-core` | draws ImGui; an addin that wants other toolkits exposes a model, as Augene2 now does |
 | `SequencerTrack` plugin-output events and processing groups, `supportsParallelTrackProcessing()`, `AudioThreadScope` | `uapmd-engine`, `uapmd-graph`, `remidy` | internals of the parallel track scheduler |
+
+---
+
+## 4 · The `bba2bd85` bump (public API moved under the bindings)
+
+Everything below is bound in C and in all five Kotlin platforms (JVM, native, Android, JS, WasmJs)
+unless a row says otherwise.
+
+**Changed upstream, followed here**
+
+| Upstream | Bindings |
+|---|---|
+| `AudioPluginGraph::setEventOutputCallback()` removed; `AudioPluginNode::setEventOutputObserver()` (per node, a span of UMP words) | `uapmd_graph_set_event_output_callback` is gone; `uapmd_node_set_event_output_observer` / `PluginNode.setEventOutputObserver`. The engine installs its own observer on every node it hosts, so on an engine-managed node this replaces the engine's capture — documented on both |
+| `AudioPluginGraph::refreshTimingInfo()` replaced by `AudioGraph::notifyLatencyChanged()` / `notifyTailLengthChanged()` | `uapmd_graph_notify_latency_changed` / `…_tail_length_changed`, `PluginGraph.notifyLatencyChanged()` / `notifyTailLengthChanged()` |
+| `UapmdUmpInputMapper::loadPreset()` → `requestPresetLoad()` (queued to the host's sink, applied on the control thread) | `uapmd_ump_in_request_preset_load`, `UmpInputMapper.requestPresetLoad()` |
+| `ProjectAddressBook` moved to `uapmd-data` and lost its runtime lookups (`sequencerTrack`, `pluginInstanceId`, `pluginAddress`) | those three functions, `uapmd_plugin_address_t` and `PluginAddress` are removed; track and clip addressing is unchanged |
+
+**New upstream, now bound**
+
+| Upstream | Bindings |
+|---|---|
+| `ProjectSelectionService` (`TimelineFacade::document().selections()`): contexts, replace/clear, active context, listeners, `projectSelection()` | `uapmd-c-selection.h`; `TimelineFacade.selections` (`ProjectSelectionService`, `ProjectSelection`, the three region kinds, `ProjectSelectionProjection`). Selections cross as snapshot handles with scalar accessors so no variant is marshalled; `SelectionProbeMain.kt` (`./gradlew :uapmd-cmp:runSelectionProbe`) checks it against the real library |
+| `PianoRollSession` publishes note selection in its own context (`selection_context`, `reference_id`, `selectObject`, `isObjectSelected`, `syncSelection`) | `uapmd_piano_roll_session_selection_context` / `clip_reference_id` / `note_reference_id` / `is_object_selected` / `select_object` / `sync_selection`; the same on Kotlin's `PianoRollSession` |
+| `SequencerEngine::notifyPluginEditorVisibilityChanged()` (an ARA editor view receives the selection during setup) | `uapmd_engine_notify_plugin_editor_visibility_changed`, `SequencerEngine.notifyPluginEditorVisibilityChanged()`. `UapmdHost.showPluginUi` / `hidePluginUi` / `destroyPluginUi` call it, because uapmd-cmp builds editor presentations itself instead of going through `AppModel::showPluginUI` (which notifies) |
+
+**Not bound**
+
+| Item | Why |
+|---|---|
+| `MidiClipDocument`, `ProjectDocument::midiContent()`, `TimelineFacade::replaceMidiClipData(…, content)` | the piano roll session (above) is the model hosts use; the document is the storage behind it, and the extra parameter needs a `MidiClipContentSnapshot` marshalled in |
+| `PianoRollSession::isAutomationInSelectedRegion()` and automation `reference_id`s | automation events are not exposed per event by the piano roll binding at all yet |
+| `ProjectDocumentView` additions (`masterTrackSnapshot`, `getObject`, `clipContentTickToProjectSeconds`), `ProjectDocumentEventDispatcher::setDeliveryHooks` | the document view and event source have never been bound; `AppModel` still serves `buildMasterTrackSnapshot()` |
+| `ProjectSaveOptions::copy_media_files` / `preserve_empty_tracks` | `saveProject()` on the facade is not bound; `AppModel` save entry points are unchanged |
+| `AudioThreadIdleWork` / `AudioThreadIdleRunner` | audio-thread plumbing for device implementations |
+| `PluginInstanceLifecycleListener::pluginEditorVisibilityChanged()`, `AraSession::setPluginEditorVisible()` | listener interfaces for in-process addins; ARA itself is not bound |
+
+**Wrapper-side addition (not an upstream change)**
+
+| Item | Bindings |
+|---|---|
+| `TimelineFacade::loadProject()` is callback-based; the blocking `uapmd_tl_load_project` waits on a future | `uapmd_tl_load_project_async` / `TimelineFacade.loadProjectAsync()` (overridden on JS and WasmJs; elsewhere it wraps the blocking call). `UapmdHost` loads through it: in a browser a WebCLAP plug-in is fetched and compiled by JavaScript, so a main thread blocked in the synchronous call never lets it finish and the tab freezes right after "instantiating WebCLAP Piano" |

@@ -36,7 +36,7 @@ internal object Off {
     const val STATE_SAVED_ID = 48
     const val STATE_SIZE = 56
 
-    // uapmd_clip_address_t / uapmd_plugin_address_t, sizeof 8
+    // uapmd_clip_address_t, sizeof 8
     const val ADDRESS_SIZE = 8
 
     // uapmd_graph_endpoint_t, sizeof 16
@@ -626,11 +626,6 @@ class JsProjectAddressBook internal constructor(private val handle: Int) : Proje
             (jsMod._uapmd_addresses_timeline_track(handle, p) as Int).takeIf { it != 0 }?.let { JsTimelineTrack(it) }
         }
 
-    override fun sequencerTrack(trackReferenceId: String): SequencerTrack? =
-        withJsCString(trackReferenceId) { p ->
-            (jsMod._uapmd_addresses_sequencer_track(handle, p) as Int).takeIf { it != 0 }?.let { JsSequencerTrack(it) }
-        }
-
     override fun trackIndex(trackReferenceId: String): Int =
         withJsCString(trackReferenceId) { p -> jsMod._uapmd_addresses_track_index(handle, p) as Int }
 
@@ -643,15 +638,6 @@ class JsProjectAddressBook internal constructor(private val handle: Int) : Proje
             }
         }
 
-    override fun pluginInstanceId(address: PluginAddress): Int =
-        withWasmMem(Off.ADDRESS_SIZE) { s ->
-            withJsTwoCStrings(address.trackReferenceId, address.nodeId) { a, b ->
-                jsSetPtr(s, a)
-                jsSetPtr(s + 4, b)
-                jsMod._uapmd_addresses_plugin_instance_id(handle, s) as Int
-            }
-        }
-
     override fun trackReferenceId(trackIndex: Int): String? {
         val p = jsMod._uapmd_addresses_track_reference_id(handle, trackIndex) as Int
         return if (p != 0) jsMod.UTF8ToString(p) as String else null
@@ -661,12 +647,6 @@ class JsProjectAddressBook internal constructor(private val handle: Int) : Proje
         withWasmMem(Off.ADDRESS_SIZE) { out ->
             if (!(jsMod._uapmd_addresses_clip_address(handle, trackIndex, clipId, out) as Boolean)) null
             else ClipAddress(jsGetStr(out), jsGetStr(out + 4))
-        }
-
-    override fun pluginAddress(instanceId: Int): PluginAddress? =
-        withWasmMem(Off.ADDRESS_SIZE) { out ->
-            if (!(jsMod._uapmd_addresses_plugin_address(handle, instanceId, out) as Boolean)) null
-            else PluginAddress(jsGetStr(out), jsGetStr(out + 4))
         }
 }
 

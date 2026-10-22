@@ -86,6 +86,12 @@ UAPMD_C_EXPORT uapmd_freeze_runtime_state_t uapmd_engine_track_freeze_state(uapm
                                                                            int32_t track_index);
 UAPMD_C_EXPORT bool uapmd_engine_is_track_busy(uapmd_sequencer_engine_t engine, int32_t track_index);
 UAPMD_C_EXPORT uapmd_plugin_instance_t uapmd_engine_get_plugin_instance(uapmd_sequencer_engine_t engine, int32_t instance_id);
+/* SequencerEngine::notifyPluginEditorVisibilityChanged(). A host that shows or hides a plug-in
+ * editor itself (rather than through uapmd_app_show_plugin_ui()/uapmd_app_hide_plugin_ui(),
+ * which notify on its behalf) must call this: send visible = true before the editor is shown
+ * (so an ARA editor view receives the current selection during setup) and false when it is
+ * hidden or fails to show. */
+UAPMD_C_EXPORT void uapmd_engine_notify_plugin_editor_visibility_changed(uapmd_sequencer_engine_t engine, int32_t instance_id, bool visible);
 UAPMD_C_EXPORT uapmd_function_block_mgr_t uapmd_engine_function_block_manager(uapmd_sequencer_engine_t engine);
 
 /* Track management */
@@ -294,7 +300,18 @@ typedef struct uapmd_project_result {
     const char* error;
 } uapmd_project_result_t;
 
+/* Blocks the calling thread until the load finishes. A load instantiates plug-ins, and some
+ * formats do that through the host's event loop (WebCLAP in a browser is fetched and
+ * compiled by JavaScript), so on a thread that has to keep that loop running this never
+ * returns: use uapmd_tl_load_project_async() there. */
 UAPMD_C_EXPORT uapmd_project_result_t uapmd_tl_load_project(uapmd_timeline_facade_t tl, const char* file_path);
+
+/* Starts the load and returns at once; `callback` reports the outcome, on whichever thread
+ * completes the last plug-in (the calling thread, before this returns, when no plug-in has to
+ * wait). `error` is NULL on success and valid only during the call. */
+typedef void (*uapmd_project_load_cb_t)(bool success, const char* error, void* user_data);
+UAPMD_C_EXPORT void uapmd_tl_load_project_async(uapmd_timeline_facade_t tl, const char* file_path,
+                                                 void* user_data, uapmd_project_load_cb_t callback);
 
 /* Discards the current document and starts an empty one: no tracks, a fresh
  * master track, no undo history, nothing dirty. Observers see the same

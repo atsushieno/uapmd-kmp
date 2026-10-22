@@ -162,6 +162,8 @@ class JvmTimelineFacade internal constructor(
 
     override val commands get() = history.commands
     override val addresses get() = history.addresses
+    override val selections: ProjectSelectionService
+        get() = JvmProjectSelectionService(handle, lib.uapmd_tl_selections(handle) ?: error("no selection service"))
 
     override fun <T> documentTransaction(block: () -> T): T = history.documentTransaction(block)
 

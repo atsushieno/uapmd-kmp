@@ -837,6 +837,17 @@ class AndroidPianoRollSession internal constructor(private val handle: Long) : P
         }
 
     override fun isNoteSelected(index: Int) = JniBridge.uapmdPianoRollSessionIsNoteSelected(handle, index)
+
+    override val selectionContext: SelectionContextId?
+        get() = JniBridge.uapmdPianoRollSessionSelectionContext(handle).takeIf { it >= 0 }
+    override val clipReferenceId: String? get() = JniBridge.uapmdPianoRollSessionClipReferenceId(handle)
+    override fun noteReferenceId(index: Int): String? = JniBridge.uapmdPianoRollSessionNoteReferenceId(handle, index)
+    override fun isObjectSelected(referenceId: String) =
+        JniBridge.uapmdPianoRollSessionIsObjectSelected(handle, referenceId)
+    override fun selectObject(referenceId: String, additive: Boolean, toggle: Boolean) =
+        JniBridge.uapmdPianoRollSessionSelectObject(handle, referenceId, additive, toggle)
+    override fun syncSelection() = JniBridge.uapmdPianoRollSessionSyncSelection(handle)
+
     override val selectedNoteCount: Int get() = JniBridge.uapmdPianoRollSessionSelectedNoteCount(handle)
 
     override var focusedNote: Int

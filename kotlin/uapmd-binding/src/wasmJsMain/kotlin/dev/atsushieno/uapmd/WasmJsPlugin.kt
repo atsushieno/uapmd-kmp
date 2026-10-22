@@ -456,7 +456,26 @@ class WasmJsPluginNode internal constructor(
             removeCFunctionPtr(fnPtr)
         }
     }
+
+    override fun setEventOutputObserver(observer: ((UIntArray) -> Unit)?) {
+        wasmNodeEventOutputRegs.remove(handle)?.let { (cbId, fnPtr) ->
+            eventOutputCallbacks.remove(cbId)
+            removeCFunctionPtr(fnPtr)
+        }
+        if (observer == null) {
+            wasmMod.uapmdNodeSetEventOutputObserver(handle, 0, 0)
+            return
+        }
+        val cbId = nextCallbackId()
+        eventOutputCallbacks[cbId] = { _, data, _ -> observer(data.toUIntArray()) }
+        val fnPtr = makeCFunctionPtr(cbId, "uapmdDispatchEventOutput", "viiii")
+        wasmNodeEventOutputRegs[handle] = cbId to fnPtr
+        wasmMod.uapmdNodeSetEventOutputObserver(handle, 0, fnPtr)
+    }
 }
+
+// One event-output observer per native node, kept for the same reason.
+private val wasmNodeEventOutputRegs = mutableMapOf<Int, Pair<Int, Int>>()
 
 // getPluginNode() hands out a fresh wrapper per call, so registrations are tracked
 // here, keyed by node handle + listener id, until the listener is removed.
@@ -469,8 +488,6 @@ class WasmJsPluginGraph internal constructor(
 ) : PluginGraph {
 
     // Callback registrations kept alive
-    private var eventOutputCbId: Int = 0
-    private var eventOutputFnPtr: Int = 0
     private val deleteCallbackIds = mutableListOf<Int>()
     private val deleteCallbackPtrs = mutableListOf<Int>()
 
@@ -503,24 +520,8 @@ class WasmJsPluginGraph internal constructor(
         return WasmJsPluginNode(nodeHandle, WasmJsPluginInstance(instHandle))
     }
 
-    override fun setEventOutputCallback(callback: ((instanceId: Int, data: UIntArray, dataSizeInBytes: Int) -> Unit)?) {
-        // Remove previous
-        if (eventOutputFnPtr != 0) {
-            removeCFunctionPtr(eventOutputFnPtr)
-            eventOutputCallbacks.remove(eventOutputCbId)
-            eventOutputFnPtr = 0
-        }
-        if (callback != null) {
-            eventOutputCbId = nextCallbackId()
-            eventOutputCallbacks[eventOutputCbId] = { instanceId, data, size ->
-                callback(instanceId, data.toUIntArray(), size)
-            }
-            eventOutputFnPtr = makeCFunctionPtr(eventOutputCbId, "uapmdDispatchEventOutput", "viiii")
-            wasmMod.uapmdGraphSetEventOutputCallback(handle, eventOutputFnPtr, 0)
-        } else {
-            wasmMod.uapmdGraphSetEventOutputCallback(handle, 0, 0)
-        }
-    }
+    override fun notifyLatencyChanged() = wasmMod.uapmdGraphNotifyLatencyChanged(handle)
+    override fun notifyTailLengthChanged() = wasmMod.uapmdGraphNotifyTailLengthChanged(handle)
 
     override val outputBusCount: UInt
         get() = wasmMod.uapmdGraphOutputBusCount(handle).toUInt()
@@ -541,10 +542,6 @@ class WasmJsPluginGraph internal constructor(
         get() = wasmMod.uapmdGraphMainOutputTailLengthInSeconds(handle)
 
     override fun close() {
-        if (eventOutputFnPtr != 0) {
-            removeCFunctionPtr(eventOutputFnPtr)
-            eventOutputCallbacks.remove(eventOutputCbId)
-        }
         deleteCallbackPtrs.forEach { removeCFunctionPtr(it) }
         wasmMod.uapmdGraphDestroy(handle)
     }
