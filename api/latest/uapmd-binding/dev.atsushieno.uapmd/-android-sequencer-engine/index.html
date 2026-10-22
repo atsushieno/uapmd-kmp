@@ -48,6 +48,8 @@
         <ul class="filter-section filter-section_loading" id="filter-section" aria-label="Target filter">
                 <button class="platform-tag platform-selector jvm-like" data-active="" aria-pressed="true"
                         data-filter=":uapmd-binding/androidMain">Android</button>
+                <button class="platform-tag platform-selector common-like" data-active="" aria-pressed="true"
+                        data-filter=":uapmd-binding/commonMain">Common</button>
             <div class="dropdown filter-section--dropdown" data-role="dropdown" id="filter-section-dropdown">
                 <button class="button button_dropdown filter-section--dropdown-toggle" role="combobox"
                         data-role="dropdown-toggle"
@@ -68,6 +70,14 @@
                                        data-filter=":uapmd-binding/androidMain"/>
                                 <span class="checkbox--icon"></span>
                                 Android
+                            </label>
+                        </li>
+                        <li role="option" class="dropdown--option platform-selector-option common-like" tabindex="0">
+                            <label class="checkbox">
+                                <input type="checkbox" class="checkbox--input" id=":uapmd-binding/commonMain"
+                                       data-filter=":uapmd-binding/commonMain"/>
+                                <span class="checkbox--icon"></span>
+                                Common
                             </label>
                         </li>
                 </ul>
@@ -112,11 +122,62 @@
 <div class="content sourceset-dependent-content" data-active="" data-togglable=":uapmd-binding/androidMain"><div class="symbol monospace"><span class="token keyword">class </span><a href="index.html">AndroidSequencerEngine</a> : <a href="../-sequencer-engine/index.html">SequencerEngine</a></div></div>    </div>
   </div>
   <div class="tabbedcontent">
-    <div class="tabs-section" tabs-section="tabs-section"><button class="section-tab" data-active="" data-togglable="CONSTRUCTOR,TYPE,PROPERTY,FUNCTION">Members</button></div>
+    <div class="tabs-section" tabs-section="tabs-section"><button class="section-tab" data-active="" data-togglable="CONSTRUCTOR,TYPE,PROPERTY,FUNCTION">Members</button><button class="section-tab" data-togglable="CONSTRUCTOR,TYPE,PROPERTY,FUNCTION,EXTENSION_PROPERTY,EXTENSION_FUNCTION">Members &amp; Extensions</button></div>
     <div class="tabs-section-body">
       <div data-togglable="PROPERTY">
         <h2 class="tableheader">Properties</h2>
-        <div class="table"><a data-name="-1589246788%2FProperties%2F-2126834290" anchor-label="functionBlockManager" id="-1589246788%2FProperties%2F-2126834290" data-filterable-set=":uapmd-binding/androidMain"></a>
+        <div class="table"><a data-name="1961084917%2FProperties%2F-2126834290" anchor-label="audioWorkers" id="1961084917%2FProperties%2F-2126834290" data-filterable-set=":uapmd-binding/androidMain"></a>
+          <div class="table-row table-row_content" data-filterable-current=":uapmd-binding/androidMain" data-filterable-set=":uapmd-binding/androidMain">
+            <div class="main-subrow keyValue ">
+              <div class=""><span class="inline-flex">
+                  <div><a href="audio-workers.html"><span>audio</span><wbr></wbr><span><span>Workers</span></span></a></div>
+<span class="anchor-wrapper"><span class="anchor-icon" pointing-to="1961084917%2FProperties%2F-2126834290"></span>
+                    <div class="copy-popup-wrapper "><span class="copy-popup-icon"></span><span>Link copied to clipboard</span></div>
+                  </span></span></div>
+              <div>
+                <div class="title">
+                  <div class="platform-hinted  with-platform-tabs" data-platform-hinted="data-platform-hinted">
+                    <div class="platform-bookmarks-row" data-toggle-list="data-toggle-list"><button class="platform-bookmark" data-filterable-current=":uapmd-binding/androidMain" data-filterable-set=":uapmd-binding/androidMain" data-active="" data-toggle=":uapmd-binding/androidMain">Android</button></div>
+<div class="content sourceset-dependent-content" data-active="" data-togglable=":uapmd-binding/androidMain"><div class="symbol monospace"><span class="token keyword">open </span><span class="token keyword">override </span><span class="token keyword">val </span><a href="audio-workers.html">audioWorkers</a><span class="token operator">: </span><a href="../-audio-workers/index.html">AudioWorkers</a></div><div class="brief "><p class="paragraph"><code class="lang-kotlin">SequencerEngine::audioWorkers()</code>: parallel processing of independent tracks.</p></div></div>                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+<a data-name="-102171112%2FProperties%2F-2126834290" anchor-label="droppedPluginParameterNotificationCount" id="-102171112%2FProperties%2F-2126834290" data-filterable-set=":uapmd-binding/androidMain"></a>
+          <div class="table-row table-row_content" data-filterable-current=":uapmd-binding/androidMain" data-filterable-set=":uapmd-binding/androidMain">
+            <div class="main-subrow keyValue ">
+              <div class=""><span class="inline-flex">
+                  <div><a href="dropped-plugin-parameter-notification-count.html"><span>dropped</span><wbr></wbr><span>Plugin</span><wbr></wbr><span>Parameter</span><wbr></wbr><span>Notification</span><wbr></wbr><span><span>Count</span></span></a></div>
+<span class="anchor-wrapper"><span class="anchor-icon" pointing-to="-102171112%2FProperties%2F-2126834290"></span>
+                    <div class="copy-popup-wrapper "><span class="copy-popup-icon"></span><span>Link copied to clipboard</span></div>
+                  </span></span></div>
+              <div>
+                <div class="title">
+                  <div class="platform-hinted  with-platform-tabs" data-platform-hinted="data-platform-hinted">
+                    <div class="platform-bookmarks-row" data-toggle-list="data-toggle-list"><button class="platform-bookmark" data-filterable-current=":uapmd-binding/androidMain" data-filterable-set=":uapmd-binding/androidMain" data-active="" data-toggle=":uapmd-binding/androidMain">Android</button></div>
+<div class="content sourceset-dependent-content" data-active="" data-togglable=":uapmd-binding/androidMain"><div class="symbol monospace"><span class="token keyword">open </span><span class="token keyword">override </span><span class="token keyword">val </span><a href="dropped-plugin-parameter-notification-count.html">droppedPluginParameterNotificationCount</a><span class="token operator">: </span><a href="https://kotlinlang.org/api/core/kotlin-stdlib/kotlin/-u-int/index.html">UInt</a></div><div class="brief "><p class="paragraph">Lifetime count of plugin parameter notifications dropped at the bounded audio-to-UI handoff; wraps modulo 2^32.</p></div></div>                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+<a data-name="-1500481900%2FProperties%2F-2126834290" anchor-label="droppedPluginPresetRequestCount" id="-1500481900%2FProperties%2F-2126834290" data-filterable-set=":uapmd-binding/androidMain"></a>
+          <div class="table-row table-row_content" data-filterable-current=":uapmd-binding/androidMain" data-filterable-set=":uapmd-binding/androidMain">
+            <div class="main-subrow keyValue ">
+              <div class=""><span class="inline-flex">
+                  <div><a href="dropped-plugin-preset-request-count.html"><span>dropped</span><wbr></wbr><span>Plugin</span><wbr></wbr><span>Preset</span><wbr></wbr><span>Request</span><wbr></wbr><span><span>Count</span></span></a></div>
+<span class="anchor-wrapper"><span class="anchor-icon" pointing-to="-1500481900%2FProperties%2F-2126834290"></span>
+                    <div class="copy-popup-wrapper "><span class="copy-popup-icon"></span><span>Link copied to clipboard</span></div>
+                  </span></span></div>
+              <div>
+                <div class="title">
+                  <div class="platform-hinted  with-platform-tabs" data-platform-hinted="data-platform-hinted">
+                    <div class="platform-bookmarks-row" data-toggle-list="data-toggle-list"><button class="platform-bookmark" data-filterable-current=":uapmd-binding/androidMain" data-filterable-set=":uapmd-binding/androidMain" data-active="" data-toggle=":uapmd-binding/androidMain">Android</button></div>
+<div class="content sourceset-dependent-content" data-active="" data-togglable=":uapmd-binding/androidMain"><div class="symbol monospace"><span class="token keyword">open </span><span class="token keyword">override </span><span class="token keyword">val </span><a href="dropped-plugin-preset-request-count.html">droppedPluginPresetRequestCount</a><span class="token operator">: </span><a href="https://kotlinlang.org/api/core/kotlin-stdlib/kotlin/-u-int/index.html">UInt</a></div><div class="brief "><p class="paragraph">Lifetime count of MIDI preset requests discarded (offline/freeze rendering, or control-queue overflow); wraps modulo 2^32.</p></div></div>                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+<a data-name="-1589246788%2FProperties%2F-2126834290" anchor-label="functionBlockManager" id="-1589246788%2FProperties%2F-2126834290" data-filterable-set=":uapmd-binding/androidMain"></a>
           <div class="table-row table-row_content" data-filterable-current=":uapmd-binding/androidMain" data-filterable-set=":uapmd-binding/androidMain">
             <div class="main-subrow keyValue ">
               <div class=""><span class="inline-flex">
@@ -392,6 +453,21 @@
               </div>
             </div>
           </div>
+<a data-name="785582603%2FFunctions%2F1472794380" anchor-label="addParameterMetadataChangedListener" id="785582603%2FFunctions%2F1472794380" data-filterable-set=":uapmd-binding/commonMain"></a>
+          <div class="table-row table-row_content" data-togglable="EXTENSION_FUNCTION" data-filterable-current=":uapmd-binding/commonMain" data-filterable-set=":uapmd-binding/commonMain">
+            <div class="main-subrow keyValue ">
+              <div class=""><span class="inline-flex">
+                  <div><a href="../add-parameter-metadata-changed-listener.html"><span>add</span><wbr></wbr><span>Parameter</span><wbr></wbr><span>Metadata</span><wbr></wbr><span>Changed</span><wbr></wbr><span><span>Listener</span></span></a></div>
+<span class="anchor-wrapper"><span class="anchor-icon" pointing-to="785582603%2FFunctions%2F1472794380"></span>
+                    <div class="copy-popup-wrapper "><span class="copy-popup-icon"></span><span>Link copied to clipboard</span></div>
+                  </span></span></div>
+              <div>
+                <div class="title">
+                  <div class="platform-hinted " data-platform-hinted="data-platform-hinted"><div class="content sourceset-dependent-content" data-active="" data-togglable=":uapmd-binding/commonMain"><div class="symbol monospace"><span class="token keyword">fun </span><a href="../-sequencer-engine/index.html">SequencerEngine</a><span class="token punctuation">.</span><a href="../add-parameter-metadata-changed-listener.html"><span class="token function">addParameterMetadataChangedListener</span></a><span class="token punctuation">(</span><span class="parameters "><span class="parameter ">instanceId<span class="token operator">: </span><a href="https://kotlinlang.org/api/core/kotlin-stdlib/kotlin/-int/index.html">Int</a><span class="token punctuation">, </span></span><span class="parameter ">dispatch<span class="token operator">: </span><span class="token punctuation">(</span><span class="token punctuation">(</span><span class="token punctuation">)</span><span class="token operator"> -&gt; </span><a href="https://kotlinlang.org/api/core/kotlin-stdlib/kotlin/-unit/index.html">Unit</a><span class="token punctuation">)</span><span class="token operator"> -&gt; </span><a href="https://kotlinlang.org/api/core/kotlin-stdlib/kotlin/-unit/index.html">Unit</a><span class="token operator"> = </span>{ it() }<span class="token punctuation">, </span></span><span class="parameter ">replayCurrent<span class="token operator">: </span><a href="https://kotlinlang.org/api/core/kotlin-stdlib/kotlin/-boolean/index.html">Boolean</a><span class="token operator"> = </span><span class="token boolean">true</span><span class="token punctuation">, </span></span><span class="parameter ">onError<span class="token operator">: </span><span class="token punctuation">(</span><a href="https://kotlinlang.org/api/core/kotlin-stdlib/kotlin/-throwable/index.html">Throwable</a><span class="token punctuation">)</span><span class="token operator"> -&gt; </span><a href="https://kotlinlang.org/api/core/kotlin-stdlib/kotlin/-unit/index.html">Unit</a><span class="token operator"> = </span>{ println(&quot;Parameter metadata listener failed: $it&quot;) }<span class="token punctuation">, </span></span><span class="parameter ">listener<span class="token operator">: </span><span class="token punctuation">(</span><a href="../-parameter-metadata-snapshot/index.html">ParameterMetadataSnapshot</a><span class="token punctuation">)</span><span class="token operator"> -&gt; </span><a href="https://kotlinlang.org/api/core/kotlin-stdlib/kotlin/-unit/index.html">Unit</a></span></span><span class="token punctuation">)</span><span class="token operator">: </span><a href="https://kotlinlang.org/api/core/kotlin-stdlib/kotlin/-auto-closeable/index.html">AutoCloseable</a></div><div class="brief "><p class="paragraph">Snapshot/replay convenience over the existing native graph metadata event. Metadata is copied on the callback thread, before dispatching to the UI. No periodic reads. The dispatcher defaults to the native control thread; UI callers should supply their dispatcher. Close subscriptions before destroying the engine.</p></div></div></div>
+                </div>
+              </div>
+            </div>
+          </div>
 <a data-name="-2029409579%2FFunctions%2F-2126834290" anchor-label="addPluginToTrack" id="-2029409579%2FFunctions%2F-2126834290" data-filterable-set=":uapmd-binding/androidMain"></a>
           <div class="table-row table-row_content" data-filterable-current=":uapmd-binding/androidMain" data-filterable-set=":uapmd-binding/androidMain">
             <div class="main-subrow keyValue ">
@@ -643,6 +719,23 @@
                   <div class="platform-hinted  with-platform-tabs" data-platform-hinted="data-platform-hinted">
                     <div class="platform-bookmarks-row" data-toggle-list="data-toggle-list"><button class="platform-bookmark" data-filterable-current=":uapmd-binding/androidMain" data-filterable-set=":uapmd-binding/androidMain" data-active="" data-toggle=":uapmd-binding/androidMain">Android</button></div>
 <div class="content sourceset-dependent-content" data-active="" data-togglable=":uapmd-binding/androidMain"><div class="symbol monospace"><span class="token keyword">open </span><span class="token keyword">override </span><span class="token keyword">fun </span><a href="mark-track-dirty.html"><span class="token function">markTrackDirty</span></a><span class="token punctuation">(</span><span class="parameters "><span class="parameter ">trackIndex<span class="token operator">: </span><a href="https://kotlinlang.org/api/core/kotlin-stdlib/kotlin/-int/index.html">Int</a><span class="token punctuation">, </span></span><span class="parameter ">dirty<span class="token operator">: </span><a href="https://kotlinlang.org/api/core/kotlin-stdlib/kotlin/-boolean/index.html">Boolean</a><span class="token operator"> = </span><span class="token boolean">true</span></span></span><span class="token punctuation">)</span></div></div>                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+<a data-name="-2127686663%2FFunctions%2F-2126834290" anchor-label="notifyPluginEditorVisibilityChanged" id="-2127686663%2FFunctions%2F-2126834290" data-filterable-set=":uapmd-binding/androidMain"></a>
+          <div class="table-row table-row_content" data-filterable-current=":uapmd-binding/androidMain" data-filterable-set=":uapmd-binding/androidMain">
+            <div class="main-subrow keyValue ">
+              <div class=""><span class="inline-flex">
+                  <div><a href="notify-plugin-editor-visibility-changed.html"><span>notify</span><wbr></wbr><span>Plugin</span><wbr></wbr><span>Editor</span><wbr></wbr><span>Visibility</span><wbr></wbr><span><span>Changed</span></span></a></div>
+<span class="anchor-wrapper"><span class="anchor-icon" pointing-to="-2127686663%2FFunctions%2F-2126834290"></span>
+                    <div class="copy-popup-wrapper "><span class="copy-popup-icon"></span><span>Link copied to clipboard</span></div>
+                  </span></span></div>
+              <div>
+                <div class="title">
+                  <div class="platform-hinted  with-platform-tabs" data-platform-hinted="data-platform-hinted">
+                    <div class="platform-bookmarks-row" data-toggle-list="data-toggle-list"><button class="platform-bookmark" data-filterable-current=":uapmd-binding/androidMain" data-filterable-set=":uapmd-binding/androidMain" data-active="" data-toggle=":uapmd-binding/androidMain">Android</button></div>
+<div class="content sourceset-dependent-content" data-active="" data-togglable=":uapmd-binding/androidMain"><div class="symbol monospace"><span class="token keyword">open </span><span class="token keyword">override </span><span class="token keyword">fun </span><a href="notify-plugin-editor-visibility-changed.html"><span class="token function">notifyPluginEditorVisibilityChanged</span></a><span class="token punctuation">(</span><span class="parameters "><span class="parameter ">instanceId<span class="token operator">: </span><a href="https://kotlinlang.org/api/core/kotlin-stdlib/kotlin/-int/index.html">Int</a><span class="token punctuation">, </span></span><span class="parameter ">visible<span class="token operator">: </span><a href="https://kotlinlang.org/api/core/kotlin-stdlib/kotlin/-boolean/index.html">Boolean</a></span></span><span class="token punctuation">)</span></div><div class="brief "><p class="paragraph"><code class="lang-kotlin">SequencerEngine::notifyPluginEditorVisibilityChanged()</code>. A host that shows or hides a plug-in editor itself (not through <a href="../-app-model/index.html">AppModel</a>'s plug-in UI requests, which notify on its behalf) must call this: <code class="lang-kotlin">true</code> before the editor is shown, so an ARA editor view receives the current selection during setup, and <code class="lang-kotlin">false</code> when it is hidden or fails to show.</p></div></div>                  </div>
                 </div>
               </div>
             </div>

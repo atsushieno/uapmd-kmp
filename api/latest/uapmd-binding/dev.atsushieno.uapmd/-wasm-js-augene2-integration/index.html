@@ -1,0 +1,367 @@
+<!DOCTYPE html>
+<html class="no-js" lang="en">
+<head>
+    <meta name="viewport" content="width=device-width, initial-scale=1" charset="UTF-8">
+    <title>WasmJsAugene2Integration</title>
+    <link href="../../../images/logo-icon.svg" rel="icon" type="image/svg">
+        <script>var pathToRoot = "../../../";</script>
+    <script>document.documentElement.classList.replace("no-js", "js");</script>
+    <script>const storage = localStorage.getItem("dokka-dark-mode")
+      if (storage == null) {
+        const osDarkSchemePreferred = window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches
+        if (osDarkSchemePreferred === true) {
+          document.getElementsByTagName("html")[0].classList.add("theme-dark")
+        }
+      } else {
+        const savedDarkMode = JSON.parse(storage)
+        if (savedDarkMode === true) {
+          document.getElementsByTagName("html")[0].classList.add("theme-dark")
+        }
+      }
+    </script>
+<script type="text/javascript" src="../../../scripts/sourceset_dependencies.js" async="async"></script>
+<link href="../../../styles/style.css" rel="Stylesheet">
+<link href="../../../styles/main.css" rel="Stylesheet">
+<link href="../../../styles/prism.css" rel="Stylesheet">
+<link href="../../../styles/logo-styles.css" rel="Stylesheet">
+<link href="../../../ui-kit/ui-kit.min.css" rel="Stylesheet">
+<script type="text/javascript" src="../../../scripts/safe-local-storage_blocking.js"></script>
+<script type="text/javascript" src="../../../scripts/navigation-loader.js" async="async"></script>
+<script type="text/javascript" src="../../../scripts/platform-content-handler.js" async="async"></script>
+<script type="text/javascript" src="../../../scripts/main.js" defer="defer"></script>
+<script type="text/javascript" src="../../../scripts/prism.js" async="async"></script>
+<script type="text/javascript" src="../../../ui-kit/ui-kit.min.js" defer="defer"></script>
+</head>
+<body>
+<div class="root">
+    <header class="navigation theme-dark" id="navigation-wrapper" role="banner">
+            <a class="library-name--link" href="../../../index.html" tabindex="1">
+                    uapmd-binding
+            </a>
+        <button class="navigation-controls--btn navigation-controls--btn_toc ui-kit_mobile-only" id="toc-toggle"
+                type="button">Toggle table of contents
+        </button>
+        <div class="navigation-controls--break ui-kit_mobile-only"></div>
+        <div class="library-version" id="library-version">
+        </div>
+        <div class="navigation-controls">
+        <ul class="filter-section filter-section_loading" id="filter-section" aria-label="Target filter">
+                <button class="platform-tag platform-selector wasm-like" data-active="" aria-pressed="true"
+                        data-filter=":uapmd-binding/wasmJsMain">WasmJs</button>
+            <div class="dropdown filter-section--dropdown" data-role="dropdown" id="filter-section-dropdown">
+                <button class="button button_dropdown filter-section--dropdown-toggle" role="combobox"
+                        data-role="dropdown-toggle"
+                        aria-controls="platform-tags-listbox"
+                        aria-haspopup="listbox"
+                        aria-expanded="false"
+                        aria-label="Toggle source sets"
+                ></button>
+                <ul role="listbox" id="platform-tags-listbox" class="dropdown--list" data-role="dropdown-listbox" aria-label="Target filter">
+                    <div class="dropdown--header"><span>Target filter</span>
+                        <button class="button" data-role="dropdown-toggle" aria-label="Close target filter">
+                            <i class="ui-kit-icon ui-kit-icon_cross"></i>
+                        </button>
+                    </div>
+                        <li role="option" class="dropdown--option platform-selector-option wasm-like" tabindex="0">
+                            <label class="checkbox">
+                                <input type="checkbox" class="checkbox--input" id=":uapmd-binding/wasmJsMain"
+                                       data-filter=":uapmd-binding/wasmJsMain"/>
+                                <span class="checkbox--icon"></span>
+                                WasmJs
+                            </label>
+                        </li>
+                </ul>
+                <div class="dropdown--overlay"></div>
+            </div>
+        </ul>
+            <button class="navigation-controls--btn navigation-controls--btn_theme" id="theme-toggle-button"
+                    type="button">Switch theme
+            </button>
+            <div class="navigation-controls--btn navigation-controls--btn_search" id="searchBar" role="button">Search in
+                API
+            </div>
+        </div>
+    </header>
+    <div id="container">
+        <nav id="leftColumn" class="sidebar" data-item-type="SECTION" data-item-config='{"defaultSize": 280, "minSize": 200, "maxSize": 400}'>
+            <a class="toc--skip-link" href="#main">Skip to content</a>
+            <div class="dropdown theme-dark_mobile" data-role="dropdown" id="toc-dropdown">
+                <ul role="listbox" id="toc-listbox" class="dropdown--list dropdown--list_toc-list"
+                    data-role="dropdown-listbox" aria-label="Table of contents">
+                    <div class="dropdown--header">
+                            <span>
+                                    uapmd-binding
+                            </span>
+                        <button class="button" data-role="dropdown-toggle" aria-label="Close table of contents">
+                            <i class="ui-kit-icon ui-kit-icon_cross"></i>
+                        </button>
+                    </div>
+                    <div class="sidebar--inner" id="sideMenu"></div>
+                </ul>
+                <div class="dropdown--overlay"></div>
+            </div>
+        </nav>
+        <div id="resizer" class="resizer" data-item-type="BAR"></div>
+        <div id="main" data-item-type="SECTION" role="main">
+<div class="main-content" data-page-type="classlike" id="content" pageIds="uapmd-binding::dev.atsushieno.uapmd/WasmJsAugene2Integration///PointingToDeclaration//-1969350221">
+  <div class="breadcrumbs"><a href="../../../index.html">uapmd-binding</a><span class="delimiter">/</span><a href="../index.html">dev.atsushieno.uapmd</a><span class="delimiter">/</span><span class="current">WasmJsAugene2Integration</span></div>
+  <div class="cover ">
+    <h1 class="cover"><span>Wasm</span><wbr></wbr><span>Js</span><wbr></wbr><span><span>Augene2Integration</span></span></h1>
+    <div class="platform-hinted  with-platform-tabs" data-platform-hinted="data-platform-hinted">
+      <div class="platform-bookmarks-row" data-toggle-list="data-toggle-list"><button class="platform-bookmark" data-filterable-current=":uapmd-binding/wasmJsMain" data-filterable-set=":uapmd-binding/wasmJsMain" data-active="" data-toggle=":uapmd-binding/wasmJsMain">WasmJs</button></div>
+<div class="content sourceset-dependent-content" data-active="" data-togglable=":uapmd-binding/wasmJsMain"><div class="symbol monospace"><span class="token keyword">class </span><a href="index.html">WasmJsAugene2Integration</a> : <span data-unresolved-link="dev.atsushieno.uapmd/Augene2Integration///PointingToDeclaration/">Augene2Integration</span></div></div>    </div>
+  </div>
+  <div class="tabbedcontent">
+    <div class="tabs-section" tabs-section="tabs-section"><button class="section-tab" data-active="" data-togglable="CONSTRUCTOR,TYPE,PROPERTY,FUNCTION">Members</button></div>
+    <div class="tabs-section-body">
+      <div data-togglable="PROPERTY">
+        <h2 class="tableheader">Properties</h2>
+        <div class="table"><a data-name="1704054447%2FProperties%2F-1969350221" anchor-label="busy" id="1704054447%2FProperties%2F-1969350221" data-filterable-set=":uapmd-binding/wasmJsMain"></a>
+          <div class="table-row table-row_content" data-filterable-current=":uapmd-binding/wasmJsMain" data-filterable-set=":uapmd-binding/wasmJsMain">
+            <div class="main-subrow keyValue ">
+              <div class=""><span class="inline-flex">
+                  <div><a href="busy.html"><span><span>busy</span></span></a></div>
+<span class="anchor-wrapper"><span class="anchor-icon" pointing-to="1704054447%2FProperties%2F-1969350221"></span>
+                    <div class="copy-popup-wrapper "><span class="copy-popup-icon"></span><span>Link copied to clipboard</span></div>
+                  </span></span></div>
+              <div>
+                <div class="title">
+                  <div class="platform-hinted  with-platform-tabs" data-platform-hinted="data-platform-hinted">
+                    <div class="platform-bookmarks-row" data-toggle-list="data-toggle-list"><button class="platform-bookmark" data-filterable-current=":uapmd-binding/wasmJsMain" data-filterable-set=":uapmd-binding/wasmJsMain" data-active="" data-toggle=":uapmd-binding/wasmJsMain">WasmJs</button></div>
+<div class="content sourceset-dependent-content" data-active="" data-togglable=":uapmd-binding/wasmJsMain"><div class="symbol monospace"><span class="token keyword">open </span><span class="token keyword">override </span><span class="token keyword">val </span><a href="busy.html">busy</a><span class="token operator">: </span><a href="https://kotlinlang.org/api/core/kotlin-stdlib/kotlin/-boolean/index.html">Boolean</a></div><div class="brief "><p class="paragraph">A document pick, an apply, or another history operation is in progress; edits are ignored.</p></div></div>                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+<a data-name="556124066%2FProperties%2F-1969350221" anchor-label="compiling" id="556124066%2FProperties%2F-1969350221" data-filterable-set=":uapmd-binding/wasmJsMain"></a>
+          <div class="table-row table-row_content" data-filterable-current=":uapmd-binding/wasmJsMain" data-filterable-set=":uapmd-binding/wasmJsMain">
+            <div class="main-subrow keyValue ">
+              <div class=""><span class="inline-flex">
+                  <div><a href="compiling.html"><span><span>compiling</span></span></a></div>
+<span class="anchor-wrapper"><span class="anchor-icon" pointing-to="556124066%2FProperties%2F-1969350221"></span>
+                    <div class="copy-popup-wrapper "><span class="copy-popup-icon"></span><span>Link copied to clipboard</span></div>
+                  </span></span></div>
+              <div>
+                <div class="title">
+                  <div class="platform-hinted  with-platform-tabs" data-platform-hinted="data-platform-hinted">
+                    <div class="platform-bookmarks-row" data-toggle-list="data-toggle-list"><button class="platform-bookmark" data-filterable-current=":uapmd-binding/wasmJsMain" data-filterable-set=":uapmd-binding/wasmJsMain" data-active="" data-toggle=":uapmd-binding/wasmJsMain">WasmJs</button></div>
+<div class="content sourceset-dependent-content" data-active="" data-togglable=":uapmd-binding/wasmJsMain"><div class="symbol monospace"><span class="token keyword">open </span><span class="token keyword">override </span><span class="token keyword">val </span><a href="compiling.html">compiling</a><span class="token operator">: </span><a href="https://kotlinlang.org/api/core/kotlin-stdlib/kotlin/-boolean/index.html">Boolean</a></div><div class="brief "><p class="paragraph">Sources are being checked or compiled.</p></div></div>                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+<a data-name="237622886%2FProperties%2F-1969350221" anchor-label="diagnostics" id="237622886%2FProperties%2F-1969350221" data-filterable-set=":uapmd-binding/wasmJsMain"></a>
+          <div class="table-row table-row_content" data-filterable-current=":uapmd-binding/wasmJsMain" data-filterable-set=":uapmd-binding/wasmJsMain">
+            <div class="main-subrow keyValue ">
+              <div class=""><span class="inline-flex">
+                  <div><a href="diagnostics.html"><span><span>diagnostics</span></span></a></div>
+<span class="anchor-wrapper"><span class="anchor-icon" pointing-to="237622886%2FProperties%2F-1969350221"></span>
+                    <div class="copy-popup-wrapper "><span class="copy-popup-icon"></span><span>Link copied to clipboard</span></div>
+                  </span></span></div>
+              <div>
+                <div class="title">
+                  <div class="platform-hinted  with-platform-tabs" data-platform-hinted="data-platform-hinted">
+                    <div class="platform-bookmarks-row" data-toggle-list="data-toggle-list"><button class="platform-bookmark" data-filterable-current=":uapmd-binding/wasmJsMain" data-filterable-set=":uapmd-binding/wasmJsMain" data-active="" data-toggle=":uapmd-binding/wasmJsMain">WasmJs</button></div>
+<div class="content sourceset-dependent-content" data-active="" data-togglable=":uapmd-binding/wasmJsMain"><div class="symbol monospace"><span class="token keyword">open </span><span class="token keyword">override </span><span class="token keyword">val </span><a href="diagnostics.html">diagnostics</a><span class="token operator">: </span><a href="https://kotlinlang.org/api/core/kotlin-stdlib/kotlin.collections/-list/index.html">List</a><span class="token operator">&lt;</span><a href="https://kotlinlang.org/api/core/kotlin-stdlib/kotlin/-string/index.html">String</a><span class="token operator">&gt;</span></div></div>                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+<a data-name="310307764%2FProperties%2F-1969350221" anchor-label="isOpen" id="310307764%2FProperties%2F-1969350221" data-filterable-set=":uapmd-binding/wasmJsMain"></a>
+          <div class="table-row table-row_content" data-filterable-current=":uapmd-binding/wasmJsMain" data-filterable-set=":uapmd-binding/wasmJsMain">
+            <div class="main-subrow keyValue ">
+              <div class=""><span class="inline-flex">
+                  <div><a href="is-open.html"><span>is</span><wbr></wbr><span><span>Open</span></span></a></div>
+<span class="anchor-wrapper"><span class="anchor-icon" pointing-to="310307764%2FProperties%2F-1969350221"></span>
+                    <div class="copy-popup-wrapper "><span class="copy-popup-icon"></span><span>Link copied to clipboard</span></div>
+                  </span></span></div>
+              <div>
+                <div class="title">
+                  <div class="platform-hinted  with-platform-tabs" data-platform-hinted="data-platform-hinted">
+                    <div class="platform-bookmarks-row" data-toggle-list="data-toggle-list"><button class="platform-bookmark" data-filterable-current=":uapmd-binding/wasmJsMain" data-filterable-set=":uapmd-binding/wasmJsMain" data-active="" data-toggle=":uapmd-binding/wasmJsMain">WasmJs</button></div>
+<div class="content sourceset-dependent-content" data-active="" data-togglable=":uapmd-binding/wasmJsMain"><div class="symbol monospace"><span class="token keyword">open </span><span class="token keyword">override </span><span class="token keyword">var </span><a href="is-open.html">isOpen</a><span class="token operator">: </span><a href="https://kotlinlang.org/api/core/kotlin-stdlib/kotlin/-boolean/index.html">Boolean</a></div><div class="brief "><p class="paragraph">Panel visibility. The addin command opens it; disabling the addin closes it.</p></div></div>                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+<a data-name="1263710764%2FProperties%2F-1969350221" anchor-label="resourceFolder" id="1263710764%2FProperties%2F-1969350221" data-filterable-set=":uapmd-binding/wasmJsMain"></a>
+          <div class="table-row table-row_content" data-filterable-current=":uapmd-binding/wasmJsMain" data-filterable-set=":uapmd-binding/wasmJsMain">
+            <div class="main-subrow keyValue ">
+              <div class=""><span class="inline-flex">
+                  <div><a href="resource-folder.html"><span>resource</span><wbr></wbr><span><span>Folder</span></span></a></div>
+<span class="anchor-wrapper"><span class="anchor-icon" pointing-to="1263710764%2FProperties%2F-1969350221"></span>
+                    <div class="copy-popup-wrapper "><span class="copy-popup-icon"></span><span>Link copied to clipboard</span></div>
+                  </span></span></div>
+              <div>
+                <div class="title">
+                  <div class="platform-hinted  with-platform-tabs" data-platform-hinted="data-platform-hinted">
+                    <div class="platform-bookmarks-row" data-toggle-list="data-toggle-list"><button class="platform-bookmark" data-filterable-current=":uapmd-binding/wasmJsMain" data-filterable-set=":uapmd-binding/wasmJsMain" data-active="" data-toggle=":uapmd-binding/wasmJsMain">WasmJs</button></div>
+<div class="content sourceset-dependent-content" data-active="" data-togglable=":uapmd-binding/wasmJsMain"><div class="symbol monospace"><span class="token keyword">open </span><span class="token keyword">override </span><span class="token keyword">var </span><a href="resource-folder.html">resourceFolder</a><span class="token operator">: </span><a href="https://kotlinlang.org/api/core/kotlin-stdlib/kotlin/-string/index.html">String</a></div><div class="brief "><p class="paragraph">Optional project-relative folder imported resources are placed under.</p></div></div>                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+<a data-name="532589658%2FProperties%2F-1969350221" anchor-label="sources" id="532589658%2FProperties%2F-1969350221" data-filterable-set=":uapmd-binding/wasmJsMain"></a>
+          <div class="table-row table-row_content" data-filterable-current=":uapmd-binding/wasmJsMain" data-filterable-set=":uapmd-binding/wasmJsMain">
+            <div class="main-subrow keyValue ">
+              <div class=""><span class="inline-flex">
+                  <div><a href="sources.html"><span><span>sources</span></span></a></div>
+<span class="anchor-wrapper"><span class="anchor-icon" pointing-to="532589658%2FProperties%2F-1969350221"></span>
+                    <div class="copy-popup-wrapper "><span class="copy-popup-icon"></span><span>Link copied to clipboard</span></div>
+                  </span></span></div>
+              <div>
+                <div class="title">
+                  <div class="platform-hinted  with-platform-tabs" data-platform-hinted="data-platform-hinted">
+                    <div class="platform-bookmarks-row" data-toggle-list="data-toggle-list"><button class="platform-bookmark" data-filterable-current=":uapmd-binding/wasmJsMain" data-filterable-set=":uapmd-binding/wasmJsMain" data-active="" data-toggle=":uapmd-binding/wasmJsMain">WasmJs</button></div>
+<div class="content sourceset-dependent-content" data-active="" data-togglable=":uapmd-binding/wasmJsMain"><div class="symbol monospace"><span class="token keyword">open </span><span class="token keyword">override </span><span class="token keyword">val </span><a href="sources.html">sources</a><span class="token operator">: </span><a href="https://kotlinlang.org/api/core/kotlin-stdlib/kotlin.collections/-list/index.html">List</a><span class="token operator">&lt;</span><span data-unresolved-link="dev.atsushieno.uapmd/Augene2IntegrationSource///PointingToDeclaration/">Augene2IntegrationSource</span><span class="token operator">&gt;</span></div></div>                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+<a data-name="762659862%2FProperties%2F-1969350221" anchor-label="status" id="762659862%2FProperties%2F-1969350221" data-filterable-set=":uapmd-binding/wasmJsMain"></a>
+          <div class="table-row table-row_content" data-filterable-current=":uapmd-binding/wasmJsMain" data-filterable-set=":uapmd-binding/wasmJsMain">
+            <div class="main-subrow keyValue ">
+              <div class=""><span class="inline-flex">
+                  <div><a href="status.html"><span><span>status</span></span></a></div>
+<span class="anchor-wrapper"><span class="anchor-icon" pointing-to="762659862%2FProperties%2F-1969350221"></span>
+                    <div class="copy-popup-wrapper "><span class="copy-popup-icon"></span><span>Link copied to clipboard</span></div>
+                  </span></span></div>
+              <div>
+                <div class="title">
+                  <div class="platform-hinted  with-platform-tabs" data-platform-hinted="data-platform-hinted">
+                    <div class="platform-bookmarks-row" data-toggle-list="data-toggle-list"><button class="platform-bookmark" data-filterable-current=":uapmd-binding/wasmJsMain" data-filterable-set=":uapmd-binding/wasmJsMain" data-active="" data-toggle=":uapmd-binding/wasmJsMain">WasmJs</button></div>
+<div class="content sourceset-dependent-content" data-active="" data-togglable=":uapmd-binding/wasmJsMain"><div class="symbol monospace"><span class="token keyword">open </span><span class="token keyword">override </span><span class="token keyword">val </span><a href="status.html">status</a><span class="token operator">: </span><a href="https://kotlinlang.org/api/core/kotlin-stdlib/kotlin/-string/index.html">String</a></div></div>                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+<a data-name="1153966978%2FProperties%2F-1969350221" anchor-label="trackMappings" id="1153966978%2FProperties%2F-1969350221" data-filterable-set=":uapmd-binding/wasmJsMain"></a>
+          <div class="table-row table-row_content" data-filterable-current=":uapmd-binding/wasmJsMain" data-filterable-set=":uapmd-binding/wasmJsMain">
+            <div class="main-subrow keyValue ">
+              <div class=""><span class="inline-flex">
+                  <div><a href="track-mappings.html"><span>track</span><wbr></wbr><span><span>Mappings</span></span></a></div>
+<span class="anchor-wrapper"><span class="anchor-icon" pointing-to="1153966978%2FProperties%2F-1969350221"></span>
+                    <div class="copy-popup-wrapper "><span class="copy-popup-icon"></span><span>Link copied to clipboard</span></div>
+                  </span></span></div>
+              <div>
+                <div class="title">
+                  <div class="platform-hinted  with-platform-tabs" data-platform-hinted="data-platform-hinted">
+                    <div class="platform-bookmarks-row" data-toggle-list="data-toggle-list"><button class="platform-bookmark" data-filterable-current=":uapmd-binding/wasmJsMain" data-filterable-set=":uapmd-binding/wasmJsMain" data-active="" data-toggle=":uapmd-binding/wasmJsMain">WasmJs</button></div>
+<div class="content sourceset-dependent-content" data-active="" data-togglable=":uapmd-binding/wasmJsMain"><div class="symbol monospace"><span class="token keyword">open </span><span class="token keyword">override </span><span class="token keyword">val </span><a href="track-mappings.html">trackMappings</a><span class="token operator">: </span><a href="https://kotlinlang.org/api/core/kotlin-stdlib/kotlin.collections/-list/index.html">List</a><span class="token operator">&lt;</span><span data-unresolved-link="dev.atsushieno.uapmd/Augene2TrackMapping///PointingToDeclaration/">Augene2TrackMapping</span><span class="token operator">&gt;</span></div></div>                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div data-togglable="FUNCTION">
+        <h2 class="tableheader">Functions</h2>
+        <div class="table"><a data-name="30655322%2FFunctions%2F-1969350221" anchor-label="close" id="30655322%2FFunctions%2F-1969350221" data-filterable-set=":uapmd-binding/wasmJsMain"></a>
+          <div class="table-row table-row_content" data-filterable-current=":uapmd-binding/wasmJsMain" data-filterable-set=":uapmd-binding/wasmJsMain">
+            <div class="main-subrow keyValue ">
+              <div class=""><span class="inline-flex">
+                  <div><a href="close.html"><span><span>close</span></span></a></div>
+<span class="anchor-wrapper"><span class="anchor-icon" pointing-to="30655322%2FFunctions%2F-1969350221"></span>
+                    <div class="copy-popup-wrapper "><span class="copy-popup-icon"></span><span>Link copied to clipboard</span></div>
+                  </span></span></div>
+              <div>
+                <div class="title">
+                  <div class="platform-hinted  with-platform-tabs" data-platform-hinted="data-platform-hinted">
+                    <div class="platform-bookmarks-row" data-toggle-list="data-toggle-list"><button class="platform-bookmark" data-filterable-current=":uapmd-binding/wasmJsMain" data-filterable-set=":uapmd-binding/wasmJsMain" data-active="" data-toggle=":uapmd-binding/wasmJsMain">WasmJs</button></div>
+<div class="content sourceset-dependent-content" data-active="" data-togglable=":uapmd-binding/wasmJsMain"><div class="symbol monospace"><span class="token keyword">open </span><span class="token keyword">override </span><span class="token keyword">fun </span><a href="close.html"><span class="token function">close</span></a><span class="token punctuation">(</span><span class="token punctuation">)</span></div></div>                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+<a data-name="1626381887%2FFunctions%2F-1969350221" anchor-label="compile" id="1626381887%2FFunctions%2F-1969350221" data-filterable-set=":uapmd-binding/wasmJsMain"></a>
+          <div class="table-row table-row_content" data-filterable-current=":uapmd-binding/wasmJsMain" data-filterable-set=":uapmd-binding/wasmJsMain">
+            <div class="main-subrow keyValue ">
+              <div class=""><span class="inline-flex">
+                  <div><a href="compile.html"><span><span>compile</span></span></a></div>
+<span class="anchor-wrapper"><span class="anchor-icon" pointing-to="1626381887%2FFunctions%2F-1969350221"></span>
+                    <div class="copy-popup-wrapper "><span class="copy-popup-icon"></span><span>Link copied to clipboard</span></div>
+                  </span></span></div>
+              <div>
+                <div class="title">
+                  <div class="platform-hinted  with-platform-tabs" data-platform-hinted="data-platform-hinted">
+                    <div class="platform-bookmarks-row" data-toggle-list="data-toggle-list"><button class="platform-bookmark" data-filterable-current=":uapmd-binding/wasmJsMain" data-filterable-set=":uapmd-binding/wasmJsMain" data-active="" data-toggle=":uapmd-binding/wasmJsMain">WasmJs</button></div>
+<div class="content sourceset-dependent-content" data-active="" data-togglable=":uapmd-binding/wasmJsMain"><div class="symbol monospace"><span class="token keyword">open </span><span class="token keyword">override </span><span class="token keyword">fun </span><a href="compile.html"><span class="token function">compile</span></a><span class="token punctuation">(</span><span class="token punctuation">)</span></div><div class="brief "><p class="paragraph">Refreshes linked files, compiles, and applies the result as one undo step.</p></div></div>                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+<a data-name="-1823370908%2FFunctions%2F-1969350221" anchor-label="importSources" id="-1823370908%2FFunctions%2F-1969350221" data-filterable-set=":uapmd-binding/wasmJsMain"></a>
+          <div class="table-row table-row_content" data-filterable-current=":uapmd-binding/wasmJsMain" data-filterable-set=":uapmd-binding/wasmJsMain">
+            <div class="main-subrow keyValue ">
+              <div class=""><span class="inline-flex">
+                  <div><a href="import-sources.html"><span>import</span><wbr></wbr><span><span>Sources</span></span></a></div>
+<span class="anchor-wrapper"><span class="anchor-icon" pointing-to="-1823370908%2FFunctions%2F-1969350221"></span>
+                    <div class="copy-popup-wrapper "><span class="copy-popup-icon"></span><span>Link copied to clipboard</span></div>
+                  </span></span></div>
+              <div>
+                <div class="title">
+                  <div class="platform-hinted  with-platform-tabs" data-platform-hinted="data-platform-hinted">
+                    <div class="platform-bookmarks-row" data-toggle-list="data-toggle-list"><button class="platform-bookmark" data-filterable-current=":uapmd-binding/wasmJsMain" data-filterable-set=":uapmd-binding/wasmJsMain" data-active="" data-toggle=":uapmd-binding/wasmJsMain">WasmJs</button></div>
+<div class="content sourceset-dependent-content" data-active="" data-togglable=":uapmd-binding/wasmJsMain"><div class="symbol monospace"><span class="token keyword">open </span><span class="token keyword">override </span><span class="token keyword">fun </span><a href="import-sources.html"><span class="token function">importSources</span></a><span class="token punctuation">(</span><span class="parameters "><span class="parameter ">compile<span class="token operator">: </span><a href="https://kotlinlang.org/api/core/kotlin-stdlib/kotlin/-boolean/index.html">Boolean</a></span></span><span class="token punctuation">)</span></div><div class="brief "><p class="paragraph">Picks MML files. Inputs (<span data-unresolved-link="dev.atsushieno.uapmd/Augene2Integration/importSources/#kotlin.Boolean/PointingToCallableParameters(0)/">compile</span> = true) are compiled; the others are only available to <code class="lang-kotlin">#include</code>.</p></div></div>                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+<a data-name="-750448732%2FFunctions%2F-1969350221" anchor-label="relinkSource" id="-750448732%2FFunctions%2F-1969350221" data-filterable-set=":uapmd-binding/wasmJsMain"></a>
+          <div class="table-row table-row_content" data-filterable-current=":uapmd-binding/wasmJsMain" data-filterable-set=":uapmd-binding/wasmJsMain">
+            <div class="main-subrow keyValue ">
+              <div class=""><span class="inline-flex">
+                  <div><a href="relink-source.html"><span>relink</span><wbr></wbr><span><span>Source</span></span></a></div>
+<span class="anchor-wrapper"><span class="anchor-icon" pointing-to="-750448732%2FFunctions%2F-1969350221"></span>
+                    <div class="copy-popup-wrapper "><span class="copy-popup-icon"></span><span>Link copied to clipboard</span></div>
+                  </span></span></div>
+              <div>
+                <div class="title">
+                  <div class="platform-hinted  with-platform-tabs" data-platform-hinted="data-platform-hinted">
+                    <div class="platform-bookmarks-row" data-toggle-list="data-toggle-list"><button class="platform-bookmark" data-filterable-current=":uapmd-binding/wasmJsMain" data-filterable-set=":uapmd-binding/wasmJsMain" data-active="" data-toggle=":uapmd-binding/wasmJsMain">WasmJs</button></div>
+<div class="content sourceset-dependent-content" data-active="" data-togglable=":uapmd-binding/wasmJsMain"><div class="symbol monospace"><span class="token keyword">open </span><span class="token keyword">override </span><span class="token keyword">fun </span><a href="relink-source.html"><span class="token function">relinkSource</span></a><span class="token punctuation">(</span><span class="parameters "><span class="parameter ">path<span class="token operator">: </span><a href="https://kotlinlang.org/api/core/kotlin-stdlib/kotlin/-string/index.html">String</a></span></span><span class="token punctuation">)</span></div><div class="brief "><p class="paragraph">Picks a replacement file for the resource at <span data-unresolved-link="dev.atsushieno.uapmd/Augene2Integration/relinkSource/#kotlin.String/PointingToCallableParameters(0)/">path</span>.</p></div></div>                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+<a data-name="-102468357%2FFunctions%2F-1969350221" anchor-label="removeSource" id="-102468357%2FFunctions%2F-1969350221" data-filterable-set=":uapmd-binding/wasmJsMain"></a>
+          <div class="table-row table-row_content" data-filterable-current=":uapmd-binding/wasmJsMain" data-filterable-set=":uapmd-binding/wasmJsMain">
+            <div class="main-subrow keyValue ">
+              <div class=""><span class="inline-flex">
+                  <div><a href="remove-source.html"><span>remove</span><wbr></wbr><span><span>Source</span></span></a></div>
+<span class="anchor-wrapper"><span class="anchor-icon" pointing-to="-102468357%2FFunctions%2F-1969350221"></span>
+                    <div class="copy-popup-wrapper "><span class="copy-popup-icon"></span><span>Link copied to clipboard</span></div>
+                  </span></span></div>
+              <div>
+                <div class="title">
+                  <div class="platform-hinted  with-platform-tabs" data-platform-hinted="data-platform-hinted">
+                    <div class="platform-bookmarks-row" data-toggle-list="data-toggle-list"><button class="platform-bookmark" data-filterable-current=":uapmd-binding/wasmJsMain" data-filterable-set=":uapmd-binding/wasmJsMain" data-active="" data-toggle=":uapmd-binding/wasmJsMain">WasmJs</button></div>
+<div class="content sourceset-dependent-content" data-active="" data-togglable=":uapmd-binding/wasmJsMain"><div class="symbol monospace"><span class="token keyword">open </span><span class="token keyword">override </span><span class="token keyword">fun </span><a href="remove-source.html"><span class="token function">removeSource</span></a><span class="token punctuation">(</span><span class="parameters "><span class="parameter ">path<span class="token operator">: </span><a href="https://kotlinlang.org/api/core/kotlin-stdlib/kotlin/-string/index.html">String</a></span></span><span class="token punctuation">)</span></div></div>                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+    <div class="footer">
+        <div class="footer--container">
+            <a href="#content" id="go-to-top-link" class="footer--button footer--button_go-to-top"></a>
+            <div class="footer--content">
+                <div>
+                    <span>Generated by </span>
+                    <a class="footer--link footer--link_external" href="https://github.com/Kotlin/dokka">
+                        Dokka
+                    </a>
+                    <div>© 2026 Copyright</div>
+                </div>
+            </div>
+        </div>
+    </div>
+        </div>
+    </div>
+</div>
+</body>
+</html>
