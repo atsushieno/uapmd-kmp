@@ -2,6 +2,7 @@ package dev.atsushieno.uapmd.cmp
 
 import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.asComposeImageBitmap
+import dev.atsushieno.uapmd.FramebufferUi
 import org.jetbrains.skia.Bitmap
 import org.jetbrains.skia.ColorAlphaType
 import org.jetbrains.skia.ColorType
@@ -22,3 +23,6 @@ actual class FramebufferSurface actual constructor(
     actual val image: ImageBitmap
         get() = bitmap.asComposeImageBitmap()
 }
+
+internal actual suspend fun pollFramebufferFrames(ui: FramebufferUi, onFrame: (ImageBitmap) -> Unit) =
+    pollFramebufferFramesThroughByteArray(ui, onFrame)

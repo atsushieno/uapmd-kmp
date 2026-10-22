@@ -215,7 +215,13 @@ UAPMD_C_EXPORT void uapmd_instance_fbui_set_displayed(uapmd_plugin_instance_t in
 
 /* Installs the services above. Any callback may be NULL; a NULL menu callback means
  * menus are dismissed rather than shown, which is still an answer. Pass NULL for
- * every callback to uninstall, which a host must do before it stops drawing. */
+ * every callback to uninstall, which a host must do before it stops drawing.
+ *
+ * The callbacks are made on the plugin's render thread, except on the web: there that
+ * thread is a worker, which cannot call a host written in JavaScript, so the menu and
+ * cursor callbacks are made on the main thread instead, a little later. The
+ * dropped-file callback has to answer at once and is not made from a worker at all;
+ * a browser has no paths to report for dropped files anyway. */
 UAPMD_C_EXPORT void uapmd_instance_fbui_set_host(uapmd_plugin_instance_t inst,
                                                     uapmd_fbui_menu_cb_t menu_callback,
                                                     uapmd_fbui_cursor_cb_t cursor_callback,

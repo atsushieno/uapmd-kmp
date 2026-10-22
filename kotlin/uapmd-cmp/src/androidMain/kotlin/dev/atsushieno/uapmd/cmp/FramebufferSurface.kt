@@ -3,6 +3,7 @@ package dev.atsushieno.uapmd.cmp
 import android.graphics.Bitmap
 import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.asImageBitmap
+import dev.atsushieno.uapmd.FramebufferUi
 
 /**
  * Android has no BGRA configuration, so this is the one platform where the pixels have to
@@ -36,3 +37,6 @@ actual class FramebufferSurface actual constructor(
     actual val image: ImageBitmap
         get() = bitmap.asImageBitmap()
 }
+
+internal actual suspend fun pollFramebufferFrames(ui: FramebufferUi, onFrame: (ImageBitmap) -> Unit) =
+    pollFramebufferFramesThroughByteArray(ui, onFrame)

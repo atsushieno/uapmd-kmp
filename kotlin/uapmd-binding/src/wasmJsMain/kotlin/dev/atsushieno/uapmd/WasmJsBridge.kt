@@ -1639,6 +1639,30 @@ external interface UapmdCApiModule : JsAny {
     /** Callback: void(uint32_t files_written, const char* error, void* user_data) */
     @JsName("_uapmd_app_sync_jsfx_registered_folders")
     fun uapmdAppSyncJsfxRegisteredFolders(app: Int, userData: Int, callback: Int)
+
+    // ── Framebuffer plugin editors (uapmd-c-framebuffer-ui.h) ───────────────
+    @JsName("_uapmd_instance_has_framebuffer_ui")
+    fun uapmdInstanceHasFramebufferUi(inst: Int): Boolean
+    @JsName("_uapmd_instance_fbui_preferred_size")
+    fun uapmdInstanceFbuiPreferredSize(inst: Int, outWidth: Int, outHeight: Int): Boolean
+    @JsName("_uapmd_instance_fbui_set_surface_size")
+    fun uapmdInstanceFbuiSetSurfaceSize(inst: Int, width: Int, height: Int, scaleFactor: Double)
+    @JsName("_uapmd_instance_fbui_frame_info")
+    fun uapmdInstanceFbuiFrameInfo(inst: Int, outInfo: Int): Boolean
+    @JsName("_uapmd_instance_fbui_copy_frame")
+    fun uapmdInstanceFbuiCopyFrame(inst: Int, dst: Int, dstCapacity: Int, dstStride: Int, outInfo: Int): Boolean
+    @JsName("_uapmd_instance_fbui_deliver_input")
+    fun uapmdInstanceFbuiDeliverInput(inst: Int, input: Int, keys: Int, keyCount: Int)
+    @JsName("_uapmd_instance_fbui_set_displayed")
+    fun uapmdInstanceFbuiSetDisplayed(inst: Int, displayed: Boolean)
+    /**
+     * Callbacks: menu void(request, items, item_count, x, y, user_data);
+     * cursor void(cursor, user_data); dropped file size_t(index, buf, buf_size, user_data).
+     */
+    @JsName("_uapmd_instance_fbui_set_host")
+    fun uapmdInstanceFbuiSetHost(inst: Int, menuCb: Int, cursorCb: Int, droppedFileCb: Int, userData: Int)
+    @JsName("_uapmd_instance_fbui_complete_menu")
+    fun uapmdInstanceFbuiCompleteMenu(request: Int, chosenItem: Int)
 }
 
 

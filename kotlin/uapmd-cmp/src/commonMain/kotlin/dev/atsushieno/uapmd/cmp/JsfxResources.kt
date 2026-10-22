@@ -12,6 +12,23 @@ import dev.atsushieno.uapmd.Jsfx
 import dev.atsushieno.uapmd.JsfxDuplicateListing
 import dev.atsushieno.uapmd.JsfxPluginFormat
 import dev.atsushieno.uapmd.JsfxRegisteredFolder
+import dev.atsushieno.uapmd.cmp.generated.resources.Res
+
+/**
+ * Gives JSFX editors a font where they draw text with one the app supplies rather than the
+ * platform's ([Jsfx.usesOwnFontBackend]). Without it every label in an editor is missing.
+ *
+ * uapmd-app hands over the face its own UI uses, Roboto SemiBold (`FontLoader.cpp`), and so
+ * does this, so an effect looks the same in both. An editor takes the font when it first
+ * sets one, so this has to happen before any editor opens.
+ */
+suspend fun supplyJsfxEditorFont() {
+    if (!Jsfx.isAvailable || !Jsfx.usesOwnFontBackend)
+        return
+    runCatching { Res.readBytes("files/Roboto-SemiBold.ttf") }
+        .onSuccess { Jsfx.setEditorFontData(it) }
+        .onFailure { println("uapmd.cmp: no font for JSFX editors: ${it.message}") }
+}
 
 /**
  * What uapmd-app's `JsfxResourcesWindow` does, without the drawing: where the

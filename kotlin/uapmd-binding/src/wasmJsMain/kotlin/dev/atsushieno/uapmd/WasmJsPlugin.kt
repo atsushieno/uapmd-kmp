@@ -137,6 +137,15 @@ class WasmJsPluginInstance internal constructor(
         } finally { mod.free(ptr) }
     }
 
+    // Built once: the host installs callbacks on it, and a fresh wrapper each time would
+    // lose track of the ones it has to remove.
+    private val framebufferUiOrNull: WasmJsFramebufferUi? by lazy {
+        if (wasmMod.uapmdInstanceHasFramebufferUi(handle)) WasmJsFramebufferUi(handle) else null
+    }
+
+    override val framebufferUi: FramebufferUi?
+        get() = framebufferUiOrNull
+
     override val uiCapabilities: PluginUiCapabilities
         get() {
             val capsPtr = wasmMod.malloc(4)

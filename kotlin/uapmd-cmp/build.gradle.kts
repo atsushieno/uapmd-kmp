@@ -120,6 +120,25 @@ fun JavaExec.forwardScannerExecutable() {
     }
 }
 
+// JSFX editors draw their text with a font the app supplies wherever the platform has no
+// font stack to borrow (Jsfx.usesOwnFontBackend: Android, iOS, the web). uapmd-app hands
+// them the face it uses itself, Roboto SemiBold, so this ships the same file -- taken from
+// the uapmd checkout rather than copied into this repository.
+val jsfxEditorFontResources = layout.buildDirectory.dir("generated/jsfxEditorFont")
+val syncJsfxEditorFont by tasks.registering(Sync::class) {
+    from(rootProject.projectDir.parentFile.resolve("external/uapmd/external/font/static/Roboto-SemiBold.ttf"))
+    into(jsfxEditorFontResources.map { it.dir("files") })
+}
+
+compose.resources {
+    packageOfResClass = "dev.atsushieno.uapmd.cmp.generated.resources"
+    customDirectory(
+        sourceSetName = "commonMain",
+        // Mapped from the task, so whatever reads the resources runs the sync first.
+        directoryProvider = syncJsfxEditorFont.map { jsfxEditorFontResources.get() }
+    )
+}
+
 compose.desktop {
     application {
         mainClass = "dev.atsushieno.uapmd.cmp.MainKt"

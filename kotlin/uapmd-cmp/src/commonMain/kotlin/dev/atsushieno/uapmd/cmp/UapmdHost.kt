@@ -2128,6 +2128,7 @@ fun rememberUapmdHost(): UapmdHost {
     // uapmd state lives in C++ and changes without notifying Compose (async
     // engine transitions, scan completion, history commits), so poll it.
     LaunchedEffect(host) {
+        launch { supplyJsfxEditorFont() }
         // Dev hook: AppModel scans plugins asynchronously at startup, so the
         // catalog is empty when start() returns. Wait for it, then try
         // candidates until one instantiates - many plugins fail for their own

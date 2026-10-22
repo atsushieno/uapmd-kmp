@@ -6,11 +6,17 @@
 #include <uapmd-plugin-hosting/detail/plugin-api/PluginFramebufferUIExtension.hpp>
 
 #include <cstring>
+#include <functional>
 #include <memory>
 #include <mutex>
 #include <string>
 #include <unordered_map>
 #include <vector>
+
+#if defined(__EMSCRIPTEN__)
+#include <emscripten/proxying.h>
+#include <emscripten/threading.h>
+#endif
 
 namespace fb = uapmd_plugin_hosting;
 
@@ -188,6 +194,34 @@ void flatten_menu(const std::vector<fb::FramebufferMenuItem>& items,
     }
 }
 
+#if defined(__EMSCRIPTEN__)
+/* On the web the plugin's renderer is a worker, and it calls the services below from
+   there. A host written in JavaScript cannot be called from a worker: a function pointer
+   made with addFunction() is an entry in the main thread's function table only -- a
+   worker has a table of its own, where that index is something else or nothing -- and
+   the code behind it lives in the main thread's JavaScript realm anyway. So a call that
+   arrives on any other thread is handed to the main thread and made there. */
+bool on_main_thread(std::function<void()> task) {
+    if (emscripten_is_main_runtime_thread()) {
+        task();
+        return true;
+    }
+    auto* pending = new std::function<void()>(std::move(task));
+    auto run = [](void* raw) {
+        std::unique_ptr<std::function<void()>> owned{static_cast<std::function<void()>*>(raw)};
+        (*owned)();
+    };
+    if (emscripten_proxy_async(emscripten_proxy_get_system_queue(),
+                               emscripten_main_runtime_thread_id(), run, pending))
+        return true;
+    delete pending;
+    return false;
+}
+#endif
+
+/* Hosts are never destroyed (see uapmd_instance_fbui_set_host), so a call handed to the
+   main thread may keep `this`. The callbacks are read when the call is made, not when it
+   was asked for, so one that arrives after the host uninstalled finds nothing to call. */
 class CFramebufferUIHost : public fb::FramebufferUIHost {
 public:
     uapmd_fbui_menu_cb_t menu_cb{nullptr};
@@ -198,35 +232,40 @@ public:
     void requestMenu(const std::vector<fb::FramebufferMenuItem>& items,
                      int32_t x, int32_t y,
                      std::function<void(int32_t)> completed) override {
-        if (!menu_cb) {
-            /* Dismissing is still an answer; dropping it hangs the renderer. */
-            completed(0);
-            return;
-        }
         auto request = std::make_shared<MenuRequest>();
         request->completed = std::move(completed);
         {
             std::lock_guard lock(g_menu_mutex);
             g_menus[request.get()] = request;
         }
-
-        std::vector<uapmd_fbui_menu_item_t> flat;
-        std::vector<std::string> labels;
-        labels.reserve(items.size());
-        flatten_menu(items, flat, labels);
-        for (size_t i = 0; i < flat.size(); i++)
-            flat[i].label = labels[i].c_str();
-
-        menu_cb(reinterpret_cast<uapmd_fbui_menu_request_t>(request.get()),
-                flat.empty() ? nullptr : flat.data(), flat.size(), x, y, user_data);
+        auto handle = reinterpret_cast<uapmd_fbui_menu_request_t>(request.get());
+#if defined(__EMSCRIPTEN__)
+        /* `items` is only valid for this call and the menu opens after it returns, so
+           it travels as a copy. */
+        if (!on_main_thread([this, handle, items, x, y] { showMenu(handle, items, x, y); }))
+            uapmd_instance_fbui_complete_menu(handle, 0);
+#else
+        showMenu(handle, items, x, y);
+#endif
     }
 
     void setCursor(fb::FramebufferCursor cursor) override {
-        if (cursor_cb)
-            cursor_cb(static_cast<uapmd_fbui_cursor_t>(cursor), user_data);
+#if defined(__EMSCRIPTEN__)
+        on_main_thread([this, cursor] { applyCursor(cursor); });
+#else
+        applyCursor(cursor);
+#endif
     }
 
     std::string droppedFile(int32_t index) override {
+#if defined(__EMSCRIPTEN__)
+        /* This one must answer before it returns, and the renderer asks while holding
+           the lock the main thread takes to deliver input -- so waiting here for the
+           main thread could wait for ever. A browser hands dropped files over as data,
+           not paths, so a worker has none to report. */
+        if (!emscripten_is_main_runtime_thread())
+            return {};
+#endif
         if (!dropped_cb)
             return {};
         size_t needed = dropped_cb(index, nullptr, 0, user_data);
@@ -238,6 +277,30 @@ public:
             return {};
         value.resize(std::strlen(value.c_str()));
         return value;
+    }
+
+private:
+    void showMenu(uapmd_fbui_menu_request_t handle,
+                  const std::vector<fb::FramebufferMenuItem>& items,
+                  int32_t x, int32_t y) {
+        if (!menu_cb) {
+            /* Dismissing is still an answer; dropping it hangs the renderer. */
+            uapmd_instance_fbui_complete_menu(handle, 0);
+            return;
+        }
+        std::vector<uapmd_fbui_menu_item_t> flat;
+        std::vector<std::string> labels;
+        labels.reserve(items.size());
+        flatten_menu(items, flat, labels);
+        for (size_t i = 0; i < flat.size(); i++)
+            flat[i].label = labels[i].c_str();
+
+        menu_cb(handle, flat.empty() ? nullptr : flat.data(), flat.size(), x, y, user_data);
+    }
+
+    void applyCursor(fb::FramebufferCursor cursor) {
+        if (cursor_cb)
+            cursor_cb(static_cast<uapmd_fbui_cursor_t>(cursor), user_data);
     }
 };
 
