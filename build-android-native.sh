@@ -7,7 +7,7 @@
 #
 # The build requires prefab packages (SDL3, androidaudioplugin, oboe) which
 # AGP extracts when you run a Gradle configure step.  Run once if needed:
-#   cd kotlin && ./gradlew :uapmd-binding:configureCMakeRelWithDebInfo
+#   cd kotlin && ./gradlew :uapmd-binding:configureCMakeRelease
 #
 # Outputs per ABI:
 #   kotlin/uapmd-binding/build/jniLibs/<abi>/libuapmd-jni.so
@@ -90,7 +90,7 @@ AAP_DIR="${AAP_DIR:-}"
 if [[ -z "$AAP_DIR" ]]; then
     if ! AAP_DIR=$(find_aap_dir); then
         echo "ERROR: androidaudioplugin headers not found in ~/.gradle/caches." >&2
-        echo "  Run: cd kotlin && ./gradlew :uapmd-binding:configureCMakeRelWithDebInfo" >&2
+        echo "  Run: cd kotlin && ./gradlew :uapmd-binding:configureCMakeRelease" >&2
         echo "  Or set AAP_DIR to a directory containing include/aap/…" >&2
         exit 1
     fi
@@ -115,7 +115,7 @@ for ABI in "${ABIS[@]}"; do
     fi
     if [[ -z "$PREFAB_DIR" ]]; then
         echo "ERROR: No extracted prefab packages found for $ABI." >&2
-        echo "  Run: cd kotlin && ./gradlew :uapmd-binding:configureCMakeRelWithDebInfo" >&2
+        echo "  Run: cd kotlin && ./gradlew :uapmd-binding:configureCMakeRelease" >&2
         exit 1
     fi
     echo "  Prefab root: $PREFAB_DIR"
@@ -128,7 +128,7 @@ for ABI in "${ABIS[@]}"; do
         -DANDROID_ABI="$ABI" \
         -DANDROID_PLATFORM=android-26 \
         -DANDROID_STL=c++_shared \
-        -DCMAKE_BUILD_TYPE=RelWithDebInfo \
+        -DCMAKE_BUILD_TYPE=Release \
         -DCMAKE_FIND_ROOT_PATH="$PREFAB_DIR" \
         -DAAP_DIR="$AAP_DIR" \
         -DMIDICCI_SKIP_TOOLS=ON \

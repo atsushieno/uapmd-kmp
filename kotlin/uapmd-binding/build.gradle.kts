@@ -93,7 +93,7 @@ android {
         externalNativeBuild {
             cmake {
                 arguments.addAll(listOf(
-                    "-DCMAKE_BUILD_TYPE=RelWithDebInfo",
+                    "-DCMAKE_BUILD_TYPE=Release",
                     "-DMIDICCI_SKIP_TOOLS=ON",
                     "-DCPM_SOURCE_CACHE=${cpmCacheDir.absolutePath}",
                     "-DANDROID_STL=c++_shared",
@@ -154,7 +154,7 @@ tasks.register("buildUapmdCApiDesktop") {
 
     inputs.dir(repoRoot.resolve("c-api"))
     outputs.file(File(cApiDylibDir, when {
-        os.isWindows -> "RelWithDebInfo/uapmd-c-api.dll"
+        os.isWindows -> "Release/uapmd-c-api.dll"
         os.isMacOsX  -> "libuapmd-c-api.dylib"
         else         -> "libuapmd-c-api.so"
     }))
@@ -166,7 +166,7 @@ tasks.register("buildUapmdCApiDesktop") {
         if (!cmakeCache.exists()) {
             val configureArgs = mutableListOf(
                 cmakeExecutable, "-B", cmakeBuildDir.absolutePath,
-                "-DCMAKE_BUILD_TYPE=RelWithDebInfo",
+                "-DCMAKE_BUILD_TYPE=Release",
                 "-DCPM_SOURCE_CACHE=${cpmCacheDir.absolutePath}",
                 "-DUAPMD_BUILD_TESTS=OFF",
                 "-DMIDICCI_SKIP_TOOLS=ON"
@@ -187,18 +187,26 @@ tasks.register("buildUapmdCApiDesktop") {
             // A cached tool or library that has since been removed (e.g. a JDK replaced by
             // a newer one, whose `java` augene2's FindANTLR runs) makes CMake's automatic
             // re-run fail. Drop those entries so that find_*() searches for them again.
-            val staleEntries = cmakeCache.readLines().mapNotNull { line ->
+            val cacheLines = cmakeCache.readLines()
+            val staleEntries = cacheLines.mapNotNull { line ->
                 Regex("^([A-Za-z0-9_.+-]+):FILEPATH=(.+)$").matchEntire(line)?.destructured
                     ?.takeIf { (_, path) -> File(path).isAbsolute && !File(path).exists() }
                     ?.component1()
             }
-            if (staleEntries.isNotEmpty()) {
+            if (staleEntries.isNotEmpty())
                 logger.lifecycle("Re-resolving stale CMake cache entries: ${staleEntries.joinToString()}")
+            // CMAKE_BUILD_TYPE is only passed on a fresh configure, so a build directory
+            // configured with another one (it used to be RelWithDebInfo) would keep it.
+            val buildTypeArgs = if ("CMAKE_BUILD_TYPE:STRING=Release" in cacheLines) emptyList() else {
+                logger.lifecycle("Switching the cached CMAKE_BUILD_TYPE to Release")
+                listOf("-DCMAKE_BUILD_TYPE=Release")
+            }
+            if (staleEntries.isNotEmpty() || buildTypeArgs.isNotEmpty()) {
                 buildServices.exec.exec {
                     workingDir = repoRoot
                     environment("PATH", cmakePathEnv)
                     commandLine(listOf(cmakeExecutable, "-B", cmakeBuildDir.absolutePath) +
-                        staleEntries.map { "-U$it" })
+                        staleEntries.map { "-U$it" } + buildTypeArgs)
                 }
             }
         }
@@ -208,6 +216,7 @@ tasks.register("buildUapmdCApiDesktop") {
             commandLine(
                 cmakeExecutable, "--build", cmakeBuildDir.absolutePath,
                 "--target", "uapmd-c-api",
+                "--config", "Release",
                 "--parallel"
             )
         }
@@ -229,13 +238,13 @@ val jneOs = when {
     os.isWindows -> "windows"
     else         -> "unknown"
 }
-// VS generator places outputs in a config subdirectory (e.g. RelWithDebInfo/); Ninja does not.
+// VS generator places outputs in a config subdirectory (Release/, picked by --config); Ninja does not.
 val jneLibName = when {
     os.isMacOsX  -> "libuapmd-c-api.dylib"
     os.isLinux   -> "libuapmd-c-api.so"
     else         -> "uapmd-c-api.dll"
 }
-val jneLibFile = if (os.isWindows) File(cApiDylibDir, "RelWithDebInfo/$jneLibName")
+val jneLibFile = if (os.isWindows) File(cApiDylibDir, "Release/$jneLibName")
                  else File(cApiDylibDir, jneLibName)
 val jneResourceDir = project.file("src/jvmMain/resources/jne/$jneOs/$jneArch")
 
