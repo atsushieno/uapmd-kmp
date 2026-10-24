@@ -574,7 +574,7 @@ class JsAppModel internal constructor(internal val handle: Int) : AppModel {
     override fun addUmpEventToClip(trackIndex: Int, clipId: Int, tick: Long, words: UIntArray): Boolean =
         withWasmMem(words.size * 4) { buf ->
             words.forEachIndexed { i, w -> jsMod.setValue(buf + i * 4, w.toInt(), "i32") }
-            // -sWASM_BIGINT: scalar i64 parameters must arrive as BigInt.
+            // Scalar i64 parameters must arrive as BigInt.
             jsMod._uapmd_app_add_ump_event_to_clip(
                 handle, trackIndex, clipId, js("BigInt")(tick.toString()), buf, words.size
             ) as Boolean
@@ -1214,7 +1214,7 @@ class JsPianoRollSession internal constructor(private val handle: Int) : PianoRo
     override fun isNoteSelected(index: Int) =
         jsMod._uapmd_piano_roll_session_is_note_selected(handle, index) as Boolean
 
-    // -sWASM_BIGINT: the int64_t context id crosses as BigInt.
+    // The int64_t context id crosses as BigInt.
     override val selectionContext: SelectionContextId?
         get() = jsMod._uapmd_piano_roll_session_selection_context(handle).toString().toLong().takeIf { it >= 0 }
     override val clipReferenceId: String?

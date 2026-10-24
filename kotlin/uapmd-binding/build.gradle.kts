@@ -161,8 +161,9 @@ tasks.register("buildUapmdCApiDesktop") {
 
     doLast {
         cmakeBuildDir.mkdirs()
+        val cmakeCache = File(cmakeBuildDir, "CMakeCache.txt")
         // Configure if this is a fresh build directory.
-        if (!File(cmakeBuildDir, "CMakeCache.txt").exists()) {
+        if (!cmakeCache.exists()) {
             val configureArgs = mutableListOf(
                 cmakeExecutable, "-B", cmakeBuildDir.absolutePath,
                 "-DCMAKE_BUILD_TYPE=RelWithDebInfo",
@@ -181,6 +182,24 @@ tasks.register("buildUapmdCApiDesktop") {
                 workingDir = repoRoot
                 environment("PATH", cmakePathEnv)
                 commandLine(configureArgs)
+            }
+        } else {
+            // A cached tool or library that has since been removed (e.g. a JDK replaced by
+            // a newer one, whose `java` augene2's FindANTLR runs) makes CMake's automatic
+            // re-run fail. Drop those entries so that find_*() searches for them again.
+            val staleEntries = cmakeCache.readLines().mapNotNull { line ->
+                Regex("^([A-Za-z0-9_.+-]+):FILEPATH=(.+)$").matchEntire(line)?.destructured
+                    ?.takeIf { (_, path) -> File(path).isAbsolute && !File(path).exists() }
+                    ?.component1()
+            }
+            if (staleEntries.isNotEmpty()) {
+                logger.lifecycle("Re-resolving stale CMake cache entries: ${staleEntries.joinToString()}")
+                buildServices.exec.exec {
+                    workingDir = repoRoot
+                    environment("PATH", cmakePathEnv)
+                    commandLine(listOf(cmakeExecutable, "-B", cmakeBuildDir.absolutePath) +
+                        staleEntries.map { "-U$it" })
+                }
             }
         }
         buildServices.exec.exec {
@@ -290,10 +309,23 @@ tasks.register("buildUapmdCApiWasm") {
 
         val cpmCacheArg = "-DCPM_SOURCE_CACHE=${cpmCacheDir.absolutePath}"
 
+        // An Emscripten upgrade (e.g. Homebrew replacing Cellar/emscripten/<version>)
+        // leaves CMakeCache.txt pointing at compilers that no longer exist, and CMake
+        // refuses to reconfigure. Start from a fresh cache whenever the toolchain
+        // differs from the one the cache was created with.
+        val emccVersion = ProcessBuilder("emcc", "--version")
+            .redirectErrorStream(true)
+            .start()
+            .inputStream.bufferedReader().readLine().orEmpty().trim()
+        val toolchainStamp = File(buildDir, "emcc-version.txt")
+        val freshArgs = if (toolchainStamp.exists() && toolchainStamp.readText() == emccVersion)
+            emptyList() else listOf("--fresh")
+
         // ── 1. Configure ──────────────────────────────────────────────────────
         buildServices.exec.exec {
             commandLine(
                 "emcmake", "cmake",
+                *freshArgs.toTypedArray(),
                 "-S", wasmSrcDir.absolutePath,
                 "-B", buildDir.absolutePath,
                 "-G", "Ninja",
@@ -303,6 +335,7 @@ tasks.register("buildUapmdCApiWasm") {
                 "-DMIDICCI_SKIP_TOOLS=ON"
             )
         }
+        toolchainStamp.writeText(emccVersion)
 
         // ── 2. Build ──────────────────────────────────────────────────────────
         buildServices.exec.exec {

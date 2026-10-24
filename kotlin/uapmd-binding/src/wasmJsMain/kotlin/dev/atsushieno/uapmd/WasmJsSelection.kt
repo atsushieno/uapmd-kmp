@@ -1,7 +1,7 @@
 package dev.atsushieno.uapmd
 
-// The module is linked with -sWASM_BIGINT=1, so int64_t parameters, results and callback
-// arguments are BigInt. Contexts, ticks and listener tokens cross here as decimal strings,
+// Emscripten passes int64_t parameters, results and callback arguments as BigInt.
+// Contexts, ticks and listener tokens cross here as decimal strings,
 // which keeps them exact beyond 2^53 and avoids Long in the JS interop.
 
 @JsFun("(mod, svc) => mod._uapmd_selection_service_default_context(svc).toString()")

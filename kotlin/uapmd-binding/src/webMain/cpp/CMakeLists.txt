@@ -108,6 +108,14 @@ set_target_properties(uapmd-c-api-web PROPERTIES
     SUFFIX      ".js"
 )
 
+# Emscripten's shell.js leaves `var ENVIRONMENT_IS_PTHREAD = ENVIRONMENT_IS_WORKER && ...`
+# without a semicolon and splices the --pre-js files in right after it. A pre-js that
+# begins with `(` -- audioworklet-env-fix.js does -- turns that line into a call,
+# `"em-pthread"(...)`, which throws in every pthread worker. Passing this one first
+# terminates the statement.
+set(UAPMD_PRE_JS_SEPARATOR "${CMAKE_CURRENT_BINARY_DIR}/pre-js-separator.js")
+file(CONFIGURE OUTPUT "${UAPMD_PRE_JS_SEPARATOR}" CONTENT ";\n")
+
 target_link_options(uapmd-c-api-web PRIVATE
     # Modular ES6 factory export
     "-sMODULARIZE=1"
@@ -119,10 +127,7 @@ target_link_options(uapmd-c-api-web PRIVATE
     # causing Emscripten to auto-inject a narrower EXPORTED_RUNTIME_METHODS list
     # at link time that would otherwise override and drop getValue/addFunction.
     # Keeping HEAPU8 here as well lets us be the definitive last word.
-    "-sEXPORTED_RUNTIME_METHODS=[HEAPU8,UTF8ToString,stringToUTF8,allocate,ALLOC_NORMAL,allocateUTF8,FS,IDBFS,ccall,getValue,setValue,addFunction,removeFunction,lengthBytesUTF8]"
-    # Enable JS BigInt ↔ Wasm i64 so int64_t parameters (timestamps, frame
-    # counts) round-trip correctly across the JS boundary.
-    "-sWASM_BIGINT=1"
+    "-sEXPORTED_RUNTIME_METHODS=[HEAPU8,UTF8ToString,stringToUTF8,FS,IDBFS,ccall,getValue,setValue,addFunction,removeFunction,lengthBytesUTF8]"
     # Allow the function table to grow for callback registration
     "-sALLOW_TABLE_GROWTH=1"
     # Memory: 64 MB initial, allow growth
@@ -150,6 +155,7 @@ target_link_options(uapmd-c-api-web PRIVATE
     # Backfills AudioWorkletGlobalScope (Chrome does not expose it as a named property, so
     # Emscripten skips registering the worklet bootstrap and the audio engine cannot start),
     # and provides the navigator shim the runtime expects inside the worklet.
+    "--pre-js=${UAPMD_PRE_JS_SEPARATOR}"
     "--pre-js=${UAPMD_SOURCE_DIR}/tools/uapmd-app/web/audioworklet-env-fix.js"
     # IndexedDB-backed filesystem: uapmd persists its plugin list cache and the
     # blocklist under /browser, which the app mounts as IDBFS at startup.
@@ -170,5 +176,5 @@ set_property(TARGET uapmd-c-api-web APPEND PROPERTY LINK_DEPENDS
 # CMAKE_EXE_LINKER_FLAGS places this AFTER all target and dependency link options,
 # making it the final word on the link command line.
 string(APPEND CMAKE_EXE_LINKER_FLAGS
-    " -sEXPORTED_RUNTIME_METHODS=[HEAPU8,UTF8ToString,stringToUTF8,allocate,ALLOC_NORMAL,allocateUTF8,FS,IDBFS,ccall,getValue,setValue,addFunction,removeFunction,lengthBytesUTF8]"
+    " -sEXPORTED_RUNTIME_METHODS=[HEAPU8,UTF8ToString,stringToUTF8,FS,IDBFS,ccall,getValue,setValue,addFunction,removeFunction,lengthBytesUTF8]"
 )

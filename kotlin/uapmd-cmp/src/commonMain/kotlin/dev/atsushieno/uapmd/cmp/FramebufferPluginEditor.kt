@@ -4,6 +4,8 @@ import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.gestures.awaitEachGesture
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.offset
+import androidx.compose.foundation.layout.size
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.HorizontalDivider
@@ -15,7 +17,6 @@ import androidx.compose.ui.graphics.drawscope.DrawScope
 import androidx.compose.ui.input.pointer.*
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalDensity
-import androidx.compose.ui.unit.DpOffset
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import dev.atsushieno.uapmd.*
@@ -108,18 +109,22 @@ fun FramebufferPluginEditor(
         }
 
         menu?.let { pending ->
-            DropdownMenu(
-                expanded = true,
-                onDismissRequest = {
-                    pending.complete(0)
-                    menu = null
-                },
-                // Also pixels, for the same reason.
-                offset = with(LocalDensity.current) { DpOffset(pending.x.toDp(), pending.y.toDp()) }
-            ) {
-                FramebufferMenuItems(pending.items) { chosen ->
-                    pending.complete(chosen)
-                    menu = null
+            // A dropdown opens below whatever it is anchored to, which here would be the
+            // whole editor. Anchored to an empty box at the point the plugin asked for, it
+            // opens there instead -- where the user clicked, as in uapmd-app. Also pixels,
+            // for the same reason.
+            Box(Modifier.offset { IntOffset(pending.x, pending.y) }.size(0.dp)) {
+                DropdownMenu(
+                    expanded = true,
+                    onDismissRequest = {
+                        pending.complete(0)
+                        menu = null
+                    }
+                ) {
+                    FramebufferMenuItems(pending.items) { chosen ->
+                        pending.complete(chosen)
+                        menu = null
+                    }
                 }
             }
         }

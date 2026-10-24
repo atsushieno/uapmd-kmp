@@ -305,7 +305,7 @@ class JsPluginNode internal constructor(
 
     override fun sendAllNotesOff() = jsMod._uapmd_node_send_all_notes_off(handle)
 
-    // -sWASM_BIGINT: the int64_t listener ids cross as BigInt.
+    // The int64_t listener ids cross as BigInt.
     override fun addParameterUpdateListener(listener: ParameterUpdateListener): Long {
         val fn: (dynamic, dynamic, dynamic) -> Unit = { index, value, _ ->
             listener.onParameterUpdate(index as Int, value as Double)

@@ -1,7 +1,7 @@
 package dev.atsushieno.uapmd
 
-// The module is linked with -sWASM_BIGINT, so int64_t parameters, results and callback
-// arguments cross as BigInt. Contexts, ticks and listener tokens go through these helpers.
+// Emscripten passes int64_t parameters, results and callback arguments as BigInt.
+// Contexts, ticks and listener tokens go through these helpers.
 private fun bigInt(v: Long): dynamic = js("BigInt")(v.toString())
 private fun longOf(v: dynamic): Long = v.toString().toLong()
 

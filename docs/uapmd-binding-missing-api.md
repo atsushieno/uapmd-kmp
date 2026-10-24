@@ -13,7 +13,7 @@ uapmd API. Anything else belongs in the app.
 ## 1 · Still unbound in `uapmd-c-app.h`
 
 Ordered by when `uapmd-cmp` needs them. Several pass or return structs **by value**, which is
-where the Emscripten ABI rules (sret first-argument, byval-as-pointer, `WASM_BIGINT`) bite.
+where the Emscripten ABI rules (sret first-argument, byval-as-pointer, i64-as-BigInt) bite.
 Both by-value directions are now proven in practice:
 - **struct in a callback** — `uapmd_plugin_instance_result_t` arrives as a pointer on wasm/js
   (int32 id @0, `char*` @4, `char*` @8), as `Structure.ByValue` on JNA, `CValue<>` on cinterop.

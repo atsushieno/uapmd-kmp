@@ -12,7 +12,7 @@ inputs:
       so a floating `latest` could change them under us and surface as a
       baffling wasm-only failure. Bump consciously, and re-check the layouts.
     required: false
-    default: '4.0.22'
+    default: '6.0.13'
 
 runs:
   using: composite

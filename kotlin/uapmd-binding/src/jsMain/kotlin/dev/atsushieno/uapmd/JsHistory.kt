@@ -213,7 +213,7 @@ internal fun jsSetI64(ptr: Int, v: Long) {
     jsSetI32(ptr + 4, (v ushr 32).toInt())
 }
 
-/** WASM_BIGINT=1 means scalar i64 parameters cross the boundary as BigInt. */
+/** Scalar i64 parameters cross the boundary as BigInt. */
 private fun bigInt(v: Long): dynamic = js("BigInt")(v.toString())
 
 /** Reads a uint64 field written as two little-endian 32-bit halves. */

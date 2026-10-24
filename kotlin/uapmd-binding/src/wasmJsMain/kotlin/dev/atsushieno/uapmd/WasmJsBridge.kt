@@ -1957,9 +1957,8 @@ internal external fun wasmPianoRollSessionSelectionContext(mod: UapmdCApiModule,
 
 // ── Project history: BigInt-valued parameters ────────────────────────────────
 //
-// The Wasm module is linked with -sWASM_BIGINT=1, so scalar i64 parameters must
-// arrive as BigInt. Passing the value as a decimal string keeps it exact for
-// magnitudes beyond 2^53.
+// Scalar i64 parameters must arrive as BigInt. Passing the value as a decimal
+// string keeps it exact for magnitudes beyond 2^53.
 
 @JsFun("(mod, out, app, t, id) => mod._uapmd_app_disconnect_track_graph_connection(out, app, t, BigInt(id))")
 internal external fun wasmAppDisconnectTrackGraph(
