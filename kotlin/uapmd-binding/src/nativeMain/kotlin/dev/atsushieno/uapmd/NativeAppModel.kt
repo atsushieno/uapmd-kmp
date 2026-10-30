@@ -21,6 +21,7 @@ class NativeAppModel internal constructor(
 
     override val isAudioEngineEnabled: Boolean get() = uapmd_app_is_audio_engine_enabled(handle)
     override fun setAudioEngineEnabled(enabled: Boolean) = uapmd_app_set_audio_engine_enabled(handle, enabled)
+    override fun shutdownAudioEngine() = uapmd_app_shutdown_audio_engine(handle)
     override fun toggleAudioEngine() = uapmd_app_toggle_audio_engine(handle)
 
     override var autoBufferSizeEnabled: Boolean

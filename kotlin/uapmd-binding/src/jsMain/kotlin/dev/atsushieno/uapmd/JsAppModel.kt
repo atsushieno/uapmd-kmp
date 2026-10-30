@@ -23,6 +23,10 @@ class JsAppModel internal constructor(internal val handle: Int) : AppModel {
         jsMod._uapmd_app_set_audio_engine_enabled(handle, enabled)
     }
 
+    override fun shutdownAudioEngine() {
+        jsMod._uapmd_app_shutdown_audio_engine(handle)
+    }
+
     override fun toggleAudioEngine() {
         jsMod._uapmd_app_toggle_audio_engine(handle)
     }

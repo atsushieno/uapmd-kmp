@@ -355,6 +355,21 @@ UAPMD_C_EXPORT size_t   uapmd_tt_reference_id(uapmd_timeline_track_t tt, char* b
 UAPMD_C_EXPORT bool     uapmd_tt_has_device_input_source(uapmd_timeline_track_t tt);
 UAPMD_C_EXPORT bool     uapmd_tt_remove_clip(uapmd_timeline_track_t tt, int32_t clip_id);
 
+/* uapmd::TrackProperties: authored presentation metadata, owned and accessed by
+ * the model thread, never read by the audio thread. `color` is 0xRRGGBB and is
+ * meaningful only when `has_color` is true; an absent color uses the current
+ * theme. `path` is a case-sensitive organizational string (non-empty paths sort
+ * first). TrackProperties::valid() requires a finite `order` and a color within
+ * 0xFFFFFF. */
+UAPMD_C_EXPORT bool     uapmd_tt_properties_has_color(uapmd_timeline_track_t tt);
+UAPMD_C_EXPORT uint32_t uapmd_tt_properties_color(uapmd_timeline_track_t tt);
+UAPMD_C_EXPORT size_t   uapmd_tt_properties_path(uapmd_timeline_track_t tt, char* buf, size_t buf_size);
+UAPMD_C_EXPORT double   uapmd_tt_properties_order(uapmd_timeline_track_t tt);
+/* TimelineTrack::properties(value): replaces them without recording history, and
+ * returns false (changing nothing) when they are not valid. User edits go through
+ * uapmd_commands_set_track_properties() instead. */
+UAPMD_C_EXPORT bool     uapmd_tt_set_properties(uapmd_timeline_track_t tt, bool has_color, uint32_t color, const char* path, double order);
+
 #ifdef __cplusplus
 }
 #endif

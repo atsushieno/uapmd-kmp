@@ -28,6 +28,16 @@ class AndroidTimelineTrack internal constructor(
 ) : TimelineTrack {
     override val channelCount: Int get() = JniBridge.uapmdTtChannelCount(handle)
 
+    override val properties: TrackProperties
+        get() = TrackProperties(
+            color = if (JniBridge.uapmdTtPropertiesHasColor(handle)) JniBridge.uapmdTtPropertiesColor(handle).toUInt() else null,
+            path = JniBridge.uapmdTtPropertiesPath(handle),
+            order = JniBridge.uapmdTtPropertiesOrder(handle)
+        )
+
+    override fun setProperties(value: TrackProperties): Boolean =
+        JniBridge.uapmdTtSetProperties(handle, value.color != null, (value.color ?: 0u).toInt(), value.path, value.order)
+
     override fun getClips(): List<ClipData> {
         val count = JniBridge.uapmdTtClipCount(handle)
         if (count == 0) return emptyList()

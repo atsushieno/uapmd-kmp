@@ -28,11 +28,8 @@ import dev.atsushieno.uapmd.cmp.pickProjectFileToSave
 import kotlinx.coroutines.launch
 
 /**
- * uapmd-app's Render To File.
- *
- * Uses the already-bound `SequencerEngine.renderOffline()` rather than
- * AppModel's `start_render` family — same result, no new binding, and the
- * progress/cancel callbacks come through directly.
+ * uapmd-app's Render To File, through the same AppModel render job it uses
+ * (see [UapmdHost.startRender]).
  */
 @Composable
 fun ExporterWindow(host: UapmdHost) {

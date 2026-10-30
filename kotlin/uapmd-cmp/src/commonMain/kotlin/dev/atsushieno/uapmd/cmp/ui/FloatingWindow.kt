@@ -1,6 +1,8 @@
 package dev.atsushieno.uapmd.cmp.ui
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.gestures.awaitEachGesture
+import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.foundation.gestures.detectDragGestures
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -118,7 +120,27 @@ class FloatingWindowManager {
     fun closeWhere(predicate: (String) -> Boolean) {
         windows.filter { predicate(it.key) }.forEach { close(it.key) }
     }
+
+    /** Resizes an open window, e.g. once its content has learned the size it wants. */
+    fun resize(key: String, size: DpSize) {
+        windows.firstOrNull { it.key == key }?.size = size.coerceAtLeast(MinWindowSize)
+    }
+
+    /** Where [key] sits in the stack, 0 being the bottom; -1 when it is not open. */
+    fun stackIndex(key: String): Int = windows.indexOfFirst { it.key == key }
+
+    val windowCount: Int get() = windows.size
+
+    /** True when no other window is drawn over [key]. */
+    fun isFrontmost(key: String): Boolean = windows.lastOrNull()?.key == key
 }
+
+/** The window size that gives [content] room inside the title bar and padding. */
+fun windowSizeForContent(content: DpSize): DpSize =
+    DpSize(content.width + ContentPadding * 2, content.height + TitleBarHeight + ContentPadding * 2)
+
+private fun DpSize.coerceAtLeast(min: DpSize) =
+    DpSize(width.coerceAtLeast(min.width), height.coerceAtLeast(min.height))
 
 private const val DetailsWindowKeyPrefix = "details:"
 
@@ -183,6 +205,16 @@ private val ResizeHandleSize = 30.dp
 /** Room for the chrome plus real content, not chrome alone. */
 private val MinWindowSize = DpSize(180.dp, TitleBarHeight + 56.dp)
 
+/** Between the window's edge and its content. */
+private val ContentPadding = 8.dp
+
+/**
+ * How far the resize corner reaches into the bottom-right of a window's content.
+ * Content that takes input there itself - a live plug-in surface - keeps clear
+ * of it, or the corner could not be grabbed.
+ */
+val ResizeGripContentOverlap: Dp = ResizeHandleSize - ContentPadding
+
 /**
  * Draws every open window over [content]. Later entries render on top, which is
  * also the focus order the manager maintains.
@@ -220,13 +252,15 @@ private fun FloatingWindowFrame(
             .offset { with(density) { IntOffset(entry.position.x.toPx().roundToInt(), entry.position.y.toPx().roundToInt()) } }
             .size(entry.size)
             .pointerInput(entry.key) {
-                // Any press inside the window raises it, matching ImGui focus behaviour.
-                awaitPointerEventScope {
-                    while (true) {
-                        awaitPointerEvent(androidx.compose.ui.input.pointer.PointerEventPass.Initial)
-                        manager.bringToFront(entry.key)
-                        break
-                    }
+                // Any press inside the window raises it, matching ImGui focus behaviour:
+                // every press, not only the first. Seen in the Initial pass, before the
+                // title bar or the content can consume it.
+                awaitEachGesture {
+                    awaitFirstDown(
+                        requireUnconsumed = false,
+                        pass = androidx.compose.ui.input.pointer.PointerEventPass.Initial
+                    )
+                    manager.bringToFront(entry.key)
                 }
             }
     ) {
@@ -238,7 +272,7 @@ private fun FloatingWindowFrame(
         ) {
             Column(Modifier.fillMaxSize()) {
                 TitleBar(manager, entry, hostSize)
-                Box(Modifier.fillMaxSize().padding(8.dp)) { entry.content() }
+                Box(Modifier.fillMaxSize().padding(ContentPadding)) { entry.content() }
             }
         }
         if (entry.resizable) ResizeHandle(entry, Modifier.align(Alignment.BottomEnd))

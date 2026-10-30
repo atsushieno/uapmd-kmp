@@ -456,6 +456,12 @@ class WasmJsProjectCommands internal constructor(private val handle: Int) : Proj
     override fun setTrackSolo(trackIndex: Int, solo: Boolean, origin: MutationOrigin) =
         wasmMod.uapmdCommandsSetTrackSolo(handle, trackIndex, solo, origin.nativeValue)
 
+    override fun setTrackProperties(trackIndex: Int, properties: TrackProperties, origin: MutationOrigin) =
+        withCStringKt(properties.path) { p ->
+            wasmMod.uapmdCommandsSetTrackProperties(handle, trackIndex, properties.color != null,
+                (properties.color ?: 0u).toInt(), p, properties.order, origin.nativeValue)
+        }
+
     override fun setTrackBypassed(trackIndex: Int, bypassed: Boolean, origin: MutationOrigin) =
         wasmMod.uapmdCommandsSetTrackBypassed(handle, trackIndex, bypassed, origin.nativeValue)
 
@@ -708,6 +714,13 @@ class WasmJsClipFragment internal constructor(
 class WasmJsTrackFragment internal constructor(internal val handle: Int) : TrackFragment {
     override val referenceId: String
         get() = readString(handle) { h, buf, size -> uapmdTrackFragmentReferenceId(h, buf, size) }
+
+    override val properties: TrackProperties
+        get() = TrackProperties(
+            color = if (wasmMod.uapmdTrackFragmentPropertiesHasColor(handle)) wasmMod.uapmdTrackFragmentPropertiesColor(handle).toUInt() else null,
+            path = readString(handle) { h, buf, size -> uapmdTrackFragmentPropertiesPath(h, buf, size) },
+            order = wasmMod.uapmdTrackFragmentPropertiesOrder(handle)
+        )
 
     override val volume: Double get() = wasmMod.uapmdTrackFragmentVolume(handle)
     override val muted: Boolean get() = wasmMod.uapmdTrackFragmentMuted(handle)

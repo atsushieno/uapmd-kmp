@@ -61,6 +61,7 @@ class AndroidAppModel internal constructor(internal val handle: Long) : AppModel
 
     override val isAudioEngineEnabled: Boolean get() = JniBridge.uapmdAppIsAudioEngineEnabled(handle)
     override fun setAudioEngineEnabled(enabled: Boolean) = JniBridge.uapmdAppSetAudioEngineEnabled(handle, enabled)
+    override fun shutdownAudioEngine() = JniBridge.uapmdAppShutdownAudioEngine(handle)
     override fun toggleAudioEngine() = JniBridge.uapmdAppToggleAudioEngine(handle)
 
     override var autoBufferSizeEnabled: Boolean

@@ -256,6 +256,10 @@ JNI_FN(void, uapmdAppSetAudioEngineEnabled)(JNIEnv*, jclass, jlong app, jboolean
     uapmd_app_set_audio_engine_enabled(AM(app), enabled);
 }
 
+JNI_FN(void, uapmdAppShutdownAudioEngine)(JNIEnv*, jclass, jlong app) {
+    uapmd_app_shutdown_audio_engine(AM(app));
+}
+
 JNI_FN(void, uapmdAppToggleAudioEngine)(JNIEnv*, jclass, jlong app) {
     uapmd_app_toggle_audio_engine(AM(app));
 }

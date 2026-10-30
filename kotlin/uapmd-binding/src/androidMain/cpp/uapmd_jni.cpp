@@ -1668,6 +1668,36 @@ JNIEXPORT jint JNICALL Java_dev_atsushieno_uapmd_JniBridge_uapmdTtChannelCount(
     return static_cast<jint>(uapmd_tt_channel_count(j2p<uapmd_timeline_track_t>(tt)));
 }
 
+JNIEXPORT jboolean JNICALL Java_dev_atsushieno_uapmd_JniBridge_uapmdTtPropertiesHasColor(
+        JNIEnv*, jclass, jlong tt) {
+    return uapmd_tt_properties_has_color(j2p<uapmd_timeline_track_t>(tt));
+}
+
+JNIEXPORT jint JNICALL Java_dev_atsushieno_uapmd_JniBridge_uapmdTtPropertiesColor(
+        JNIEnv*, jclass, jlong tt) {
+    return static_cast<jint>(uapmd_tt_properties_color(j2p<uapmd_timeline_track_t>(tt)));
+}
+
+JNIEXPORT jstring JNICALL Java_dev_atsushieno_uapmd_JniBridge_uapmdTtPropertiesPath(
+        JNIEnv* env, jclass, jlong tt) {
+    auto track = j2p<uapmd_timeline_track_t>(tt);
+    return cstr(env, [&](char* b, size_t n){ return uapmd_tt_properties_path(track, b, n); });
+}
+
+JNIEXPORT jdouble JNICALL Java_dev_atsushieno_uapmd_JniBridge_uapmdTtPropertiesOrder(
+        JNIEnv*, jclass, jlong tt) {
+    return uapmd_tt_properties_order(j2p<uapmd_timeline_track_t>(tt));
+}
+
+JNIEXPORT jboolean JNICALL Java_dev_atsushieno_uapmd_JniBridge_uapmdTtSetProperties(
+        JNIEnv* env, jclass, jlong tt, jboolean hasColor, jint color, jstring path, jdouble order) {
+    const char* p = jstr(env, path);
+    bool ok = uapmd_tt_set_properties(j2p<uapmd_timeline_track_t>(tt), hasColor,
+                                      static_cast<uint32_t>(color), p, order);
+    jstr_release(env, path, p);
+    return ok;
+}
+
 JNIEXPORT jint JNICALL Java_dev_atsushieno_uapmd_JniBridge_uapmdTtClipCount(
         JNIEnv*, jclass, jlong h) {
     auto cm = uapmd_tt_clip_manager(j2p<uapmd_timeline_track_t>(h));

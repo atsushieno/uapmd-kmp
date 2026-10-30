@@ -64,6 +64,12 @@ UAPMD_C_EXPORT uint32_t uapmd_app_track_count(uapmd_app_model_t app);
 UAPMD_C_EXPORT bool uapmd_app_is_scanning(uapmd_app_model_t app);
 UAPMD_C_EXPORT bool uapmd_app_is_audio_engine_enabled(uapmd_app_model_t app);
 UAPMD_C_EXPORT void uapmd_app_set_audio_engine_enabled(uapmd_app_model_t app, bool enabled);
+/* AppModel::shutdownAudioEngine(): the final, synchronous engine-off for
+ * application teardown. It stops the transport, mutes the output and stops plugin
+ * processing on the calling (main) thread, with no audible tail drain. Call it
+ * after uapmd_app_stop_plugin_scanning() and before tearing down addins, as
+ * uapmd-app does: an addin (ARA) must not go away while plugins still process. */
+UAPMD_C_EXPORT void uapmd_app_shutdown_audio_engine(uapmd_app_model_t app);
 UAPMD_C_EXPORT void uapmd_app_toggle_audio_engine(uapmd_app_model_t app);
 UAPMD_C_EXPORT void uapmd_app_update_audio_device_settings(uapmd_app_model_t app, int32_t sample_rate, uint32_t buffer_size);
 UAPMD_C_EXPORT void uapmd_app_set_auto_buffer_size_enabled(uapmd_app_model_t app, bool enabled);

@@ -554,6 +554,82 @@ fun main() {
         cmds.setTrackGain(0, 1.0); cmds.setTrackMuted(0, false); cmds.setTrackSolo(0, false)
     }
 
+    // ── track properties: color, path, order (uapmd 2f3f63c8d) ───────────────
+    run {
+        println("-- track properties")
+        val cmds = model.sequencer.engine.timeline.commands
+        val track = model.getTimelineTrack(0u)
+        val original = track.properties
+        println("   initial: $original")
+        check("a fresh track has no color", original.color == null)
+
+        val edited = dev.atsushieno.uapmd.TrackProperties(0x8E55BCu, "Orchestra/Strings", 2.5)
+        check("setTrackProperties accepted", cmds.setTrackProperties(0, edited))
+        println("   after set: ${track.properties}")
+        check("track properties round-tripped", track.properties == edited)
+        check("an empty path round-trips too",
+            cmds.setTrackProperties(0, edited.copy(path = "")) && track.properties.path == "")
+        cmds.setTrackProperties(0, edited)
+
+        // Rejected as TrackProperties::valid() rejects them, leaving the track as it was.
+        check("a non-finite order is rejected",
+            !cmds.setTrackProperties(0, edited.copy(order = Double.NaN)) && track.properties == edited)
+        check("a color past 0xFFFFFF is rejected",
+            !cmds.setTrackProperties(0, edited.copy(color = 0x1000000u)) && track.properties == edited)
+
+        // Undo is asynchronous; the edit is one history step.
+        var undoErr: String? = "(callback never fired)"
+        model.undo { undoErr = it }
+        val undoAt = System.currentTimeMillis()
+        while (undoErr == "(callback never fired)" && System.currentTimeMillis() - undoAt < 10_000)
+            Thread.sleep(50)
+        println("   after undo: ${track.properties} (error=$undoErr)")
+        check("undo restores the previous properties", undoErr == null && track.properties.path == "")
+
+        // The history-free setter that the serializer and fragments use.
+        check("TimelineTrack.setProperties accepted", track.setProperties(edited))
+        check("TimelineTrack.setProperties is visible to readers", track.properties == edited)
+        check("TimelineTrack.setProperties rejects invalid ones",
+            !track.setProperties(edited.copy(order = Double.POSITIVE_INFINITY)) && track.properties == edited)
+
+        // A detached track carries its properties with it.
+        var fragment: dev.atsushieno.uapmd.TrackFragment? = null
+        var fragmentErr: String? = "(callback never fired)"
+        model.sequencer.engine.timeline.captureTrackFragment(0) { f, e -> fragment = f; fragmentErr = e }
+        val fragAt = System.currentTimeMillis()
+        while (fragmentErr == "(callback never fired)" && System.currentTimeMillis() - fragAt < 10_000)
+            Thread.sleep(50)
+        println("   captured fragment: ${fragment?.properties} (error=$fragmentErr)")
+        check("a captured track fragment carries the properties", fragment?.properties == edited)
+        fragment?.close()
+
+        // The master track can carry properties too (it stays first regardless).
+        val master = model.masterTimelineTrack
+        check("master track properties are settable",
+            cmds.setTrackProperties(Int.MIN_VALUE, master.properties.copy(color = 0x336699u))
+                && master.properties.color == 0x336699u)
+        cmds.setTrackProperties(Int.MIN_VALUE, master.properties.copy(color = null))
+        cmds.setTrackProperties(0, original)
+
+        // The timeline's presentation order, as uapmd-app's sortedTrackIndices().
+        if (model.timelineTrackCount.toInt() >= 2) {
+            val host = UapmdHost.attach(model)
+            val second = model.getTimelineTrack(1u).properties
+            fun props(path: String, order: Double) = dev.atsushieno.uapmd.TrackProperties(path = path, order = order)
+            host.setTrackProperties(1, props("Strings", 0.0))
+            println("   order with a path on track 1: ${host.sortedTrackIndices}")
+            check("a track with a path sorts before those without", host.sortedTrackIndices.first() == 1)
+            host.setTrackProperties(0, props("Strings", 5.0))
+            check("within a path, order decides", host.sortedTrackIndices.take(2) == listOf(1, 0))
+            host.setTrackProperties(0, props("Brass", 5.0))
+            check("path decides before order", host.sortedTrackIndices.take(2) == listOf(0, 1))
+            host.setTrackProperties(0, props("Strings", 0.0))
+            check("equal path and order keep the track order", host.sortedTrackIndices.take(2) == listOf(0, 1))
+            cmds.setTrackProperties(0, original)
+            cmds.setTrackProperties(1, second)
+        }
+    }
+
     // ── project markers (engine-owned, edited through ProjectCommands) ───────
     val markersBefore = model.sequencer.engine.masterTrackMarkers.size
     val added = model.sequencer.engine.timeline.commands.setMasterTrackMarkers(
@@ -694,6 +770,9 @@ fun main() {
 
     // ── project save/load (struct RETURNED by value: the sret ABI path) ──────
     val projectPath = System.getProperty("java.io.tmpdir") + "/uapmd-cmp-probe.uapmd"
+    // Track properties live in the package's track-properties extension file.
+    val savedProperties = dev.atsushieno.uapmd.TrackProperties(0x00AA55u, "Drums", 7.0)
+    model.sequencer.engine.timeline.commands.setTrackProperties(0, savedProperties)
     val saved = model.saveProjectSync(projectPath)
     println("   saveProjectSync -> success=${saved.success} error=${saved.error}")
     check("saveProjectSync returned a decodable struct", saved.success || saved.error != null)
@@ -710,6 +789,9 @@ fun main() {
         prepared.close()
         println("   loadProject -> success=${loaded.success} error=${loaded.error}")
         check("loadProject round-tripped", loaded.success)
+        val loadedProperties = runCatching { model.getTimelineTrack(0u).properties }.getOrNull()
+        println("   track 0 properties after load: $loadedProperties")
+        check("track properties survive save and load", loadedProperties == savedProperties)
 
         val zipPath = projectPath.removeSuffix(".uapmd") + ".uapmdz"
         val zipped = model.saveProjectSync(zipPath)
@@ -1789,16 +1871,50 @@ fun main() {
         }
     }
 
+    // ── Render To File with the audio engine off (uapmd #65) ─────────────────
+    run {
+        println("-- render to file, engine off")
+        model.setAudioEngineEnabled(false)
+        val offAt = System.currentTimeMillis()
+        while (seq.isAudioPlaying() != 0 && System.currentTimeMillis() - offAt < 15_000)
+            Thread.sleep(50)
+        java.awt.EventQueue.invokeAndWait { }
+        val out = java.io.File(System.getProperty("java.io.tmpdir"), "uapmd-cmp-probe-render.wav")
+        out.delete()
+        val bounds = model.sequencer.engine.timeline.calculateContentBounds()
+        val started = model.startRenderToFile(
+            dev.atsushieno.uapmd.RenderToFileSettings(
+                outputPath = out.absolutePath,
+                endSeconds = 2.0,
+                hasEndSeconds = true,
+                useContentFallback = false,
+                contentBoundsValid = bounds.hasContent,
+                contentStartSeconds = bounds.firstSeconds,
+                contentEndSeconds = bounds.lastSeconds,
+                tailSeconds = 0.5
+            )
+        )
+        check("a render job starts while the engine is off", started)
+        val renderAt = System.currentTimeMillis()
+        var status = model.renderToFileStatus
+        while (status.running && System.currentTimeMillis() - renderAt < 60_000) {
+            Thread.sleep(100)
+            status = model.renderToFileStatus
+        }
+        println("   render: success=${status.success} seconds=${status.renderedSeconds} message='${status.message}' bytes=${out.length()}")
+        check("the render completes with the engine off", !status.running && status.success)
+        check("the rendered file has audio frames", out.length() > 44)
+        check("the engine stays off after the render", !model.isAudioEngineEnabled && seq.isAudioPlaying() == 0)
+        model.clearCompletedRenderStatus()
+    }
+
     // ── ordered teardown: engine off, then cleanup (§2.5) ────────────────────
-    model.setAudioEngineEnabled(false)
-    val teardownAt = System.currentTimeMillis()
-    while (seq.isAudioPlaying() != 0 && System.currentTimeMillis() - teardownAt < 15_000)
-        Thread.sleep(50)
-    // `isAudioPlaying() == 0` is NOT "shutdown finished": AppModel sets it inside
-    // completeAudioEngineShutdown(), which is itself a task queued on the event
-    // loop and still has plugin deactivation and resetProcessingState() to run.
-    // Destroying the model before that task drains crashes it on a null `this`.
-    // Flushing the queue with an ordered no-op guarantees it has completed.
+    // shutdownAudioEngine() is the synchronous engine-off uapmd-app quits with:
+    // unlike setAudioEngineEnabled(false), audio has stopped when it returns.
+    model.shutdownAudioEngine()
+    check("shutdownAudioEngine stops audio before returning", seq.isAudioPlaying() == 0)
+    check("the engine reports disabled after shutdownAudioEngine", !model.isAudioEngineEnabled)
+    // Anything else still queued on the event loop drains before the model goes.
     java.awt.EventQueue.invokeAndWait { }
     cleanupAppModel()
     println("-- cleaned up")

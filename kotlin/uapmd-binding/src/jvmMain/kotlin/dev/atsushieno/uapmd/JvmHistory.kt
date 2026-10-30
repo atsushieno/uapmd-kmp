@@ -224,6 +224,10 @@ class JvmProjectCommands internal constructor(private val handle: Pointer) : Pro
     override fun setTrackSolo(trackIndex: Int, solo: Boolean, origin: MutationOrigin) =
         lib.uapmd_commands_set_track_solo(handle, trackIndex, solo, origin.nativeValue)
 
+    override fun setTrackProperties(trackIndex: Int, properties: TrackProperties, origin: MutationOrigin) =
+        lib.uapmd_commands_set_track_properties(handle, trackIndex, properties.color != null,
+            (properties.color ?: 0u).toInt(), properties.path, properties.order, origin.nativeValue)
+
     override fun setTrackBypassed(trackIndex: Int, bypassed: Boolean, origin: MutationOrigin) =
         lib.uapmd_commands_set_track_bypassed(handle, trackIndex, bypassed, origin.nativeValue)
 
@@ -426,6 +430,13 @@ class JvmClipFragment internal constructor(
 class JvmTrackFragment internal constructor(internal val handle: Pointer) : TrackFragment {
     override val referenceId: String
         get() = readJvmString { buf, size -> lib.uapmd_track_fragment_reference_id(handle, buf, size) }
+
+    override val properties: TrackProperties
+        get() = TrackProperties(
+            color = if (lib.uapmd_track_fragment_properties_has_color(handle)) lib.uapmd_track_fragment_properties_color(handle).toUInt() else null,
+            path = readJvmString { buf, size -> lib.uapmd_track_fragment_properties_path(handle, buf, size) },
+            order = lib.uapmd_track_fragment_properties_order(handle)
+        )
 
     override val volume: Double get() = lib.uapmd_track_fragment_volume(handle)
     override val muted: Boolean get() = lib.uapmd_track_fragment_muted(handle)

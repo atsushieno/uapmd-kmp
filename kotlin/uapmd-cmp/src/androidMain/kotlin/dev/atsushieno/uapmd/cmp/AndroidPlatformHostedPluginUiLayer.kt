@@ -2,29 +2,24 @@ package dev.atsushieno.uapmd.cmp
 
 import android.content.Context
 import android.os.Build
+import android.view.SurfaceView
 import android.view.View
 import androidx.compose.foundation.background
-import androidx.compose.foundation.border
 import androidx.compose.foundation.gestures.detectDragGestures
 import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.offset
-import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.layout.wrapContentSize
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
@@ -38,10 +33,15 @@ import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalWindowInfo
+import androidx.compose.ui.unit.DpSize
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
+import dev.atsushieno.uapmd.AapUiHostDetails
+import dev.atsushieno.uapmd.cmp.ui.FloatingWindowManager
+import dev.atsushieno.uapmd.cmp.ui.ResizeGripContentOverlap
+import dev.atsushieno.uapmd.cmp.ui.windowSizeForContent
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import org.androidaudioplugin.hosting.GuiHelper
@@ -53,36 +53,70 @@ private sealed interface AapHostLoadState {
     data class Error(val message: String) : AapHostLoadState
 }
 
+private const val AapUiWindowKeyPrefix = "aap-ui:"
+
+/** The window key for one instance's AAP editor. */
+internal fun aapUiWindowKey(instanceId: Int): String = "$AapUiWindowKeyPrefix$instanceId"
+
+/**
+ * Keeps a floating window open for each AAP plug-in UI.
+ *
+ * uapmd-app ("AAP GUI can be layered appropriately now") gave an editor's title
+ * bar, focus, resizing and scrollbars to its own windowing and kept only the
+ * plug-in content as a live SurfaceView, placed in the window order. Here that
+ * windowing is [FloatingWindowManager]: an AAP editor is an ordinary window whose
+ * content is the plug-in surface, so it drags, raises and closes like the Details
+ * and Plugin Selector windows, and those can be drawn over it.
+ */
 @Composable
-internal fun AndroidPlatformHostedPluginUiLayer(
-    host: UapmdHost,
-    modifier: Modifier = Modifier
-) {
-    val engine = host.model.sequencer.engine
-    val hostedInfos = host.platformHostedUiInstanceIds.mapNotNull { id ->
-        engine.getPluginInstance(id)?.let { inst ->
-            HostedInstanceInfo(id, inst.displayName, inst.pluginId, inst.aapUiHostDetails)
-        }
-    }
-    Box(modifier = modifier) {
-        hostedInfos.forEach { info ->
-            // Keyed so that closing one window cannot hand its composition slot -
-            // and the AndroidView holding its SurfaceView - to the next one.
-            key(info.instanceId) {
-                AapPluginUiWindow(
-                    info = info,
-                    onClose = { host.hidePluginUi(info.instanceId) },
-                    onError = { host.reportPluginUiStatus(it) }
+internal fun AndroidPlatformHostedPluginUiLayer(host: UapmdHost, windows: FloatingWindowManager) {
+    val ids = host.platformHostedUiInstanceIds
+
+    LaunchedEffect(ids) {
+        ids.forEach { instanceId ->
+            val key = aapUiWindowKey(instanceId)
+            if (windows.isOpen(key))
+                return@forEach
+
+            val instance = host.model.sequencer.engine.getPluginInstance(instanceId)
+            val details = instance?.aapUiHostDetails
+            if (instance == null || details == null) {
+                host.reportPluginUiStatus(
+                    "AAP UI host details are unavailable for ${instance?.displayName ?: "instance $instanceId"}."
                 )
+                host.hidePluginUi(instanceId)
+                return@forEach
             }
+
+            val info = HostedInstanceInfo(instanceId, instance.displayName, instance.pluginId, details)
+            windows.open(
+                key = key,
+                title = "${instance.displayName} (${instance.formatName})",
+                // Resized to the plug-in's preferred size once the plug-in reports it.
+                initialSize = ProvisionalWindowSize,
+                onClose = { host.hidePluginUi(instanceId) }
+            ) {
+                AapPluginUiWindowContent(info, windows, key) { message ->
+                    host.reportPluginUiStatus(message)
+                    windows.close(key)
+                }
+            }
+        }
+
+        // A hidden editor, or one whose plug-in is gone, takes its window with it.
+        windows.closeWhere { key ->
+            if (!key.startsWith(AapUiWindowKeyPrefix)) return@closeWhere false
+            val id = key.removePrefix(AapUiWindowKeyPrefix).toIntOrNull()
+            id != null && id !in ids
         }
     }
 }
 
 @Composable
-private fun AapPluginUiWindow(
+private fun AapPluginUiWindowContent(
     info: HostedInstanceInfo,
-    onClose: () -> Unit,
+    windows: FloatingWindowManager,
+    key: String,
     onError: (String) -> Unit
 ) {
     val context = LocalContext.current
@@ -91,13 +125,6 @@ private fun AapPluginUiWindow(
     // display metrics, follows folds and multi-window.
     val available = LocalWindowInfo.current.containerSize
     val hostDetails = info.aapUiHostDetails
-    if (hostDetails == null) {
-        LaunchedEffect(info.pluginId) {
-            onError("AAP UI host details are unavailable for ${info.displayName}.")
-            onClose()
-        }
-        return
-    }
 
     val hostLoadState by produceState<AapHostLoadState>(
         initialValue = AapHostLoadState.Loading,
@@ -121,9 +148,8 @@ private fun AapPluginUiWindow(
         try {
             // A plug-in with no native view of its own (AAP's default Compose UI,
             // e.g. the MDA plug-ins) reports no preferred size. Falling back to a
-            // fixed 480x320 made that its content size, and since the viewport can
-            // never exceed the content, its window could not be resized at all.
-            // uapmd-app falls back to the host's content area instead; do the same.
+            // fixed 480x320 made that its content size, so it could never use a
+            // larger window; uapmd-app falls back to the host's content area instead.
             val preferred = host.getPreferredSizeOrFallback(
                 available.width.coerceAtLeast(MIN_CONTENT_FALLBACK_WIDTH),
                 available.height.coerceAtLeast(MIN_CONTENT_FALLBACK_HEIGHT)
@@ -147,20 +173,11 @@ private fun AapPluginUiWindow(
     }
 
     when (val state = hostLoadState) {
-        AapHostLoadState.Loading -> return
-        is AapHostLoadState.Error -> {
-            LaunchedEffect(info.instanceId, state.message) {
-                onError(state.message)
-                onClose()
-            }
-            return
+        AapHostLoadState.Loading -> Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+            Text("Connecting to ${info.displayName}…", style = MaterialTheme.typography.bodySmall)
         }
-        is AapHostLoadState.Ready -> AapPluginSurfaceWindow(
-            title = info.displayName,
-            state = state.state,
-            available = available,
-            onClose = onClose
-        )
+        is AapHostLoadState.Error -> LaunchedEffect(state.message) { onError(state.message) }
+        is AapHostLoadState.Ready -> AapPluginSurface(state.state, windows, key, available)
     }
 }
 
@@ -170,83 +187,85 @@ private data class AapHostState(
     val contentHeight: Int
 )
 
+/** The viewport configuration the remote editor last laid itself out for. */
+private class AppliedViewport {
+    var configuration: GuiHelper.ViewportConfiguration? = null
+}
+
 @Composable
-private fun AapPluginSurfaceWindow(
-    title: String,
+private fun AapPluginSurface(
     state: AapHostState,
-    available: IntSize,
-    onClose: () -> Unit
+    windows: FloatingWindowManager,
+    key: String,
+    available: IntSize
 ) {
     val density = LocalDensity.current
-    val scrollbarThickness = 12.dp
-    val resizeHandleSize = 20.dp
-    // Only an estimate of the title bar's own height, used to keep the window
-    // within the host window; the bar itself is sized by its content.
-    val titleBarHeight = 52.dp
-    val scrollbarThicknessPx = with(density) { scrollbarThickness.roundToPx() }
-    val chromeHeightPx = with(density) { (titleBarHeight + scrollbarThickness).roundToPx() }
-    // The viewport may grow up to the content size, but never past what the host
-    // window can actually show. Mirrors uapmd-app's constrainViewportSize().
-    val maxAvailableWidthPx = (available.width - scrollbarThicknessPx).coerceAtLeast(1)
-    val maxAvailableHeightPx = (available.height - chromeHeightPx).coerceAtLeast(1)
-    val minDimensionPx = with(density) { MIN_VIEWPORT_DIMENSION.roundToPx() }
+    val barPx = with(density) { ScrollbarThickness.roundToPx() }
+    // The window's resize corner reaches into the bottom-right of its content.
+    // The surface stays clear of it: a surface above the window takes the
+    // touches there, and the corner could no longer be grabbed.
+    val gripPx = with(density) { ResizeGripContentOverlap.roundToPx() }
+    val surfaceView = state.host.surfaceView as SurfaceView
 
-    var offsetX by remember(title) { mutableStateOf(32f) }
-    var offsetY by remember(title) { mutableStateOf(32f) }
     var contentWidthPx by remember(state) { mutableStateOf(state.contentWidth) }
     var contentHeightPx by remember(state) { mutableStateOf(state.contentHeight) }
-    // Open at 80% of the host window at most, as uapmd-app does, so the window
-    // lands fully on screen with room to grab its edges.
-    var viewportWidthPx by remember(state) {
-        mutableStateOf(
-            constrainViewport(
-                state.contentWidth, (maxAvailableWidthPx * INITIAL_MAX_HOST_FRACTION).toInt(),
-                state.contentWidth, minDimensionPx
-            )
-        )
-    }
-    var viewportHeightPx by remember(state) {
-        mutableStateOf(
-            constrainViewport(
-                state.contentHeight, (maxAvailableHeightPx * INITIAL_MAX_HOST_FRACTION).toInt(),
-                state.contentHeight, minDimensionPx
-            )
-        )
-    }
-    var scrollX by remember { mutableStateOf(0) }
-    var scrollY by remember { mutableStateOf(0) }
+    var areaPx by remember(state) { mutableStateOf(IntSize.Zero) }
+    var scrollX by remember(state) { mutableStateOf(0) }
+    var scrollY by remember(state) { mutableStateOf(0) }
     var surfaceReady by remember(state) { mutableStateOf(false) }
     var connected by remember(state) { mutableStateOf(false) }
-    var resizeStartWidth by remember { mutableStateOf(viewportWidthPx) }
-    var resizeStartHeight by remember { mutableStateOf(viewportHeightPx) }
-    var resizeDragWidth by remember { mutableStateOf(0f) }
-    var resizeDragHeight by remember { mutableStateOf(0f) }
+    val applied = remember(state) { AppliedViewport() }
     val currentHost by rememberUpdatedState(state.host)
-    val viewportWidthDp = with(density) { viewportWidthPx.toDp() }
-    val viewportHeightDp = with(density) { viewportHeightPx.toDp() }
-    val maxViewportWidthPx = minOf(contentWidthPx, maxAvailableWidthPx).coerceAtLeast(1)
-    val maxViewportHeightPx = minOf(contentHeightPx, maxAvailableHeightPx).coerceAtLeast(1)
-    val minViewportWidthPx = minDimensionPx.coerceAtMost(maxViewportWidthPx)
-    val minViewportHeightPx = minDimensionPx.coerceAtMost(maxViewportHeightPx)
+
+    // The viewport is whatever the window leaves for it. A vertical scrollbar
+    // takes room only when the content overflows; the bottom strip is there
+    // anyway, for the resize corner, and holds the horizontal one.
+    val vertical = contentHeightPx > areaPx.height - gripPx
+    val viewportWidthPx = (areaPx.width - (if (vertical) barPx else 0)).coerceAtLeast(1)
+    val viewportHeightPx = (areaPx.height - gripPx).coerceAtLeast(1)
+    val horizontal = contentWidthPx > viewportWidthPx
     val maxScrollX = (contentWidthPx - viewportWidthPx).coerceAtLeast(0)
     val maxScrollY = (contentHeightPx - viewportHeightPx).coerceAtLeast(0)
     val effectiveScrollX = scrollX.coerceIn(0, maxScrollX)
     val effectiveScrollY = scrollY.coerceIn(0, maxScrollY)
-    val frameWidthDp = viewportWidthDp + if (maxScrollY > 0) scrollbarThickness else 0.dp
 
-    DisposableEffect(currentHost) {
-        onDispose {
-            connected = false
+    // The preferred size asks for a window size once, as uapmd-app's
+    // resizeContent() does: at most 80% of the host window, plus whatever
+    // scrollbar that leaves necessary. Later content measurements only move the
+    // scrollbars. Growing the window with them fed a responsive (Compose)
+    // editor's layout back into another, larger window size.
+    LaunchedEffect(state) {
+        val viewportW = state.contentWidth.coerceAtMost((available.width * INITIAL_MAX_HOST_FRACTION).toInt())
+        val viewportH = state.contentHeight.coerceAtMost((available.height * INITIAL_MAX_HOST_FRACTION).toInt())
+        val areaW = viewportW + if (state.contentHeight > viewportH) barPx else 0
+        val areaH = viewportH + gripPx
+        with(density) {
+            val size = windowSizeForContent(DpSize(areaW.toDp(), areaH.toDp()))
+            windows.resize(
+                key,
+                DpSize(
+                    size.width.coerceAtMost((available.width * MAX_WINDOW_HOST_FRACTION).toDp()),
+                    size.height.coerceAtMost((available.height * MAX_WINDOW_HOST_FRACTION).toDp())
+                )
+            )
         }
     }
 
+    // Where the surface sits in the window stack; see applyWindowStackOrder().
+    val front = windows.isFrontmost(key)
+    val stackIndex = windows.stackIndex(key)
+    val stackSize = windows.windowCount
+    LaunchedEffect(surfaceView, front, stackIndex, stackSize) {
+        surfaceView.applyWindowStackOrder(front, stackIndex, stackSize)
+    }
+
     // Ordering matters for remote plugin UI setup, exactly as in uapmd-app's
-    // PluginUiOverlay.scheduleSurfaceReadyNotification: the SurfaceView has to be
-    // in a live view tree with a display and layout params before connect() may
-    // run, because connectUINoHandler() reads surfaceView.display.displayId and
-    // hands the plug-in this view's host token. Connecting during composition -
-    // before Android has attached the view - raced SurfaceControlViewHost setup
-    // and left the plug-in surface blank.
+    // PluginUiOverlay: the SurfaceView has to be in a live view tree with a
+    // display and layout params before connect() may run, because
+    // connectUINoHandler() reads surfaceView.display.displayId and hands the
+    // plug-in this view's host token. Connecting during composition - before
+    // Android has attached the view - raced SurfaceControlViewHost setup and
+    // left the plug-in surface blank.
     DisposableEffect(currentHost) {
         val view = currentHost.surfaceView
         var cancelled = false
@@ -265,22 +284,20 @@ private fun AapPluginSurfaceWindow(
         onDispose {
             cancelled = true
             surfaceReady = false
+            connected = false
         }
     }
 
     DisposableEffect(state.host) {
+        // Delivered on the main looper by aap-core.
         val listener: (Int, Int) -> Unit = { w, h ->
-            // Skip notifications that arrive at the current viewport dimensions.
-            // These come from relayout() calls triggered by configureViewport, not from
-            // genuine content-size changes (e.g. plugin zoom level changes).
-            // Also skip if nothing actually changed.
-            val isViewportSized = w == viewportWidthPx && h == viewportHeightPx
-            val isSameSize = w == contentWidthPx && h == contentHeightPx
-            if (!isViewportSized && !isSameSize) {
+            if (w > 0 && h > 0 && (w != contentWidthPx || h != contentHeightPx)) {
+                // The remote editor already laid itself out at this size: take it
+                // as the content size, rather than echoing it back as another
+                // relayout request (uapmd-app does the same).
+                applied.configuration = applied.configuration?.copy(contentWidth = w, contentHeight = h)
                 contentWidthPx = w
                 contentHeightPx = h
-                if (viewportWidthPx > w) viewportWidthPx = w
-                if (viewportHeightPx > h) viewportHeightPx = h
             }
         }
         state.host.contentSizeChangedListeners.add(listener)
@@ -289,159 +306,110 @@ private fun AapPluginSurfaceWindow(
         }
     }
 
-    // Deliberately NOT keyed on the viewport size: it changes while the popup is
+    // Deliberately NOT keyed on the viewport size: it changes while the window is
     // laid out, which cancelled this effect mid-connect() and ran a second
     // connect(). The service then tore down the first GUI session ("Another GUI
     // controller ... was alive. Terminating it.") and the plug-in UI stayed blank.
     LaunchedEffect(currentHost, surfaceReady) {
         if (!surfaceReady || connected)
             return@LaunchedEffect
-        // Connect at the full preferred content size so JUCE's peer view is not constrained
-        // to the (smaller) viewport dimensions. This allows JUCE to report its actual preferred
-        // size via OPCODE_CONTENT_SIZE_CHANGED (e.g. Odin2 at 150% zoom = 1800x1200),
-        // which then updates contentWidthPx and triggers a correct configureViewport call.
+        // Connect at the full preferred content size so JUCE's peer view is not
+        // constrained to the (smaller) viewport. JUCE then reports its actual size
+        // via OPCODE_CONTENT_SIZE_CHANGED (e.g. Odin2 at 150% zoom = 1800x1200).
         currentHost.connect(state.contentWidth, state.contentHeight)
         currentHost.show()
         connected = true
     }
 
-    LaunchedEffect(currentHost, viewportWidthPx, viewportHeightPx, contentWidthPx, contentHeightPx, effectiveScrollX, effectiveScrollY, connected) {
-        if (!connected)
+    LaunchedEffect(
+        currentHost, viewportWidthPx, viewportHeightPx, contentWidthPx, contentHeightPx,
+        effectiveScrollX, effectiveScrollY, connected
+    ) {
+        if (!connected || areaPx == IntSize.Zero)
             return@LaunchedEffect
-        currentHost.configureViewport(
-            GuiHelper.ViewportConfiguration(
-                viewportWidth = viewportWidthPx,
-                viewportHeight = viewportHeightPx,
-                contentWidth = contentWidthPx,
-                contentHeight = contentHeightPx,
-                scrollX = effectiveScrollX,
-                scrollY = effectiveScrollY
-            )
+        val configuration = GuiHelper.ViewportConfiguration(
+            viewportWidth = viewportWidthPx,
+            viewportHeight = viewportHeightPx,
+            contentWidth = contentWidthPx,
+            contentHeight = contentHeightPx,
+            scrollX = effectiveScrollX,
+            scrollY = effectiveScrollY
         )
+        if (applied.configuration == configuration)
+            return@LaunchedEffect
+        applied.configuration = configuration
+        currentHost.configureViewport(configuration)
     }
 
-    // Drawn in the activity window, not in a Popup, so that text fields in the
-    // plug-in UI can get the IME. aap-core (0.11.2+) hands focus to the plug-in's
-    // embedded window through the SurfaceView's *host* window
-    // (SurfaceView.onFocusChanged -> grantEmbeddedWindowFocus), which only takes
-    // effect while that host window holds window focus. A Popup window is
-    // FLAG_NOT_FOCUSABLE, so it never did; a focusable one would instead keep
-    // window focus - and with it the IME and key shortcuts - away from the rest
-    // of the app for as long as any plug-in UI is open. In the activity window,
-    // view focus decides which side gets the keyboard, exactly as in uapmd-app's
-    // PluginUiOverlay: aap-core focuses the SurfaceView when the plug-in UI is
-    // touched, and Compose's interop takes that focus back when a Compose text
-    // field is focused.
-    Box(
-        modifier = Modifier
-            // Measured on its own terms, as the Popup was. The layer loses the IME
-            // height (safeDrawing insets) while a keyboard is up, and that must not
-            // squeeze the plug-in surface.
-            .wrapContentSize(Alignment.TopStart, unbounded = true)
-            .offset { IntOffset(offsetX.roundToInt(), offsetY.roundToInt()) }
-    ) {
-        Column(
-            modifier = Modifier
-                .padding(12.dp)
-                // A separate popup window swallowed every press within its bounds;
-                // in-window, presses on the frame would fall through to the
-                // timeline underneath unless something here is hit.
-                .pointerInput(Unit) {
-                    awaitPointerEventScope {
-                        while (true)
-                            awaitPointerEvent()
-                    }
-                }
-                .background(MaterialTheme.colorScheme.surface)
-                .border(1.dp, MaterialTheme.colorScheme.outlineVariant)
-        ) {
-            Row(
+    // In the activity window, not in a Popup, so that text fields in the plug-in
+    // UI can get the IME: aap-core hands focus to the plug-in's embedded window
+    // through the SurfaceView's *host* window (grantEmbeddedWindowFocus), which
+    // only takes effect while that host window holds window focus.
+    Box(Modifier.fillMaxSize().onSizeChanged { areaPx = it }) {
+        if (areaPx.width <= 0 || areaPx.height <= 0)
+            return@Box
+        val viewportWidthDp = with(density) { viewportWidthPx.toDp() }
+        val viewportHeightDp = with(density) { viewportHeightPx.toDp() }
+        AndroidView(
+            modifier = Modifier.size(viewportWidthDp, viewportHeightDp),
+            factory = { _: Context ->
+                // Placed before it is attached, so it never shows above windows it should not.
+                surfaceView.also { it.applyWindowStackOrder(front, stackIndex, stackSize) }
+            },
+            onRelease = { _: View ->
+                surfaceReady = false
+                connected = false
+            },
+            onReset = { _: View -> }
+        )
+        if (vertical) {
+            ScrollbarTrack(
                 modifier = Modifier
-                    .width(frameWidthDp)
-                    .background(MaterialTheme.colorScheme.primaryContainer)
-                    .pointerInput(Unit) {
-                        detectDragGestures { change, dragAmount ->
-                            change.consume()
-                            offsetX += dragAmount.x
-                            offsetY += dragAmount.y
-                        }
-                    }
-                    .padding(horizontal = 8.dp, vertical = 6.dp),
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Text(title, modifier = Modifier.weight(1f), color = MaterialTheme.colorScheme.onPrimaryContainer)
-                TextButton(onClick = onClose) {
-                    Text("Close")
-                }
-            }
-            Row {
-                Box(
-                    modifier = Modifier
-                        .width(viewportWidthDp)
-                        .height(viewportHeightDp)
-                        .border(1.dp, MaterialTheme.colorScheme.outline)
-                ) {
-                    AndroidView(
-                        modifier = Modifier.fillMaxSize(),
-                        factory = { _: Context -> state.host.surfaceView },
-                        onRelease = { _: View ->
-                            surfaceReady = false
-                            connected = false
-                        },
-                        onReset = { _: View -> }
-                    )
-                }
-                if (maxScrollY > 0) {
-                    ScrollbarTrack(
-                        modifier = Modifier
-                            .width(scrollbarThickness)
-                            .height(viewportHeightDp),
-                        scrollValue = effectiveScrollY,
-                        maxValue = maxScrollY,
-                        isHorizontal = false,
-                        onScrollValueChange = { scrollY = it }
-                    )
-                }
-            }
-            Row {
-                if (maxScrollX > 0) {
-                    ScrollbarTrack(
-                        modifier = Modifier
-                            .width(viewportWidthDp)
-                            .height(scrollbarThickness),
-                        scrollValue = effectiveScrollX,
-                        maxValue = maxScrollX,
-                        isHorizontal = true,
-                        onScrollValueChange = { scrollX = it }
-                    )
-                } else {
-                    Box(
-                        modifier = Modifier
-                            .width(viewportWidthDp)
-                            .height(resizeHandleSize)
-                    )
-                }
-                ResizeHandle(
-                    modifier = Modifier
-                        .width(if (maxScrollY > 0) scrollbarThickness else resizeHandleSize)
-                        .height(if (maxScrollX > 0) scrollbarThickness else resizeHandleSize),
-                    onResizeStart = {
-                        resizeStartWidth = viewportWidthPx
-                        resizeStartHeight = viewportHeightPx
-                        resizeDragWidth = 0f
-                        resizeDragHeight = 0f
-                    },
-                    onResize = { dragWidth, dragHeight ->
-                        resizeDragWidth += dragWidth
-                        resizeDragHeight += dragHeight
-                        viewportWidthPx = (resizeStartWidth + resizeDragWidth.roundToInt())
-                            .coerceIn(minViewportWidthPx, maxViewportWidthPx)
-                        viewportHeightPx = (resizeStartHeight + resizeDragHeight.roundToInt())
-                            .coerceIn(minViewportHeightPx, maxViewportHeightPx)
-                    }
-                )
-            }
+                    .align(Alignment.TopEnd)
+                    .width(ScrollbarThickness)
+                    .height(viewportHeightDp),
+                scrollValue = effectiveScrollY,
+                maxValue = maxScrollY,
+                isHorizontal = false,
+                onScrollValueChange = { scrollY = it }
+            )
         }
+        if (horizontal) {
+            ScrollbarTrack(
+                modifier = Modifier
+                    .offset { IntOffset(0, viewportHeightPx) }
+                    .width(with(density) { (areaPx.width - gripPx).coerceAtLeast(1).toDp() })
+                    .height(ScrollbarThickness),
+                scrollValue = effectiveScrollX,
+                maxValue = maxScrollX,
+                isHorizontal = true,
+                onScrollValueChange = { scrollX = it }
+            )
+        }
+    }
+}
+
+/**
+ * Places the plug-in surface in the window stack, as uapmd-app now does.
+ *
+ * Behind the activity window, a SurfaceView shows through the hole it punches
+ * when it is drawn, in Compose's draw order, so a window drawn later covers it
+ * like any other window's content - including another editor's. Android
+ * delivers no input to an embedded window behind its host, though, so the front
+ * editor, which nothing is drawn over, goes above the window, where its plug-in
+ * receives touches directly. A background editor still gets the touch that
+ * raises it: Compose hands it to the SurfaceView, and aap-core transfers that
+ * gesture to the plug-in on Android 15 and later.
+ */
+private fun SurfaceView.applyWindowStackOrder(front: Boolean, stackIndex: Int, stackSize: Int) {
+    if (Build.VERSION.SDK_INT >= 36) {
+        // Negative orders are behind the window and a higher order is above a
+        // lower one, so background editors keep the order of their windows.
+        setCompositionOrder(if (front) 1 else stackIndex - stackSize - 1)
+    } else {
+        // Earlier releases have a single order behind the window, so where two
+        // background editors overlap either may show.
+        setZOrderOnTop(front)
     }
 }
 
@@ -540,57 +508,25 @@ private fun updateScrollFromDrag(
     onScrollValueChange(next.coerceIn(0, maxValue))
 }
 
-@Composable
-private fun ResizeHandle(
-    modifier: Modifier,
-    onResizeStart: () -> Unit,
-    onResize: (dragWidth: Float, dragHeight: Float) -> Unit
-) {
-    Box(
-        modifier = modifier
-            .background(Color.Black.copy(alpha = 0.2f))
-            .pointerInput(Unit) {
-                detectDragGestures(
-                    onDragStart = { onResizeStart() },
-                    onDrag = { change, dragAmount ->
-                        change.consume()
-                        onResize(dragAmount.x, dragAmount.y)
-                    }
-                )
-            }
-    ) {
-        Text(
-            text = "◢",
-            color = Color.White.copy(alpha = 0.75f),
-            modifier = Modifier.align(Alignment.Center)
-        )
-    }
-}
+private val ScrollbarThickness = 12.dp
 
-
-/**
- * Smallest usable plug-in window, matching uapmd-app's MIN_DIMENSION_DP. It is a
- * ceiling as well as a floor: a plug-in whose content is smaller than this may
- * not be stretched past its own content size.
- */
-private val MIN_VIEWPORT_DIMENSION = 200.dp
+/** Until the plug-in reports the size it wants. */
+private val ProvisionalWindowSize = DpSize(480.dp, 360.dp)
 
 /** Floor for a content size, used when a plug-in reports no preferred size. */
 private const val MIN_CONTENT_FALLBACK_WIDTH = 480
 private const val MIN_CONTENT_FALLBACK_HEIGHT = 320
 
-/** Fraction of the host window a freshly opened plug-in window may occupy. */
+/** Fraction of the host window a freshly opened plug-in viewport may occupy. */
 private const val INITIAL_MAX_HOST_FRACTION = 0.8f
 
-private fun constrainViewport(contentPx: Int, maxAvailablePx: Int, desiredPx: Int, minPx: Int): Int {
-    val max = minOf(contentPx, maxAvailablePx).coerceAtLeast(1)
-    return desiredPx.coerceIn(minPx.coerceAtMost(max), max)
-}
+/** Fraction of the host window a freshly opened plug-in window may occupy, chrome included. */
+private const val MAX_WINDOW_HOST_FRACTION = 0.85f
 
 /** The four fields this layer needs about a platform-hosted instance. */
 internal data class HostedInstanceInfo(
     val instanceId: Int,
     val displayName: String,
     val pluginId: String,
-    val aapUiHostDetails: dev.atsushieno.uapmd.AapUiHostDetails?
+    val aapUiHostDetails: AapUiHostDetails
 )

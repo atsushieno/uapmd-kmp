@@ -231,6 +231,16 @@ class JvmTimelineTrack internal constructor(
 ) : TimelineTrack {
     override val channelCount: Int get() = lib.uapmd_tt_channel_count(handle).toInt()
 
+    override val properties: TrackProperties
+        get() = TrackProperties(
+            color = if (lib.uapmd_tt_properties_has_color(handle)) lib.uapmd_tt_properties_color(handle).toUInt() else null,
+            path = readJvmString { buf, size -> lib.uapmd_tt_properties_path(handle, buf, size) },
+            order = lib.uapmd_tt_properties_order(handle)
+        )
+
+    override fun setProperties(value: TrackProperties): Boolean =
+        lib.uapmd_tt_set_properties(handle, value.color != null, (value.color ?: 0u).toInt(), value.path, value.order)
+
     override fun getClips(): List<ClipData> {
         val cm = lib.uapmd_tt_clip_manager(handle) ?: return emptyList()
         val count = lib.uapmd_cm_clip_count(cm).toInt()

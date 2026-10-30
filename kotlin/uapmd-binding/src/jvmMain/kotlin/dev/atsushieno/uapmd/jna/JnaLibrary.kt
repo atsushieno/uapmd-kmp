@@ -1109,6 +1109,11 @@ interface UapmdLibrary : Library {
                                                   outProgress: UapmdOfflineRenderProgress): Boolean
     fun uapmd_engine_is_track_busy(engine: Pointer, trackIndex: Int): Boolean
     fun uapmd_tt_channel_count(tt: Pointer): Int
+    fun uapmd_tt_properties_has_color(tt: Pointer): Boolean
+    fun uapmd_tt_properties_color(tt: Pointer): Int
+    fun uapmd_tt_properties_path(tt: Pointer, buf: ByteArray?, bufSize: Long): Long
+    fun uapmd_tt_properties_order(tt: Pointer): Double
+    fun uapmd_tt_set_properties(tt: Pointer, hasColor: Boolean, color: Int, path: String?, order: Double): Boolean
     fun uapmd_audio_file_reader_create(filepath: String): Pointer?
     fun uapmd_audio_file_reader_create_silent(numFrames: Long, numChannels: Int, sampleRate: Int): Pointer?
     fun uapmd_audio_file_reader_destroy(reader: Pointer?)
@@ -1679,6 +1684,7 @@ interface UapmdLibrary : Library {
     fun uapmd_commands_set_clip_needs_file_save(cmd: Pointer?, trackIndex: Int, clipId: Int, needsSave: Boolean, origin: Int): Boolean
     fun uapmd_commands_set_clip_markers(cmd: Pointer?, trackIndex: Int, clipId: Int, markers: UapmdClipMarker?, markerCount: Int, origin: Int): Boolean
     fun uapmd_commands_set_clip_audio_warps(cmd: Pointer?, trackIndex: Int, clipId: Int, warps: UapmdAudioWarpPoint?, warpCount: Int, origin: Int): Boolean
+    fun uapmd_commands_set_track_properties(cmd: Pointer?, trackIndex: Int, hasColor: Boolean, color: Int, path: String?, order: Double, origin: Int): Boolean
     fun uapmd_commands_set_track_gain(cmd: Pointer?, trackIndex: Int, gain: Double, origin: Int): Boolean
     fun uapmd_commands_set_track_muted(cmd: Pointer?, trackIndex: Int, muted: Boolean, origin: Int): Boolean
     fun uapmd_commands_set_track_solo(cmd: Pointer?, trackIndex: Int, solo: Boolean, origin: Int): Boolean
@@ -1800,6 +1806,10 @@ interface UapmdLibrary : Library {
     fun uapmd_track_fragment_volume(fragment: Pointer?): Double
     fun uapmd_track_fragment_muted(fragment: Pointer?): Boolean
     fun uapmd_track_fragment_solo(fragment: Pointer?): Boolean
+    fun uapmd_track_fragment_properties_has_color(fragment: Pointer?): Boolean
+    fun uapmd_track_fragment_properties_color(fragment: Pointer?): Int
+    fun uapmd_track_fragment_properties_path(fragment: Pointer?, buf: ByteArray?, bufSize: Long): Long
+    fun uapmd_track_fragment_properties_order(fragment: Pointer?): Double
     fun uapmd_track_fragment_graph_type(fragment: Pointer?, buf: ByteArray?, bufSize: Long): Long
     fun uapmd_track_fragment_graph_bytes(fragment: Pointer?, buf: ByteArray?, bufSize: Long): Long
     fun uapmd_track_fragment_clip_count(fragment: Pointer?): Int
@@ -1918,6 +1928,7 @@ interface UapmdLibrary : Library {
     fun uapmd_app_is_scanning(app: Pointer?): Boolean
     fun uapmd_app_is_audio_engine_enabled(app: Pointer?): Boolean
     fun uapmd_app_set_audio_engine_enabled(app: Pointer?, enabled: Boolean)
+    fun uapmd_app_shutdown_audio_engine(app: Pointer?)
     fun uapmd_app_toggle_audio_engine(app: Pointer?)
     fun uapmd_app_update_audio_device_settings(app: Pointer?, sampleRate: Int, bufferSize: Int)
     fun uapmd_app_set_auto_buffer_size_enabled(app: Pointer?, enabled: Boolean)

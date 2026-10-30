@@ -426,6 +426,15 @@ JNI_FN(jboolean, uapmdCommandsSetClipAudioWarps)(JNIEnv* env, jclass, jlong h, j
                                                buf.data(), buf.size(), static_cast<uapmd_mutation_origin_t>(o));
 }
 
+JNI_FN(jboolean, uapmdCommandsSetTrackProperties)(JNIEnv* env, jclass, jlong h, jint t, jboolean hasColor, jint color, jstring path, jdouble order, jint o) {
+    const char* p = jstr(env, path);
+    bool ok = uapmd_commands_set_track_properties(j2p<uapmd_project_commands_t>(h), t, hasColor,
+                                                  static_cast<uint32_t>(color), p, order,
+                                                  static_cast<uapmd_mutation_origin_t>(o));
+    jstr_release(env, path, p);
+    return ok;
+}
+
 JNI_FN(jboolean, uapmdCommandsSetTrackGain)(JNIEnv*, jclass, jlong h, jint t, jdouble v, jint o) {
     return uapmd_commands_set_track_gain(j2p<uapmd_project_commands_t>(h), t, v, static_cast<uapmd_mutation_origin_t>(o));
 }
@@ -744,6 +753,23 @@ JNI_FN(jboolean, uapmdTrackFragmentMuted)(JNIEnv*, jclass, jlong h) {
 
 JNI_FN(jboolean, uapmdTrackFragmentSolo)(JNIEnv*, jclass, jlong h) {
     return uapmd_track_fragment_solo(j2p<uapmd_track_fragment_t>(h));
+}
+
+JNI_FN(jboolean, uapmdTrackFragmentPropertiesHasColor)(JNIEnv*, jclass, jlong h) {
+    return uapmd_track_fragment_properties_has_color(j2p<uapmd_track_fragment_t>(h));
+}
+
+JNI_FN(jint, uapmdTrackFragmentPropertiesColor)(JNIEnv*, jclass, jlong h) {
+    return static_cast<jint>(uapmd_track_fragment_properties_color(j2p<uapmd_track_fragment_t>(h)));
+}
+
+JNI_FN(jstring, uapmdTrackFragmentPropertiesPath)(JNIEnv* env, jclass, jlong h) {
+    auto fragment = j2p<uapmd_track_fragment_t>(h);
+    return cstr(env, [&](char* buf, size_t size) { return uapmd_track_fragment_properties_path(fragment, buf, size); });
+}
+
+JNI_FN(jdouble, uapmdTrackFragmentPropertiesOrder)(JNIEnv*, jclass, jlong h) {
+    return uapmd_track_fragment_properties_order(j2p<uapmd_track_fragment_t>(h));
 }
 
 JNI_FN(jstring, uapmdTrackFragmentGraphType)(JNIEnv* env, jclass, jlong h) {

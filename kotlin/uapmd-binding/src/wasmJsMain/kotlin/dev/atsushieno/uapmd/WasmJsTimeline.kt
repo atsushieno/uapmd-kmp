@@ -7,6 +7,18 @@ class WasmJsTimelineTrack internal constructor(
 ) : TimelineTrack {
     override val channelCount: Int get() = wasmMod.uapmdTtChannelCount(handle)
 
+    override val properties: TrackProperties
+        get() = TrackProperties(
+            color = if (wasmMod.uapmdTtPropertiesHasColor(handle)) wasmMod.uapmdTtPropertiesColor(handle).toUInt() else null,
+            path = readString(handle) { h, buf, size -> uapmdTtPropertiesPath(h, buf, size) },
+            order = wasmMod.uapmdTtPropertiesOrder(handle)
+        )
+
+    override fun setProperties(value: TrackProperties): Boolean =
+        withCStringKt(value.path) { p ->
+            wasmMod.uapmdTtSetProperties(handle, value.color != null, (value.color ?: 0u).toInt(), p, value.order)
+        }
+
     override fun getClips(): List<ClipData> {
         val mod = wasmMod
         val cm = mod.uapmdTtClipManager(handle)

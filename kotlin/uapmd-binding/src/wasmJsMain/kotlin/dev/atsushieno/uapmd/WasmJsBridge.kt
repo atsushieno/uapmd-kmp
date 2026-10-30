@@ -459,6 +459,16 @@ external interface UapmdCApiModule : JsAny {
     fun uapmdEngineIsTrackBusy(engine: Int, trackIndex: Int): Boolean
     @JsName("_uapmd_tt_channel_count")
     fun uapmdTtChannelCount(handle: Int): Int
+    @JsName("_uapmd_tt_properties_has_color")
+    fun uapmdTtPropertiesHasColor(handle: Int): Boolean
+    @JsName("_uapmd_tt_properties_color")
+    fun uapmdTtPropertiesColor(handle: Int): Int
+    @JsName("_uapmd_tt_properties_path")
+    fun uapmdTtPropertiesPath(handle: Int, buf: Int, bufSize: Int): Int
+    @JsName("_uapmd_tt_properties_order")
+    fun uapmdTtPropertiesOrder(handle: Int): Double
+    @JsName("_uapmd_tt_set_properties")
+    fun uapmdTtSetProperties(handle: Int, hasColor: Boolean, color: Int, pathPtr: Int, order: Double): Boolean
     @JsName("_uapmd_tt_sample_rate")
     fun uapmdTtSampleRate(handle: Int): Int
     @JsName("_uapmd_tt_clip_manager")
@@ -717,6 +727,8 @@ external interface UapmdCApiModule : JsAny {
     fun uapmdCommandsSetClipMarkers(cmd: Int, t: Int, c: Int, markersPtr: Int, count: Int, o: Int): Boolean
     @JsName("_uapmd_commands_set_clip_audio_warps")
     fun uapmdCommandsSetClipAudioWarps(cmd: Int, t: Int, c: Int, warpsPtr: Int, count: Int, o: Int): Boolean
+    @JsName("_uapmd_commands_set_track_properties")
+    fun uapmdCommandsSetTrackProperties(cmd: Int, t: Int, hasColor: Boolean, color: Int, pathPtr: Int, order: Double, o: Int): Boolean
     @JsName("_uapmd_commands_set_track_gain")
     fun uapmdCommandsSetTrackGain(cmd: Int, t: Int, v: Double, o: Int): Boolean
     @JsName("_uapmd_commands_set_track_muted")
@@ -797,6 +809,14 @@ external interface UapmdCApiModule : JsAny {
     fun uapmdTrackFragmentMuted(fragment: Int): Boolean
     @JsName("_uapmd_track_fragment_solo")
     fun uapmdTrackFragmentSolo(fragment: Int): Boolean
+    @JsName("_uapmd_track_fragment_properties_has_color")
+    fun uapmdTrackFragmentPropertiesHasColor(fragment: Int): Boolean
+    @JsName("_uapmd_track_fragment_properties_color")
+    fun uapmdTrackFragmentPropertiesColor(fragment: Int): Int
+    @JsName("_uapmd_track_fragment_properties_path")
+    fun uapmdTrackFragmentPropertiesPath(fragment: Int, buf: Int, bufSize: Int): Int
+    @JsName("_uapmd_track_fragment_properties_order")
+    fun uapmdTrackFragmentPropertiesOrder(fragment: Int): Double
     @JsName("_uapmd_track_fragment_graph_type")
     fun uapmdTrackFragmentGraphType(fragment: Int, buf: Int, bufSize: Int): Int
     @JsName("_uapmd_track_fragment_graph_bytes")
@@ -1077,6 +1097,8 @@ external interface UapmdCApiModule : JsAny {
     fun uapmdAppIsAudioEngineEnabled(app: Int): Boolean
     @JsName("_uapmd_app_set_audio_engine_enabled")
     fun uapmdAppSetAudioEngineEnabled(app: Int, enabled: Boolean)
+    @JsName("_uapmd_app_shutdown_audio_engine")
+    fun uapmdAppShutdownAudioEngine(app: Int)
     @JsName("_uapmd_app_toggle_audio_engine")
     fun uapmdAppToggleAudioEngine(app: Int)
     @JsName("_uapmd_app_update_audio_device_settings")

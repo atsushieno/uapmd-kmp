@@ -53,6 +53,16 @@ class NativeTimelineTrack internal constructor(
 ) : TimelineTrack {
     override val channelCount: Int get() = uapmd_tt_channel_count(handle).toInt()
 
+    override val properties: TrackProperties
+        get() = TrackProperties(
+            color = if (uapmd_tt_properties_has_color(handle)) uapmd_tt_properties_color(handle) else null,
+            path = readCString { buf, size -> uapmd_tt_properties_path(handle, buf, size) },
+            order = uapmd_tt_properties_order(handle)
+        )
+
+    override fun setProperties(value: TrackProperties): Boolean =
+        uapmd_tt_set_properties(handle, value.color != null, value.color ?: 0u, value.path, value.order)
+
     override fun getClips(): List<ClipData> = memScoped {
         val cm = uapmd_tt_clip_manager(handle) ?: return emptyList()
         val count = uapmd_cm_clip_count(cm).toInt()

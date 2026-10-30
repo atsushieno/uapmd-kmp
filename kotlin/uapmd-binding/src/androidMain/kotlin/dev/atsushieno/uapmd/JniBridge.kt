@@ -413,6 +413,11 @@ object JniBridge {
     @JvmStatic external fun uapmdEngineTrackFreezeRenderProgress(engine: Long, trackIndex: Int): DoubleArray?
     @JvmStatic external fun uapmdEngineIsTrackBusy(engine: Long, trackIndex: Int): Boolean
     @JvmStatic external fun uapmdTtChannelCount(tt: Long): Int
+    @JvmStatic external fun uapmdTtPropertiesHasColor(tt: Long): Boolean
+    @JvmStatic external fun uapmdTtPropertiesColor(tt: Long): Int
+    @JvmStatic external fun uapmdTtPropertiesPath(tt: Long): String
+    @JvmStatic external fun uapmdTtPropertiesOrder(tt: Long): Double
+    @JvmStatic external fun uapmdTtSetProperties(tt: Long, hasColor: Boolean, color: Int, path: String, order: Double): Boolean
     @JvmStatic external fun uapmdAudioFileReaderCreate(path: String): Long
     @JvmStatic external fun uapmdAudioFileReaderCreateSilent(numFrames: Long, numChannels: Int, sampleRate: Int): Long
     @JvmStatic external fun uapmdAudioFileReaderDestroy(h: Long)
@@ -513,6 +518,7 @@ object JniBridge {
     @JvmStatic external fun uapmdCommandsSetClipNeedsFileSave(h: Long, t: Int, c: Int, v: Boolean, o: Int): Boolean
     @JvmStatic external fun uapmdCommandsSetClipMarkers(h: Long, t: Int, c: Int, strings: Array<String?>, numbers: DoubleArray, refTypes: IntArray, o: Int): Boolean
     @JvmStatic external fun uapmdCommandsSetClipAudioWarps(h: Long, t: Int, c: Int, strings: Array<String?>, numbers: DoubleArray, refTypes: IntArray, o: Int): Boolean
+    @JvmStatic external fun uapmdCommandsSetTrackProperties(h: Long, t: Int, hasColor: Boolean, color: Int, path: String, order: Double, o: Int): Boolean
     @JvmStatic external fun uapmdCommandsSetTrackGain(h: Long, t: Int, v: Double, o: Int): Boolean
     @JvmStatic external fun uapmdCommandsSetTrackMuted(h: Long, t: Int, v: Boolean, o: Int): Boolean
     @JvmStatic external fun uapmdCommandsSetTrackSolo(h: Long, t: Int, v: Boolean, o: Int): Boolean
@@ -629,6 +635,10 @@ object JniBridge {
     @JvmStatic external fun uapmdTrackFragmentVolume(h: Long): Double
     @JvmStatic external fun uapmdTrackFragmentMuted(h: Long): Boolean
     @JvmStatic external fun uapmdTrackFragmentSolo(h: Long): Boolean
+    @JvmStatic external fun uapmdTrackFragmentPropertiesHasColor(h: Long): Boolean
+    @JvmStatic external fun uapmdTrackFragmentPropertiesColor(h: Long): Int
+    @JvmStatic external fun uapmdTrackFragmentPropertiesPath(h: Long): String
+    @JvmStatic external fun uapmdTrackFragmentPropertiesOrder(h: Long): Double
     @JvmStatic external fun uapmdTrackFragmentGraphType(h: Long): String
     @JvmStatic external fun uapmdTrackFragmentGraphBytes(h: Long): ByteArray
     @JvmStatic external fun uapmdTrackFragmentClipCount(h: Long): Int
@@ -762,6 +772,7 @@ object JniBridge {
     @JvmStatic external fun uapmdAppIsScanning(app: Long): Boolean
     @JvmStatic external fun uapmdAppIsAudioEngineEnabled(app: Long): Boolean
     @JvmStatic external fun uapmdAppSetAudioEngineEnabled(app: Long, enabled: Boolean)
+    @JvmStatic external fun uapmdAppShutdownAudioEngine(app: Long)
     @JvmStatic external fun uapmdAppToggleAudioEngine(app: Long)
     @JvmStatic external fun uapmdAppUpdateAudioDeviceSettings(app: Long, sampleRate: Int, bufferSize: Int)
     @JvmStatic external fun uapmdAppSetAutoBufferSizeEnabled(app: Long, enabled: Boolean)

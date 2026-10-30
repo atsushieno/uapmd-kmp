@@ -1,9 +1,9 @@
 package dev.atsushieno.uapmd.cmp
 
 import androidx.compose.runtime.Composable
-import androidx.compose.ui.Modifier
 import dev.atsushieno.uapmd.PluginInstance
 import dev.atsushieno.uapmd.initAndroidEventLoop
+import dev.atsushieno.uapmd.cmp.ui.FloatingWindowManager
 
 // Android AAP plugin UIs are remote Android Views, hosted by the platform's own
 // view system rather than by remidy - so no floating presentation here.
@@ -16,8 +16,8 @@ actual fun supportsPlatformHostedPluginUi(instance: PluginInstance): Boolean =
     instance.aapUiHostDetails != null
 
 @Composable
-actual fun PlatformHostedPluginUiLayer(host: UapmdHost, modifier: Modifier) {
-    AndroidPlatformHostedPluginUiLayer(host = host, modifier = modifier)
+actual fun PlatformHostedPluginUiLayer(host: UapmdHost, windows: FloatingWindowManager) {
+    AndroidPlatformHostedPluginUiLayer(host = host, windows = windows)
 }
 
 // Must be called from the Android main thread: it routes remidy EventLoop tasks

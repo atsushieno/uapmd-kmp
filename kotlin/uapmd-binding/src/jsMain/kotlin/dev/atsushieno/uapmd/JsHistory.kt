@@ -470,6 +470,12 @@ class JsProjectCommands internal constructor(private val handle: Int) : ProjectC
     override fun setTrackSolo(trackIndex: Int, solo: Boolean, origin: MutationOrigin): Boolean =
         jsMod._uapmd_commands_set_track_solo(handle, trackIndex, solo, origin.nativeValue) as Boolean
 
+    override fun setTrackProperties(trackIndex: Int, properties: TrackProperties, origin: MutationOrigin): Boolean =
+        withJsCString(properties.path) { p ->
+            jsMod._uapmd_commands_set_track_properties(handle, trackIndex, properties.color != null,
+                (properties.color ?: 0u).toInt(), p, properties.order, origin.nativeValue) as Boolean
+        }
+
     override fun setTrackBypassed(trackIndex: Int, bypassed: Boolean, origin: MutationOrigin): Boolean =
         jsMod._uapmd_commands_set_track_bypassed(handle, trackIndex, bypassed, origin.nativeValue) as Boolean
 
@@ -722,6 +728,14 @@ class JsClipFragment internal constructor(
 class JsTrackFragment internal constructor(internal val handle: Int) : TrackFragment {
     override val referenceId: String
         get() = readJsString(handle) { h, buf, size -> jsMod._uapmd_track_fragment_reference_id(h, buf, size) as Int }
+
+    override val properties: TrackProperties
+        get() = TrackProperties(
+            color = if (jsMod._uapmd_track_fragment_properties_has_color(handle) as Boolean)
+                (jsMod._uapmd_track_fragment_properties_color(handle) as Int).toUInt() else null,
+            path = readJsString(handle) { h, buf, size -> jsMod._uapmd_track_fragment_properties_path(h, buf, size) as Int },
+            order = jsMod._uapmd_track_fragment_properties_order(handle) as Double
+        )
 
     override val volume: Double get() = jsMod._uapmd_track_fragment_volume(handle) as Double
     override val muted: Boolean get() = jsMod._uapmd_track_fragment_muted(handle) as Boolean

@@ -7,6 +7,19 @@ class JsTimelineTrack internal constructor(
 ) : TimelineTrack {
     override val channelCount: Int get() = jsMod._uapmd_tt_channel_count(handle) as Int
 
+    override val properties: TrackProperties
+        get() = TrackProperties(
+            color = if (jsMod._uapmd_tt_properties_has_color(handle) as Boolean)
+                (jsMod._uapmd_tt_properties_color(handle) as Int).toUInt() else null,
+            path = readJsString(handle) { h, buf, size -> jsMod._uapmd_tt_properties_path(h, buf, size) as Int },
+            order = jsMod._uapmd_tt_properties_order(handle) as Double
+        )
+
+    override fun setProperties(value: TrackProperties): Boolean =
+        withJsCString(value.path) { p ->
+            jsMod._uapmd_tt_set_properties(handle, value.color != null, (value.color ?: 0u).toInt(), p, value.order) as Boolean
+        }
+
     override fun getClips(): List<ClipData> = emptyList()
 }
 

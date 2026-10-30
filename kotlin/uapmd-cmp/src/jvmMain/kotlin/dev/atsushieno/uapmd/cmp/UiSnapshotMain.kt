@@ -23,6 +23,7 @@ import dev.atsushieno.uapmd.cmp.ui.Timeline
 import dev.atsushieno.uapmd.cmp.ui.InstanceDetails
 import dev.atsushieno.uapmd.cmp.ui.PianoRollEditor
 import dev.atsushieno.uapmd.cmp.ui.TrackGraphEditor
+import dev.atsushieno.uapmd.cmp.ui.SequenceEditor
 import dev.atsushieno.uapmd.cmp.ui.rememberFloatingWindowManager
 import org.jetbrains.skia.EncodedImageFormat
 import java.io.File
@@ -258,6 +259,7 @@ fun main() {
                         }
                         "steps" -> StepSequencerEditor(host, 0, stepClip)
                         "graph" -> TrackGraphEditor(host, graphTrack)
+                        "trackdetails" -> SequenceEditor(host, rememberFloatingWindowManager(), graphTrack)
                         "pianoroll" -> PianoRollEditor(
                             host, 0, pianoRollClip,
                             initialScrollSeconds =

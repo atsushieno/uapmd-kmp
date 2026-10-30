@@ -4,7 +4,7 @@ import dev.atsushieno.uapmd.createAudioFileReader
 
 /**
  * Min/max of an audio file's mono mixdown, one pair per [framesPerBucket]
- * frames. Finer than uapmd-app's fixed 512 columns, since the timeline here
+ * frames. Finer than uapmd-app's fixed 2048 columns, since the timeline here
  * zooms in far enough for those to show as steps.
  */
 class WaveformPeaks(

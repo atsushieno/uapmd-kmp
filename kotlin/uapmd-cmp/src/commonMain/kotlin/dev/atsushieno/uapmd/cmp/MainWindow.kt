@@ -153,6 +153,9 @@ fun MainWindow() {
 
                 // Opens and closes a window per drawn plug-in editor; draws nothing here.
                 FramebufferPluginUiLayer(host, windows)
+                // The same for editors the platform hosts (Android AAP): their content
+                // is a live surface, but the window around it is an ordinary one.
+                PlatformHostedPluginUiLayer(host, windows)
 
                 // Windows owned by addins: their commands (System menu) open
                 // them, and disabling the addin closes them, so they follow the
@@ -247,11 +250,6 @@ fun MainWindow() {
                         BottomBar(host, windows)
                     }
                 }
-                // Above the floating windows, as uapmd-app stacks its plug-in UI
-                // overlays over the ImGui windows. The plug-in surface itself is
-                // Z-ordered on top regardless, so anything drawn over its frame
-                // would split the window visually.
-                PlatformHostedPluginUiLayer(host, Modifier.fillMaxSize())
             }
         }
     }

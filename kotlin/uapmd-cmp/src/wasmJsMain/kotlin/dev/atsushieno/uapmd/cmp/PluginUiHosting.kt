@@ -1,9 +1,9 @@
 package dev.atsushieno.uapmd.cmp
 
 import androidx.compose.runtime.Composable
-import androidx.compose.ui.Modifier
 import dev.atsushieno.uapmd.PluginInstance
 import dev.atsushieno.uapmd.PluginUiHost
+import dev.atsushieno.uapmd.cmp.ui.FloatingWindowManager
 
 /**
  * Web plugin UIs go through the floating-window path, not an embedded one.
@@ -29,7 +29,7 @@ actual fun unsupportedFloatingPluginUiMessage(): String? = null
 actual fun supportsPlatformHostedPluginUi(instance: PluginInstance): Boolean = false
 
 @Composable
-actual fun PlatformHostedPluginUiLayer(host: UapmdHost, modifier: Modifier) = Unit
+actual fun PlatformHostedPluginUiLayer(host: UapmdHost, windows: FloatingWindowManager) = Unit
 
 // The browser event loop is the main loop; nothing to install.
 actual fun initPlatformEventLoop() = Unit

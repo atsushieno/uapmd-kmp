@@ -56,12 +56,13 @@ import dev.atsushieno.uapmd.FreezeRuntimeState
 import dev.atsushieno.uapmd.createAudioFileReader
 import dev.atsushieno.uapmd.createSilentAudioFileReader
 import dev.atsushieno.uapmd.MidiNoteData
-import dev.atsushieno.uapmd.OfflineRenderSettings
+import dev.atsushieno.uapmd.RenderToFileSettings
 import dev.atsushieno.uapmd.PluginInstanceConfig
 import dev.atsushieno.uapmd.PluginInstanceResult
 import dev.atsushieno.uapmd.ScanMode
 import dev.atsushieno.uapmd.SlowScanProgress
 import dev.atsushieno.uapmd.TimelineState
+import dev.atsushieno.uapmd.TrackProperties
 import dev.atsushieno.uapmd.UndoState
 import dev.atsushieno.uapmd.getAppModel
 import dev.atsushieno.uapmd.instantiateAppModel
@@ -1183,8 +1184,14 @@ class UapmdHost private constructor(val model: AppModel) {
         private set
     var renderStatus by mutableStateOf<String?>(null)
         private set
-    private var renderCancelled = false
 
+    /**
+     * AppModel's render job, which uapmd-app's Render To File runs. Rendering
+     * through `SequencerEngine.renderOffline` directly skipped what the job does
+     * around it: it pauses realtime playback for the render and, since uapmd
+     * #65, restarts plug-in processing when the audio engine is off - without
+     * that, a render with the engine off had only deactivated plug-ins to run.
+     */
     fun startRender(
         outputPath: String,
         startSeconds: Double,
@@ -1193,42 +1200,55 @@ class UapmdHost private constructor(val model: AppModel) {
         enableSilenceStop: Boolean
     ) {
         if (isRendering) return
+        val bounds = model.sequencer.engine.timeline.calculateContentBounds()
+        val started = model.startRenderToFile(
+            RenderToFileSettings(
+                outputPath = outputPath,
+                startSeconds = startSeconds,
+                endSeconds = endSeconds ?: 0.0,
+                hasEndSeconds = endSeconds != null,
+                useContentFallback = endSeconds == null,
+                contentBoundsValid = bounds.hasContent,
+                contentStartSeconds = bounds.firstSeconds,
+                contentEndSeconds = bounds.lastSeconds,
+                tailSeconds = tailSeconds,
+                enableSilenceStop = enableSilenceStop,
+                // AppModel::RenderToFileSettings' own defaults.
+                silenceDurationSeconds = 5.0,
+                silenceThresholdDb = -80.0
+            )
+        )
+        if (!started) {
+            renderStatus = "Unable to start render job."
+            return
+        }
         isRendering = true
-        renderCancelled = false
         renderProgress = 0.0
         renderStatus = null
 
-        val bounds = model.sequencer.engine.timeline.calculateContentBounds()
-        val settings = OfflineRenderSettings(
-            outputPath = outputPath,
-            startSeconds = startSeconds,
-            endSeconds = endSeconds,
-            useContentFallback = endSeconds == null,
-            contentBoundsValid = bounds.hasContent,
-            contentStartSeconds = bounds.firstSeconds,
-            contentEndSeconds = bounds.lastSeconds,
-            tailSeconds = tailSeconds,
-            enableSilenceStop = enableSilenceStop,
-            sampleRate = model.sampleRate.takeIf { it > 0 } ?: 48000
-        )
-
-        // renderOffline blocks, so keep it off the UI dispatcher.
-        scope.launch(backgroundDispatcher()) {
-            val result = model.sequencer.engine.renderOffline(
-                settings,
-                progressCallback = { p -> renderProgress = p.progress },
-                shouldCancel = { renderCancelled }
-            )
-            isRendering = false
-            renderStatus = when {
-                result.canceled -> "Render cancelled."
-                result.success -> "Rendered ${result.renderedSeconds}s to $outputPath"
-                else -> result.errorMessage ?: "Render failed."
+        // The job runs on its own thread and needs the main thread to prepare
+        // and restore the engine, so the status is polled rather than waited on.
+        scope.launch {
+            while (true) {
+                val status = model.renderToFileStatus
+                renderProgress = status.progress
+                if (!status.running) {
+                    isRendering = false
+                    renderStatus = when {
+                        status.success -> "Rendered ${fixedSeconds(status.renderedSeconds)}s to ${status.outputPath}"
+                        else -> status.message.ifEmpty { "Render failed." }
+                    }
+                    model.clearCompletedRenderStatus()
+                    break
+                }
+                kotlinx.coroutines.delay(100)
             }
         }
     }
 
-    fun cancelRender() { renderCancelled = true }
+    fun cancelRender() = model.cancelRenderToFile()
+
+    private fun fixedSeconds(seconds: Double) = (kotlin.math.round(seconds * 100) / 100).toString()
 
     // ── Clip import ─────────────────────────────────────────────────────────
 
@@ -1700,6 +1720,40 @@ class UapmdHost private constructor(val model: AppModel) {
         commands.setTrackFreezePolicyEnabled(trackIndex, enabled).also { refresh() }
 
     /**
+     * Color, path and order, as Track Details shows them. uapmd-app reads these
+     * from the document view; the timeline track holds the same value.
+     */
+    fun trackProperties(trackIndex: Int): TrackProperties =
+        if (trackIndex == Int.MIN_VALUE) masterTrackProperties
+        // uapmd-app's fallback when the document does not know the track yet.
+        else trackPropertiesList.getOrNull(trackIndex) ?: TrackProperties(order = trackIndex.toDouble())
+
+    /** One undoable edit; invalid properties are rejected, as uapmd-app's are. */
+    fun setTrackProperties(trackIndex: Int, properties: TrackProperties) =
+        commands.setTrackProperties(trackIndex, properties).also { refresh() }
+
+    /**
+     * Track indices in presentation order, as uapmd-app's
+     * `SequenceEditor::sortedTrackIndices` sorts them: a non-empty path first,
+     * then by path (case-sensitive), then by order, keeping the track order for
+     * ties. The master track is not part of it; it always stays first.
+     */
+    val sortedTrackIndices: List<Int>
+        get() {
+            val properties = trackPropertiesList
+            return properties.indices.sortedWith { lhs, rhs ->
+                val a = properties[lhs]
+                val b = properties[rhs]
+                when {
+                    a.path.isEmpty() != b.path.isEmpty() -> if (a.path.isNotEmpty()) -1 else 1
+                    a.path != b.path -> a.path.compareTo(b.path)
+                    a.order != b.order -> a.order.compareTo(b.order)
+                    else -> lhs.compareTo(rhs)
+                }
+            }
+        }
+
+    /**
      * Track state, looked up fresh on every read.
      *
      * A `SequencerTrack` handle must never be cached across a project load:
@@ -1813,6 +1867,12 @@ class UapmdHost private constructor(val model: AppModel) {
 
     /** Per timeline track, its clips. Index matches [trackInstances]. */
     var trackClips by mutableStateOf<List<List<ClipData>>>(emptyList())
+        private set
+
+    /** Per timeline track, its [TrackProperties]. Index matches [trackClips]. */
+    var trackPropertiesList by mutableStateOf<List<TrackProperties>>(emptyList())
+        private set
+    var masterTrackProperties by mutableStateOf(TrackProperties())
         private set
 
     var playheadSeconds by mutableStateOf(0.0)
@@ -1957,8 +2017,15 @@ class UapmdHost private constructor(val model: AppModel) {
             runCatching { model.getTimelineTrack(ti.toUInt()).getClips() }.getOrDefault(emptyList())
         }
 
+        if (structural) trackPropertiesList = (0 until count).map { ti ->
+            runCatching { model.getTimelineTrack(ti.toUInt()).properties }
+                .getOrDefault(TrackProperties(order = ti.toDouble()))
+        }
+
         if (structural) masterClips =
             runCatching { model.masterTimelineTrack.getClips() }.getOrDefault(emptyList())
+        if (structural) masterTrackProperties =
+            runCatching { model.masterTimelineTrack.properties }.getOrDefault(TrackProperties())
         if (structural) masterInstances = runCatching {
             engine.masterTrack.getOrderedInstanceIds().mapNotNull { id ->
                 engine.getPluginInstance(id)?.let { TrackInstance(id, it.displayName, it.formatName) }
@@ -2006,6 +2073,10 @@ class UapmdHost private constructor(val model: AppModel) {
         // its worker would outlive the model; uapmd-app stops it at this point too
         // (main_common.cpp, before MainWindow::shutdown).
         runCatching { model.stopPluginScanning() }
+        // Then the engine, before any addin goes: tearing an addin (ARA) down
+        // while plug-ins still process crashed uapmd-app on quit, which now calls
+        // AppModel::shutdownAudioEngine() here (main_common.cpp).
+        model.shutdownAudioEngine()
         // uapmd-app's order (MainWindow::shutdown): addins first, then the
         // model's handler, then the project services retained past them.
         addins?.shutdown()
@@ -2014,7 +2085,6 @@ class UapmdHost private constructor(val model: AppModel) {
         augene2?.close()
         augene2 = null
         addins?.close()
-        model.setAudioEngineEnabled(false)
         cleanupUapmdAppModel()
     }
 
@@ -2202,44 +2272,49 @@ fun rememberUapmdHost(): UapmdHost {
  * device is lock-screened and cannot be driven by taps.
  */
 private suspend fun runPreloadPluginUiHook(host: UapmdHost) {
-    val requestedName = startupPreloadPlugin() ?: return
+    // Comma-separated, so that several editors can be opened at once - which is
+    // what checking how they stack needs.
+    val requestedNames = startupPreloadPlugin()?.split(',')?.map { it.trim() }?.filter { it.isNotEmpty() }
+        ?: return
     var waited = 0
     while ((host.isScanning || host.catalog.isEmpty()) && waited < 120_000) {
         kotlinx.coroutines.delay(200); waited += 200
     }
-    val matchingEntries = host.catalog.filter {
-        it.displayName.contains(requestedName, ignoreCase = true)
-    }
-    val entry = matchingEntries.firstOrNull { it.format == "AU" }
-        ?: matchingEntries.firstOrNull()
-    if (entry == null) {
-        println("uapmd.cmp dev hook: no preload plug-in matches '$requestedName'")
-        return
-    }
-    println(
-        "uapmd.cmp dev hook: preloading ${entry.format} " +
-            "${entry.pluginId} ${entry.displayName}"
-    )
-    host.instantiate(entry, 0)
-    var instantiateWait = 0
-    while (host.isInstantiating && instantiateWait < 30_000) {
-        kotlinx.coroutines.delay(50)
-        instantiateWait += 50
-    }
-    println(
-        "uapmd.cmp dev hook: preload completed in ${instantiateWait}ms " +
-            "id=${host.lastInstantiation?.instanceId} " +
-            "err=${host.lastInstantiation?.error}"
-    )
-    val preloadedId = host.lastInstantiation?.instanceId ?: -1
-    if (startupShowPreloadUi() && preloadedId >= 0 && host.lastInstantiation?.error == null) {
-        host.showPluginUi(preloadedId)
+    for (requestedName in requestedNames) {
+        val matchingEntries = host.catalog.filter {
+            it.displayName.contains(requestedName, ignoreCase = true)
+        }
+        val entry = matchingEntries.firstOrNull { it.format == "AU" }
+            ?: matchingEntries.firstOrNull()
+        if (entry == null) {
+            println("uapmd.cmp dev hook: no preload plug-in matches '$requestedName'")
+            continue
+        }
         println(
-            "uapmd.cmp dev hook: preload UI visible=" +
-                host.isPluginUiVisible(preloadedId) +
-                " status=${host.pluginUiStatusMessage}"
+            "uapmd.cmp dev hook: preloading ${entry.format} " +
+                "${entry.pluginId} ${entry.displayName}"
         )
-        kotlinx.coroutines.delay(1000)
+        host.instantiate(entry, 0)
+        var instantiateWait = 0
+        while (host.isInstantiating && instantiateWait < 30_000) {
+            kotlinx.coroutines.delay(50)
+            instantiateWait += 50
+        }
+        println(
+            "uapmd.cmp dev hook: preload completed in ${instantiateWait}ms " +
+                "id=${host.lastInstantiation?.instanceId} " +
+                "err=${host.lastInstantiation?.error}"
+        )
+        val preloadedId = host.lastInstantiation?.instanceId ?: -1
+        if (startupShowPreloadUi() && preloadedId >= 0 && host.lastInstantiation?.error == null) {
+            host.showPluginUi(preloadedId)
+            println(
+                "uapmd.cmp dev hook: preload UI visible=" +
+                    host.isPluginUiVisible(preloadedId) +
+                    " status=${host.pluginUiStatusMessage}"
+            )
+            kotlinx.coroutines.delay(1000)
+        }
     }
 }
 

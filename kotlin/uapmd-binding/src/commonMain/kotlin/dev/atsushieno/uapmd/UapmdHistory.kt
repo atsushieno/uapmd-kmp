@@ -245,6 +245,8 @@ interface ProjectCommands {
     fun setClipMarkers(trackIndex: Int, clipId: Int, markers: List<ClipMarkerData>, origin: MutationOrigin = MutationOrigin.User): Boolean
     fun setClipAudioWarps(trackIndex: Int, clipId: Int, warps: List<AudioWarpPointData>, origin: MutationOrigin = MutationOrigin.User): Boolean
 
+    /** Rejects properties that are not [TrackProperties.valid]. */
+    fun setTrackProperties(trackIndex: Int, properties: TrackProperties, origin: MutationOrigin = MutationOrigin.User): Boolean
     fun setTrackGain(trackIndex: Int, gain: Double, origin: MutationOrigin = MutationOrigin.User): Boolean
     fun setTrackMuted(trackIndex: Int, muted: Boolean, origin: MutationOrigin = MutationOrigin.User): Boolean
     fun setTrackSolo(trackIndex: Int, solo: Boolean, origin: MutationOrigin = MutationOrigin.User): Boolean
@@ -381,6 +383,7 @@ interface ClipFragment : AutoCloseable {
  */
 interface TrackFragment : AutoCloseable {
     val referenceId: String
+    val properties: TrackProperties
     val volume: Double
     val muted: Boolean
     val solo: Boolean

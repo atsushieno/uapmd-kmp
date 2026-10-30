@@ -270,6 +270,15 @@ bool uapmd_commands_set_track_gain(uapmd_project_commands_t cmd, int32_t track_i
     return PC(cmd)->setTrackGain(track_index, gain, to_cpp_origin(origin));
 }
 
+bool uapmd_commands_set_track_properties(uapmd_project_commands_t cmd, int32_t track_index, bool has_color, uint32_t color, const char* path, double order, uapmd_mutation_origin_t origin) {
+    uapmd::TrackProperties properties;
+    if (has_color)
+        properties.color = color;
+    properties.path = path ? path : "";
+    properties.order = order;
+    return PC(cmd)->setTrackProperties(track_index, properties, to_cpp_origin(origin));
+}
+
 bool uapmd_commands_set_track_muted(uapmd_project_commands_t cmd, int32_t track_index, bool muted, uapmd_mutation_origin_t origin) {
     return PC(cmd)->setTrackMuted(track_index, muted, to_cpp_origin(origin));
 }
@@ -643,6 +652,23 @@ bool uapmd_track_fragment_muted(uapmd_track_fragment_t fragment) {
 
 bool uapmd_track_fragment_solo(uapmd_track_fragment_t fragment) {
     return fragment && TFr(fragment)->fragment.solo;
+}
+
+bool uapmd_track_fragment_properties_has_color(uapmd_track_fragment_t fragment) {
+    return fragment && TFr(fragment)->fragment.properties.color.has_value();
+}
+
+uint32_t uapmd_track_fragment_properties_color(uapmd_track_fragment_t fragment) {
+    return fragment ? TFr(fragment)->fragment.properties.color.value_or(0) : 0;
+}
+
+size_t uapmd_track_fragment_properties_path(uapmd_track_fragment_t fragment, char* buf, size_t buf_size) {
+    if (!fragment) return 0;
+    return copy_string(TFr(fragment)->fragment.properties.path, buf, buf_size);
+}
+
+double uapmd_track_fragment_properties_order(uapmd_track_fragment_t fragment) {
+    return fragment ? TFr(fragment)->fragment.properties.order : 0.0;
 }
 
 size_t uapmd_track_fragment_graph_type(uapmd_track_fragment_t fragment, char* buf, size_t buf_size) {

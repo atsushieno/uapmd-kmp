@@ -175,6 +175,10 @@ class AndroidProjectCommands internal constructor(private val handle: Long) : Pr
     override fun setTrackSolo(trackIndex: Int, solo: Boolean, origin: MutationOrigin) =
         JniBridge.uapmdCommandsSetTrackSolo(handle, trackIndex, solo, origin.nativeValue)
 
+    override fun setTrackProperties(trackIndex: Int, properties: TrackProperties, origin: MutationOrigin) =
+        JniBridge.uapmdCommandsSetTrackProperties(handle, trackIndex, properties.color != null,
+            (properties.color ?: 0u).toInt(), properties.path, properties.order, origin.nativeValue)
+
     override fun setTrackBypassed(trackIndex: Int, bypassed: Boolean, origin: MutationOrigin) =
         JniBridge.uapmdCommandsSetTrackBypassed(handle, trackIndex, bypassed, origin.nativeValue)
 
@@ -317,6 +321,12 @@ class AndroidClipFragment internal constructor(
 
 class AndroidTrackFragment internal constructor(internal val handle: Long) : TrackFragment {
     override val referenceId: String get() = JniBridge.uapmdTrackFragmentReferenceId(handle)
+    override val properties: TrackProperties
+        get() = TrackProperties(
+            color = if (JniBridge.uapmdTrackFragmentPropertiesHasColor(handle)) JniBridge.uapmdTrackFragmentPropertiesColor(handle).toUInt() else null,
+            path = JniBridge.uapmdTrackFragmentPropertiesPath(handle),
+            order = JniBridge.uapmdTrackFragmentPropertiesOrder(handle)
+        )
     override val volume: Double get() = JniBridge.uapmdTrackFragmentVolume(handle)
     override val muted: Boolean get() = JniBridge.uapmdTrackFragmentMuted(handle)
     override val solo: Boolean get() = JniBridge.uapmdTrackFragmentSolo(handle)

@@ -1,9 +1,9 @@
 package dev.atsushieno.uapmd.cmp
 
 import androidx.compose.runtime.Composable
-import androidx.compose.ui.Modifier
 import dev.atsushieno.uapmd.PluginInstance
 import dev.atsushieno.uapmd.PluginUiHost
+import dev.atsushieno.uapmd.cmp.ui.FloatingWindowManager
 
 /** Where an embedded plugin UI should attach on this platform. */
 data class PluginUiPresentationTarget(val host: PluginUiHost, val description: String)
@@ -21,9 +21,13 @@ expect fun unsupportedFloatingPluginUiMessage(): String?
  */
 expect fun supportsPlatformHostedPluginUi(instance: PluginInstance): Boolean
 
-/** Renders any platform-hosted plugin UIs over the app content. No-op elsewhere. */
+/**
+ * Keeps a floating window open for each platform-hosted plugin UI, so that it
+ * stacks, raises and closes like every other window. Draws nothing itself; a
+ * no-op where no platform hosts plugin UIs.
+ */
 @Composable
-expect fun PlatformHostedPluginUiLayer(host: UapmdHost, modifier: Modifier = Modifier)
+expect fun PlatformHostedPluginUiLayer(host: UapmdHost, windows: FloatingWindowManager)
 
 /**
  * Installs the platform's remidy EventLoop. MUST run before AppModel exists:

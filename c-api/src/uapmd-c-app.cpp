@@ -135,6 +135,7 @@ uint32_t uapmd_app_track_count(uapmd_app_model_t app) { return static_cast<uint3
 bool uapmd_app_is_scanning(uapmd_app_model_t app)                  { return AM(app)->isScanning(); }
 bool uapmd_app_is_audio_engine_enabled(uapmd_app_model_t app)      { return AM(app)->isAudioEngineEnabled(); }
 void uapmd_app_set_audio_engine_enabled(uapmd_app_model_t app, bool en) { AM(app)->setAudioEngineEnabled(en); }
+void uapmd_app_shutdown_audio_engine(uapmd_app_model_t app)        { AM(app)->shutdownAudioEngine(); }
 void uapmd_app_toggle_audio_engine(uapmd_app_model_t app)          { AM(app)->toggleAudioEngine(); }
 void uapmd_app_update_audio_device_settings(uapmd_app_model_t app, int32_t sr, uint32_t bs) { AM(app)->updateAudioDeviceSettings(sr, bs); }
 void uapmd_app_set_auto_buffer_size_enabled(uapmd_app_model_t app, bool en) { AM(app)->setAutoBufferSizeEnabled(en); }

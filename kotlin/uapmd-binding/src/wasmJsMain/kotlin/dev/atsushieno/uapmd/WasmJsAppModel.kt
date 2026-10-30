@@ -16,6 +16,7 @@ class WasmJsAppModel internal constructor(internal val handle: Int) : AppModel {
 
     override val isAudioEngineEnabled: Boolean get() = wasmMod.uapmdAppIsAudioEngineEnabled(handle)
     override fun setAudioEngineEnabled(enabled: Boolean) = wasmMod.uapmdAppSetAudioEngineEnabled(handle, enabled)
+    override fun shutdownAudioEngine() = wasmMod.uapmdAppShutdownAudioEngine(handle)
     override fun toggleAudioEngine() = wasmMod.uapmdAppToggleAudioEngine(handle)
 
     override var autoBufferSizeEnabled: Boolean

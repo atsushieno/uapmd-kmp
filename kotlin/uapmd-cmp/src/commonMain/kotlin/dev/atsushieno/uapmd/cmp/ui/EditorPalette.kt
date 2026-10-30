@@ -30,6 +30,12 @@ data class EditorPalette(
     val navigatorWindow: Color,
     val midiClip: Color,
     val audioClip: Color,
+    /**
+     * What a colored track's clip gradient mixes its color into, top and bottom:
+     * uapmd-app's FrameBg and ChildBg (remidy-imgui-shared's SharedTheme).
+     */
+    val trackColorClipTop: Color,
+    val trackColorClipBottom: Color,
     val clipBorder: Color,
     val note: Color,
     val playhead: Color,
@@ -83,6 +89,8 @@ private val DarkEditorPalette = EditorPalette(
     navigatorWindow      = Color(0x334F8FD0),
     midiClip             = Color(0xFF3D5A75),
     audioClip            = Color(0xFF4A3D75),
+    trackColorClipTop    = Color(0xFF33334D),
+    trackColorClipBottom = Color(0xFF0B0C0F),
     clipBorder           = Color(0xFF9A8FC7),
     note                 = Color(0xFFBFD8F0),
     playhead             = Color(0xFFE8C547),
@@ -131,6 +139,8 @@ private val LightEditorPalette = EditorPalette(
     navigatorWindow      = Color(0x552F6FA8),
     midiClip             = Color(0xFFC3D8EE),
     audioClip            = Color(0xFFD4C9EC),
+    trackColorClipTop    = Color(0xFFE0E0E6),
+    trackColorClipBottom = Color(0xFFFAFAFC),
     clipBorder           = Color(0xFF6E62A6),
     note                 = Color(0xFF1D3E63),
     playhead             = Color(0xFFC2410C),

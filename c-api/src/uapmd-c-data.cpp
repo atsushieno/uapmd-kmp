@@ -586,3 +586,20 @@ size_t uapmd_tt_reference_id(uapmd_timeline_track_t tt, char* buf, size_t buf_si
 
 bool uapmd_tt_has_device_input_source(uapmd_timeline_track_t tt) { return TT(tt)->hasDeviceInputSource(); }
 bool uapmd_tt_remove_clip(uapmd_timeline_track_t tt, int32_t clip_id) { return TT(tt)->removeClip(clip_id); }
+
+bool     uapmd_tt_properties_has_color(uapmd_timeline_track_t tt) { return TT(tt)->properties().color.has_value(); }
+uint32_t uapmd_tt_properties_color(uapmd_timeline_track_t tt)     { return TT(tt)->properties().color.value_or(0); }
+double   uapmd_tt_properties_order(uapmd_timeline_track_t tt)     { return TT(tt)->properties().order; }
+
+size_t uapmd_tt_properties_path(uapmd_timeline_track_t tt, char* buf, size_t buf_size) {
+    return copy_string(TT(tt)->properties().path, buf, buf_size);
+}
+
+bool uapmd_tt_set_properties(uapmd_timeline_track_t tt, bool has_color, uint32_t color, const char* path, double order) {
+    uapmd::TrackProperties properties;
+    if (has_color)
+        properties.color = color;
+    properties.path = path ? path : "";
+    properties.order = order;
+    return TT(tt)->properties(properties);
+}

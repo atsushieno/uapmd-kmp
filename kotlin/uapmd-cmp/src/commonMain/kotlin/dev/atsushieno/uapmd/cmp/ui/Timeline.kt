@@ -66,6 +66,10 @@ import androidx.compose.ui.geometry.Size
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
+import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.lerp
+import androidx.compose.ui.draw.drawBehind
+import dev.atsushieno.uapmd.TrackProperties
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.platform.LocalDensity
@@ -214,6 +218,36 @@ private enum class DragAxis { Undecided, Scroll, Zoom }
 /** Mirrors UAPMD_MASTER_TRACK_INDEX / ProjectAddressBook.MASTER_TRACK_INDEX. */
 internal const val MasterTrackIndex = Int.MIN_VALUE
 
+/** A track's authored color (0xRRGGBB), or null to use the theme's. */
+internal fun TrackProperties.composeColor(): Color? =
+    color?.let { Color(0xFF000000.toInt() or it.toInt()) }
+
+/**
+ * A clip's fill. uapmd-app paints every clip on a colored track with a vertical
+ * gradient: 35% of the track color over FrameBg at the top, 20% over ChildBg at
+ * the bottom (`SequenceEditor::rebuildTimeline` sets these as the section's node
+ * colors, which `ClipContentNode::drawBackground` draws). The lane behind the
+ * clips keeps the theme's color, and a track with no color keeps the clip colors
+ * of its own.
+ */
+internal fun clipFill(uncolored: Color, c: EditorPalette, properties: TrackProperties, top: Float, height: Float): Brush =
+    properties.composeColor()?.let {
+        Brush.verticalGradient(
+            listOf(lerp(c.trackColorClipTop, it, 0.35f), lerp(c.trackColorClipBottom, it, 0.20f)),
+            startY = top,
+            endY = top + height
+        )
+    } ?: SolidColor(uncolored)
+
+/**
+ * The 3dp strip uapmd-app draws down the left edge of a colored track's legend
+ * (`TimelineEditor::renderTrackLegendContent`).
+ */
+internal fun Modifier.trackColorStrip(properties: TrackProperties): Modifier {
+    val color = properties.composeColor() ?: return this
+    return drawBehind { drawRect(color, Offset.Zero, Size(3.dp.toPx(), size.height)) }
+}
+
 /** Gain slider range in dB; the bottom of the range is treated as silence. */
 private const val MinGainDb = -60f
 private const val MaxGainDb = 6f
@@ -256,8 +290,10 @@ private fun NavigatorBar(
     // Mirrored Compose state, so a render that starts or advances recomposes this
     // bar on its own rather than waiting for an unrelated edit.
     val freezeRender = host.freezeRender
-    val lanes = remember(host.masterClips, host.trackClips) {
-        listOf(host.masterClips) + host.trackClips
+    // The overview shares the timeline's presentation order, as uapmd-app's does.
+    val order = host.sortedTrackIndices
+    val lanes = remember(host.masterClips, host.trackClips, order) {
+        listOf(host.masterClips) + order.mapNotNull { host.trackClips.getOrNull(it) }
     }
 
     fun scrollTo(fraction: Float) {
@@ -600,6 +636,11 @@ fun Timeline(
                 }
             }
             fun heightFor(lanes: ClipLaneAssignment) = trackHeight * lanes.laneCount
+            // trackInstances and trackClips are read from one count, but a refresh
+            // can land between them; draw only the tracks both columns know.
+            val trackOrder = host.sortedTrackIndices.filter {
+                it < host.trackInstances.size && it < host.trackClips.size
+            }
 
             // ── Legend column ────────────────────────────────────────────────
             Column(Modifier.width(legendWidth).verticalScroll(vScroll)) {
@@ -608,7 +649,9 @@ fun Timeline(
                 }
                 MasterTrackLegend(host, windows, heightFor(masterLanes))
                 HorizontalDivider()
-                host.trackInstances.indices.forEach { trackIndex ->
+                // Presentation order (path, then order), which both columns share;
+                // the master track stays first regardless of its properties.
+                trackOrder.forEach { trackIndex ->
                     TrackLegend(
                         host, windows, trackIndex, isNarrow,
                         heightFor(trackLanes.getOrElse(trackIndex) { ClipLaneAssignment.Single })
@@ -637,7 +680,7 @@ fun Timeline(
                     host, pixelsPerSecond, laneWidth, heightFor(masterLanes), ticks, masterLanes
                 )
                 HorizontalDivider()
-                host.trackClips.indices.forEach { trackIndex ->
+                trackOrder.forEach { trackIndex ->
                     val lanes = trackLanes.getOrElse(trackIndex) { ClipLaneAssignment.Single }
                     TrackLane(
                         host, windows, trackIndex, pixelsPerSecond, laneWidth,
@@ -1013,6 +1056,7 @@ private fun TrackLane(
         fun shownExtent(clip: ClipData) =
             if (proposal != null && clip.clipId == draggedClip?.clipId) proposal else extentOf(clip)
 
+        val trackProperties = host.trackProperties(trackIndex)
         Canvas(Modifier.fillMaxSize()) {
             drawLaneGrid(ticks, pixelsPerSecond, c)
             val geometry = LaneGeometry(lanes.laneCount, size.height)
@@ -1038,9 +1082,10 @@ private fun TrackLane(
                     )
                 }
                 drawRect(
-                    color = if (clip.muted) base.copy(alpha = 0.35f) else base,
+                    brush = clipFill(base, c, trackProperties, y, h),
                     topLeft = Offset(x, y),
-                    size = Size(w, h)
+                    size = Size(w, h),
+                    alpha = if (clip.muted) 0.35f else 1f
                 )
                 drawRect(
                     color = if (isDragged) c.playhead else c.clipBorder,
@@ -1735,7 +1780,11 @@ private fun TrackLegend(
         }
     }
 
-    Column(Modifier.height(trackHeight).fillMaxWidth().padding(4.dp)) {
+    Column(
+        Modifier.height(trackHeight).fillMaxWidth()
+            .trackColorStrip(host.trackProperties(trackIndex))
+            .padding(4.dp)
+    ) {
         // Rows wrap so a phone-width legend keeps every control reachable
         // instead of pushing Solo off the edge.
         FlowRow(horizontalArrangement = Arrangement.spacedBy(LegendGap), verticalArrangement = Arrangement.spacedBy(2.dp)) {
@@ -1743,16 +1792,16 @@ private fun TrackLegend(
 
             // Clips popup, as uapmd-app's first legend button.
             Box {
-                LegendIconButton("Edit clips", onClick = { clipsMenu = true }) { ClipsIcon(it) }
+                LegendIconButton("Track details and clips", onClick = { clipsMenu = true }) { ClipsIcon(it) }
                 DropdownMenu(expanded = clipsMenu, onDismissRequest = { clipsMenu = false }) {
-                    // First item in uapmd-app's Clips popup (TimelineEditor.cpp:1449);
-                    // the per-lane context actions live in that window.
-                    DropdownMenuItem(text = { Text("Edit Clips…") }, onClick = {
+                    // First item in uapmd-app's Clips popup; the per-lane context
+                    // actions live in that window.
+                    DropdownMenuItem(text = { Text("Track Details…") }, onClick = {
                         clipsMenu = false
                         windows.open(
                             "sequence:$trackIndex",
-                            "Track $trackIndex - Clips",
-                            DpSize(840.dp, 360.dp)
+                            "Track Details - Track ${trackIndex + 1}",
+                            TrackDetailsWindowSize
                         ) { SequenceEditor(host, windows, trackIndex) }
                     })
                     HorizontalDivider()
@@ -1982,19 +2031,23 @@ private fun MasterTrackLegend(host: UapmdHost, windows: FloatingWindowManager, t
     // Clips + Graph + the gain slider — this is the project's total volume —
     // and only Mute/Solo, Freeze and the More menu are gated to regular tracks.
 
-    Column(Modifier.height(trackHeight).fillMaxWidth().padding(4.dp)) {
+    Column(
+        Modifier.height(trackHeight).fillMaxWidth()
+            .trackColorStrip(host.masterTrackProperties)
+            .padding(4.dp)
+    ) {
         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(3.dp)) {
             Text("Master", style = MaterialTheme.typography.labelMedium)
 
             Box {
-                LegendIconButton("Edit clips", onClick = { clipsMenu = true }) { ClipsIcon(it) }
+                LegendIconButton("Track details and clips", onClick = { clipsMenu = true }) { ClipsIcon(it) }
                 DropdownMenu(expanded = clipsMenu, onDismissRequest = { clipsMenu = false }) {
-                    DropdownMenuItem(text = { Text("Edit Clips…") }, onClick = {
+                    DropdownMenuItem(text = { Text("Track Details…") }, onClick = {
                         clipsMenu = false
                         windows.open(
                             "sequence:master",
-                            "Master Track - Clips",
-                            DpSize(840.dp, 360.dp)
+                            "Track Details - Master Track",
+                            TrackDetailsWindowSize
                         ) { SequenceEditor(host, windows, MasterTrackIndex) }
                     })
                     HorizontalDivider()
@@ -2112,7 +2165,7 @@ private fun MasterTrackLane(
                 val w = (clip.durationSamples / sampleRate * pixelsPerSecond).toFloat().coerceAtLeast(2f)
                 val y = geometry.clipTop(lanes.laneOf(clip.clipId))
                 val h = geometry.clipHeight
-                drawRect(c.midiClip, Offset(x, y), Size(w, h))
+                drawRect(clipFill(c.midiClip, c, host.masterTrackProperties, y, h), Offset(x, y), Size(w, h))
                 drawRect(c.clipBorder, Offset(x, y), Size(w, h),
                     style = androidx.compose.ui.graphics.drawscope.Stroke(1f))
             }

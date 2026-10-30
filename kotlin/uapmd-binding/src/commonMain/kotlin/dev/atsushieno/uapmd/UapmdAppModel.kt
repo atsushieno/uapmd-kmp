@@ -30,6 +30,14 @@ interface AppModel {
      */
     val isAudioEngineEnabled: Boolean
     fun setAudioEngineEnabled(enabled: Boolean)
+    /**
+     * `AppModel::shutdownAudioEngine()`: the final engine-off for application
+     * teardown, done synchronously on the calling (main) thread with no audible
+     * tail drain. uapmd-app calls it after [stopPluginScanning] and before tearing
+     * down addins, so that an addin (ARA) never goes away while plugins still
+     * process.
+     */
+    fun shutdownAudioEngine()
     fun toggleAudioEngine()
 
     var autoBufferSizeEnabled: Boolean

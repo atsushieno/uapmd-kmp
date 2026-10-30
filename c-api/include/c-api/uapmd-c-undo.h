@@ -203,6 +203,9 @@ UAPMD_C_EXPORT bool uapmd_commands_set_clip_audio_warps(uapmd_project_commands_t
 /* Track properties. These address their track by stable document identity
  * during replay, so inserting or removing another track does not redirect an
  * undo to the wrong one. */
+/* uapmd::TrackProperties, flattened; see uapmd_tt_properties_has_color(). Invalid
+ * properties are rejected. */
+UAPMD_C_EXPORT bool uapmd_commands_set_track_properties(uapmd_project_commands_t cmd, int32_t track_index, bool has_color, uint32_t color, const char* path, double order, uapmd_mutation_origin_t origin);
 UAPMD_C_EXPORT bool uapmd_commands_set_track_gain(uapmd_project_commands_t cmd, int32_t track_index, double gain, uapmd_mutation_origin_t origin);
 UAPMD_C_EXPORT bool uapmd_commands_set_track_muted(uapmd_project_commands_t cmd, int32_t track_index, bool muted, uapmd_mutation_origin_t origin);
 UAPMD_C_EXPORT bool uapmd_commands_set_track_solo(uapmd_project_commands_t cmd, int32_t track_index, bool solo, uapmd_mutation_origin_t origin);
@@ -375,6 +378,11 @@ UAPMD_C_EXPORT size_t uapmd_track_fragment_reference_id(uapmd_track_fragment_t f
 UAPMD_C_EXPORT double uapmd_track_fragment_volume(uapmd_track_fragment_t fragment);
 UAPMD_C_EXPORT bool   uapmd_track_fragment_muted(uapmd_track_fragment_t fragment);
 UAPMD_C_EXPORT bool   uapmd_track_fragment_solo(uapmd_track_fragment_t fragment);
+/* The detached track's TrackProperties; see uapmd_tt_properties_has_color(). */
+UAPMD_C_EXPORT bool     uapmd_track_fragment_properties_has_color(uapmd_track_fragment_t fragment);
+UAPMD_C_EXPORT uint32_t uapmd_track_fragment_properties_color(uapmd_track_fragment_t fragment);
+UAPMD_C_EXPORT size_t   uapmd_track_fragment_properties_path(uapmd_track_fragment_t fragment, char* buf, size_t buf_size);
+UAPMD_C_EXPORT double   uapmd_track_fragment_properties_order(uapmd_track_fragment_t fragment);
 UAPMD_C_EXPORT size_t uapmd_track_fragment_graph_type(uapmd_track_fragment_t fragment, char* buf, size_t buf_size);
 UAPMD_C_EXPORT size_t uapmd_track_fragment_graph_bytes(uapmd_track_fragment_t fragment, uint8_t* buf, size_t buf_size);
 UAPMD_C_EXPORT uint32_t uapmd_track_fragment_clip_count(uapmd_track_fragment_t fragment);

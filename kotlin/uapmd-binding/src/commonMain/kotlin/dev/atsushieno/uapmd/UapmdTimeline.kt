@@ -21,10 +21,33 @@ interface AudioFileReader : AutoCloseable {
     fun readFrames(startFrame: Long, framesToRead: Long, dest: Array<FloatArray>)
 }
 
+/**
+ * `uapmd::TrackProperties`: authored presentation metadata, owned and accessed by
+ * the model thread. Paths are case-sensitive organizational strings; non-empty
+ * paths sort first.
+ */
+data class TrackProperties(
+    /** 0xRRGGBB; null uses the current theme. */
+    val color: UInt? = null,
+    val path: String = "",
+    val order: Double = 0.0
+) {
+    fun valid(): Boolean = order.isFinite() && (color == null || color <= 0xFFFFFFu)
+}
+
 interface TimelineTrack {
     fun getClips(): List<ClipData>
     /** Audio channels the track carries; `uapmd_tt_channel_count`. */
     val channelCount: Int
+
+    /** `TimelineTrack::properties()`. Presentation metadata is never read by the audio thread. */
+    val properties: TrackProperties
+    /**
+     * `TimelineTrack::properties(value)`: replaces them without recording history;
+     * false, changing nothing, when they are not [TrackProperties.valid]. User edits
+     * go through [ProjectCommands.setTrackProperties].
+     */
+    fun setProperties(value: TrackProperties): Boolean
 }
 
 interface TimelineFacade {
