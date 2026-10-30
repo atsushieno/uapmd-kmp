@@ -1,35 +1,65 @@
 package dev.atsushieno.uapmd
 
+import kotlin.concurrent.Volatile
 import kotlinx.cinterop.*
 import uapmd.*
+
+// uapmd removes MIDI input handlers by function pointer, and a staticCFunction cannot capture,
+// so handlers registered one by one would all share one pointer: removing any of them would
+// unregister whichever was added first. Each native MidiIO gets a single registration instead,
+// whose context dispatches to the receivers currently added to it.
+private class NativeMidiInputHandler(val receiver: (UIntArray, Long) -> Unit)
+
+private class NativeMidiInputDispatcher {
+    // Replaced, never mutated: the MIDI input thread reads it while handlers come and go.
+    @Volatile var handlers: List<NativeMidiInputHandler> = emptyList()
+    val ref: StableRef<NativeMidiInputDispatcher> = StableRef.create(this)
+}
+
+// Keyed by the native MidiIO, because FunctionBlock.midiIo hands out a fresh wrapper per access.
+private val nativeMidiInputDispatchers = mutableMapOf<Long, NativeMidiInputDispatcher>()
 
 // Top-level static function for MIDI input dispatch (no captures allowed).
 private val nativeMidiInputHandler: uapmd_ump_receiver_t =
     staticCFunction { context, ump, sizeBytes, timestamp ->
         if (context == null || ump == null) return@staticCFunction
-        val cb = context.asStableRef<(UIntArray, Long) -> Unit>().get()
+        val dispatcher = context.asStableRef<NativeMidiInputDispatcher>().get()
         val count = (sizeBytes / 4u).toInt()
-        cb(UIntArray(count) { i -> ump[i] }, timestamp)
+        for (h in dispatcher.handlers)
+            h.receiver(UIntArray(count) { i -> ump[i] }, timestamp)
     }
 
 class NativeMidiIO internal constructor(
     private val handle: uapmd_midi_io_t
 ) : MidiIO {
 
+    // The token is the NativeMidiInputHandler added to this MidiIO's dispatcher.
     override fun addInputHandler(receiver: (UIntArray, Long) -> Unit): Any {
-        val ref = StableRef.create(receiver)
-        uapmd_midi_io_add_input_handler(handle, nativeMidiInputHandler, ref.asCPointer())
-        return ref
+        val handler = NativeMidiInputHandler(receiver)
+        val dispatcher = nativeMidiInputDispatchers.getOrPut(handle.rawValue.toLong()) { NativeMidiInputDispatcher() }
+        val first = dispatcher.handlers.isEmpty()
+        dispatcher.handlers += handler
+        if (first)
+            uapmd_midi_io_add_input_handler(handle, nativeMidiInputHandler, dispatcher.ref.asCPointer())
+        return handler
     }
 
     override fun removeInputHandler(token: Any) {
+        val handler = token as? NativeMidiInputHandler ?: return
+        val key = handle.rawValue.toLong()
+        val dispatcher = nativeMidiInputDispatchers[key] ?: return
+        if (handler !in dispatcher.handlers) return
+        dispatcher.handlers -= handler
+        if (dispatcher.handlers.isNotEmpty()) return
         uapmd_midi_io_remove_input_handler(handle, nativeMidiInputHandler)
-        (token as? StableRef<*>)?.dispose()
+        nativeMidiInputDispatchers.remove(key)
+        dispatcher.ref.dispose()
     }
 
+    // The length is in bytes.
     override fun send(messages: UIntArray, timestamp: Long) {
         messages.usePinned { pinned ->
-            uapmd_midi_io_send(handle, pinned.addressOf(0), messages.size.toULong(), timestamp)
+            uapmd_midi_io_send(handle, pinned.addressOf(0), (messages.size * 4).toULong(), timestamp)
         }
     }
 }

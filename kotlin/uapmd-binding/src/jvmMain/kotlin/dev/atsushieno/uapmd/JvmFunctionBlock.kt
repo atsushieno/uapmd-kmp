@@ -2,16 +2,20 @@ package dev.atsushieno.uapmd
 
 import com.sun.jna.Pointer
 import dev.atsushieno.uapmd.jna.UmpReceiverCallback
+import java.util.concurrent.ConcurrentHashMap
 
 // ─── JvmMidiIO ───────────────────────────────────────────────────────────────
+
+// FunctionBlock.midiIo hands out a fresh wrapper per access, so the JNA callbacks are kept
+// alive here, mapped to the native MidiIO they were added to, until they are removed.
+private val midiInputCallbacks = ConcurrentHashMap<UmpReceiverCallback, Pointer>()
 
 class JvmMidiIO internal constructor(
     private val handle: Pointer
 ) : MidiIO {
 
-    // Maps token → JNA Callback so we can remove by the same native pointer.
-    private val callbackMap = mutableMapOf<Any, UmpReceiverCallback>()
-
+    // The token is the callback itself. Each one has its own native function pointer,
+    // which is what uapmd removes by.
     override fun addInputHandler(receiver: (UIntArray, Long) -> Unit): Any {
         val cb = object : UmpReceiverCallback {
             override fun invoke(context: Pointer?, ump: Pointer?, sizeInBytes: Long, timestamp: Long) {
@@ -21,14 +25,15 @@ class JvmMidiIO internal constructor(
                 receiver(arr, timestamp)
             }
         }
+        midiInputCallbacks[cb] = handle
         // user_data = null because the handler is captured in the closure
         lib.uapmd_midi_io_add_input_handler(handle, cb, null)
-        callbackMap[cb] = cb
         return cb
     }
 
     override fun removeInputHandler(token: Any) {
-        val cb = callbackMap.remove(token) ?: return
+        val cb = token as? UmpReceiverCallback ?: return
+        if (!midiInputCallbacks.remove(cb, handle)) return
         lib.uapmd_midi_io_remove_input_handler(handle, cb)
     }
 
