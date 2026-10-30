@@ -2,30 +2,37 @@ package dev.atsushieno.uapmd
 
 // ─── JsMidiIO ─────────────────────────────────────────────────────────────────
 
+// Handler function pointer → the MidiIO it was added to. Kept outside JsMidiIO because
+// FunctionBlock.midiIo returns a new wrapper on every access, so a handler may be removed
+// through a different one.
+private val jsMidiInputHandlers = mutableMapOf<Int, Int>()
+
 class JsMidiIO internal constructor(
     private val handle: Int
 ) : MidiIO {
 
-    private val handlerPtrs = mutableMapOf<Int, Int>() // token → fnPtr
-
+    // The token is the handler's function pointer, which is what the C API removes by.
     override fun addInputHandler(receiver: (messages: UIntArray, timestamp: Long) -> Unit): Any {
         val fnPtr = makeJsMidiInputHandler(receiver)
-        val token = jsMod._uapmd_midi_io_add_input_handler(handle, fnPtr, 0) as Int
-        handlerPtrs[token] = fnPtr
-        return token
+        jsMod._uapmd_midi_io_add_input_handler(handle, fnPtr, 0)
+        jsMidiInputHandlers[fnPtr] = handle
+        return fnPtr
     }
 
     override fun removeInputHandler(token: Any) {
-        val t = token as Int
-        jsMod._uapmd_midi_io_remove_input_handler(handle, t)
-        handlerPtrs.remove(t)?.let { removeJsCallback(it) }
+        val fnPtr = token as? Int ?: return
+        if (jsMidiInputHandlers[fnPtr] != handle) return
+        jsMidiInputHandlers.remove(fnPtr)
+        jsMod._uapmd_midi_io_remove_input_handler(handle, fnPtr)
+        removeJsCallback(fnPtr)
     }
 
+    // The length is in bytes, and the int64_t timestamp must arrive as BigInt.
     override fun send(messages: UIntArray, timestamp: Long) {
         val ptr = jsMod._malloc(messages.size * 4) as Int
         try {
             messages.forEachIndexed { i, v -> jsSetI32(ptr + i * 4, v.toInt()) }
-            jsMod._uapmd_midi_io_send(handle, ptr, messages.size, timestamp.toDouble())
+            jsMod._uapmd_midi_io_send(handle, ptr, messages.size * 4, js("BigInt")(timestamp.toString()))
         } finally { jsMod._free(ptr) }
     }
 }

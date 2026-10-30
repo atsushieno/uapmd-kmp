@@ -2,29 +2,32 @@ package dev.atsushieno.uapmd
 
 // ─── WasmJsMidiIO ────────────────────────────────────────────────────────────
 
+// Handler function pointer → (the MidiIO it was added to, its callback id). Kept outside
+// WasmJsMidiIO because FunctionBlock.midiIo returns a new wrapper on every access, so a
+// handler may be removed through a different one.
+private val midiInputFnPtrs = mutableMapOf<Int, Pair<Int, Int>>()
+
 class WasmJsMidiIO internal constructor(
     private val handle: Int
 ) : MidiIO {
 
-    // token (Int) → cbId used to store the handler + fnPtr for removal
-    private val handlerMap = mutableMapOf<Int, Pair<Int, Int>>() // token → (cbId, fnPtr)
-
+    // The token is the handler's function pointer, which is what the C API removes by.
     override fun addInputHandler(receiver: (messages: UIntArray, timestamp: Long) -> Unit): Any {
         val cbId = nextCallbackId()
         midiInputHandlers[cbId] = receiver
-        // Callback sig: void(const uint32_t* messages, size_t count, int64_t timestamp, void* ctx)
-        // In 32-bit Wasm: "viiii" (timestamp as two ints) or "viii" with timestamp as double
-        // Use "viii" treating timestamp as a double (WASM_BIGINT not guaranteed here)
-        val fnPtr = makeCFunctionPtr(cbId, "uapmdDispatchMidiInput", "viid")
-        val token = wasmMod.uapmdMidiIoAddInputHandler(handle, fnPtr, 0)
-        handlerMap[token] = Pair(cbId, fnPtr)
-        return token
+        // C: void(void* context, uapmd_ump_t* ump, size_t size_in_bytes, int64 timestamp)
+        val fnPtr = makeCFunctionPtr(cbId, "uapmdDispatchMidiInput", "viiij")
+        wasmMod.uapmdMidiIoAddInputHandler(handle, fnPtr, 0)
+        midiInputFnPtrs[fnPtr] = handle to cbId
+        return fnPtr
     }
 
     override fun removeInputHandler(token: Any) {
-        val intToken = token as Int
-        val (cbId, fnPtr) = handlerMap.remove(intToken) ?: return
-        wasmMod.uapmdMidiIoRemoveInputHandler(handle, intToken)
+        val fnPtr = token as? Int ?: return
+        val (owner, cbId) = midiInputFnPtrs[fnPtr] ?: return
+        if (owner != handle) return
+        midiInputFnPtrs.remove(fnPtr)
+        wasmMod.uapmdMidiIoRemoveInputHandler(handle, fnPtr)
         midiInputHandlers.remove(cbId)
         removeCFunctionPtr(fnPtr)
     }
@@ -34,7 +37,7 @@ class WasmJsMidiIO internal constructor(
         val ptr = mod.malloc(messages.size * 4)
         try {
             messages.forEachIndexed { i, v -> mod.setValue(ptr + i * 4, v.toDouble(), "i32") }
-            mod.uapmdMidiIoSend(handle, ptr, messages.size, timestamp)
+            mod.uapmdMidiIoSend(handle, ptr, messages.size * 4, timestamp)
         } finally { mod.free(ptr) }
     }
 }

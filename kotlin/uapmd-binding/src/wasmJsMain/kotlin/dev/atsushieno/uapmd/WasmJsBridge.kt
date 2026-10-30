@@ -515,11 +515,11 @@ external interface UapmdCApiModule : JsAny {
     fun uapmdMidiDeviceInstance(driverNamePtr: Int): Int
     /** Callback: void(const uint32_t* messages, size_t count, int64_t timestamp) */
     @JsName("_uapmd_midi_io_add_input_handler")
-    fun uapmdMidiIoAddInputHandler(handle: Int, callback: Int, ctx: Int): Int
+    fun uapmdMidiIoAddInputHandler(handle: Int, receiver: Int, userData: Int)
     @JsName("_uapmd_midi_io_remove_input_handler")
-    fun uapmdMidiIoRemoveInputHandler(handle: Int, token: Int)
+    fun uapmdMidiIoRemoveInputHandler(handle: Int, receiver: Int)
     @JsName("_uapmd_midi_io_send")
-    fun uapmdMidiIoSend(handle: Int, messagesPtr: Int, count: Int, timestamp: Long)
+    fun uapmdMidiIoSend(handle: Int, messagesPtr: Int, sizeInBytes: Int, timestamp: Long)
 
     // ── Function block manager ─────────────────────────────────────────────
     @JsName("_uapmd_fbm_count")
@@ -1910,11 +1910,12 @@ fun uapmdDispatchParameterMetadataRefresh(cbId: Int) {
     parameterMetadataRefreshListeners[cbId]?.invoke()
 }
 
+// C: void(void* context, uapmd_ump_t* ump, size_t size_in_bytes, int64 timestamp)
 @JsExport
-fun uapmdDispatchMidiInput(cbId: Int, messagesPtr: Int, count: Int, timestamp: Double) {
+fun uapmdDispatchMidiInput(cbId: Int, context: Int, umpPtr: Int, sizeInBytes: Int, timestamp: String) {
     val handler = midiInputHandlers[cbId] ?: return
-    val data = UIntArray(count) { i ->
-        wasmMod.getValue(messagesPtr + i * 4, "i32").toUInt()
+    val data = UIntArray(sizeInBytes / 4) { i ->
+        wasmMod.getValue(umpPtr + i * 4, "i32").toUInt()
     }
     handler(data, timestamp.toLong())
 }

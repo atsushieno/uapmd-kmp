@@ -248,15 +248,18 @@ internal fun makeJsEventOutputCallback(
     return addJsCallback(fn.asDynamic(), "viiii")
 }
 
-/** Make a table entry for a MIDI input handler. */
+/**
+ * Make a table entry for a MIDI input handler, a uapmd_ump_receiver_t:
+ * void(void* context, uapmd_ump_t* ump, size_t size_in_bytes, int64_t timestamp).
+ * The int64_t timestamp crosses as BigInt.
+ */
 internal fun makeJsMidiInputHandler(handler: (UIntArray, Long) -> Unit): Int {
-    val fn: (dynamic, dynamic, dynamic) -> Unit = { messagesPtr, count, timestamp ->
-        val ptr = messagesPtr as Int
-        val cnt = count as Int
-        val data = UIntArray(cnt) { i -> (jsMod.getValue(ptr + i * 4, "i32") as Int).toUInt() }
-        handler(data, (timestamp as Double).toLong())
+    val fn: (dynamic, dynamic, dynamic, dynamic) -> Unit = { _, umpPtr, sizeInBytes, timestamp ->
+        val ptr = umpPtr as Int
+        val data = UIntArray((sizeInBytes as Int) / 4) { i -> (jsMod.getValue(ptr + i * 4, "i32") as Int).toUInt() }
+        handler(data, timestamp.toString().toLong())
     }
-    return addJsCallback(fn.asDynamic(), "viid")
+    return addJsCallback(fn.asDynamic(), "viiij")
 }
 
 // ── Callback ID counter (reuse from plugin module direction) ──────────────────
