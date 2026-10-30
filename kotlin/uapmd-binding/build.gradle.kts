@@ -152,7 +152,13 @@ tasks.register("buildUapmdCApiDesktop") {
     group       = "build"
     description = "Builds libuapmd-c-api shared library for JVM desktop via cmake"
 
+    // The library links the uapmd engine built from the submodule, so a bump that
+    // changes only uapmd sources must rebuild it too. With c-api/ alone as input
+    // the task stayed UP-TO-DATE and kept serving the pre-bump engine.
+    inputs.file(repoRoot.resolve("CMakeLists.txt"))
     inputs.dir(repoRoot.resolve("c-api"))
+    inputs.dir(repoRoot.resolve("external/uapmd/source"))
+    inputs.dir(repoRoot.resolve("cmake"))
     outputs.file(File(cApiDylibDir, when {
         os.isWindows -> "Release/uapmd-c-api.dll"
         os.isMacOsX  -> "libuapmd-c-api.dylib"
