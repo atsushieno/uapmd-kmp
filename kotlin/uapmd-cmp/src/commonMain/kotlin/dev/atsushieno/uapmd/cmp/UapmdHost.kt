@@ -2090,9 +2090,9 @@ class UapmdHost private constructor(val model: AppModel) {
 
     companion object {
         /**
-         * Wraps an AppModel that is already running, for the headless UI
-         * snapshot tool — it drives the bootstrap itself and only needs a host
-         * to render against.
+         * Wraps an AppModel that is already running, for the tests that render
+         * views headlessly — they drive the bootstrap themselves and only need a
+         * host to render against.
          */
         internal fun attach(model: AppModel) = UapmdHost(model)
 

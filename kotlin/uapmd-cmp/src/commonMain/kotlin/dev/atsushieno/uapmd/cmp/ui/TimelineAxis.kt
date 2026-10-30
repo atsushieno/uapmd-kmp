@@ -40,7 +40,7 @@ data class RulerTick(
  * clamping and zoom bounds expressed in frames upstream have nothing to attach to
  * here and are deliberately absent.
  *
- * Kept free of Compose so it can be exercised from the bootstrap probe.
+ * Kept free of Compose so it can be exercised from the bootstrap test.
  */
 object TimelineAxis {
 

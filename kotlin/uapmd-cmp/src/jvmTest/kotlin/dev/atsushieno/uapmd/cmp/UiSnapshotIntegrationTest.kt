@@ -6,10 +6,7 @@ import androidx.compose.material3.darkColorScheme
 import androidx.compose.runtime.remember
 import androidx.compose.ui.ImageComposeScene
 import androidx.compose.ui.unit.Density
-import dev.atsushieno.uapmd.cleanupAppModel
-import dev.atsushieno.uapmd.initJvmEventLoop
-import dev.atsushieno.uapmd.getAppModel
-import dev.atsushieno.uapmd.instantiateAppModel
+import dev.atsushieno.uapmd.AppModel
 import dev.atsushieno.uapmd.cmp.ui.PluginSelector
 import dev.atsushieno.uapmd.cmp.ui.PluginList
 import dev.atsushieno.uapmd.cmp.ui.PluginGroupMode
@@ -27,24 +24,32 @@ import dev.atsushieno.uapmd.cmp.ui.SequenceEditor
 import dev.atsushieno.uapmd.cmp.ui.rememberFloatingWindowManager
 import org.jetbrains.skia.EncodedImageFormat
 import java.io.File
+import kotlin.test.Test
 
 /**
  * Renders the timeline to a PNG without a window or a device.
  *
  * The point is to be able to *look* at a layout change rather than assume it:
  * the Android device is usually behind its keyguard, and a clipped legend or a
- * button pushed out of view is invisible to a compile or to the headless probe.
+ * button pushed out of view is invisible to a compile or to the other tests.
  * `ImageComposeScene` composes and rasterises off-screen, so the same check runs
- * anywhere.
+ * anywhere. The PNG lands in `build/ui-snapshots/` unless `-Duapmd.cmp.snapshot`
+ * names a file.
  *
- *   ./gradlew :uapmd-cmp:renderUiSnapshot \
- *       -Duapmd.cmp.snapshot=/tmp/timeline.png -Duapmd.cmp.snapshotSize=1080x900
+ *   ./gradlew :uapmd-cmp:jvmIntegrationTest --tests '*UiSnapshotIntegrationTest' \
+ *       -Duapmd.cmp.snapshotView=timeline -Duapmd.cmp.snapshotSize=1080x900
  *
  * Widths matter here: the legend must fit its whole button set at a phone width,
  * which is exactly what regressed when it was pinned to 150dp.
  */
-fun main() {
-    val out = System.getProperty("uapmd.cmp.snapshot") ?: "timeline.png"
+class UiSnapshotIntegrationTest {
+    @Test
+    fun aViewRendersToAPng() = runAgainstAppModel(::renderSnapshot)
+}
+
+private fun renderSnapshot(model: AppModel, check: (String, Boolean) -> Unit) {
+    val out = System.getProperty("uapmd.cmp.snapshot")
+        ?: "build/ui-snapshots/${System.getProperty("uapmd.cmp.snapshotView") ?: "timeline"}.png"
     // Default to the test device: 1080x2342 px at ~2.625x, i.e. ~411x892 dp.
     val size = System.getProperty("uapmd.cmp.snapshotSize") ?: "1080x2342"
     val width = size.substringBefore('x').toIntOrNull() ?: 1080
@@ -52,9 +57,6 @@ fun main() {
     // The device screenshots are at ~2.6x; match that so dp sizes read the same.
     val density = System.getProperty("uapmd.cmp.snapshotDensity")?.toFloatOrNull() ?: 2.625f
 
-    initJvmEventLoop()
-    instantiateAppModel()
-    val model = getAppModel()
     model.notifyUiReady()
     model.notifyPersistentStorageReady()
 
@@ -181,9 +183,7 @@ fun main() {
         java.awt.EventQueue.invokeAndWait { }
     }
     if (view == "pianoroll") {
-        val midi = System.getProperty("uapmd.probe.midi")
-            ?: "/Users/atsushi/sources/uapmd-kmp/external/uapmd/cmake-build-debug/_deps/" +
-            "libremidi-src/tests/corpus/You're No Good.mid"
+        val midi = System.getProperty("uapmd.probe.midi") ?: defaultMidiFile().path
         val added = model.sequencer.engine.timeline
             .addMidiClipFromFile(0, dev.atsushieno.uapmd.TimelinePosition(0L, 0.0), midi)
         pianoRollClip = added.clipId
@@ -282,11 +282,11 @@ fun main() {
         val image = scene.render(now + 16_000_000L)
         val data = image.encodeToData(EncodedImageFormat.PNG)
             ?: error("failed to encode the snapshot")
+        File(out).absoluteFile.parentFile.mkdirs()
         File(out).writeBytes(data.bytes)
-        println("wrote $out (${width}x$height @ ${density}x)")
+        check("wrote $out (${width}x$height @ ${density}x)", File(out).length() > 0)
     } finally {
         scene.close()
         java.awt.EventQueue.invokeAndWait { }
-        cleanupAppModel()
     }
 }

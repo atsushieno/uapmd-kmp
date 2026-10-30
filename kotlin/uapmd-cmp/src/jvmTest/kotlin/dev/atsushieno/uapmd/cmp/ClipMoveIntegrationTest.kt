@@ -1,37 +1,29 @@
 package dev.atsushieno.uapmd.cmp
 
+import dev.atsushieno.uapmd.AppModel
 import dev.atsushieno.uapmd.TimeReference
 import dev.atsushieno.uapmd.TimeReferenceType
 import dev.atsushieno.uapmd.TimelinePosition
-import dev.atsushieno.uapmd.cleanupAppModel
-import dev.atsushieno.uapmd.getAppModel
-import dev.atsushieno.uapmd.initJvmEventLoop
 import dev.atsushieno.uapmd.PluginInstanceResult
-import dev.atsushieno.uapmd.instantiateAppModel
+import kotlin.test.Test
 
 /**
  * Repro attempt for "moving a MIDI2 clip on a track can crash the app".
  *
  * `UapmdHost.moveClip` is `setClipAnchor(ContainerStart, offset)`, which the
- * BootstrapProbe never exercises — it covers rename/gain/mute/resize only. The
+ * bootstrap test never exercises — it covers rename/gain/mute/resize only. The
  * timeline drag calls it once per gesture end, and the UI poll reads the clip
  * list continuously while the audio thread plays the same timeline, so this
  * drives all three together rather than a move in isolation.
  *
- * Run with: ./gradlew :uapmd-cmp:runClipMoveProbe
+ * Run with: ./gradlew :uapmd-cmp:jvmIntegrationTest --tests '*ClipMoveIntegrationTest'
  */
-fun main() {
-    var failures = 0
-    fun check(label: String, ok: Boolean) {
-        println("${if (ok) "PASS" else "FAIL"}  $label")
-        if (!ok) failures++
-    }
+class ClipMoveIntegrationTest {
+    @Test
+    fun clipMovesSurviveReadsAndPlayback() = runAgainstAppModel(::moveClips)
+}
 
-    println("-- installing event loop")
-    initJvmEventLoop()
-    println("-- instantiating AppModel")
-    instantiateAppModel()
-    val model = getAppModel()
+private fun moveClips(model: AppModel, check: (String, Boolean) -> Unit) {
     model.notifyUiReady()
     model.notifyPersistentStorageReady()
 
@@ -74,9 +66,7 @@ fun main() {
         model.createEmptyMidiClip(0, 0L, 480u, 120.0)
     }
     check("MIDI2 clip created (id=${clip.clipId} err=${clip.error})", clip.success)
-    if (!clip.success) {
-        cleanupAppModel(); kotlin.system.exitProcess(1)
-    }
+    if (!clip.success) return
     val id = clip.clipId
 
     fun moveTo(seconds: Double): Boolean =
@@ -180,8 +170,4 @@ fun main() {
     val offAt = System.currentTimeMillis()
     while (model.isAudioEngineEnabled && System.currentTimeMillis() - offAt < 10_000)
         Thread.sleep(50)
-
-    println(if (failures == 0) "ALL CHECKS PASSED" else "$failures CHECK(S) FAILED")
-    cleanupAppModel()
-    kotlin.system.exitProcess(if (failures == 0) 0 else 1)
 }

@@ -1,10 +1,9 @@
 package dev.atsushieno.uapmd.cmp
 
+import dev.atsushieno.uapmd.AppModel
 import dev.atsushieno.uapmd.ScanMode
-import dev.atsushieno.uapmd.cleanupAppModel
-import dev.atsushieno.uapmd.getAppModel
-import dev.atsushieno.uapmd.initJvmEventLoop
-import dev.atsushieno.uapmd.instantiateAppModel
+import org.junit.Assume.assumeTrue
+import kotlin.test.Test
 
 /**
  * Measures what the UI poll costs *while a scan is running*.
@@ -15,12 +14,18 @@ import dev.atsushieno.uapmd.instantiateAppModel
  * a pile of suspended coroutines look like. This times each call so the cost is a
  * number rather than a suspicion.
  *
- *   ./gradlew :uapmd-cmp:runScanPollProbe
+ * Only the scan progress and error reads happen on every tick, so only they are
+ * held to a frame. `UapmdHost` reads the whole catalog once, when a scan finishes;
+ * its cost is reported here, not judged against a frame.
+ *
+ *   ./gradlew :uapmd-cmp:jvmIntegrationTest --tests '*ScanPollIntegrationTest'
  */
-fun main() {
-    initJvmEventLoop()
-    instantiateAppModel()
-    val model = getAppModel()
+class ScanPollIntegrationTest {
+    @Test
+    fun pollingDuringAScanStaysInsideAFrame() = runAgainstAppModel(::measurePollCost)
+}
+
+private fun measurePollCost(model: AppModel, check: (String, Boolean) -> Unit) {
     model.notifyUiReady()
     notifyPersistentStorageReadyForPlatform(model)
 
@@ -28,7 +33,7 @@ fun main() {
     println("remote scanner available: $platformSupportsRemoteScanner")
 
     // Let the startup fast scan finish first, or its tail is what gets measured
-    // instead of the scan this probe starts.
+    // instead of the scan this test starts.
     var settle = 0
     while (model.isScanning && settle < 60_000) { Thread.sleep(100); settle += 100 }
 
@@ -76,13 +81,12 @@ fun main() {
     report("slowScanProgress", progressUs)
     report("lastPluginScanError", errorUs)
     report("full catalog read", catalogUs)
+    // A scan that ends before the first sample has nothing to measure: no plug-ins here.
+    assumeTrue("the scan ran long enough to be sampled", progressUs.isNotEmpty())
 
     // The first call carries JNA layout and JIT cost; what the UI pays every tick is
     // the steady state, so judge on the median and p95.
-    val steadyMs = listOf(progressUs, errorUs, catalogUs)
-        .filter { it.isNotEmpty() }
+    val steadyMs = listOf(progressUs, errorUs)
         .maxOf { it.sorted()[(it.size * 95) / 100] } / 1000.0
-    println(if (steadyMs < 16.0) "   OK: p95 ${steadyMs}ms stays well inside a 16ms frame"
-            else "   STALL: p95 ${steadyMs}ms threatens the frame budget")
-    cleanupAppModel()
+    check("per-tick p95 ${steadyMs}ms stays well inside a 16ms frame", steadyMs < 16.0)
 }

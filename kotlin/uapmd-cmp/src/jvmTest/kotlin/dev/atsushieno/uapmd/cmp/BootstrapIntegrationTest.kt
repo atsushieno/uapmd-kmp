@@ -1,6 +1,7 @@
 package dev.atsushieno.uapmd.cmp
 
 import dev.atsushieno.uapmd.AnchorOrigin
+import dev.atsushieno.uapmd.AppModel
 import dev.atsushieno.uapmd.ClipType
 import dev.atsushieno.uapmd.FreezePolicy
 import dev.atsushieno.uapmd.GraphBusType
@@ -17,21 +18,28 @@ import dev.atsushieno.uapmd.TimelineClipTarget
 import dev.atsushieno.uapmd.TimelinePosition
 import dev.atsushieno.uapmd.cleanupAppModel
 import dev.atsushieno.uapmd.createSilentAudioFileReader
-import dev.atsushieno.uapmd.getAppModel
-import dev.atsushieno.uapmd.initJvmEventLoop
 import dev.atsushieno.uapmd.PluginInstanceResult
-import dev.atsushieno.uapmd.instantiateAppModel
+import kotlin.test.Test
 
 /**
- * Headless check of the Phase 0 bootstrap (docs/uapmd-cmp-plan.md §2.1, §2.5).
+ * Headless check of the Phase 0 bootstrap (docs/uapmd-cmp-plan.md §2.1, §2.5), and
+ * from there of most of the AppModel surface the UI drives.
  *
  * Asserts that the audio engine starts, *cleanly* stops — AppModel's shutdown is
  * asynchronous: it drains plugin tails on a worker, then deactivates plugins via
  * a task posted to the event loop — and restarts. A restart that finds audio
  * still playing is the failure `composeApp`'s setActive+stopAudio would produce.
  *
- * Run with: ./gradlew :uapmd-cmp:runBootstrapProbe
+ * The sections share one AppModel and build on each other's tracks, clips and
+ * plug-ins, the way a session in the app does, so they run as one test.
+ *
+ * Run with: ./gradlew :uapmd-cmp:jvmIntegrationTest --tests '*BootstrapIntegrationTest'
  */
+class BootstrapIntegrationTest {
+    @Test
+    fun appModelDrivesTheWholeUiSurface() = runAgainstAppModel(::checkBootstrap)
+}
+
 private fun inst2Caps(host: dev.atsushieno.uapmd.PluginHost, id: Int): Pair<Boolean, Boolean> {
     val c = host.getInstance(id)!!.uiCapabilities
     return c.hasUiSupport to c.supportsFloatingPresentations
@@ -41,19 +49,7 @@ private fun inst2Caps(host: dev.atsushieno.uapmd.PluginHost, id: Int): Pair<Bool
 private fun host0Clips(model: dev.atsushieno.uapmd.AppModel): List<Int> =
     model.sequencer.engine.timeline.getTrack(0u).getClips().map { it.clipId }
 
-fun main() {
-    var failures = 0
-    fun check(label: String, ok: Boolean) {
-        println("${if (ok) "PASS" else "FAIL"}  $label")
-        if (!ok) failures++
-    }
-
-    println("-- installing event loop")
-    initJvmEventLoop()
-
-    println("-- instantiating AppModel")
-    instantiateAppModel()
-    val model = getAppModel()
+private fun checkBootstrap(model: AppModel, check: (String, Boolean) -> Unit) {
     model.notifyUiReady()
     model.notifyPersistentStorageReady()
     println("   sampleRate=${model.sampleRate} tracks=${model.trackCount}")
@@ -158,7 +154,8 @@ fun main() {
         // Without this the parent relaunches `java`, which serves no scanner, and
         // the scan dies with "Remote scanner failed to connect".
         val scanner = System.getProperty("uapmd.probe.scannerExe")
-            ?: "/Users/atsushi/sources/uapmd-kmp/cmake-build-debug/uapmd-source/tools/uapmd-scan/uapmd-scan"
+            ?: System.getProperty("uapmd.cmp.scannerExe")
+            ?: repoFile("cmake-build-debug/uapmd-source/tools/uapmd-scan/uapmd-scan").path
         println("   remote scanner executable: $scanner (exists=${java.io.File(scanner).exists()})")
         dev.atsushieno.uapmd.setRemoteScannerExecutable(scanner)
         val before = host.catalogEntryCount.toInt()
@@ -183,7 +180,7 @@ fun main() {
         check("the remote scanner completes", !model.isScanning)
         // Bundle counts are cache-dependent: a fully cached scan finishes before a
         // sampler sees anything, so how many bundles were walked is reported, not
-        // asserted. `runScanPollProbe` measures progress over a real scan instead.
+        // asserted. ScanPollIntegrationTest measures progress over a real scan instead.
         println("   (progress sampling is informational here: $sawProgress, peak $maxProcessed)")
         check("the remote scanner reported no connection error",
             model.lastPluginScanError?.contains("failed to connect") != true)
@@ -223,8 +220,8 @@ fun main() {
         val caps = inst2Caps(host, succeeded.instanceId)
         println("   ui: hasUiSupport=${caps.first} floating=${caps.second}")
         // Opt-in because a plugin UI is a real native window, which this
-        // otherwise-headless probe has no business opening. For the UI paths
-        // themselves see :uapmd-cmp:runPluginUiProbe.
+        // otherwise-headless test has no business opening. For the UI paths
+        // themselves see PluginUiIntegrationTest.
         if (caps.first && System.getProperty("uapmd.probe.pluginUi") != null) {
             val presentation = host.getInstance(succeeded.instanceId)!!.createUiPresentation()
             check("createUiPresentation returned a presentation", presentation != null)
@@ -278,8 +275,7 @@ fun main() {
     }
 
     // ── clip import + timeline read-back (what the Timeline view renders) ────
-    val midi = System.getProperty("uapmd.probe.midi")
-        ?: "/Users/atsushi/sources/uapmd-kmp/external/uapmd/cmake-build-debug/_deps/libremidi-src/tests/corpus/You're No Good.mid"
+    val midi = System.getProperty("uapmd.probe.midi") ?: defaultMidiFile().path
     if (java.io.File(midi).exists()) {
         val timelineFacade = model.sequencer.engine.timeline
         val added = timelineFacade.addMidiClipFromFile(0, dev.atsushieno.uapmd.TimelinePosition(0L, 0.0), midi)
@@ -1768,7 +1764,7 @@ fun main() {
 
         if (commands.isEmpty()) {
             // attach() does not initialise addins, so there is nothing to read
-            // here unless this probe is pointed at a host that has them.
+            // here unless this test is pointed at a host that has them.
             println("   NOTE  no addins loaded; live-read checks skipped")
         } else {
             val first = uiHost.addinCommands()
@@ -1844,7 +1840,7 @@ fun main() {
 
         if (http) {
             // Deliberately not 37373: uapmd-app binds that at startup, and a
-            // probe that fought a running app for the port would fail for a
+            // test that fought a running app for the port would fail for a
             // reason that has nothing to do with the binding.
             val server = dev.atsushieno.uapmd.McpServer.server(38763)
             check("a server-mode transport is created", server != null)
@@ -1918,7 +1914,4 @@ fun main() {
     java.awt.EventQueue.invokeAndWait { }
     cleanupAppModel()
     println("-- cleaned up")
-
-    println(if (failures == 0) "ALL CHECKS PASSED" else "$failures CHECK(S) FAILED")
-    kotlin.system.exitProcess(if (failures == 0) 0 else 1)
 }

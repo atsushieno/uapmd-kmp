@@ -59,6 +59,10 @@ kotlin {
         commonTest.dependencies {
             implementation(libs.kotlin.test)
         }
+        jvmTest.dependencies {
+            // Assume, to skip a test whose plug-in or input file is not on this machine.
+            implementation(libs.junit)
+        }
         jvmMain.dependencies {
             implementation(compose.desktop.currentOs)
             implementation(libs.kotlinx.coroutinesSwing)
@@ -108,17 +112,11 @@ dependencies {
 // which on the JVM is `java` and serves no scanner, so uapmd is told to launch
 // uapmd's own `uapmd-scan` instead. Without this the app falls back to scanning
 // in process, where a single bad plug-in takes the whole app down mid-scan.
+// `:uapmd-binding:buildUapmdScanDesktop` builds it; the Visual Studio generator puts
+// it in a per-configuration subdirectory.
 val uapmdScanExecutable: File = rootProject.projectDir.parentFile
-    .resolve("cmake-build-debug/uapmd-source/tools/uapmd-scan/uapmd-scan")
-
-/** Forwards the scanner path (and anything else asked for) to a forked JVM. */
-fun JavaExec.forwardScannerExecutable() {
-    val explicit = System.getProperty("uapmd.cmp.scannerExe")
-    when {
-        explicit != null -> systemProperty("uapmd.cmp.scannerExe", explicit)
-        uapmdScanExecutable.isFile -> systemProperty("uapmd.cmp.scannerExe", uapmdScanExecutable.absolutePath)
-    }
-}
+    .resolve("cmake-build-debug/uapmd-source/tools/uapmd-scan/" +
+        if (org.gradle.internal.os.OperatingSystem.current().isWindows) "Release/uapmd-scan.exe" else "uapmd-scan")
 
 // JSFX editors draw their text with a font the app supplies wherever the platform has no
 // font stack to borrow (Jsfx.usesOwnFontBackend: Android, iOS, the web). uapmd-app hands
@@ -174,173 +172,54 @@ compose.desktop {
     }
 }
 
-val jvmMainCompilation = kotlin.targets.getByName("jvm").compilations.getByName("main")
+// ── Tests ────────────────────────────────────────────────────────────────────
+//
+// Classes named *IntegrationTest drive the real AppModel through the native library:
+// they need an audio device, and most of them installed plug-ins or MIDI files, which
+// CI machines do not have. `jvmTest` (what CI runs) leaves them out; run them with
+//
+//   ./gradlew :uapmd-cmp:jvmIntegrationTest [--tests '*FreezeIntegrationTest'] [-Duapmd.probe.x=...]
+//
+// AppModel is a process-wide singleton, so every class gets a JVM of its own.
+val integrationTestPattern = "*IntegrationTest"
 
-tasks.register<JavaExec>("renderUiSnapshot") {
-    group = "verification"
-    description = "Renders the timeline off-screen to a PNG, so layout changes can be seen without a device."
-    dependsOn("jvmJar")
-    mainClass.set("dev.atsushieno.uapmd.cmp.UiSnapshotMainKt")
-    classpath(
-        files(tasks.named("jvmJar")),
-        jvmMainCompilation.runtimeDependencyFiles
-    )
-    jvmArgs("-Djava.awt.headless=true")
-    listOf(
-        "uapmd.cmp.snapshot", "uapmd.cmp.snapshotSize", "uapmd.cmp.snapshotDensity", "uapmd.cmp.snapshotView",
-        "uapmd.cmp.snapshotProject", "uapmd.cmp.rollScrollSeconds", "uapmd.cmp.snapshotRoundTrip", "uapmd.cmp.resizeProbe"
-    ).forEach { key -> System.getProperty(key)?.let { systemProperty(key, it) } }
+tasks.named<Test>("jvmTest") {
+    filter { excludeTestsMatching(integrationTestPattern) }
 }
 
-tasks.register<JavaExec>("runKeyboardDragProbe") {
-    group = "verification"
-    description = "Drags a pointer across the on-screen keyboard headlessly and reports the notes it produced."
-    dependsOn("jvmJar")
-    mainClass.set("dev.atsushieno.uapmd.cmp.KeyboardDragProbeMainKt")
-    classpath = objects.fileCollection().from(
-        tasks.named("jvmJar"),
-        kotlin.targets.getByName("jvm").compilations.getByName("main").runtimeDependencyFiles
-    )
-}
+val jvmTestCompilation = kotlin.targets.getByName("jvm").compilations.getByName("test")
 
-tasks.register<JavaExec>("runPianoRollScrollProbe") {
+tasks.register<Test>("jvmIntegrationTest") {
     group = "verification"
-    description = "Scrolls the piano roll by wheel and by scrollbar headlessly, and checks the view moves."
-    dependsOn("jvmJar")
-    mainClass.set("dev.atsushieno.uapmd.cmp.PianoRollScrollProbeMainKt")
-    classpath = objects.fileCollection().from(
-        tasks.named("jvmJar"),
-        kotlin.targets.getByName("jvm").compilations.getByName("main").runtimeDependencyFiles
-    )
-    listOf("uapmd.probe.midi").forEach { key -> System.getProperty(key)?.let { systemProperty(key, it) } }
-}
-
-tasks.register<JavaExec>("runScanPollProbe") {
-    group = "verification"
-    description = "Times what the UI poll costs while a plug-in scan runs."
-    dependsOn("jvmJar")
-    mainClass.set("dev.atsushieno.uapmd.cmp.ScanPollProbeMainKt")
-    forwardScannerExecutable()
-    classpath = objects.fileCollection().from(
-        tasks.named("jvmJar"),
-        kotlin.targets.getByName("jvm").compilations.getByName("main").runtimeDependencyFiles
-    )
-}
-
-tasks.register<JavaExec>("runFreezeProbe") {
-    group = "verification"
-    description = "Reads back what the freeze command does: policy, runtime state, render progress."
-    dependsOn("jvmJar")
-    mainClass.set("dev.atsushieno.uapmd.cmp.FreezeProbeMainKt")
-    forwardScannerExecutable()
-    classpath(files(tasks.named("jvmJar")), jvmMainCompilation.runtimeDependencyFiles)
-    jvmArgs("-Dapple.awt.application.name=uapmd-cmp", "-Xdock:name=uapmd-cmp")
-    System.getProperty("uapmd.probe.smf")?.let { systemProperty("uapmd.probe.smf", it) }
-}
-
-tasks.register<JavaExec>("runSelectionProbe") {
-    group = "verification"
-    description = "Headless check of the project selection bindings against the real native library."
-    dependsOn("jvmJar")
-    mainClass.set("dev.atsushieno.uapmd.cmp.SelectionProbeMainKt")
-    forwardScannerExecutable()
-    classpath(
-        files(tasks.named("jvmJar")),
-        jvmMainCompilation.runtimeDependencyFiles
-    )
-    jvmArgs("-Dapple.awt.application.name=uapmd-cmp", "-Xdock:name=uapmd-cmp")
-}
-
-tasks.register<JavaExec>("runMissingPluginLoadProbe") {
-    group = "verification"
-    description = "Loads a project whose plug-ins are not in the catalogue and checks that the load returns."
-    dependsOn("jvmJar")
-    mainClass.set("dev.atsushieno.uapmd.cmp.MissingPluginLoadProbeMainKt")
-    System.getProperty("uapmd.probe.project")?.let { systemProperty("uapmd.probe.project", it) }
-    forwardScannerExecutable()
-    classpath(
-        files(tasks.named("jvmJar")),
-        jvmMainCompilation.runtimeDependencyFiles
-    )
-    jvmArgs("-Dapple.awt.application.name=uapmd-cmp", "-Xdock:name=uapmd-cmp")
-}
-
-tasks.register<JavaExec>("runClipMoveProbe") {
-    group = "verification"
-    description = "Headless repro attempt for a crash when moving a MIDI2 clip on a track."
-    dependsOn("jvmJar")
-    mainClass.set("dev.atsushieno.uapmd.cmp.ClipMoveProbeMainKt")
-    System.getProperty("uapmd.probe.smf")?.let { systemProperty("uapmd.probe.smf", it) }
-    forwardScannerExecutable()
-    classpath(
-        files(tasks.named("jvmJar")),
-        jvmMainCompilation.runtimeDependencyFiles
-    )
-    jvmArgs("-Dapple.awt.application.name=uapmd-cmp", "-Xdock:name=uapmd-cmp")
-}
-
-tasks.register<JavaExec>("runPluginUiProbe") {
-    group = "verification"
-    description = "Shows one plug-in's UI, hides it and shows it again, reporting visibility at each step."
-    dependsOn("jvmJar")
-    mainClass.set("dev.atsushieno.uapmd.cmp.PluginUiProbeMainKt")
-    forwardScannerExecutable()
-    classpath(
-        files(tasks.named("jvmJar")),
-        jvmMainCompilation.runtimeDependencyFiles
-    )
-    jvmArgs("-Dapple.awt.application.name=uapmd-cmp", "-Xdock:name=uapmd-cmp")
-    listOf("uapmd.probe.uiPlugin", "uapmd.probe.uiFormat").forEach { key ->
-        System.getProperty(key)?.let { systemProperty(key, it) }
+    description = "Runs the tests that drive the real engine, audio device and installed plug-ins."
+    useJUnit()
+    testClassesDirs = jvmTestCompilation.output.classesDirs
+    classpath = files(jvmTestCompilation.output.allOutputs, jvmTestCompilation.runtimeDependencyFiles)
+    filter { includeTestsMatching(integrationTestPattern) }
+    forkEvery = 1
+    // What they exercise lives outside the build: plug-ins, devices, files.
+    outputs.upToDateWhen { false }
+    testLogging {
+        showStandardStreams = true
+        events("passed", "skipped", "failed")
+        exceptionFormat = org.gradle.api.tasks.testing.logging.TestExceptionFormat.FULL
     }
-}
-
-tasks.register<JavaExec>("runFramebufferUiProbe") {
-    group = "verification"
-    description = "Headless check that a framebuffer plug-in editor reports frames to the binding."
-    dependsOn("jvmJar")
-    mainClass.set("dev.atsushieno.uapmd.cmp.FramebufferUiProbeMainKt")
-    forwardScannerExecutable()
-    classpath(
-        files(tasks.named("jvmJar")),
-        jvmMainCompilation.runtimeDependencyFiles
-    )
-    jvmArgs("-Dapple.awt.application.name=uapmd-cmp", "-Xdock:name=uapmd-cmp")
-    // The probe documents -Duapmd.probe.plugin for choosing which effect to open, which
-    // only reaches it if the task passes it on.
-    listOf("uapmd.probe.plugin").forEach { key ->
-        providers.systemProperty(key).orNull?.let { systemProperty(key, it) }
-    }
-}
-
-tasks.register<JavaExec>("runAddinProbe") {
-    group = "verification"
-    description = "Headless check of the addin wiring: registries, Virtual MIDI Devices, Augene2 and audio workers."
-    dependsOn("jvmJar")
-    mainClass.set("dev.atsushieno.uapmd.cmp.AddinProbeMainKt")
-    forwardScannerExecutable()
-    classpath(
-        files(tasks.named("jvmJar")),
-        jvmMainCompilation.runtimeDependencyFiles
-    )
-    jvmArgs("-Dapple.awt.application.name=uapmd-cmp", "-Xdock:name=uapmd-cmp")
-    System.getProperty("uapmd.probe.instantiate")?.let { systemProperty("uapmd.probe.instantiate", it) }
-}
-
-tasks.register<JavaExec>("runBootstrapProbe") {
-    group = "verification"
-    description = "Headless check that the AppModel bootstrap starts, cleanly stops, and restarts audio."
-    dependsOn("jvmJar")
-    mainClass.set("dev.atsushieno.uapmd.cmp.BootstrapProbeMainKt")
-    forwardScannerExecutable()
-    classpath(
-        files(tasks.named("jvmJar")),
-        jvmMainCompilation.runtimeDependencyFiles
-    )
-    jvmArgs("-Dapple.awt.application.name=uapmd-cmp", "-Xdock:name=uapmd-cmp")
-    listOf("uapmd.probe.removeInstance", "uapmd.probe.pluginUi", "uapmd.probe.midi").forEach { key ->
-        System.getProperty(key)?.let { systemProperty(key, it) }
-    }
+    jvmArgs("-XX:ErrorFile=${layout.buildDirectory.get().asFile}/hs_err_pid%p.log")
+    if (org.gradle.internal.os.OperatingSystem.current().isMacOsX)
+        jvmArgs("-Dapple.awt.application.name=uapmd-cmp", "-Xdock:name=uapmd-cmp")
+    systemProperty("uapmd.test.repoRoot", rootProject.projectDir.parentFile.absolutePath)
+    // A scan run inside the test JVM loads every plug-in into it, and one that installs
+    // its own SIGSEGV handler (Floe) catches the JVM's routine internal faults and
+    // wedges the JVM. Built before the tests run, so the path is passed unconditionally.
+    dependsOn(":uapmd-binding:buildUapmdScanDesktop")
+    systemProperty("uapmd.cmp.scannerExe",
+        System.getProperty("uapmd.cmp.scannerExe") ?: uapmdScanExecutable.absolutePath)
+    // The switches the tests document (-Duapmd.probe.smf=..., -Duapmd.cmp.snapshotView=...)
+    // only reach them if the task passes them on.
+    System.getProperties().stringPropertyNames()
+        .filter { it.startsWith("uapmd.probe.") || it.startsWith("uapmd.cmp.snapshot") ||
+            it == "uapmd.cmp.rollScrollSeconds" || it == "uapmd.cmp.resizeProbe" }
+        .forEach { systemProperty(it, System.getProperty(it)) }
 }
 
 afterEvaluate {
@@ -362,7 +241,7 @@ afterEvaluate {
     ).forEach { name ->
         // Warn rather than throw: this block configures on every invocation, so a
         // task renamed by a future Kotlin plugin must not take unrelated builds
-        // (jvmRun, the probes) down with it. The warning is there because a silent
+        // (jvmRun, the tests) down with it. The warning is there because a silent
         // no-op here comes back as a confusing webpack resolve failure.
         val task = tasks.findByName(name)
         if (task == null)

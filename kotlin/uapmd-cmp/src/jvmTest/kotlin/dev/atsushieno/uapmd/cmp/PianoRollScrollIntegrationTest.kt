@@ -9,15 +9,16 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.input.pointer.PointerEventType
 import androidx.compose.ui.input.pointer.PointerType
 import androidx.compose.ui.unit.Density
+import dev.atsushieno.uapmd.AppModel
 import dev.atsushieno.uapmd.TimelinePosition
-import dev.atsushieno.uapmd.cleanupAppModel
 import dev.atsushieno.uapmd.getAppModel
-import dev.atsushieno.uapmd.initJvmEventLoop
-import dev.atsushieno.uapmd.instantiateAppModel
 import dev.atsushieno.uapmd.cmp.ui.EditorScrollbarThickness
 import dev.atsushieno.uapmd.cmp.ui.PianoRollEditor
 import org.jetbrains.skia.Bitmap
 import org.jetbrains.skia.EncodedImageFormat
+import org.junit.Assume.assumeTrue
+import java.io.File
+import kotlin.test.Test
 
 /** `EditorPalette.scrollThumb` in the dark scheme, as the bitmap reports it. */
 private val ThumbArgb = 0xFF5E5E70.toInt()
@@ -27,21 +28,26 @@ private val ThumbArgb = 0xFF5E5E70.toInt()
  * view actually moves.
  *
  * "Scrolling" here means what an editor means by it - wheel, trackpad, scrollbar -
- * not dragging the canvas. An earlier version of this probe drove drags, which is
+ * not dragging the canvas. An earlier version of this test drove drags, which is
  * why it passed while the editor did not scroll at all: it was testing a pan that
  * nobody uses instead of the mechanism that was missing. The scrollbar checks
  * matter most on a full clip, where there is no empty grid left to drag and a
  * drag that lands on a note moves the note.
  *
- *   ./gradlew :uapmd-cmp:runPianoRollScrollProbe
+ *   ./gradlew :uapmd-cmp:jvmIntegrationTest --tests '*PianoRollScrollIntegrationTest' [-Duapmd.probe.midi=<file>]
  */
+class PianoRollScrollIntegrationTest {
+    @Test
+    fun wheelAndScrollbarsScrollThePianoRoll() = runAgainstAppModel(::scrollPianoRoll)
+}
+
 private const val SceneWidth = 900
 private const val SceneHeight = 600
 private const val SceneDensity = 1.5f
 
 /**
  * The middle of a bar's footprint, in scene pixels. Taken from the real constant
- * rather than repeated here, so widening the bar for touch cannot leave the probe
+ * rather than repeated here, so widening the bar for touch cannot leave the test
  * pressing beside it.
  */
 private val ScrollbarMidPx = EditorScrollbarThickness.value * SceneDensity / 2f
@@ -64,7 +70,7 @@ private fun newScene(clipId: Int): ImageComposeScene {
 
 /**
  * Where the thumb of the bar hugging the given edge is, found in the rendered
- * pixels rather than computed from the layout the probe cannot see. Guessing a
+ * pixels rather than computed from the layout the test cannot see. Guessing a
  * point on the track instead is what made an earlier version of these checks
  * "fail": they were pressing the track beside the thumb, which pages rather than
  * drags. Reading it back also proves the thumb is on screen at all.
@@ -171,26 +177,16 @@ private fun renderAfterScroll(clipId: Int, dx: Float, dy: Float, ticks: Int): By
     }
 }
 
-fun main() {
-    initJvmEventLoop()
-    instantiateAppModel()
-    val model = getAppModel()
+private fun scrollPianoRoll(model: AppModel, check: (String, Boolean) -> Unit) {
     model.notifyUiReady()
     notifyPersistentStorageReadyForPlatform(model)
 
-    val midi = System.getProperty("uapmd.probe.midi")
-        ?: "/Users/atsushi/sources/uapmd-kmp/external/uapmd/cmake-build-debug/_deps/" +
-        "libremidi-src/tests/corpus/You're No Good.mid"
+    val midi = System.getProperty("uapmd.probe.midi") ?: defaultMidiFile().path
+    assumeTrue("MIDI file $midi exists", File(midi).isFile)
     val added = model.sequencer.engine.timeline
         .addMidiClipFromFile(0, TimelinePosition(0L, 0.0), midi)
     println("clip ${added.clipId} ok=${added.success} err=${added.error}")
     java.awt.EventQueue.invokeAndWait { }
-
-    var failures = 0
-    fun check(label: String, ok: Boolean) {
-        println((if (ok) "PASS  " else "FAIL  ") + label)
-        if (!ok) failures++
-    }
 
     val still = renderAfterScroll(added.clipId, 0f, 0f, 0)
 
@@ -233,11 +229,4 @@ fun main() {
         pointer = PointerType.Touch, acrossOffset = -edge)
     check("the gutter beside the thumb drags it too", !vThumbGutter.contentEquals(still))
     check("the two thumbs move different axes", !vThumbDown.contentEquals(hThumbRight))
-
-    cleanupAppModel()
-    if (failures > 0) {
-        println("$failures CHECK(S) FAILED")
-        kotlin.system.exitProcess(1)
-    }
-    println("ALL CHECKS PASSED")
 }

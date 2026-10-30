@@ -4,9 +4,10 @@ import dev.atsushieno.uapmd.AddinState
 import dev.atsushieno.uapmd.AudioWorkerFault
 import dev.atsushieno.uapmd.Augene2
 import dev.atsushieno.uapmd.Jsfx
+import kotlin.test.Test
 
 /**
- * Headless check of the addin wiring of uapmd f5d490d, booted through [UapmdHost]
+ * The addin wiring of uapmd f5d490d, booted through [UapmdHost]
  * exactly as the app boots:
  *
  *  - every built-in addin reaches Active - the MIR analyses fail to load
@@ -18,20 +19,32 @@ import dev.atsushieno.uapmd.Jsfx
  *  - with a plug-in (-Duapmd.probe.instantiate=<format>), its virtual MIDI 2.0
  *    device can be enabled and disabled from the Virtual MIDI Devices row.
  *
- * Run with: ./gradlew :uapmd-cmp:runAddinProbe [-Duapmd.probe.instantiate=CLAP]
+ * Run with: ./gradlew :uapmd-cmp:jvmIntegrationTest --tests '*AddinIntegrationTest' [-Duapmd.probe.instantiate=CLAP]
  */
-fun main() {
-    var failures = 0
-    fun check(label: String, ok: Boolean) {
-        println("${if (ok) "PASS" else "FAIL"}  $label")
-        if (!ok) failures++
+class AddinIntegrationTest {
+    @Test
+    fun addinsLoadAndTheirCommandsWork() {
+        val checks = Checks()
+        // UapmdHost.start() is the app's own bootstrap; this thread becomes the model
+        // thread, so the model services must be ticked from here as well.
+        val host = UapmdHost.start()
+        try {
+            checkAddins(host, checks::check)
+        } finally {
+            println("-- shutdown")
+            // Deliberately while the startup scan may still run: shutdown() has to stop
+            // it, or the process aborts on the way out.
+            println("   scanning at shutdown: ${host.isScanning}")
+            host.shutdown()
+        }
+        checks.assertAllPassed()
     }
+}
+
+private fun checkAddins(host: UapmdHost, check: (String, Boolean) -> Unit) {
     // Everything the host posts to the UI thread has landed once this returns.
     fun drainUi() = java.awt.EventQueue.invokeAndWait { }
 
-    // UapmdHost.start() is the app's own bootstrap; this thread becomes the model
-    // thread, so the model services must be ticked from here as well.
-    val host = UapmdHost.start()
     fun pump(millis: Long) {
         val until = System.currentTimeMillis() + millis
         while (System.currentTimeMillis() < until) {
@@ -161,12 +174,4 @@ fun main() {
             }
         }
     }
-
-    println("-- shutdown")
-    // Deliberately while the startup scan may still run: shutdown() has to stop
-    // it, or the process aborts on the way out.
-    println("   scanning at shutdown: ${host.isScanning}")
-    host.shutdown()
-    println(if (failures == 0) "ALL PASSED" else "$failures FAILED")
-    kotlin.system.exitProcess(if (failures == 0) 0 else 1)
 }

@@ -192,24 +192,32 @@ do, with no compile error when we skip it. The order is load-bearing:
 4. configure the audio device once the engine is up (§2.1)
 5. teardown in reverse: engine off, flush the event loop, then `cleanupAppModel()`
 
-`BootstrapProbeMain` exercises this headlessly; on web the persistent-storage step is what mounts
+`BootstrapIntegrationTest` exercises this headlessly; on web the persistent-storage step is what mounts
 the IDBFS the plug-in list cache lives in.
 
 
 ### 2.6 Verify UI and behaviour headlessly, not by eye
 
-Three harnesses exist so a claim about the UI can be checked rather than asserted. Use them
-before reporting a UI change as working.
+Tests exist so a claim about the UI can be checked rather than asserted. Use them before
+reporting a UI change as working.
 
-| Task | What it does |
+They live in `uapmd-cmp/src/jvmTest`. The `*IntegrationTest` classes drive the real AppModel
+through the native library and need an audio device, and mostly installed plug-ins too, so
+`jvmTest` (what CI runs) leaves them out. Run them with
+`./gradlew :uapmd-cmp:jvmIntegrationTest [--tests '*<Name>IntegrationTest'] [-D<switch>=...]`;
+each class runs in a JVM of its own, and the task passes `-Duapmd.probe.*` and
+`-Duapmd.cmp.snapshot*` switches on to it. A test whose plug-in or input file is not on the
+machine is skipped, not failed.
+
+| Test | What it does |
 |---|---|
-| `:uapmd-cmp:renderUiSnapshot` | Renders a view off-screen to a PNG at device density. `-Duapmd.cmp.snapshotView=` picks `timeline` (default), `selector`, `graph`, `instance` or `pianoroll`; `-Duapmd.cmp.snapshotSize=WxH` and `-Duapmd.cmp.snapshotDensity=` set the frame. This is how a clipped legend, an unreadable label or a link that never draws gets caught. |
-| `:uapmd-cmp:runPluginUiProbe` | Creates one plug-in's UI, shows it, hides it and shows it again, reporting visibility at each step. `-Duapmd.probe.uiPlugin=<name substring>` and `-Duapmd.probe.uiFormat=<CLAP\|LV2\|VST3\|AU>` pick the plug-in, by exact display name — a substring is only accepted when it names one plug-in, because `ADLplug` and `ADLplug-AE` are different plug-ins sharing a prefix. Not headless — the UI is a real native window — but unattended, and the only coverage the per-format UI paths have. |
-| `:uapmd-cmp:runBootstrapProbe` | Drives AppModel headlessly - audio start/stop, tracks, plug-ins, clips, graph, tempo map, piano-roll edits - and fails on the first broken check. |
+| `UiSnapshotIntegrationTest` | Renders a view off-screen to a PNG at device density, in `build/ui-snapshots/` unless `-Duapmd.cmp.snapshot=<file>` says otherwise. `-Duapmd.cmp.snapshotView=` picks `timeline` (default), `selector`, `graph`, `instance` or `pianoroll`; `-Duapmd.cmp.snapshotSize=WxH` and `-Duapmd.cmp.snapshotDensity=` set the frame. This is how a clipped legend, an unreadable label or a link that never draws gets caught. |
+| `PluginUiIntegrationTest` | Creates one plug-in's UI, shows it, hides it and shows it again, checking visibility at each step. `-Duapmd.probe.uiPlugin=<name substring>` and `-Duapmd.probe.uiFormat=<CLAP\|LV2\|VST3\|AU>` pick the plug-in, by exact display name — a substring is only accepted when it names one plug-in, because `ADLplug` and `ADLplug-AE` are different plug-ins sharing a prefix. With neither given it uses the CLAP build of `ADLplug-AE`, and skips when that is not installed. Not headless — the UI is a real native window — but unattended, and the only coverage the per-format UI paths have. |
+| `BootstrapIntegrationTest` | Drives AppModel headlessly - audio start/stop, tracks, plug-ins, clips, graph, tempo map, piano-roll edits - and fails listing every broken check. |
 | Serving the wasm build | The dev server injects COOP/COEP itself, so the service-worker path in `index.html` never runs there and a dev-server load proves nothing about a static deploy. To exercise what users get, build `:uapmd-cmp:wasmJsBrowserDistribution` and serve `build/dist/wasmJs/productionExecutable` with COOP/COEP headers of your own; the two builds have already differed in practice. |
-| `:uapmd-cmp:runPianoRollScrollProbe` | Scrolls the piano roll with the wheel through `ImageComposeScene` and compares renders. One notch versus twelve: a viewport that moves once and stops renders them the same. |
-| `:uapmd-cmp:runScanPollProbe` | Times what the UI poll costs while a plug-in scan runs, reporting first/median/p95/max per call. Use it before adding anything to the poll. |
-| `:uapmd-cmp:runKeyboardDragProbe` | Drags a pointer across the on-screen keyboard through `ImageComposeScene` and reports the notes produced, for touch and for mouse separately. |
+| `PianoRollScrollIntegrationTest` | Scrolls the piano roll with the wheel through `ImageComposeScene` and compares renders. One notch versus twelve: a viewport that moves once and stops renders them the same. |
+| `ScanPollIntegrationTest` | Times what the UI poll costs while a plug-in scan runs, reporting first/median/p95/max per call, and fails when the p95 of a call the poll makes every tick leaves a 16ms frame. The full catalog read, which `UapmdHost` does once per finished scan, is reported but not judged. Use it before adding anything to the poll. |
+| `KeyboardDragTest` | Drags a pointer across the on-screen keyboard through `ImageComposeScene` and checks the notes produced, for touch and for mouse separately. Needs no native library, so it is part of `jvmTest`. |
 
 **"Scrolling" means the scroll machinery, not drag-to-pan.** A viewport the wheel,
 a trackpad and a scrollbar can move - `horizontalScroll`/`verticalScroll` over content
@@ -277,13 +285,21 @@ Two consequences of getting this wrong, both seen in practice. With no scanner f
 the app silently scans in process, where formats that must instantiate on the UI
 thread block it - the window freezes mid-scan and coroutines pile up suspended - and
 a single bad plug-in kills the app outright. So the Gradle build forwards the built
-`uapmd-scan` path to the desktop app and to every probe that scans; without that
+`uapmd-scan` path to the desktop app and to `jvmIntegrationTest`; without that
 forwarding the flag is false and the default silently degrades.
+`:uapmd-binding:buildUapmdScanDesktop` builds it, and `jvmIntegrationTest` depends on
+that; the desktop app only forwards a scanner that has already been built.
+
+An in-process scan can also wedge a JVM rather than crash it: Floe installs a
+process-wide SIGSEGV handler when loaded, and the JVM raises SIGSEGV on purpose for
+its own implicit null checks, so the next one lands in Floe's handler, which hangs.
+Seen on 2026-10-30 when `ScanPollIntegrationTest` forced an in-process rescan of 880
+catalog entries with no `uapmd-scan` built.
 
 Measured cost of the UI poll during a real 164-bundle remote scan
-(`:uapmd-cmp:runScanPollProbe`, 167 samples): `slowScanProgress` median 157µs / p95
+(`ScanPollIntegrationTest`, 167 samples): `slowScanProgress` median 157µs / p95
 570µs, `lastPluginScanError` median 16µs, a full 287-entry catalog read median 2.5ms
-/ p95 6.4ms. First calls cost 11-13ms on JNA layout setup, which is why the probe
+/ p95 6.4ms. First calls cost 11-13ms on JNA layout setup, which is why the test
 reports medians rather than maxima - judging this on a handful of samples points at
 the wrong thing.
 
@@ -352,7 +368,7 @@ Virtual MIDI 2.0 devices are off by default now. Instances get no endpoint until
 is enabled in the Virtual MIDI Devices window (opened by the addin's command) or
 automatic creation is turned on there.
 
-`./gradlew :uapmd-cmp:runAddinProbe [-Duapmd.probe.instantiate=CLAP]` checks all of
+`./gradlew :uapmd-cmp:jvmIntegrationTest --tests '*AddinIntegrationTest' [-Duapmd.probe.instantiate=CLAP]` checks all of
 this headlessly: every addin Active, both command registries populated, both windows
 opening from their commands, audio worker resizing, and enabling/disabling a device.
 
@@ -496,7 +512,7 @@ After `uapmd_app_remove_plugin_instance()`, `instanceIds()` still reports the re
 Deterministic: instantiate → remove → engine off ⇒ `SIGSEGV`, `si_addr: 0x0`, in
 `uapmd_app::AppModel::completeAudioEngineShutdown()+0x110`, reached from the event-loop task.
 Skipping only the removal leaves teardown clean. Reproduce with `-Duapmd.probe.removeInstance=1`;
-the probe keeps it opt-in so default runs stay green.
+`BootstrapIntegrationTest` keeps it opt-in so default runs stay green.
 
 `tests/uapmd-app-shutdown-crash.c` is a started pure-C repro but **does not work yet**: a bare C
 host installs no remidy `EventLoop`, so instantiation never completes and it stalls before the

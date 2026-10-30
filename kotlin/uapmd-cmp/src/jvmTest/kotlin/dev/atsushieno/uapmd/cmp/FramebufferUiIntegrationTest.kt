@@ -2,11 +2,11 @@ package dev.atsushieno.uapmd.cmp
 
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.ui.Modifier
+import dev.atsushieno.uapmd.AppModel
 import dev.atsushieno.uapmd.PluginInstanceConfig
-import dev.atsushieno.uapmd.cleanupAppModel
-import dev.atsushieno.uapmd.getAppModel
-import dev.atsushieno.uapmd.initJvmEventLoop
-import dev.atsushieno.uapmd.instantiateAppModel
+import org.junit.Assume.assumeTrue
+import kotlin.test.Test
+import kotlin.test.fail
 
 /**
  * Headless check of the framebuffer editor path, below Compose.
@@ -16,8 +16,13 @@ import dev.atsushieno.uapmd.instantiateAppModel
  * a frame, and whether the frame that comes back holds anything. Compose is not involved,
  * so a pass here puts the fault in the renderer and a failure puts it below.
  *
- * Run with: ./gradlew :uapmd-cmp:runFramebufferUiProbe
+ * Run with: ./gradlew :uapmd-cmp:jvmIntegrationTest --tests '*FramebufferUiIntegrationTest' [-Duapmd.probe.plugin=OTT]
  */
+class FramebufferUiIntegrationTest {
+    @Test
+    fun aJsfxEditorDrawsThroughTheFramebufferPath() = runAgainstAppModel(::checkFramebufferEditor)
+}
+
 // What JNA thinks these structs look like, for comparison with the C header. A Java
 // layout that disagrees means native code reads or writes past the end of JNA's buffer,
 // which corrupts memory rather than failing.
@@ -40,11 +45,8 @@ private fun reportStructLayouts() {
         "label", "id", "disabled", "checked", "separator", "childCount")
 }
 
-fun main() {
+private fun checkFramebufferEditor(model: AppModel, check: (String, Boolean) -> Unit) {
     reportStructLayouts()
-    initJvmEventLoop()
-    instantiateAppModel()
-    val model = getAppModel()
     model.notifyUiReady()
     model.notifyPersistentStorageReady()
     model.setAudioEngineEnabled(true)
@@ -66,11 +68,8 @@ fun main() {
     val jsfxEntries = catalog.filter { it.format == "JSFX" }
     val jsfx = jsfxEntries.firstOrNull { it.displayName.contains(wanted, ignoreCase = true) }
         ?: jsfxEntries.firstOrNull()
-    if (jsfx == null) {
-        println("FAIL: no JSFX effect in the catalogue (${catalog.size} entries)")
-        cleanupAppModel()
-        return
-    }
+    assumeTrue("a JSFX effect is in the catalogue (${catalog.size} entries)", jsfx != null)
+    jsfx!!
     println("${jsfxEntries.size} JSFX effects; matching \"$wanted\"")
     println("using ${jsfx.displayName} (${jsfx.pluginId})")
 
@@ -85,27 +84,16 @@ fun main() {
     val deadline = System.currentTimeMillis() + 15000
     while (!done && System.currentTimeMillis() < deadline)
         Thread.sleep(20)
-    if (instanceId < 0) {
-        println("FAIL: could not instantiate: ${error ?: "timed out"}")
-        cleanupAppModel()
-        return
-    }
+    if (instanceId < 0)
+        fail("could not instantiate: ${error ?: "timed out"}")
 
     val instance = model.sequencer.engine.getPluginInstance(instanceId)
-    if (instance == null) {
-        println("FAIL: instance $instanceId is not retrievable")
-        cleanupAppModel()
-        return
-    }
+        ?: fail("instance $instanceId is not retrievable")
     println("instance $instanceId: hasUiSupport=${instance.hasUiSupport}")
 
 
     val ui = instance.framebufferUi
-    if (ui == null) {
-        println("FAIL: framebufferUi is null -- the binding does not see the extension")
-        cleanupAppModel()
-        return
-    }
+        ?: fail("framebufferUi is null -- the binding does not see the extension")
 
     val preferred = ui.preferredSize
     println("preferredSize=$preferred")
@@ -122,10 +110,8 @@ fun main() {
         info = ui.frameInfo()
     }
     if (info == null) {
-        println("FAIL: the plugin never reported a frame (displayed=true, ${width}x${height})")
         ui.setDisplayed(false)
-        cleanupAppModel()
-        return
+        fail("the plugin never reported a frame (displayed=true, ${width}x${height})")
     }
     println("frameInfo: ${info.width}x${info.height} stride=${info.strideBytes} " +
             "format=${info.format} serial=${info.serial}")
@@ -133,10 +119,8 @@ fun main() {
     val pixels = ByteArray(info.height * info.width * 4)
     val copied = ui.copyFrame(pixels, info.width * 4)
     if (copied == null) {
-        println("FAIL: copyFrame refused ${pixels.size} bytes at stride ${info.width * 4}")
         ui.setDisplayed(false)
-        cleanupAppModel()
-        return
+        fail("copyFrame refused ${pixels.size} bytes at stride ${info.width * 4}")
     }
 
     // A frame of nothing but zeroes is a frame the plugin has not really drawn into.
@@ -308,25 +292,15 @@ fun main() {
     // Ten is well under the rate a plugin asks for and well over the rate a hidden
     // editor is ticked at, so it separates the two without pinning down either.
     val responsive = dragRate >= 10.0
-    // More than one distinct frame is the point: a frozen editor renders perfectly well.
-    val composes = composedBlank == 0 && composedDistinct > 1
-    val ok = nonZero > 0 && opaqueLit > 0 && resizeOk && responsive && composes && framesOpaque
-    println(
-        when {
-            ok -> "PASS: the plugin draws at a usable rate, the binding reads it, " +
-                    "and Compose renders it frame by frame"
-            nonZero == 0 -> "FAIL: frames arrive but every byte is zero"
-            !resizeOk -> "FAIL: the plugin ignored the new surface size"
-            !responsive -> "FAIL: the plugin redraws at %.1f fps -- too slow to be dragged"
-                .format(dragRate)
-            composedBlank > 0 -> "FAIL: Compose drew nothing on $composedBlank of 40 frames"
-            composedDistinct <= 1 -> "FAIL: Compose drew the same frame throughout -- frozen"
-            !framesOpaque -> "FAIL: the plugin's frames are not opaque, so hosts that " +
-                "composite with the alpha will see the editor flicker"
-            else -> "FAIL: the frame has pixels but the Compose surface came back blank"
-        }
-    )
-
     ui.setDisplayed(false)
-    cleanupAppModel()
+
+    check("frames carry drawn pixels, not only zeroes", nonZero > 0)
+    check("the pixels survive the trip into the Compose surface", opaqueLit > 0)
+    check("the plugin follows a new surface size", resizeOk)
+    check("the plugin redraws at %.1f fps, fast enough to be dragged".format(dragRate), responsive)
+    check("Compose drew something on every one of 40 frames ($composedBlank blank)", composedBlank == 0)
+    // More than one distinct frame is the point: a frozen editor renders perfectly well.
+    check("Compose drew changing frames, not one frozen frame", composedDistinct > 1)
+    // Hosts that composite with the alpha would otherwise see the editor flicker.
+    check("the plugin's frames are opaque", framesOpaque)
 }

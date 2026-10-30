@@ -148,17 +148,22 @@ val cmakePathEnv: String
     get() = File(cmakeExecutable).parent?.let { it + File.pathSeparator + System.getenv("PATH").orEmpty() }
         ?: System.getenv("PATH").orEmpty()
 
-tasks.register("buildUapmdCApiDesktop") {
-    group       = "build"
-    description = "Builds libuapmd-c-api shared library for JVM desktop via cmake"
-
-    // The library links the uapmd engine built from the submodule, so a bump that
-    // changes only uapmd sources must rebuild it too. With c-api/ alone as input
-    // the task stayed UP-TO-DATE and kept serving the pre-bump engine.
+// What the desktop CMake tree builds from. Everything in it links the uapmd engine
+// built from the submodule, so a bump that changes only uapmd sources must rebuild it
+// too. With c-api/ alone as input the library task stayed UP-TO-DATE and kept serving
+// the pre-bump engine.
+fun Task.desktopCMakeInputs() {
     inputs.file(repoRoot.resolve("CMakeLists.txt"))
     inputs.dir(repoRoot.resolve("c-api"))
     inputs.dir(repoRoot.resolve("external/uapmd/source"))
     inputs.dir(repoRoot.resolve("cmake"))
+}
+
+tasks.register("buildUapmdCApiDesktop") {
+    group       = "build"
+    description = "Builds libuapmd-c-api shared library for JVM desktop via cmake"
+
+    desktopCMakeInputs()
     outputs.file(File(cApiDylibDir, when {
         os.isWindows -> "Release/uapmd-c-api.dll"
         os.isMacOsX  -> "libuapmd-c-api.dylib"
@@ -222,6 +227,36 @@ tasks.register("buildUapmdCApiDesktop") {
             commandLine(
                 cmakeExecutable, "--build", cmakeBuildDir.absolutePath,
                 "--target", "uapmd-c-api",
+                "--config", "Release",
+                "--parallel"
+            )
+        }
+    }
+}
+
+// ─── Build uapmd-scan, the out-of-process plug-in scanner ────────────────────
+//
+// A JVM host cannot serve remote scans from its own executable (that is `java`), so
+// without this binary every scan runs in process, where a plug-in that crashes - or
+// that installs a signal handler of its own, as Floe does - takes the JVM with it.
+// Built in the same CMake tree, which the library task configures.
+tasks.register("buildUapmdScanDesktop") {
+    group       = "build"
+    description = "Builds uapmd-scan, the out-of-process plug-in scanner, for JVM desktop via cmake"
+    dependsOn("buildUapmdCApiDesktop")
+
+    desktopCMakeInputs()
+    // VS generator places outputs in a config subdirectory (Release/, picked by --config); Ninja does not.
+    outputs.file(File(cmakeBuildDir, "uapmd-source/tools/uapmd-scan/" +
+        if (os.isWindows) "Release/uapmd-scan.exe" else "uapmd-scan"))
+
+    doLast {
+        buildServices.exec.exec {
+            workingDir = repoRoot
+            environment("PATH", cmakePathEnv)
+            commandLine(
+                cmakeExecutable, "--build", cmakeBuildDir.absolutePath,
+                "--target", "uapmd-scan",
                 "--config", "Release",
                 "--parallel"
             )

@@ -1,25 +1,22 @@
 package dev.atsushieno.uapmd.cmp
 
 import dev.atsushieno.uapmd.*
+import kotlin.test.Test
 
 /**
- * Headless check of the project selection bindings against the real native library: the
- * service round-trips a selection (objects, all three region kinds), reports the active
- * context, notifies listeners, projects a selection onto clips/tracks/time, and the piano roll
- * session publishes its notes in its own context.
+ * The project selection bindings against the real native library: the service
+ * round-trips a selection (objects, all three region kinds), reports the active
+ * context, notifies listeners, projects a selection onto clips/tracks/time, and the
+ * piano roll session publishes its notes in its own context.
  *
- * Run with: ./gradlew :uapmd-cmp:runSelectionProbe
+ * Run with: ./gradlew :uapmd-cmp:jvmIntegrationTest --tests '*SelectionIntegrationTest'
  */
-fun main() {
-    var failures = 0
-    fun check(label: String, ok: Boolean) {
-        println("${if (ok) "PASS" else "FAIL"}  $label")
-        if (!ok) failures++
-    }
+class SelectionIntegrationTest {
+    @Test
+    fun selectionsRoundTripThroughTheNativeLibrary() = runAgainstAppModel(::checkSelections)
+}
 
-    initJvmEventLoop()
-    instantiateAppModel()
-    val model = getAppModel()
+private fun checkSelections(model: AppModel, check: (String, Boolean) -> Unit) {
     model.notifyUiReady()
     model.notifyPersistentStorageReady()
 
@@ -35,7 +32,7 @@ fun main() {
     val clipRef = timeline.addresses.clipAddress(0, clip.clipId)?.clipReferenceId
     val trackRef = timeline.addresses.trackReferenceId(0)
     check("clip reference id resolved ($clipRef / track $trackRef)", clipRef != null && trackRef != null)
-    if (clipRef == null || trackRef == null) { cleanupAppModel(); kotlin.system.exitProcess(1) }
+    if (clipRef == null || trackRef == null) return
 
     val svc = timeline.selections
     val ctx = svc.defaultContext
@@ -128,7 +125,4 @@ fun main() {
     }
 
     svc.removeListener(token)
-    println(if (failures == 0) "ALL PASS" else "$failures FAILED")
-    cleanupAppModel()
-    kotlin.system.exitProcess(if (failures == 0) 0 else 1)
 }
