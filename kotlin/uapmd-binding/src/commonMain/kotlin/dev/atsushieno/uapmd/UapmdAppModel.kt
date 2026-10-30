@@ -204,6 +204,13 @@ interface AppModel {
     fun loadProject(filePath: String): AppProjectResult
     fun saveProjectSync(filePath: String): AppProjectResult
     fun saveProject(filePath: String, callback: (AppProjectResult) -> Unit)
+    /**
+     * `AppModel::saveProjectToDocument`, uapmd-app's Save Project: stages the
+     * project, packs it into a `.uapmdz` archive and writes that through
+     * [documentProvider] to a handle from its [DocumentProvider.pickSaveDocument].
+     * Needed where the picked document has no writable path (Android's SAF).
+     */
+    fun saveProjectToDocument(handle: DocumentHandle, callback: (DocumentIOResult) -> Unit)
     /** Android's document-picker path: resolves a content:// handle token. */
     fun loadProjectFromHandleToken(token: String): AppProjectResult
 
@@ -828,7 +835,14 @@ data class RenderToFileSettings(
     val tailSeconds: Double = 0.0,
     val enableSilenceStop: Boolean = false,
     val silenceDurationSeconds: Double = 2.0,
-    val silenceThresholdDb: Double = -60.0
+    val silenceThresholdDb: Double = -60.0,
+    /**
+     * A document picked with [DocumentProvider.pickSaveDocument] on
+     * [AppModel.documentProvider]. The job then renders to a temp file and writes
+     * it through the provider, so [outputPath] only names the file. Needed where
+     * the picked document has no writable path (Android's SAF).
+     */
+    val outputHandle: DocumentHandle? = null
 )
 
 data class RenderToFileStatus(
@@ -898,6 +912,13 @@ interface DocumentProvider {
     fun pickOpenDocuments(
         filters: List<DocumentFilter>,
         allowMultiple: Boolean,
+        callback: (DocumentPickResult) -> Unit
+    )
+
+    /** Cancelled: success with no handles, as for [pickOpenDocuments]. */
+    fun pickSaveDocument(
+        defaultName: String,
+        filters: List<DocumentFilter>,
         callback: (DocumentPickResult) -> Unit
     )
 

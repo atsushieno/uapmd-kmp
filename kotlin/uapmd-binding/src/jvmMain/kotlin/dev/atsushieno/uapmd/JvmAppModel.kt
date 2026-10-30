@@ -260,6 +260,24 @@ class JvmAppModel internal constructor(
         lib.uapmd_app_save_project(handle, filePath, null, cb)
     }
 
+    override fun saveProjectToDocument(handle: DocumentHandle, callback: (DocumentIOResult) -> Unit) {
+        lateinit var cb: DocumentWriteCb
+        cb = object : DocumentWriteCb {
+            override fun invoke(result: UapmdDocumentIoResult.ByValue, userData: Pointer?) {
+                liveAppCallbacks.remove(cb)
+                callback(DocumentIOResult(result.success != 0.toByte(), result.error))
+            }
+        }
+        liveAppCallbacks.add(cb)
+        // The handle's strings are copied before the call returns.
+        val h = UapmdDocumentHandle().also {
+            it.id = handle.id
+            it.display_name = handle.displayName
+            it.mime_type = handle.mimeType
+        }
+        lib.uapmd_app_save_project_to_document(this.handle, h, null, cb)
+    }
+
     override fun loadProjectFromHandleToken(token: String): AppProjectResult =
         lib.uapmd_app_load_project_from_handle_token(handle, token).toKotlin()
 
@@ -945,6 +963,13 @@ private fun RenderToFileSettings.toJvmSettings() = UapmdAppRenderSettings().also
     it.enable_silence_stop = if (enableSilenceStop) 1 else 0
     it.silence_duration_seconds = silenceDurationSeconds
     it.silence_threshold_db = silenceThresholdDb
+    it.output_handle = outputHandle?.let { h ->
+        UapmdDocumentHandle.ByReference().apply {
+            id = h.id
+            display_name = h.displayName
+            mime_type = h.mimeType
+        }
+    }
     it.write()
 }
 

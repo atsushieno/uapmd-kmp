@@ -896,6 +896,12 @@ typedef struct uapmd_app_render_settings {
     bool enable_silence_stop;
     double silence_duration_seconds;
     double silence_threshold_db;
+    /* AppModel::RenderToFileSettings::outputHandle; NULL when unset. A handle from
+     * `uapmd_document_provider_pick_save` on the app's provider: the job renders to
+     * a temp file and writes it through that provider, as uapmd-app's Render To File
+     * does. Required where the picked document has no writable path (Android SAF);
+     * output_path then only names the file. */
+    const uapmd_document_handle_t* output_handle;
 } uapmd_app_render_settings_t;
 
 typedef struct uapmd_app_render_status {

@@ -1,5 +1,7 @@
 package dev.atsushieno.uapmd.cmp
 
+import dev.atsushieno.uapmd.DocumentHandle
+
 /**
  * Minimal platform file chooser. Only what the Project menu needs for now;
  * import/export grow their own filters later.
@@ -14,6 +16,16 @@ expect suspend fun pickProjectFileToOpen(): String?
  * directory, it can only download a named file.
  */
 expect suspend fun pickProjectFileToSave(defaultName: String): String?
+
+/**
+ * Where Render To File writes. Where the picked document has no writable path
+ * (Android's SAF), [handle] carries it: the render job then writes through
+ * AppModel's document provider, as uapmd-app's Render To File always does, and
+ * [path] only names the file.
+ */
+data class RenderDestination(val path: String, val handle: DocumentHandle? = null)
+
+expect suspend fun pickRenderDestination(host: UapmdHost, defaultName: String): RenderDestination?
 /**
  * Separate MIDI and audio choosers, as uapmd-app has them: `addSmfClipToTrack`
  * offers "SMF Files" (`*.mid`, `*.midi`, `*.smf`) and the audio paths offer

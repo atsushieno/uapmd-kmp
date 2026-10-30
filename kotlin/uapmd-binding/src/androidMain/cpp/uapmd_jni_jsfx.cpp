@@ -143,6 +143,20 @@ void read_trampoline(uapmd_document_io_result_t result, const uint8_t* data, siz
     delete ctx;
 }
 
+/** cb: invoke(success: Boolean, error: String?) */
+void write_trampoline(uapmd_document_io_result_t result, void* ud) {
+    auto* ctx = static_cast<Ctx*>(ud);
+    if (!ctx) return;
+    JNIEnv* e = uapmd_jni_env();
+    if (e && ctx->mid) {
+        auto error = jstr_or_null(e, result.error);
+        e->CallVoidMethod(ctx->obj, ctx->mid, static_cast<jboolean>(result.success), error);
+        if (e->ExceptionCheck()) e->ExceptionClear();
+        if (error) e->DeleteLocalRef(error);
+    }
+    delete ctx;
+}
+
 /** cb: invoke(success, path, documents: Array<String?>, token, displayName, error: String?) */
 void folder_trampoline(const uapmd_folder_pick_result_t* result, void* ud) {
     auto* ctx = static_cast<Ctx*>(ud);
@@ -196,6 +210,7 @@ void folder_sync_trampoline(uint32_t written, const char* error, void* ud) {
 
 constexpr const char* kPickSig = "(Z[Ljava/lang/String;Ljava/lang/String;)V";
 constexpr const char* kReadSig = "(ZLjava/lang/String;[B)V";
+constexpr const char* kWriteSig = "(ZLjava/lang/String;)V";
 constexpr const char* kFolderSig =
         "(ZLjava/lang/String;[Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;)V";
 constexpr const char* kErrorSig = "(Ljava/lang/String;)V";
@@ -210,6 +225,42 @@ Ctx* make_ctx(JNIEnv* env, jobject cb, const char* signature) {
     }
     return ctx;
 }
+
+/**
+ * Filter i is labels[i], mimeTypes[i] and extensions[i]. Owns the strings the
+ * C filters point into; the provider copies them before a pick call returns.
+ */
+struct FilterArgs {
+    std::vector<std::string> labels;
+    std::vector<std::vector<std::string>> mimeStrings, extStrings;
+    std::vector<std::vector<const char*>> mimePtrs, extPtrs;
+    std::vector<uapmd_document_filter_t> filters;
+
+    FilterArgs(JNIEnv* env, jobjectArray labelArray, jobjectArray mimeTypes, jobjectArray extensions)
+        : labels(strings_from_java(env, labelArray)) {
+        for (size_t i = 0; i < labels.size(); i++) {
+            auto m = static_cast<jobjectArray>(env->GetObjectArrayElement(mimeTypes, static_cast<jsize>(i)));
+            auto x = static_cast<jobjectArray>(env->GetObjectArrayElement(extensions, static_cast<jsize>(i)));
+            mimeStrings.push_back(strings_from_java(env, m));
+            extStrings.push_back(strings_from_java(env, x));
+            if (m) env->DeleteLocalRef(m);
+            if (x) env->DeleteLocalRef(x);
+        }
+        for (size_t i = 0; i < labels.size(); i++) {
+            mimePtrs.push_back(c_strs(mimeStrings[i]));
+            extPtrs.push_back(c_strs(extStrings[i]));
+        }
+        for (size_t i = 0; i < labels.size(); i++)
+            filters.push_back({labels[i].c_str(),
+                               mimePtrs[i].data(), static_cast<uint32_t>(mimePtrs[i].size()),
+                               extPtrs[i].data(), static_cast<uint32_t>(extPtrs[i].size())});
+    }
+    FilterArgs(const FilterArgs&) = delete;
+    FilterArgs& operator=(const FilterArgs&) = delete;
+
+    const uapmd_document_filter_t* data() const { return filters.data(); }
+    uint32_t count() const { return static_cast<uint32_t>(filters.size()); }
+};
 
 /** {id, displayName, mimeType}; the strings are owned by the caller's JStrs. */
 struct HandleArg {
@@ -251,28 +302,21 @@ JNI_FN(void, uapmdDocumentProviderPickOpen)(JNIEnv* env, jclass, jlong provider,
                                              jobject cb) {
     auto* ctx = make_ctx(env, cb, kPickSig);
     if (!ctx) return;
-    auto labelStrings = strings_from_java(env, labels);
-    std::vector<std::vector<std::string>> mimeStrings, extStrings;
-    std::vector<std::vector<const char*>> mimePtrs, extPtrs;
-    for (size_t i = 0; i < labelStrings.size(); i++) {
-        auto m = static_cast<jobjectArray>(env->GetObjectArrayElement(mimeTypes, static_cast<jsize>(i)));
-        auto x = static_cast<jobjectArray>(env->GetObjectArrayElement(extensions, static_cast<jsize>(i)));
-        mimeStrings.push_back(strings_from_java(env, m));
-        extStrings.push_back(strings_from_java(env, x));
-        if (m) env->DeleteLocalRef(m);
-        if (x) env->DeleteLocalRef(x);
-    }
-    std::vector<uapmd_document_filter_t> filters;
-    for (size_t i = 0; i < labelStrings.size(); i++) {
-        mimePtrs.push_back(c_strs(mimeStrings[i]));
-        extPtrs.push_back(c_strs(extStrings[i]));
-    }
-    for (size_t i = 0; i < labelStrings.size(); i++)
-        filters.push_back({labelStrings[i].c_str(),
-                           mimePtrs[i].data(), static_cast<uint32_t>(mimePtrs[i].size()),
-                           extPtrs[i].data(), static_cast<uint32_t>(extPtrs[i].size())});
-    uapmd_document_provider_pick_open(DP(provider), filters.data(), static_cast<uint32_t>(filters.size()),
+    FilterArgs filters(env, labels, mimeTypes, extensions);
+    uapmd_document_provider_pick_open(DP(provider), filters.data(), filters.count(),
                                       allowMultiple, ctx, pick_trampoline);
+}
+
+/** As uapmdDocumentProviderPickOpen; cb receives at most one handle. */
+JNI_FN(void, uapmdDocumentProviderPickSave)(JNIEnv* env, jclass, jlong provider, jstring defaultName,
+                                             jobjectArray labels, jobjectArray mimeTypes,
+                                             jobjectArray extensions, jobject cb) {
+    auto* ctx = make_ctx(env, cb, kPickSig);
+    if (!ctx) return;
+    FilterArgs filters(env, labels, mimeTypes, extensions);
+    JStr name(env, defaultName);
+    uapmd_document_provider_pick_save(DP(provider), name.c_str(), filters.data(), filters.count(),
+                                      ctx, pick_trampoline);
 }
 
 JNI_FN(void, uapmdDocumentProviderRead)(JNIEnv* env, jclass, jlong provider,
@@ -281,6 +325,15 @@ JNI_FN(void, uapmdDocumentProviderRead)(JNIEnv* env, jclass, jlong provider,
     if (!ctx) return;
     HandleArg handle(env, id, displayName, mimeType);
     uapmd_document_provider_read(DP(provider), handle.get(), ctx, read_trampoline);
+}
+
+JNI_FN(void, uapmdAppSaveProjectToDocument)(JNIEnv* env, jclass, jlong app,
+                                            jstring id, jstring displayName, jstring mimeType, jobject cb) {
+    auto* ctx = make_ctx(env, cb, kWriteSig);
+    if (!ctx) return;
+    HandleArg handle(env, id, displayName, mimeType);
+    auto h = handle.get();
+    uapmd_app_save_project_to_document(AM(app), &h, ctx, write_trampoline);
 }
 
 JNI_FN(void, uapmdDocumentProviderPickFolder)(JNIEnv* env, jclass, jlong provider, jobject cb) {

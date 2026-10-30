@@ -317,6 +317,11 @@ class JsAppModel internal constructor(internal val handle: Int) : AppModel {
         }
     }
 
+    override fun saveProjectToDocument(handle: DocumentHandle, callback: (DocumentIOResult) -> Unit) {
+        val slot = makeJsDocumentWrite(callback)
+        withJsDocumentHandle(handle) { h -> jsMod._uapmd_app_save_project_to_document(this.handle, h, 0, slot) }
+    }
+
     override fun loadProjectFromHandleToken(token: String): AppProjectResult =
         projectCall(token) { out, t -> jsMod._uapmd_app_load_project_from_handle_token(out, handle, t) }
 
@@ -755,7 +760,14 @@ class JsAppModel internal constructor(internal val handle: Int) : AppModel {
                 jsSetI8(p + 56, if (settings.enableSilenceStop) 1 else 0)
                 jsMod.setValue(p + 64, settings.silenceDurationSeconds, "double")
                 jsMod.setValue(p + 72, settings.silenceThresholdDb, "double")
-                jsMod._uapmd_app_start_render_to_file(handle, p) as Boolean
+                val outputHandle = settings.outputHandle
+                if (outputHandle == null) {
+                    jsSetI32(p + 80, 0)
+                    jsMod._uapmd_app_start_render_to_file(handle, p) as Boolean
+                } else withJsDocumentHandle(outputHandle) { h ->
+                    jsSetI32(p + 80, h)
+                    jsMod._uapmd_app_start_render_to_file(handle, p) as Boolean
+                }
             }
         }
 
@@ -979,7 +991,7 @@ private const val JsClipMarkerSize = 32
 private const val JsWarpPointSize = 32
 
 private const val JsClipAddResultSize = 16
-private const val JsAppRenderSettingsSize = 80
+private const val JsAppRenderSettingsSize = 88
 private const val JsAppRenderStatusSize = 32
 
 private fun jsReadClipMarker(p: Int) = ClipMarkerData(

@@ -46,6 +46,9 @@ actual fun defaultStemOutputDirectory(audioFilePath: String): String =
 actual suspend fun pickProjectFileToSave(defaultName: String): String? =
     pick(FileDialog.SAVE, defaultName)
 
+actual suspend fun pickRenderDestination(host: UapmdHost, defaultName: String): RenderDestination? =
+    pickProjectFileToSave(defaultName)?.let { RenderDestination(it) }
+
 /** The dialog already chose a real destination. */
 actual fun deliverSavedFile(path: String) = Unit
 

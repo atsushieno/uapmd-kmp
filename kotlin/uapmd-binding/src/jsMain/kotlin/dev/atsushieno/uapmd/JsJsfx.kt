@@ -82,14 +82,67 @@ internal fun makeJsFolderSync(callback: (UInt, String?) -> Unit): Int {
     return slot
 }
 
+/** A uapmd_document_filter_t array of [filters] for the duration of [block]; 0 when empty. */
+private fun <T> withJsDocumentFilters(filters: List<DocumentFilter>, block: (Int) -> T): T {
+    val mod = jsMod
+    val allocations = mutableListOf<Int>()
+    fun cString(s: String): Int {
+        val len = (mod.lengthBytesUTF8(s) as Int) + 1
+        return (mod._malloc(len) as Int).also { mod.stringToUTF8(s, it, len); allocations += it }
+    }
+    fun cStringArray(list: List<String>): Int {
+        if (list.isEmpty()) return 0
+        val array = (mod._malloc(list.size * 4) as Int).also { allocations += it }
+        list.forEachIndexed { i, s -> jsSetI32(array + i * 4, cString(s)) }
+        return array
+    }
+    try {
+        val array = if (filters.isEmpty()) 0
+            else (mod._malloc(filters.size * DOCUMENT_FILTER_SIZE) as Int).also { allocations += it }
+        filters.forEachIndexed { i, f ->
+            val p = array + i * DOCUMENT_FILTER_SIZE
+            jsSetI32(p, cString(f.label))
+            jsSetI32(p + 4, cStringArray(f.mimeTypes))
+            jsSetI32(p + 8, f.mimeTypes.size)
+            jsSetI32(p + 12, cStringArray(f.extensions))
+            jsSetI32(p + 16, f.extensions.size)
+        }
+        return block(array)
+    } finally {
+        allocations.forEach { mod._free(it) }
+    }
+}
+
+/** A uapmd_document_handle_t of [handle] for the duration of [block]. */
+internal fun <T> withJsDocumentHandle(handle: DocumentHandle, block: (Int) -> T): T =
+    withJsThreeCStrings(handle.id, handle.displayName, handle.mimeType) { id, name, mime ->
+        withJsStruct(DOCUMENT_HANDLE_SIZE) { p ->
+            jsSetI32(p, id)
+            jsSetI32(p + 4, name)
+            jsSetI32(p + 8, mime)
+            block(p)
+        }
+    }
+
+/** A "vii" slot for uapmd_write_callback_t; the result crosses by value, i.e. as a pointer. */
+internal fun makeJsDocumentWrite(callback: (DocumentIOResult) -> Unit): Int {
+    var slot = 0
+    val fn: (dynamic, dynamic) -> Unit = { resultPtr, _ ->
+        try {
+            val p = resultPtr as Int
+            callback(DocumentIOResult(jsGetBool(p), jsStrOrNull(p + 4)))
+        } finally {
+            removeJsCallback(slot)
+        }
+    }
+    slot = addJsCallback(fn.asDynamic(), "vii")
+    return slot
+}
+
 class JsDocumentProvider internal constructor(internal val handle: Int) : DocumentProvider {
     override fun tick() { jsMod._uapmd_document_provider_tick(handle) }
 
-    override fun pickOpenDocuments(
-        filters: List<DocumentFilter>,
-        allowMultiple: Boolean,
-        callback: (DocumentPickResult) -> Unit
-    ) {
+    private fun documentPickSlot(callback: (DocumentPickResult) -> Unit): Int {
         var slot = 0
         val fn: (dynamic, dynamic) -> Unit = { resultPtr, _ ->
             try {
@@ -104,33 +157,32 @@ class JsDocumentProvider internal constructor(internal val handle: Int) : Docume
             }
         }
         slot = addJsCallback(fn.asDynamic(), "vii")
-        // The provider copies the filters before pick_open returns.
-        val mod = jsMod
-        val allocations = mutableListOf<Int>()
-        fun cString(s: String): Int {
-            val len = (mod.lengthBytesUTF8(s) as Int) + 1
-            return (mod._malloc(len) as Int).also { mod.stringToUTF8(s, it, len); allocations += it }
+        return slot
+    }
+
+    // The provider copies the filters, name and handle before a call returns.
+
+    override fun pickOpenDocuments(
+        filters: List<DocumentFilter>,
+        allowMultiple: Boolean,
+        callback: (DocumentPickResult) -> Unit
+    ) {
+        val slot = documentPickSlot(callback)
+        withJsDocumentFilters(filters) { array ->
+            jsMod._uapmd_document_provider_pick_open(handle, array, filters.size, allowMultiple, 0, slot)
         }
-        fun cStringArray(list: List<String>): Int {
-            if (list.isEmpty()) return 0
-            val array = (mod._malloc(list.size * 4) as Int).also { allocations += it }
-            list.forEachIndexed { i, s -> jsSetI32(array + i * 4, cString(s)) }
-            return array
-        }
-        try {
-            val array = if (filters.isEmpty()) 0
-                else (mod._malloc(filters.size * DOCUMENT_FILTER_SIZE) as Int).also { allocations += it }
-            filters.forEachIndexed { i, f ->
-                val p = array + i * DOCUMENT_FILTER_SIZE
-                jsSetI32(p, cString(f.label))
-                jsSetI32(p + 4, cStringArray(f.mimeTypes))
-                jsSetI32(p + 8, f.mimeTypes.size)
-                jsSetI32(p + 12, cStringArray(f.extensions))
-                jsSetI32(p + 16, f.extensions.size)
+    }
+
+    override fun pickSaveDocument(
+        defaultName: String,
+        filters: List<DocumentFilter>,
+        callback: (DocumentPickResult) -> Unit
+    ) {
+        val slot = documentPickSlot(callback)
+        withJsCString(defaultName) { name ->
+            withJsDocumentFilters(filters) { array ->
+                jsMod._uapmd_document_provider_pick_save(handle, name, array, filters.size, 0, slot)
             }
-            mod._uapmd_document_provider_pick_open(handle, array, filters.size, allowMultiple, 0, slot)
-        } finally {
-            allocations.forEach { mod._free(it) }
         }
     }
 
@@ -148,15 +200,8 @@ class JsDocumentProvider internal constructor(internal val handle: Int) : Docume
             }
         }
         slot = addJsCallback(fn.asDynamic(), "viiii")
-        // The handle crosses by value, i.e. as a pointer; the provider copies it.
-        withJsThreeCStrings(handle.id, handle.displayName, handle.mimeType) { id, name, mime ->
-            withJsStruct(DOCUMENT_HANDLE_SIZE) { p ->
-                jsSetI32(p, id)
-                jsSetI32(p + 4, name)
-                jsSetI32(p + 8, mime)
-                jsMod._uapmd_document_provider_read(this.handle, p, 0, slot)
-            }
-        }
+        // The handle crosses by value, i.e. as a pointer.
+        withJsDocumentHandle(handle) { p -> jsMod._uapmd_document_provider_read(this.handle, p, 0, slot) }
     }
 
     override fun pickFolder(callback: (FolderPickResult) -> Unit) {

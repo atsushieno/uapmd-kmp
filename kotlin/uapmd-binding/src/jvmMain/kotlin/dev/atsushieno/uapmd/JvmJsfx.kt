@@ -40,6 +40,44 @@ private fun folderPickCb(callback: (FolderPickResult) -> Unit): FolderPickCb {
     return cb
 }
 
+private fun documentPickCb(callback: (DocumentPickResult) -> Unit): DocumentPickCb {
+    lateinit var cb: DocumentPickCb
+    cb = object : DocumentPickCb {
+        override fun invoke(result: UapmdDocumentPickResult.ByValue, userData: Pointer?) {
+            liveAppCallbacks.remove(cb)
+            callback(DocumentPickResult(
+                success = result.success != 0.toByte(),
+                handles = readDocumentHandles(result.handles, result.handle_count),
+                error = result.error
+            ))
+        }
+    }
+    liveAppCallbacks.add(cb)
+    return cb
+}
+
+/**
+ * The provider copies the filters before a pick call returns, so the native
+ * memory only has to outlive [block].
+ */
+private fun <T> withNativeFilters(filters: List<DocumentFilter>, block: (Array<UapmdDocumentFilter>?) -> T): T {
+    val keepAlive = mutableListOf<StringArray>()
+    @Suppress("UNCHECKED_CAST")
+    val nativeFilters = if (filters.isEmpty()) null
+        else UapmdDocumentFilter().toArray(filters.size) as Array<UapmdDocumentFilter>
+    filters.forEachIndexed { i, f ->
+        val n = nativeFilters!![i]
+        n.label = f.label
+        if (f.mimeTypes.isNotEmpty())
+            n.mime_types = StringArray(f.mimeTypes.toTypedArray(), "UTF-8").also { keepAlive += it }
+        n.mime_type_count = f.mimeTypes.size
+        if (f.extensions.isNotEmpty())
+            n.extensions = StringArray(f.extensions.toTypedArray(), "UTF-8").also { keepAlive += it }
+        n.extension_count = f.extensions.size
+    }
+    return block(nativeFilters).also { keepAlive.clear() }
+}
+
 class JvmDocumentProvider internal constructor(internal val handle: Pointer) : DocumentProvider {
     override fun tick() = lib.uapmd_document_provider_tick(handle)
 
@@ -47,37 +85,16 @@ class JvmDocumentProvider internal constructor(internal val handle: Pointer) : D
         filters: List<DocumentFilter>,
         allowMultiple: Boolean,
         callback: (DocumentPickResult) -> Unit
-    ) {
-        lateinit var cb: DocumentPickCb
-        cb = object : DocumentPickCb {
-            override fun invoke(result: UapmdDocumentPickResult.ByValue, userData: Pointer?) {
-                liveAppCallbacks.remove(cb)
-                callback(DocumentPickResult(
-                    success = result.success != 0.toByte(),
-                    handles = readDocumentHandles(result.handles, result.handle_count),
-                    error = result.error
-                ))
-            }
-        }
-        liveAppCallbacks.add(cb)
-        // The provider copies the filters before pick_open returns, so the
-        // native memory only has to outlive the call.
-        val keepAlive = mutableListOf<StringArray>()
-        @Suppress("UNCHECKED_CAST")
-        val nativeFilters = if (filters.isEmpty()) null
-            else UapmdDocumentFilter().toArray(filters.size) as Array<UapmdDocumentFilter>
-        filters.forEachIndexed { i, f ->
-            val n = nativeFilters!![i]
-            n.label = f.label
-            if (f.mimeTypes.isNotEmpty())
-                n.mime_types = StringArray(f.mimeTypes.toTypedArray(), "UTF-8").also { keepAlive += it }
-            n.mime_type_count = f.mimeTypes.size
-            if (f.extensions.isNotEmpty())
-                n.extensions = StringArray(f.extensions.toTypedArray(), "UTF-8").also { keepAlive += it }
-            n.extension_count = f.extensions.size
-        }
-        lib.uapmd_document_provider_pick_open(handle, nativeFilters, filters.size, allowMultiple, null, cb)
-        keepAlive.clear()
+    ) = withNativeFilters(filters) {
+        lib.uapmd_document_provider_pick_open(handle, it, filters.size, allowMultiple, null, documentPickCb(callback))
+    }
+
+    override fun pickSaveDocument(
+        defaultName: String,
+        filters: List<DocumentFilter>,
+        callback: (DocumentPickResult) -> Unit
+    ) = withNativeFilters(filters) {
+        lib.uapmd_document_provider_pick_save(handle, defaultName, it, filters.size, null, documentPickCb(callback))
     }
 
     override fun readDocument(handle: DocumentHandle, callback: (DocumentIOResult, ByteArray) -> Unit) {

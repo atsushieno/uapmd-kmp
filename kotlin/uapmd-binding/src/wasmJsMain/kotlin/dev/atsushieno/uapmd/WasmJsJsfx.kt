@@ -60,6 +60,7 @@ private fun <T> withWasmCStringArray(strings: List<String>, block: (Int) -> T): 
 private val pendingDocumentPickResults = mutableMapOf<Int, (DocumentPickResult) -> Unit>()
 private val pendingDocumentReads = mutableMapOf<Int, (DocumentIOResult, ByteArray) -> Unit>()
 private val pendingFolderPicks = mutableMapOf<Int, (FolderPickResult) -> Unit>()
+private val pendingDocumentIOResults = mutableMapOf<Int, (DocumentIOResult) -> Unit>()
 private val pendingJsfxFolderSyncs = mutableMapOf<Int, (UInt, String?) -> Unit>()
 
 /** The C callback takes uapmd_document_pick_result_t by value, i.e. as a pointer. */
@@ -80,6 +81,18 @@ fun uapmdDispatchDocumentRead(cbId: Int, resultPtr: Int, dataPtr: Int, size: Int
         ByteArray(size) { i -> wasmMod.getValue(dataPtr + i, "i8").toInt().toByte() }
     else ByteArray(0)
     callback(DocumentIOResult(wasmGetBool(resultPtr), wasmStrOrNull(resultPtr + 4)), data)
+}
+
+/** The C callback takes uapmd_document_io_result_t by value, i.e. as a pointer. */
+@JsExport
+fun uapmdDispatchDocumentIOResult(cbId: Int, resultPtr: Int) {
+    pendingDocumentIOResults.remove(cbId)?.invoke(DocumentIOResult(wasmGetBool(resultPtr), wasmStrOrNull(resultPtr + 4)))
+}
+
+internal fun documentWritePtr(callback: (DocumentIOResult) -> Unit): Int {
+    val cbId = nextCallbackId()
+    pendingDocumentIOResults[cbId] = callback
+    return makeCFunctionPtr(cbId, "uapmdDispatchDocumentIOResult", "vii")
 }
 
 @JsExport
@@ -117,46 +130,86 @@ internal fun jsfxFolderSyncPtr(callback: (UInt, String?) -> Unit): Int {
     return makeCFunctionPtr(cbId, "uapmdDispatchJsfxFolderSync", "viii")
 }
 
+/** A uapmd_document_filter_t array of [filters] for the duration of [block]; 0 when empty. */
+private fun <T> withWasmDocumentFilters(filters: List<DocumentFilter>, block: (Int) -> T): T {
+    val mod = wasmMod
+    val allocations = mutableListOf<Int>()
+    fun cString(s: String): Int {
+        val len = mod.lengthBytesUTF8(s) + 1
+        return mod.malloc(len).also { mod.stringToUTF8(s, it, len); allocations += it }
+    }
+    fun cStringArray(list: List<String>): Int {
+        if (list.isEmpty()) return 0
+        val array = mod.malloc(list.size * 4).also { allocations += it }
+        list.forEachIndexed { i, s -> wasmSetI32(array + i * 4, cString(s)) }
+        return array
+    }
+    try {
+        val array = if (filters.isEmpty()) 0
+            else mod.malloc(filters.size * DOCUMENT_FILTER_SIZE).also { allocations += it }
+        filters.forEachIndexed { i, f ->
+            val p = array + i * DOCUMENT_FILTER_SIZE
+            wasmSetI32(p, cString(f.label))
+            wasmSetI32(p + 4, cStringArray(f.mimeTypes))
+            wasmSetI32(p + 8, f.mimeTypes.size)
+            wasmSetI32(p + 12, cStringArray(f.extensions))
+            wasmSetI32(p + 16, f.extensions.size)
+        }
+        return block(array)
+    } finally {
+        allocations.forEach { mod.free(it) }
+    }
+}
+
+/** A uapmd_document_handle_t of [handle] for the duration of [block]. */
+internal fun <T> withWasmDocumentHandle(handle: DocumentHandle, block: (Int) -> T): T =
+    withCStringKt(handle.id) { id ->
+        withCStringKt(handle.displayName) { name ->
+            withCStringKt(handle.mimeType) { mime ->
+                withWasmStruct(DOCUMENT_HANDLE_SIZE) { p ->
+                    wasmSetI32(p, id)
+                    wasmSetI32(p + 4, name)
+                    wasmSetI32(p + 8, mime)
+                    block(p)
+                }
+            }
+        }
+    }
+
 // ─── DocumentProvider ────────────────────────────────────────────────────────
 
 class WasmJsDocumentProvider internal constructor(internal val handle: Int) : DocumentProvider {
     override fun tick() = wasmMod.uapmdDocumentProviderTick(handle)
+
+    private fun documentPickPtr(callback: (DocumentPickResult) -> Unit): Int {
+        val cbId = nextCallbackId()
+        pendingDocumentPickResults[cbId] = callback
+        return makeCFunctionPtr(cbId, "uapmdDispatchDocumentPickResult", "vii")
+    }
+
+    // The provider copies the filters, name and handle before a call returns.
 
     override fun pickOpenDocuments(
         filters: List<DocumentFilter>,
         allowMultiple: Boolean,
         callback: (DocumentPickResult) -> Unit
     ) {
-        val cbId = nextCallbackId()
-        pendingDocumentPickResults[cbId] = callback
-        val cbPtr = makeCFunctionPtr(cbId, "uapmdDispatchDocumentPickResult", "vii")
-        val mod = wasmMod
-        // The provider copies the filters before pick_open returns.
-        val allocations = mutableListOf<Int>()
-        fun cString(s: String): Int {
-            val len = mod.lengthBytesUTF8(s) + 1
-            return mod.malloc(len).also { mod.stringToUTF8(s, it, len); allocations += it }
+        val cbPtr = documentPickPtr(callback)
+        withWasmDocumentFilters(filters) { array ->
+            wasmMod.uapmdDocumentProviderPickOpen(handle, array, filters.size, allowMultiple, 0, cbPtr)
         }
-        fun cStringArray(list: List<String>): Int {
-            if (list.isEmpty()) return 0
-            val array = mod.malloc(list.size * 4).also { allocations += it }
-            list.forEachIndexed { i, s -> wasmSetI32(array + i * 4, cString(s)) }
-            return array
-        }
-        try {
-            val array = if (filters.isEmpty()) 0
-                else mod.malloc(filters.size * DOCUMENT_FILTER_SIZE).also { allocations += it }
-            filters.forEachIndexed { i, f ->
-                val p = array + i * DOCUMENT_FILTER_SIZE
-                wasmSetI32(p, cString(f.label))
-                wasmSetI32(p + 4, cStringArray(f.mimeTypes))
-                wasmSetI32(p + 8, f.mimeTypes.size)
-                wasmSetI32(p + 12, cStringArray(f.extensions))
-                wasmSetI32(p + 16, f.extensions.size)
+    }
+
+    override fun pickSaveDocument(
+        defaultName: String,
+        filters: List<DocumentFilter>,
+        callback: (DocumentPickResult) -> Unit
+    ) {
+        val cbPtr = documentPickPtr(callback)
+        withCStringKt(defaultName) { name ->
+            withWasmDocumentFilters(filters) { array ->
+                wasmMod.uapmdDocumentProviderPickSave(handle, name, array, filters.size, 0, cbPtr)
             }
-            mod.uapmdDocumentProviderPickOpen(handle, array, filters.size, allowMultiple, 0, cbPtr)
-        } finally {
-            allocations.forEach { mod.free(it) }
         }
     }
 
@@ -164,19 +217,8 @@ class WasmJsDocumentProvider internal constructor(internal val handle: Int) : Do
         val cbId = nextCallbackId()
         pendingDocumentReads[cbId] = callback
         val cbPtr = makeCFunctionPtr(cbId, "uapmdDispatchDocumentRead", "viiii")
-        // The handle crosses by value, i.e. as a pointer; the provider copies it.
-        withCStringKt(handle.id) { id ->
-            withCStringKt(handle.displayName) { name ->
-                withCStringKt(handle.mimeType) { mime ->
-                    withWasmStruct(DOCUMENT_HANDLE_SIZE) { p ->
-                        wasmSetI32(p, id)
-                        wasmSetI32(p + 4, name)
-                        wasmSetI32(p + 8, mime)
-                        wasmMod.uapmdDocumentProviderRead(this.handle, p, 0, cbPtr)
-                    }
-                }
-            }
-        }
+        // The handle crosses by value, i.e. as a pointer.
+        withWasmDocumentHandle(handle) { p -> wasmMod.uapmdDocumentProviderRead(this.handle, p, 0, cbPtr) }
     }
 
     override fun pickFolder(callback: (FolderPickResult) -> Unit) =

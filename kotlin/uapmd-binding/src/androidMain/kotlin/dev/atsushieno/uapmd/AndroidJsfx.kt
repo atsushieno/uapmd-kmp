@@ -48,6 +48,19 @@ class AndroidDocumentProvider internal constructor(internal val handle: Long) : 
         DocumentPickCallback(callback)
     )
 
+    override fun pickSaveDocument(
+        defaultName: String,
+        filters: List<DocumentFilter>,
+        callback: (DocumentPickResult) -> Unit
+    ) = JniBridge.uapmdDocumentProviderPickSave(
+        handle,
+        defaultName,
+        filters.map { it.label }.toTypedArray(),
+        filters.map { it.mimeTypes.toTypedArray() }.toTypedArray(),
+        filters.map { it.extensions.toTypedArray() }.toTypedArray(),
+        DocumentPickCallback(callback)
+    )
+
     override fun readDocument(handle: DocumentHandle, callback: (DocumentIOResult, ByteArray) -> Unit) =
         JniBridge.uapmdDocumentProviderRead(this.handle, handle.id, handle.displayName, handle.mimeType,
             DocumentReadCallback(callback))

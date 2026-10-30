@@ -18,6 +18,7 @@ import dev.atsushieno.uapmd.AddinManager
 import dev.atsushieno.uapmd.Augene2
 import dev.atsushieno.uapmd.Augene2Integration
 import dev.atsushieno.uapmd.AudioWorkerFault
+import dev.atsushieno.uapmd.DocumentHandle
 import dev.atsushieno.uapmd.DocumentProvider
 import dev.atsushieno.uapmd.PanelRegistry
 import dev.atsushieno.uapmd.ProjectAddressBook
@@ -1004,6 +1005,22 @@ class UapmdHost private constructor(val model: AppModel) {
         }
     }
 
+    /**
+     * uapmd-app's Save Project (`MainWindow::handleSaveProject`): the model packs the
+     * project into a `.uapmdz` and writes it through its document provider, to a
+     * handle picked from that provider. [onDone] runs on the UI thread.
+     */
+    fun saveProjectToDocument(handle: DocumentHandle, onDone: (AppProjectResult) -> Unit = {}) = offUiThread {
+        model.saveProjectToDocument(handle) { io ->
+            onUiThread {
+                val result = AppProjectResult(io.success, io.error)
+                lastProjectResult = result
+                refresh()
+                onDone(result)
+            }
+        }
+    }
+
     // ── Plugin UI ───────────────────────────────────────────────────────────
     //
     // Goes through PluginInstance.createUiPresentation(), the path composeApp
@@ -1197,7 +1214,8 @@ class UapmdHost private constructor(val model: AppModel) {
         startSeconds: Double,
         endSeconds: Double?,
         tailSeconds: Double,
-        enableSilenceStop: Boolean
+        enableSilenceStop: Boolean,
+        outputHandle: DocumentHandle? = null
     ) {
         if (isRendering) return
         val bounds = model.sequencer.engine.timeline.calculateContentBounds()
@@ -1215,7 +1233,8 @@ class UapmdHost private constructor(val model: AppModel) {
                 enableSilenceStop = enableSilenceStop,
                 // AppModel::RenderToFileSettings' own defaults.
                 silenceDurationSeconds = 5.0,
-                silenceThresholdDb = -80.0
+                silenceThresholdDb = -80.0,
+                outputHandle = outputHandle
             )
         )
         if (!started) {

@@ -38,6 +38,10 @@ actual suspend fun pickProjectFileToOpen(): String? =
 actual suspend fun pickProjectFileToSave(defaultName: String): String? =
     runCatching { createSaveScratchPath(defaultName) }.getOrNull()
 
+/** A MEMFS scratch path, downloaded by [deliverSavedFile] once the render is there. */
+actual suspend fun pickRenderDestination(host: UapmdHost, defaultName: String): RenderDestination? =
+    pickProjectFileToSave(defaultName)?.let { RenderDestination(it) }
+
 actual fun deliverSavedFile(path: String) {
     runCatching { downloadFileFromMemfs(path) }
 }

@@ -1,5 +1,7 @@
 package dev.atsushieno.uapmd.cmp
 
+import dev.atsushieno.uapmd.DocumentFilter
+import dev.atsushieno.uapmd.DocumentHandle
 import dev.atsushieno.uapmd.JniBridge
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.suspendCancellableCoroutine
@@ -71,6 +73,28 @@ actual suspend fun pickProjectFileToOpen(): String? = AndroidDocumentPicker.pick
 
 actual suspend fun pickProjectFileToSave(defaultName: String): String? =
     AndroidDocumentPicker.pickSave(KIND_PROJECT, defaultName)
+
+/**
+ * A SAF document to write to, picked the way uapmd-app picks one: through AppModel's
+ * provider, keeping the handle. [AndroidDocumentPicker]'s save path cannot stand in
+ * for it, being a cache copy that nothing writes back to the document.
+ */
+private suspend fun pickSaveHandle(host: UapmdHost, defaultName: String, typeLabel: String, extension: String): DocumentHandle? {
+    val provider = host.documentProvider ?: return null
+    return suspendCancellableCoroutine { cont ->
+        provider.pickSaveDocument(
+            defaultName,
+            listOf(
+                DocumentFilter(typeLabel, emptyList(), listOf(extension)),
+                DocumentFilter("All Files", emptyList(), listOf("*"))
+            )
+        ) { result -> cont.resume(result.handles.firstOrNull()?.takeIf { result.success }) }
+    }
+}
+
+/** The render job writes through the handle, as uapmd-app's ExporterWindow has it do. */
+actual suspend fun pickRenderDestination(host: UapmdHost, defaultName: String): RenderDestination? =
+    pickSaveHandle(host, defaultName, "WAV", "*.wav")?.let { RenderDestination(it.displayName.ifEmpty { it.id }, it) }
 
 /** The Storage Access Framework already chose a real destination. */
 actual fun deliverSavedFile(path: String) = Unit
@@ -189,9 +213,10 @@ actual fun startupRenderPath(): String? = androidStartupRenderPath
 
 actual fun startupBufferSize(): Int = androidStartupBufferSize
 
-/** A real filesystem: the picker chose the destination, so write straight to it. */
+/** As uapmd-app saves: a `.uapmdz` archive written through the picked SAF document. */
 actual suspend fun saveProjectToPlatform(host: UapmdHost, defaultName: String): String? {
-    val path = pickProjectFileToSave(defaultName) ?: return null
-    host.saveProject(path)
-    return host.lastProjectResult?.takeIf { !it.success }?.error
+    val handle = pickSaveHandle(host, defaultName, "UAPMD Project Archive", "*.uapmdz") ?: return null
+    return suspendCancellableCoroutine { cont ->
+        host.saveProjectToDocument(handle) { cont.resume(it.takeIf { r -> !r.success }?.error) }
+    }
 }

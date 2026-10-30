@@ -272,6 +272,11 @@ class WasmJsAppModel internal constructor(internal val handle: Int) : AppModel {
         }
     }
 
+    override fun saveProjectToDocument(handle: DocumentHandle, callback: (DocumentIOResult) -> Unit) {
+        val cbPtr = documentWritePtr(callback)
+        withWasmDocumentHandle(handle) { h -> wasmMod.uapmdAppSaveProjectToDocument(this.handle, h, 0, cbPtr) }
+    }
+
     override fun loadProjectFromHandleToken(token: String): AppProjectResult =
         projectCall(token) { out, app, t -> wasmMod.uapmdAppLoadProjectFromHandleToken(out, app, t) }
 
@@ -701,7 +706,14 @@ class WasmJsAppModel internal constructor(internal val handle: Int) : AppModel {
                 mod.setValue(p + 56, (if (settings.enableSilenceStop) 1 else 0).toDouble(), "i8")
                 mod.setValue(p + 64, settings.silenceDurationSeconds, "double")
                 mod.setValue(p + 72, settings.silenceThresholdDb, "double")
-                mod.uapmdAppStartRenderToFile(handle, p)
+                val outputHandle = settings.outputHandle
+                if (outputHandle == null) {
+                    mod.setValue(p + 80, 0.0, "i32")
+                    mod.uapmdAppStartRenderToFile(handle, p)
+                } else withWasmDocumentHandle(outputHandle) { h ->
+                    mod.setValue(p + 80, h.toDouble(), "i32")
+                    mod.uapmdAppStartRenderToFile(handle, p)
+                }
             }
         }
     }
@@ -927,7 +939,7 @@ private const val ClipAddResultSize = 16
 private const val TimelinePositionSize = 16
 private const val MidiTempoChangeSize = 16
 private const val MidiTimeSigChangeSize = 16
-private const val AppRenderSettingsSize = 80
+private const val AppRenderSettingsSize = 88
 private const val AppRenderStatusSize = 32
 
 /** uapmd_timeline_position_t: int64 @0, double @8 - passed byval, i.e. by pointer. */

@@ -884,6 +884,8 @@ object JniBridge {
     @JvmStatic external fun uapmdAppSaveProjectSync(app: Long, filePath: String): Array<Any>?
     /** cb: (success: Boolean, error: String?) -> Unit */
     @JvmStatic external fun uapmdAppSaveProject(app: Long, filePath: String, cb: Any)
+    /** cb: invoke(success: Boolean, error: String?) */
+    @JvmStatic external fun uapmdAppSaveProjectToDocument(app: Long, id: String, displayName: String, mimeType: String, cb: Any)
     @JvmStatic external fun uapmdAppLoadProjectFromHandleToken(app: Long, token: String): Array<Any>?
     @JvmStatic external fun uapmdAppNewProject(app: Long): Array<Any>?
     @JvmStatic external fun uapmdAppMasterTempoMap(app: Long): Long
@@ -1002,7 +1004,10 @@ object JniBridge {
     @JvmStatic external fun uapmdAppMasterMarkerCount(app: Long): Int
     @JvmStatic external fun uapmdAppGetMasterMarkers(app: Long, outOffsets: DoubleArray, outRefTypes: IntArray): Array<String?>
     @JvmStatic external fun uapmdAppSetMasterTrackMarkersWithValidation(app: Long, mStr: Array<String>, mNum: DoubleArray, mRef: IntArray): Array<Any>
-    @JvmStatic external fun uapmdAppStartRenderToFile(app: Long, outputPath: String, nums: DoubleArray, flags: BooleanArray): Boolean
+    /** outputHandle: {id, displayName, mimeType}, or null. */
+    @JvmStatic external fun uapmdAppStartRenderToFile(
+        app: Long, outputPath: String, nums: DoubleArray, flags: BooleanArray, outputHandle: Array<String>?
+    ): Boolean
     @JvmStatic external fun uapmdAppCancelRenderToFile(app: Long)
     @JvmStatic external fun uapmdAppGetRenderToFileStatus(app: Long): Array<Any?>
     @JvmStatic external fun uapmdAppClearCompletedRenderStatus(app: Long)
@@ -1094,6 +1099,11 @@ object JniBridge {
     @JvmStatic external fun uapmdDocumentProviderPickOpen(
         provider: Long, labels: Array<String>, mimeTypes: Array<Array<String>>,
         extensions: Array<Array<String>>, allowMultiple: Boolean, cb: Any
+    )
+    /** Filters as for uapmdDocumentProviderPickOpen. cb: invoke(Boolean, Array<String?>, String?) */
+    @JvmStatic external fun uapmdDocumentProviderPickSave(
+        provider: Long, defaultName: String, labels: Array<String>, mimeTypes: Array<Array<String>>,
+        extensions: Array<Array<String>>, cb: Any
     )
     /** cb: invoke(success: Boolean, error: String?, data: ByteArray) */
     @JvmStatic external fun uapmdDocumentProviderRead(provider: Long, id: String, displayName: String, mimeType: String, cb: Any)

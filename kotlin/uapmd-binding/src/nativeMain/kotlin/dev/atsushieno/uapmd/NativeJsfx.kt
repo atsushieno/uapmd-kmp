@@ -37,6 +37,16 @@ private val documentReadTrampoline =
         }
     }
 
+internal val documentWriteTrampoline =
+    staticCFunction<CValue<uapmd_document_io_result_t>, COpaquePointer?, Unit> { result, userData ->
+        if (userData != null) {
+            val ref = userData.asStableRef<(DocumentIOResult) -> Unit>()
+            val r = result.useContents { DocumentIOResult(success, error?.toKString()) }
+            ref.get()(r)
+            ref.dispose()
+        }
+    }
+
 private val folderPickTrampoline =
     staticCFunction<CPointer<uapmd_folder_pick_result_t>?, COpaquePointer?, Unit> { result, userData ->
         if (userData != null) {
@@ -74,6 +84,20 @@ internal val jsfxFolderSyncTrampoline =
         }
     }
 
+/** The provider copies the filters before a pick call returns, so scope memory suffices. */
+private fun MemScope.allocDocumentFilters(filters: List<DocumentFilter>): CPointer<uapmd_document_filter_t>? {
+    val nativeFilters = if (filters.isEmpty()) null else allocArray<uapmd_document_filter_t>(filters.size)
+    filters.forEachIndexed { i, f ->
+        val n = nativeFilters!![i]
+        n.label = f.label.cstr.ptr
+        n.mime_types = if (f.mimeTypes.isEmpty()) null else f.mimeTypes.toCStringArray(this)
+        n.mime_type_count = f.mimeTypes.size.toUInt()
+        n.extensions = if (f.extensions.isEmpty()) null else f.extensions.toCStringArray(this)
+        n.extension_count = f.extensions.size.toUInt()
+    }
+    return nativeFilters
+}
+
 class NativeDocumentProvider internal constructor(internal val handle: uapmd_document_provider_t) : DocumentProvider {
     override fun tick() = uapmd_document_provider_tick(handle)
 
@@ -82,17 +106,16 @@ class NativeDocumentProvider internal constructor(internal val handle: uapmd_doc
         allowMultiple: Boolean,
         callback: (DocumentPickResult) -> Unit
     ) = memScoped {
-        // The provider copies the filters before pick_open returns.
-        val nativeFilters = if (filters.isEmpty()) null else allocArray<uapmd_document_filter_t>(filters.size)
-        filters.forEachIndexed { i, f ->
-            val n = nativeFilters!![i]
-            n.label = f.label.cstr.ptr
-            n.mime_types = if (f.mimeTypes.isEmpty()) null else f.mimeTypes.toCStringArray(this)
-            n.mime_type_count = f.mimeTypes.size.toUInt()
-            n.extensions = if (f.extensions.isEmpty()) null else f.extensions.toCStringArray(this)
-            n.extension_count = f.extensions.size.toUInt()
-        }
-        uapmd_document_provider_pick_open(handle, nativeFilters, filters.size.toUInt(), allowMultiple,
+        uapmd_document_provider_pick_open(handle, allocDocumentFilters(filters), filters.size.toUInt(), allowMultiple,
+            StableRef.create(callback).asCPointer(), documentPickTrampoline)
+    }
+
+    override fun pickSaveDocument(
+        defaultName: String,
+        filters: List<DocumentFilter>,
+        callback: (DocumentPickResult) -> Unit
+    ) = memScoped {
+        uapmd_document_provider_pick_save(handle, defaultName, allocDocumentFilters(filters), filters.size.toUInt(),
             StableRef.create(callback).asCPointer(), documentPickTrampoline)
     }
 

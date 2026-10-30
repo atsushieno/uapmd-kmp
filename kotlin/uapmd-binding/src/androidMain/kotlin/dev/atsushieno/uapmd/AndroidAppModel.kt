@@ -252,6 +252,10 @@ class AndroidAppModel internal constructor(internal val handle: Long) : AppModel
             callback(AppProjectResult(success, error))
         })
 
+    override fun saveProjectToDocument(handle: DocumentHandle, callback: (DocumentIOResult) -> Unit) =
+        JniBridge.uapmdAppSaveProjectToDocument(this.handle, handle.id, handle.displayName, handle.mimeType,
+            AppProjectSaveCallback { success, error -> callback(DocumentIOResult(success, error)) })
+
     override fun loadProjectFromHandleToken(token: String): AppProjectResult =
         JniBridge.uapmdAppLoadProjectFromHandleToken(handle, token).toProjectResult()
 
@@ -553,7 +557,8 @@ class AndroidAppModel internal constructor(internal val handle: Long) : AppModel
             booleanArrayOf(
                 settings.hasEndSeconds, settings.useContentFallback,
                 settings.contentBoundsValid, settings.enableSilenceStop
-            )
+            ),
+            settings.outputHandle?.let { arrayOf(it.id, it.displayName, it.mimeType) }
         )
 
     override fun cancelRenderToFile() = JniBridge.uapmdAppCancelRenderToFile(handle)

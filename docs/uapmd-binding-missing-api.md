@@ -44,9 +44,8 @@ uint32@8, ptr@12, sizeof 16; `uapmd_ump_event_t` tick@0, word_count@8, words@12,
 |---|---|---|
 | Plugin UI | `show_plugin_ui` (the parent-handle/resize-handler form) | no |
 | Plugin state | `save_plugin_state`, `load_plugin_state` | **yes** — `uapmd_plugin_state_result_t` |
-| Project I/O | `document_provider` `pick_save`, `write`, `resolve_to_path`, `persist_handle`, `restore_handle` on `AppModel.documentProvider` — `tick()`, `pickOpenDocuments`, `readDocument` and the folder calls are bound (the JSFX Settings window needs them); saving still goes through the per-platform file pickers | **yes** — `uapmd_document_handle_t` in, `uapmd_document_io_result_t` in callbacks |
+| Project I/O | `document_provider` `write`, `resolve_to_path`, `persist_handle`, `restore_handle` on `AppModel.documentProvider` — `tick()`, `pickOpenDocuments`, `pickSaveDocument`, `readDocument`, the folder calls and `AppModel.saveProjectToDocument` are bound (Android's Save Project and Render To File use them). Loading and plug-in state still go through the per-platform file pickers; their AppModel entry points are in §2 | **yes** — `uapmd_document_handle_t` in, `uapmd_document_io_result_t` in callbacks |
 | Clips | `add_clip_to_track`, `add_midi_clip_to_track`, `add_midi_clip_from_data` | **yes** — `uapmd_clip_add_result_t`. Note `TimelineFacade.addMidiClipFromFile()` / `addAudioClip()` were already bound and cover the common cases |
-| Offline render | `start_render`, `cancel_render`, `get_render_status`, `clear_render_status` | **yes**. Not needed so far: `SequencerEngine.renderOffline()` was already bound and drives the Exporter directly |
 | Track graph | `request_show_track_graph` (the request/serve indirection; not needed — the app opens its own window) | no |
 | Master markers | `master_marker_count`, `get_master_marker`, `set_master_markers` | **yes**. Not needed: `SequencerEngine.masterTrackMarkers` and `ProjectCommands.setMasterTrackMarkers()` already cover both directions |
 | Misc | `add_device_input_to_track` | no |
@@ -64,6 +63,8 @@ first. All predate 0.5.6 — they were simply never needed by a KMP app before.
 | `PluginInstanceLifecycleListener` add/remove | same | 0.5.6 delta not covered by `13dac10` |
 | `restoreNodeId` parameter on `addPluginToTrack()` | same | 0.5.6 delta not covered by `13dac10` |
 | `FrozenTrackManager::errorMessageForTrack` | `uapmd-engine/…/FrozenTrackManager.hpp` | showing why a freeze failed; the runtime state alone says only that it did |
+| `AppModel::loadProjectFromResolvedPath` | `tools/uapmd-app-model/…/AppModel.hpp` | loading as uapmd-app does. uapmd-cmp's own `prepareProjectLoad` + `loadProjectAsync` skips its `markLoadedArchiveClipsNeedsFileSave()`, so re-saving a loaded `.uapmdz` drops the unmodified master clip (the tempo map) |
+| `DocumentHandle` overloads of `savePluginState` / `loadPluginState` | same | plug-in state on Android, where the picked document has no path |
 
 Bound since (2026-10-06): `AudioGraphNode::parameterUpdateEvent()` / `parameterMetadataRefreshEvent()`
 as `uapmd_node_{add,remove}_parameter_{update,metadata_refresh}_listener` → `PluginNode.add/remove…Listener`

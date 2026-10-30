@@ -1679,9 +1679,13 @@ JNI_FN(jobjectArray, uapmdAppSetMasterTrackMarkersWithValidation)(JNIEnv* env, j
         AM(app), n ? markers.data() : nullptr, static_cast<uint32_t>(n)));
 }
 
-/** Settings cross as double[8] plus boolean[3], to keep the argument list short. */
+/**
+ * Settings cross as double[8] plus boolean[4], to keep the argument list short;
+ * the output handle as a {id, displayName, mimeType} triple, or null.
+ */
 JNI_FN(jboolean, uapmdAppStartRenderToFile)(JNIEnv* env, jclass, jlong app, jstring outputPath,
-                                             jdoubleArray nums, jbooleanArray flags) {
+                                             jdoubleArray nums, jbooleanArray flags,
+                                             jobjectArray outputHandle) {
     JStr path(env, outputPath);
     jdouble n[8] = {};
     if (nums && env->GetArrayLength(nums) >= 8) env->GetDoubleArrayRegion(nums, 0, 8, n);
@@ -1701,7 +1705,22 @@ JNI_FN(jboolean, uapmdAppStartRenderToFile)(JNIEnv* env, jclass, jlong app, jstr
     s.use_content_fallback = f[1];
     s.content_bounds_valid = f[2];
     s.enable_silence_stop = f[3];
-    return uapmd_app_start_render_to_file(AM(app), &s);
+
+    jstring parts[3] = {};
+    if (outputHandle && env->GetArrayLength(outputHandle) >= 3)
+        for (jsize i = 0; i < 3; i++)
+            parts[i] = static_cast<jstring>(env->GetObjectArrayElement(outputHandle, i));
+    bool started;
+    {
+        JStr id(env, parts[0]), name(env, parts[1]), mime(env, parts[2]);
+        uapmd_document_handle_t handle{id.c_str(), name.c_str(), mime.c_str()};
+        if (outputHandle)
+            s.output_handle = &handle;
+        started = uapmd_app_start_render_to_file(AM(app), &s);
+    }
+    for (auto part : parts)
+        if (part) env->DeleteLocalRef(part);
+    return started;
 }
 
 JNI_FN(void, uapmdAppCancelRenderToFile)(JNIEnv*, jclass, jlong app) {

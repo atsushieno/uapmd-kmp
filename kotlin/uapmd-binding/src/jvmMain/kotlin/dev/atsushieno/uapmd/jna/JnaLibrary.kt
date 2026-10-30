@@ -108,6 +108,10 @@ interface DocumentPathCb : Callback {
     fun invoke(result: UapmdDocumentIoResult.ByValue, path: String?, userData: Pointer?)
 }
 
+interface DocumentWriteCb : Callback {
+    fun invoke(result: UapmdDocumentIoResult.ByValue, userData: Pointer?)
+}
+
 // ─── Event loop callbacks ─────────────────────────────────────────────────────
 
 interface EventLoopInitializeCb : Callback {
@@ -302,7 +306,7 @@ open class UapmdMidiTimeSigChange : Structure {
     "output_path", "start_seconds", "end_seconds", "has_end_seconds",
     "use_content_fallback", "content_bounds_valid",
     "content_start_seconds", "content_end_seconds", "tail_seconds",
-    "enable_silence_stop", "silence_duration_seconds", "silence_threshold_db"
+    "enable_silence_stop", "silence_duration_seconds", "silence_threshold_db", "output_handle"
 )
 open class UapmdAppRenderSettings : Structure() {
     @JvmField var output_path: String? = null
@@ -317,6 +321,7 @@ open class UapmdAppRenderSettings : Structure() {
     @JvmField var enable_silence_stop: Byte = 0
     @JvmField var silence_duration_seconds: Double = 0.0
     @JvmField var silence_threshold_db: Double = 0.0
+    @JvmField var output_handle: UapmdDocumentHandle.ByReference? = null
 }
 
 @FieldOrder("running", "completed", "success", "progress", "rendered_seconds", "message", "output_path")
@@ -505,6 +510,7 @@ open class UapmdDocumentHandle(p: Pointer? = null) : Structure(p) {
     @JvmField var mime_type: String? = null
 
     class ByValue : UapmdDocumentHandle(), Structure.ByValue
+    class ByReference : UapmdDocumentHandle(), Structure.ByReference
 }
 
 @FieldOrder("label", "mime_types", "mime_type_count", "extensions", "extension_count")
@@ -1135,6 +1141,14 @@ interface UapmdLibrary : Library {
         filters: Array<UapmdDocumentFilter>?,
         filterCount: Int,
         allowMultiple: Boolean,
+        userData: Pointer?,
+        callback: DocumentPickCb?
+    )
+    fun uapmd_document_provider_pick_save(
+        provider: Pointer?,
+        defaultName: String,
+        filters: Array<UapmdDocumentFilter>?,
+        filterCount: Int,
         userData: Pointer?,
         callback: DocumentPickCb?
     )
@@ -2024,6 +2038,7 @@ interface UapmdLibrary : Library {
     fun uapmd_app_load_project(app: Pointer?, filePath: String?): UapmdAppProjectResult.ByVal
     fun uapmd_app_save_project_sync(app: Pointer?, filePath: String?): UapmdAppProjectResult.ByVal
     fun uapmd_app_save_project(app: Pointer?, filePath: String?, userData: Pointer?, callback: ProjectSaveCb?)
+    fun uapmd_app_save_project_to_document(app: Pointer?, handle: UapmdDocumentHandle?, userData: Pointer?, callback: DocumentWriteCb?)
     fun uapmd_app_load_project_from_handle_token(app: Pointer?, token: String?): UapmdAppProjectResult.ByVal
     fun uapmd_app_new_project(app: Pointer?): UapmdAppProjectResult.ByVal
 

@@ -243,6 +243,17 @@ class NativeAppModel internal constructor(
     override fun saveProject(filePath: String, callback: (AppProjectResult) -> Unit) =
         uapmd_app_save_project(handle, filePath, StableRef.create(callback).asCPointer(), appProjectSaveTrampoline)
 
+    override fun saveProjectToDocument(handle: DocumentHandle, callback: (DocumentIOResult) -> Unit) = memScoped {
+        // The handle's strings are copied before the call returns.
+        val h = alloc<uapmd_document_handle_t>().also {
+            it.id = handle.id.cstr.ptr
+            it.display_name = handle.displayName.cstr.ptr
+            it.mime_type = handle.mimeType.cstr.ptr
+        }
+        uapmd_app_save_project_to_document(this@NativeAppModel.handle, h.ptr,
+            StableRef.create(callback).asCPointer(), documentWriteTrampoline)
+    }
+
     override fun loadProjectFromHandleToken(token: String): AppProjectResult =
         uapmd_app_load_project_from_handle_token(handle, token).useContents { toKotlin() }
 
@@ -565,6 +576,13 @@ class NativeAppModel internal constructor(
         s.enable_silence_stop = settings.enableSilenceStop
         s.silence_duration_seconds = settings.silenceDurationSeconds
         s.silence_threshold_db = settings.silenceThresholdDb
+        s.output_handle = settings.outputHandle?.let { h ->
+            alloc<uapmd_document_handle_t>().also {
+                it.id = h.id.cstr.ptr
+                it.display_name = h.displayName.cstr.ptr
+                it.mime_type = h.mimeType.cstr.ptr
+            }.ptr
+        }
         uapmd_app_start_render_to_file(handle, s.ptr)
     }
 

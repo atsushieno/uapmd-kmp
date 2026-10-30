@@ -803,6 +803,26 @@ private fun checkBootstrap(model: AppModel, check: (String, Boolean) -> Unit) {
             }
             p2.close()
         }
+
+        // Through a document handle, as uapmd-cmp saves on Android: the model
+        // packs a .uapmdz and the provider writes it. The desktop provider's
+        // handle id is the path.
+        val docPath = java.io.File(System.getProperty("java.io.tmpdir"), "uapmd-cmp-probe-doc.uapmdz")
+        docPath.delete()
+        var docResult: dev.atsushieno.uapmd.DocumentIOResult? = null
+        model.saveProjectToDocument(dev.atsushieno.uapmd.DocumentHandle(docPath.absolutePath, docPath.name, "")) {
+            docResult = it
+        }
+        val docAt = System.currentTimeMillis()
+        while (docResult == null && System.currentTimeMillis() - docAt < 10_000)
+            Thread.sleep(50)
+        println("   saveProjectToDocument -> $docResult bytes=${docPath.length()}")
+        check("saveProjectToDocument calls back with success", docResult?.success == true)
+        check("the document is a .uapmdz archive",
+            docPath.length() > 4 && docPath.readBytes().copyOfRange(0, 2).contentEquals(byteArrayOf(0x50, 0x4B)))
+        val p3 = dev.atsushieno.uapmd.prepareProjectLoad(docPath.absolutePath)
+        check("the saved document loads back", p3.success && model.loadProject(p3.path).success)
+        p3.close()
     }
 
     // ── Sequence Editor clip actions: positioned adds, silent audio clip ─────
@@ -1901,6 +1921,40 @@ private fun checkBootstrap(model: AppModel, check: (String, Boolean) -> Unit) {
         check("the render completes with the engine off", !status.running && status.success)
         check("the rendered file has audio frames", out.length() > 44)
         check("the engine stays off after the render", !model.isAudioEngineEnabled && seq.isAudioPlaying() == 0)
+        model.clearCompletedRenderStatus()
+
+        // Through a document handle, as uapmd-cmp renders on Android, where the
+        // picked SAF document has no path. The desktop provider's handle id is the
+        // path; outputPath only names the file, so nothing may land under that name.
+        println("-- render to file through a document handle")
+        val viaHandle = java.io.File(System.getProperty("java.io.tmpdir"), "uapmd-cmp-probe-render-handle.wav")
+        viaHandle.delete()
+        val nameOnly = java.io.File("uapmd-cmp-probe-render-label.wav")
+        nameOnly.delete()
+        val handleStarted = model.startRenderToFile(
+            dev.atsushieno.uapmd.RenderToFileSettings(
+                outputPath = nameOnly.name,
+                endSeconds = 2.0,
+                hasEndSeconds = true,
+                useContentFallback = false,
+                contentBoundsValid = bounds.hasContent,
+                contentStartSeconds = bounds.firstSeconds,
+                contentEndSeconds = bounds.lastSeconds,
+                tailSeconds = 0.5,
+                outputHandle = dev.atsushieno.uapmd.DocumentHandle(viaHandle.absolutePath, nameOnly.name, "")
+            )
+        )
+        check("a render job starts with an output handle", handleStarted)
+        val handleAt = System.currentTimeMillis()
+        status = model.renderToFileStatus
+        while (status.running && System.currentTimeMillis() - handleAt < 60_000) {
+            Thread.sleep(100)
+            status = model.renderToFileStatus
+        }
+        println("   render: success=${status.success} message='${status.message}' bytes=${viaHandle.length()}")
+        check("the handle render completes", !status.running && status.success)
+        check("the provider wrote the same audio to the handle", viaHandle.length() == out.length())
+        check("nothing was written at outputPath", !nameOnly.exists())
         model.clearCompletedRenderStatus()
     }
 

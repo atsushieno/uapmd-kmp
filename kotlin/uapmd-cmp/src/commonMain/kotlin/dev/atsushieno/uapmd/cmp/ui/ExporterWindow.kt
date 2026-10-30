@@ -22,9 +22,10 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
+import dev.atsushieno.uapmd.DocumentHandle
 import dev.atsushieno.uapmd.cmp.UapmdHost
 import dev.atsushieno.uapmd.cmp.deliverSavedFile
-import dev.atsushieno.uapmd.cmp.pickProjectFileToSave
+import dev.atsushieno.uapmd.cmp.pickRenderDestination
 import kotlinx.coroutines.launch
 
 /**
@@ -34,6 +35,9 @@ import kotlinx.coroutines.launch
 @Composable
 fun ExporterWindow(host: UapmdHost) {
     var outputPath by remember { mutableStateOf("") }
+    // A picked document the render writes through; editing the path drops it,
+    // as uapmd-app's ExporterWindow does.
+    var outputHandle by remember { mutableStateOf<DocumentHandle?>(null) }
     var startSeconds by remember { mutableStateOf("0") }
     var endSeconds by remember { mutableStateOf("") }
     var tailSeconds by remember { mutableStateOf("2") }
@@ -44,11 +48,16 @@ fun ExporterWindow(host: UapmdHost) {
     Column(Modifier.fillMaxWidth()) {
         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
             OutlinedTextField(
-                value = outputPath, onValueChange = { outputPath = it },
+                value = outputPath, onValueChange = { outputPath = it; outputHandle = null },
                 label = { Text("Output file") }, singleLine = true, modifier = Modifier.weight(1f)
             )
             Button(onClick = {
-                scope.launch { pickProjectFileToSave("render.wav")?.let { outputPath = it } }
+                scope.launch {
+                    pickRenderDestination(host, "render.wav")?.let {
+                        outputPath = it.path
+                        outputHandle = it.handle
+                    }
+                }
             }) { Text("…") }
         }
 
@@ -75,13 +84,15 @@ fun ExporterWindow(host: UapmdHost) {
         Row(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalAlignment = Alignment.CenterVertically) {
             Button(
                 onClick = {
-                    deliverWhenDone = outputPath
+                    // A handle is written through the document provider by the job itself.
+                    deliverWhenDone = outputPath.takeIf { outputHandle == null }
                     host.startRender(
                         outputPath = outputPath,
                         startSeconds = startSeconds.toDoubleOrNull() ?: 0.0,
                         endSeconds = endSeconds.toDoubleOrNull(),
                         tailSeconds = tailSeconds.toDoubleOrNull() ?: 0.0,
-                        enableSilenceStop = silenceStop
+                        enableSilenceStop = silenceStop,
+                        outputHandle = outputHandle
                     )
                 },
                 enabled = outputPath.isNotBlank() && !host.isRendering

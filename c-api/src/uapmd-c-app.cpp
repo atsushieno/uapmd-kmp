@@ -1696,6 +1696,9 @@ bool uapmd_app_start_render_to_file(uapmd_app_model_t app, const uapmd_app_rende
     s.enableSilenceStop = settings->enable_silence_stop;
     s.silenceDurationSeconds = settings->silence_duration_seconds;
     s.silenceThresholdDb = settings->silence_threshold_db;
+    if (const auto* h = settings->output_handle)
+        s.outputHandle = uapmd::DocumentHandle{
+            h->id ? h->id : "", h->display_name ? h->display_name : "", h->mime_type ? h->mime_type : ""};
     return AM(app)->startRenderToFile(s);
 }
 
