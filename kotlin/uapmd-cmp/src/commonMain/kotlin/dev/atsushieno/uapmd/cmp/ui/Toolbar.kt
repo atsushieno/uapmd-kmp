@@ -41,9 +41,10 @@ import androidx.compose.material3.rememberTooltipState
 import dev.atsushieno.uapmd.AddinCommandInfo
 import dev.atsushieno.uapmd.AudioWorkerFault
 import dev.atsushieno.uapmd.cmp.UapmdHost
-import dev.atsushieno.uapmd.cmp.pickMidiFileToOpen
-import dev.atsushieno.uapmd.cmp.pickProjectFileToOpen
-import dev.atsushieno.uapmd.cmp.saveProjectToPlatform
+import dev.atsushieno.uapmd.cmp.DocumentFilters
+import dev.atsushieno.uapmd.cmp.pickDocumentToOpen
+import dev.atsushieno.uapmd.cmp.pickDocumentToSave
+import dev.atsushieno.uapmd.cmp.pickFileToRead
 import androidx.compose.runtime.rememberCoroutineScope
 import kotlinx.coroutines.launch
 
@@ -191,11 +192,14 @@ fun Toolbar(
                     })
                     DropdownMenuItem(text = { Text("Load Project") }, onClick = {
                         projectOpen = false
-                        scope.launch { pickProjectFileToOpen()?.let { host.loadProject(it) } }
+                        scope.launch { host.pickDocumentToOpen(DocumentFilters.projectToOpen)?.let { host.loadProjectFromDocument(it) } }
                     })
                     DropdownMenuItem(text = { Text("Save Project") }, onClick = {
                         projectOpen = false
-                        scope.launch { saveProjectToPlatform(host, "project.uapmdz") }
+                        scope.launch {
+                            host.pickDocumentToSave("project.uapmdz", DocumentFilters.projectToSave)
+                                ?.let { host.saveProjectToDocument(it) }
+                        }
                     })
                     HorizontalDivider()
                     DropdownMenuItem(text = { Text("Render To File") }, onClick = {
@@ -204,7 +208,7 @@ fun Toolbar(
                     HorizontalDivider()
                     DropdownMenuItem(text = { Text("Import MIDI Tracks (SMF)") }, onClick = {
                         projectOpen = false
-                        scope.launch { pickMidiFileToOpen()?.let { host.importMidiTracks(it) } }
+                        scope.launch { host.pickFileToRead(DocumentFilters.midiTracks)?.let { host.importMidiTracks(it) } }
                     })
                     // The backend is whichever separator addin is enabled, so the
                     // item only exists while at least one is, as in uapmd-app.
@@ -280,6 +284,9 @@ fun Toolbar(
             Text(it, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.error)
         }
         host.lastProjectResult?.error?.let {
+            Text(it, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.error)
+        }
+        host.fileErrorMessage?.let {
             Text(it, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.error)
         }
     }

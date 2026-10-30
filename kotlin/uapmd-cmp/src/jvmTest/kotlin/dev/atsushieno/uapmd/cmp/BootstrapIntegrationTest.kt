@@ -216,6 +216,25 @@ private fun checkBootstrap(model: AppModel, check: (String, Boolean) -> Unit) {
         check("instance retrievable from the plugin host", inst != null)
         check("instance reports a display name", !inst?.displayName.isNullOrEmpty())
         println("   instantiated '${inst?.displayName}' params=${inst?.parameterCount} group=${model.getInstanceGroup(succeeded.instanceId)}")
+        // Plug-in state through a document handle, as the Details window saves it.
+        // The desktop provider's handle id is the path.
+        val stateFile = java.io.File(System.getProperty("java.io.tmpdir"), "uapmd-cmp-probe.state")
+        stateFile.delete()
+        val stateHandle = dev.atsushieno.uapmd.DocumentHandle(stateFile.absolutePath, stateFile.name, "")
+        var stateSaved: dev.atsushieno.uapmd.PluginStateResult? = null
+        model.savePluginState(succeeded.instanceId, stateHandle) { stateSaved = it }
+        val stateSaveAt = System.currentTimeMillis()
+        while (stateSaved == null && System.currentTimeMillis() - stateSaveAt < 10_000)
+            Thread.sleep(50)
+        println("   savePluginState(handle) -> $stateSaved exists=${stateFile.exists()}")
+        check("plug-in state saves through a handle", stateSaved?.success == true && stateFile.exists())
+        var stateLoaded: dev.atsushieno.uapmd.PluginStateResult? = null
+        model.loadPluginState(succeeded.instanceId, stateHandle) { stateLoaded = it }
+        val stateLoadAt = System.currentTimeMillis()
+        while (stateLoaded == null && System.currentTimeMillis() - stateLoadAt < 10_000)
+            Thread.sleep(50)
+        println("   loadPluginState(handle) -> $stateLoaded")
+        check("plug-in state loads through a handle", stateLoaded?.success == true)
         // ── plugin UI presentation (the path composeApp proved) ──────────────
         val caps = inst2Caps(host, succeeded.instanceId)
         println("   ui: hasUiSupport=${caps.first} floating=${caps.second}")
@@ -823,6 +842,39 @@ private fun checkBootstrap(model: AppModel, check: (String, Boolean) -> Unit) {
         val p3 = dev.atsushieno.uapmd.prepareProjectLoad(docPath.absolutePath)
         check("the saved document loads back", p3.success && model.loadProject(p3.path).success)
         p3.close()
+
+        // Loaded the way uapmd-app loads. Whether re-saving packs the clips again is not
+        // checked here: AppModel marks them from the load completion, which runs on the
+        // event-loop thread (the EDT), and this harness creates AppModel on the test
+        // thread, so the model refuses those commands. The app creates it on the EDT.
+        fun awaitProject(call: ((dev.atsushieno.uapmd.AppProjectResult) -> Unit) -> Unit): dev.atsushieno.uapmd.AppProjectResult? {
+            var result: dev.atsushieno.uapmd.AppProjectResult? = null
+            call { result = it }
+            val at = System.currentTimeMillis()
+            while (result == null && System.currentTimeMillis() - at < 30_000)
+                Thread.sleep(50)
+            return result
+        }
+        val reloaded = awaitProject { model.loadProjectFromResolvedPath(docPath.absolutePath, it) }
+        println("   loadProjectFromResolvedPath -> $reloaded")
+        check("loadProjectFromResolvedPath loads the archive", reloaded?.success == true)
+        val resaved = java.io.File(System.getProperty("java.io.tmpdir"), "uapmd-cmp-probe-doc2.uapmdz")
+        resaved.delete()
+        var resaveResult: dev.atsushieno.uapmd.DocumentIOResult? = null
+        model.saveProjectToDocument(dev.atsushieno.uapmd.DocumentHandle(resaved.absolutePath, resaved.name, "")) {
+            resaveResult = it
+        }
+        val resaveAt = System.currentTimeMillis()
+        while (resaveResult == null && System.currentTimeMillis() - resaveAt < 10_000)
+            Thread.sleep(50)
+        check("the reloaded project saves again", resaveResult?.success == true)
+
+        // And through a document handle, as the Load Project menu does.
+        val viaDocument = awaitProject {
+            model.loadProjectFromDocument(dev.atsushieno.uapmd.DocumentHandle(resaved.absolutePath, resaved.name, ""), it)
+        }
+        println("   loadProjectFromDocument -> $viaDocument")
+        check("loadProjectFromDocument loads it", viaDocument?.success == true)
     }
 
     // ── Sequence Editor clip actions: positioned adds, silent audio clip ─────

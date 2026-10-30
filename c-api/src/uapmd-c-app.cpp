@@ -77,6 +77,15 @@ uapmd_document_provider_t uapmd_app_document_provider(uapmd_app_model_t app) {
     return reinterpret_cast<uapmd_document_provider_t>(AM(app)->documentProvider());
 }
 
+/* The C handle only borrows its strings for the duration of a call. */
+static uapmd::DocumentHandle to_cpp_handle(const uapmd_document_handle_t* handle) {
+    if (!handle)
+        return {};
+    return {handle->id ? handle->id : "",
+            handle->display_name ? handle->display_name : "",
+            handle->mime_type ? handle->mime_type : ""};
+}
+
 /*
  * The error string must outlive the callback, which fires after this returns; the
  * caller only borrows it for the duration of the call, as everywhere else here.
@@ -85,14 +94,8 @@ void uapmd_app_save_project_to_document(uapmd_app_model_t app,
                                           const uapmd_document_handle_t* handle,
                                           void* user_data,
                                           uapmd_write_callback_t callback) {
-    uapmd::DocumentHandle h;
-    if (handle) {
-        h.id = handle->id ? handle->id : "";
-        h.display_name = handle->display_name ? handle->display_name : "";
-        h.mime_type = handle->mime_type ? handle->mime_type : "";
-    }
     AM(app)->saveProjectToDocument(
-        std::move(h),
+        to_cpp_handle(handle),
         [user_data, callback](uapmd::DocumentIOResult result) {
             if (!callback)
                 return;
@@ -372,21 +375,24 @@ void uapmd_app_hide_plugin_ui(uapmd_app_model_t app, int32_t instance_id) {
  *  Plugin state save/load
  * ═══════════════════════════════════════════════════════════════════════════ */
 
+static auto plugin_state_callback(void* user_data, uapmd_plugin_state_cb_t callback) {
+    return [callback, user_data](uapmd_app::AppModel::PluginStateResult r) {
+        if (!callback) return;
+        uapmd_plugin_state_result_t cr;
+        cr.instance_id = r.instanceId;
+        cr.success = r.success;
+        cr.error = r.error.empty() ? nullptr : r.error.c_str();
+        cr.filepath = r.filepath.empty() ? nullptr : r.filepath.c_str();
+        callback(cr, user_data);
+    };
+}
+
 void uapmd_app_load_plugin_state(uapmd_app_model_t app,
                                    int32_t instance_id,
                                    const char* filepath,
                                    void* user_data,
                                    uapmd_plugin_state_cb_t callback) {
-    AM(app)->loadPluginState(instance_id, filepath,
-        [callback, user_data](uapmd_app::AppModel::PluginStateResult r) {
-            if (!callback) return;
-            uapmd_plugin_state_result_t cr;
-            cr.instance_id = r.instanceId;
-            cr.success = r.success;
-            cr.error = r.error.empty() ? nullptr : r.error.c_str();
-            cr.filepath = r.filepath.empty() ? nullptr : r.filepath.c_str();
-            callback(cr, user_data);
-        });
+    AM(app)->loadPluginState(instance_id, filepath, plugin_state_callback(user_data, callback));
 }
 
 void uapmd_app_save_plugin_state(uapmd_app_model_t app,
@@ -394,16 +400,23 @@ void uapmd_app_save_plugin_state(uapmd_app_model_t app,
                                    const char* filepath,
                                    void* user_data,
                                    uapmd_plugin_state_cb_t callback) {
-    AM(app)->savePluginState(instance_id, filepath,
-        [callback, user_data](uapmd_app::AppModel::PluginStateResult r) {
-            if (!callback) return;
-            uapmd_plugin_state_result_t cr;
-            cr.instance_id = r.instanceId;
-            cr.success = r.success;
-            cr.error = r.error.empty() ? nullptr : r.error.c_str();
-            cr.filepath = r.filepath.empty() ? nullptr : r.filepath.c_str();
-            callback(cr, user_data);
-        });
+    AM(app)->savePluginState(instance_id, filepath, plugin_state_callback(user_data, callback));
+}
+
+void uapmd_app_load_plugin_state_from_document(uapmd_app_model_t app,
+                                                 int32_t instance_id,
+                                                 const uapmd_document_handle_t* handle,
+                                                 void* user_data,
+                                                 uapmd_plugin_state_cb_t callback) {
+    AM(app)->loadPluginState(instance_id, to_cpp_handle(handle), plugin_state_callback(user_data, callback));
+}
+
+void uapmd_app_save_plugin_state_to_document(uapmd_app_model_t app,
+                                               int32_t instance_id,
+                                               const uapmd_document_handle_t* handle,
+                                               void* user_data,
+                                               uapmd_plugin_state_cb_t callback) {
+    AM(app)->savePluginState(instance_id, to_cpp_handle(handle), plugin_state_callback(user_data, callback));
 }
 
 /* ═══════════════════════════════════════════════════════════════════════════
@@ -1640,6 +1653,25 @@ void uapmd_app_save_project(uapmd_app_model_t app, const char* file_path, void* 
     });
 }
 
+static auto project_result_callback(void* user_data, uapmd_project_save_cb_t callback) {
+    return [callback, user_data](uapmd_app::AppModel::ProjectResult r) {
+        if (!callback) return;
+        tl_error = r.error;
+        uapmd_app_project_result_t cr = { r.success, tl_error.empty() ? nullptr : tl_error.c_str() };
+        callback(cr, user_data);
+    };
+}
+
+void uapmd_app_load_project_from_resolved_path(uapmd_app_model_t app, const char* file_path,
+                                                 void* user_data, uapmd_project_save_cb_t callback) {
+    AM(app)->loadProjectFromResolvedPath(file_path ? file_path : "", project_result_callback(user_data, callback));
+}
+
+void uapmd_app_load_project_from_document(uapmd_app_model_t app, const uapmd_document_handle_t* handle,
+                                            void* user_data, uapmd_project_save_cb_t callback) {
+    AM(app)->loadProjectFromDocument(to_cpp_handle(handle), project_result_callback(user_data, callback));
+}
+
 uapmd_app_project_result_t uapmd_app_save_project_sync(uapmd_app_model_t app, const char* file_path) {
     auto r = AM(app)->saveProjectSync(file_path);
     tl_error = r.error;
@@ -1696,9 +1728,8 @@ bool uapmd_app_start_render_to_file(uapmd_app_model_t app, const uapmd_app_rende
     s.enableSilenceStop = settings->enable_silence_stop;
     s.silenceDurationSeconds = settings->silence_duration_seconds;
     s.silenceThresholdDb = settings->silence_threshold_db;
-    if (const auto* h = settings->output_handle)
-        s.outputHandle = uapmd::DocumentHandle{
-            h->id ? h->id : "", h->display_name ? h->display_name : "", h->mime_type ? h->mime_type : ""};
+    if (settings->output_handle)
+        s.outputHandle = to_cpp_handle(settings->output_handle);
     return AM(app)->startRenderToFile(s);
 }
 

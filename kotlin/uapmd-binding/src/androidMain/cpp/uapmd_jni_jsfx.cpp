@@ -143,6 +143,22 @@ void read_trampoline(uapmd_document_io_result_t result, const uint8_t* data, siz
     delete ctx;
 }
 
+/** cb: invoke(success: Boolean, error: String?, path: String) */
+void path_trampoline(uapmd_document_io_result_t result, const char* path, void* ud) {
+    auto* ctx = static_cast<Ctx*>(ud);
+    if (!ctx) return;
+    JNIEnv* e = uapmd_jni_env();
+    if (e && ctx->mid) {
+        auto error = jstr_or_null(e, result.error);
+        auto p = jstr(e, path);
+        e->CallVoidMethod(ctx->obj, ctx->mid, static_cast<jboolean>(result.success), error, p);
+        if (e->ExceptionCheck()) e->ExceptionClear();
+        if (error) e->DeleteLocalRef(error);
+        e->DeleteLocalRef(p);
+    }
+    delete ctx;
+}
+
 /** cb: invoke(success: Boolean, error: String?) */
 void write_trampoline(uapmd_document_io_result_t result, void* ud) {
     auto* ctx = static_cast<Ctx*>(ud);
@@ -211,6 +227,7 @@ void folder_sync_trampoline(uint32_t written, const char* error, void* ud) {
 constexpr const char* kPickSig = "(Z[Ljava/lang/String;Ljava/lang/String;)V";
 constexpr const char* kReadSig = "(ZLjava/lang/String;[B)V";
 constexpr const char* kWriteSig = "(ZLjava/lang/String;)V";
+constexpr const char* kPathSig = "(ZLjava/lang/String;Ljava/lang/String;)V";
 constexpr const char* kFolderSig =
         "(ZLjava/lang/String;[Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;)V";
 constexpr const char* kErrorSig = "(Ljava/lang/String;)V";
@@ -334,6 +351,14 @@ JNI_FN(void, uapmdAppSaveProjectToDocument)(JNIEnv* env, jclass, jlong app,
     HandleArg handle(env, id, displayName, mimeType);
     auto h = handle.get();
     uapmd_app_save_project_to_document(AM(app), &h, ctx, write_trampoline);
+}
+
+JNI_FN(void, uapmdDocumentProviderResolveToPath)(JNIEnv* env, jclass, jlong provider,
+                                                 jstring id, jstring displayName, jstring mimeType, jobject cb) {
+    auto* ctx = make_ctx(env, cb, kPathSig);
+    if (!ctx) return;
+    HandleArg handle(env, id, displayName, mimeType);
+    uapmd_document_provider_resolve_to_path(DP(provider), handle.get(), ctx, path_trampoline);
 }
 
 JNI_FN(void, uapmdDocumentProviderPickFolder)(JNIEnv* env, jclass, jlong provider, jobject cb) {

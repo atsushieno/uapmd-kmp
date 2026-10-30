@@ -29,8 +29,8 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import dev.atsushieno.uapmd.cmp.UapmdHost
 import dev.atsushieno.uapmd.cmp.defaultStemOutputDirectory
-import dev.atsushieno.uapmd.cmp.pickAudioFileToOpen
-import dev.atsushieno.uapmd.cmp.pickStemModelFileToOpen
+import dev.atsushieno.uapmd.cmp.DocumentFilters
+import dev.atsushieno.uapmd.cmp.pickFileToRead
 import kotlinx.coroutines.launch
 
 /**
@@ -100,7 +100,7 @@ fun AudioImportWindow(host: UapmdHost, onClose: () -> Unit) {
                 modifier = Modifier.weight(1f)
             )
             TextButton(
-                onClick = { scope.launch { pickAudioFileToOpen()?.let { audioPath = it } } },
+                onClick = { scope.launch { host.pickFileToRead(DocumentFilters.splitAudioSource)?.let { audioPath = it } } },
                 enabled = !status.running
             ) { Text("Browse…") }
         }
@@ -118,7 +118,9 @@ fun AudioImportWindow(host: UapmdHost, onClose: () -> Unit) {
                 TextButton(
                     onClick = {
                         scope.launch {
-                            pickStemModelFileToOpen(separator.modelFileExtensions)?.let { modelPath = it }
+                            host.pickFileToRead(
+                                DocumentFilters.stemModel(separator.modelFileLabel, separator.modelFileExtensions)
+                            )?.let { modelPath = it }
                         }
                     },
                     enabled = !status.running

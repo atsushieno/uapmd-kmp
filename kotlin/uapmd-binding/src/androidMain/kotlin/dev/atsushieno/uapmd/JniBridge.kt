@@ -16,10 +16,6 @@ object JniBridge {
     @JvmStatic external fun uapmdDocumentProviderCreate(): Long
     @JvmStatic external fun uapmdDocumentProviderDestroy(h: Long)
     @JvmStatic external fun uapmdDocumentProviderTick(h: Long)
-    /** cb: (success: Boolean, path: String?, error: String?) -> Unit */
-    @JvmStatic external fun uapmdDocumentProviderPickOpenPath(h: Long, kind: Int, cb: Any)
-    /** cb.onResult(success: Boolean, path: String?, error: String?) */
-    @JvmStatic external fun uapmdDocumentProviderPickSavePath(h: Long, kind: Int, defaultName: String, cb: Any)
     @JvmStatic external fun uapmdPrepareProjectLoad(filePath: String): Long
     @JvmStatic external fun uapmdPreparedProjectSuccess(h: Long): Boolean
     @JvmStatic external fun uapmdPreparedProjectPath(h: Long): String
@@ -886,6 +882,10 @@ object JniBridge {
     @JvmStatic external fun uapmdAppSaveProject(app: Long, filePath: String, cb: Any)
     /** cb: invoke(success: Boolean, error: String?) */
     @JvmStatic external fun uapmdAppSaveProjectToDocument(app: Long, id: String, displayName: String, mimeType: String, cb: Any)
+    /** cb: invoke(success: Boolean, error: String?) */
+    @JvmStatic external fun uapmdAppLoadProjectFromResolvedPath(app: Long, filePath: String, cb: Any)
+    /** cb: invoke(success: Boolean, error: String?) */
+    @JvmStatic external fun uapmdAppLoadProjectFromDocument(app: Long, id: String, displayName: String, mimeType: String, cb: Any)
     @JvmStatic external fun uapmdAppLoadProjectFromHandleToken(app: Long, token: String): Array<Any>?
     @JvmStatic external fun uapmdAppNewProject(app: Long): Array<Any>?
     @JvmStatic external fun uapmdAppMasterTempoMap(app: Long): Long
@@ -982,6 +982,9 @@ object JniBridge {
     @JvmStatic external fun uapmdAppUpdateDeviceLabel(app: Long, instanceId: Int, label: String)
     @JvmStatic external fun uapmdAppLoadPluginState(app: Long, instanceId: Int, filepath: String, cb: Any)
     @JvmStatic external fun uapmdAppSavePluginState(app: Long, instanceId: Int, filepath: String, cb: Any)
+    /** cb: invoke(instanceId: Int, success: Boolean, error: String?, filepath: String?) */
+    @JvmStatic external fun uapmdAppLoadPluginStateFromDocument(app: Long, instanceId: Int, id: String, displayName: String, mimeType: String, cb: Any)
+    @JvmStatic external fun uapmdAppSavePluginStateToDocument(app: Long, instanceId: Int, id: String, displayName: String, mimeType: String, cb: Any)
     @JvmStatic external fun uapmdAppLoadPluginStateSync(app: Long, instanceId: Int, filepath: String, outStrings: Array<String?>): IntArray
     @JvmStatic external fun uapmdAppSavePluginStateSync(app: Long, instanceId: Int, filepath: String, outStrings: Array<String?>): IntArray
     @JvmStatic external fun uapmdAppMarkPluginInstanceTrackDirty(app: Long, instanceId: Int)
@@ -1105,6 +1108,8 @@ object JniBridge {
         provider: Long, defaultName: String, labels: Array<String>, mimeTypes: Array<Array<String>>,
         extensions: Array<Array<String>>, cb: Any
     )
+    /** cb: invoke(success: Boolean, error: String?, path: String) */
+    @JvmStatic external fun uapmdDocumentProviderResolveToPath(provider: Long, id: String, displayName: String, mimeType: String, cb: Any)
     /** cb: invoke(success: Boolean, error: String?, data: ByteArray) */
     @JvmStatic external fun uapmdDocumentProviderRead(provider: Long, id: String, displayName: String, mimeType: String, cb: Any)
     /** cb: invoke(success, path, documents: Array<String?>, token, displayName, error: String?) */

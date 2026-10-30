@@ -277,6 +277,15 @@ class WasmJsAppModel internal constructor(internal val handle: Int) : AppModel {
         withWasmDocumentHandle(handle) { h -> wasmMod.uapmdAppSaveProjectToDocument(this.handle, h, 0, cbPtr) }
     }
 
+    override fun loadProjectFromResolvedPath(filePath: String, callback: (AppProjectResult) -> Unit) {
+        withCStringKt(filePath) { p -> wasmMod.uapmdAppLoadProjectFromResolvedPath(handle, p, 0, appProjectSavePtr(callback)) }
+    }
+
+    override fun loadProjectFromDocument(handle: DocumentHandle, callback: (AppProjectResult) -> Unit) {
+        val cbPtr = appProjectSavePtr(callback)
+        withWasmDocumentHandle(handle) { h -> wasmMod.uapmdAppLoadProjectFromDocument(this.handle, h, 0, cbPtr) }
+    }
+
     override fun loadProjectFromHandleToken(token: String): AppProjectResult =
         projectCall(token) { out, app, t -> wasmMod.uapmdAppLoadProjectFromHandleToken(out, app, t) }
 
@@ -474,6 +483,20 @@ class WasmJsAppModel internal constructor(internal val handle: Int) : AppModel {
         withCStringKt(filepath) { p ->
             wasmMod.uapmdAppSavePluginState(handle, instanceId, p, 0, pluginStatePtr(callback))
         }
+
+    override fun loadPluginState(instanceId: Int, handle: DocumentHandle, callback: (PluginStateResult) -> Unit) {
+        val cbPtr = pluginStatePtr(callback)
+        withWasmDocumentHandle(handle) { h ->
+            wasmMod.uapmdAppLoadPluginStateFromDocument(this.handle, instanceId, h, 0, cbPtr)
+        }
+    }
+
+    override fun savePluginState(instanceId: Int, handle: DocumentHandle, callback: (PluginStateResult) -> Unit) {
+        val cbPtr = pluginStatePtr(callback)
+        withWasmDocumentHandle(handle) { h ->
+            wasmMod.uapmdAppSavePluginStateToDocument(this.handle, instanceId, h, 0, cbPtr)
+        }
+    }
 
     override fun loadPluginStateSync(instanceId: Int, filepath: String): PluginStateResult =
         withWasmStruct(PluginStateResultSize) { out ->

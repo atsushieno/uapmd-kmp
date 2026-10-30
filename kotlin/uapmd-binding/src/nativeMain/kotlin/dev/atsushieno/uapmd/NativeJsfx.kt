@@ -37,6 +37,24 @@ private val documentReadTrampoline =
         }
     }
 
+private val documentPathTrampoline =
+    staticCFunction<CValue<uapmd_document_io_result_t>, CPointer<ByteVar>?, COpaquePointer?, Unit> {
+        result, path, userData ->
+        if (userData != null) {
+            val ref = userData.asStableRef<(DocumentIOResult, String) -> Unit>()
+            val r = result.useContents { DocumentIOResult(success, error?.toKString()) }
+            ref.get()(r, path?.toKString() ?: "")
+            ref.dispose()
+        }
+    }
+
+/** A uapmd_document_handle_t of this handle, alive for the scope. */
+internal fun MemScope.allocDocumentHandle(handle: DocumentHandle) = alloc<uapmd_document_handle_t>().also {
+    it.id = handle.id.cstr.ptr
+    it.display_name = handle.displayName.cstr.ptr
+    it.mime_type = handle.mimeType.cstr.ptr
+}
+
 internal val documentWriteTrampoline =
     staticCFunction<CValue<uapmd_document_io_result_t>, COpaquePointer?, Unit> { result, userData ->
         if (userData != null) {
@@ -127,6 +145,11 @@ class NativeDocumentProvider internal constructor(internal val handle: uapmd_doc
         }
         uapmd_document_provider_read(this@NativeDocumentProvider.handle, h,
             StableRef.create(callback).asCPointer(), documentReadTrampoline)
+    }
+
+    override fun resolveToPath(handle: DocumentHandle, callback: (DocumentIOResult, String) -> Unit) = memScoped {
+        uapmd_document_provider_resolve_to_path(this@NativeDocumentProvider.handle, allocDocumentHandle(handle).readValue(),
+            StableRef.create(callback).asCPointer(), documentPathTrampoline)
     }
 
     override fun pickFolder(callback: (FolderPickResult) -> Unit) =

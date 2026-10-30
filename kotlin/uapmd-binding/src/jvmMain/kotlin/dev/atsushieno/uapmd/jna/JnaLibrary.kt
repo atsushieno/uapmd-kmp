@@ -1154,7 +1154,7 @@ interface UapmdLibrary : Library {
     )
     fun uapmd_document_provider_resolve_to_path(
         provider: Pointer?,
-        handle: UapmdDocumentHandle,
+        handle: UapmdDocumentHandle.ByValue,
         userData: Pointer?,
         callback: DocumentPathCb?
     )
@@ -2039,6 +2039,8 @@ interface UapmdLibrary : Library {
     fun uapmd_app_save_project_sync(app: Pointer?, filePath: String?): UapmdAppProjectResult.ByVal
     fun uapmd_app_save_project(app: Pointer?, filePath: String?, userData: Pointer?, callback: ProjectSaveCb?)
     fun uapmd_app_save_project_to_document(app: Pointer?, handle: UapmdDocumentHandle?, userData: Pointer?, callback: DocumentWriteCb?)
+    fun uapmd_app_load_project_from_resolved_path(app: Pointer?, filePath: String?, userData: Pointer?, callback: ProjectSaveCb?)
+    fun uapmd_app_load_project_from_document(app: Pointer?, handle: UapmdDocumentHandle?, userData: Pointer?, callback: ProjectSaveCb?)
     fun uapmd_app_load_project_from_handle_token(app: Pointer?, token: String?): UapmdAppProjectResult.ByVal
     fun uapmd_app_new_project(app: Pointer?): UapmdAppProjectResult.ByVal
 
@@ -2123,6 +2125,8 @@ interface UapmdLibrary : Library {
     fun uapmd_app_mark_plugin_instance_track_dirty(app: Pointer?, instanceId: Int)
     fun uapmd_app_load_plugin_state(app: Pointer?, instanceId: Int, filepath: String?, userData: Pointer?, callback: PluginStateCb?)
     fun uapmd_app_save_plugin_state(app: Pointer?, instanceId: Int, filepath: String?, userData: Pointer?, callback: PluginStateCb?)
+    fun uapmd_app_load_plugin_state_from_document(app: Pointer?, instanceId: Int, handle: UapmdDocumentHandle?, userData: Pointer?, callback: PluginStateCb?)
+    fun uapmd_app_save_plugin_state_to_document(app: Pointer?, instanceId: Int, handle: UapmdDocumentHandle?, userData: Pointer?, callback: PluginStateCb?)
     fun uapmd_app_master_tempo_map(app: Pointer?): Pointer?
 
     fun uapmd_app_get_midi_clip_ump_events(app: Pointer?, trackIndex: Int, clipId: Int): UapmdUmpEventsResult.ByVal

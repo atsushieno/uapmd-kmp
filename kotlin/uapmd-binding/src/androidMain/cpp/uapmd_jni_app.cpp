@@ -54,6 +54,13 @@ struct JStr {
     const char* c_str() const { return chars ? chars : ""; }
 };
 
+/** {id, displayName, mimeType}; the strings are owned by the JStrs. */
+struct JHandle {
+    JStr id, name, mime;
+    JHandle(JNIEnv* env, jstring i, jstring n, jstring m) : id(env, i), name(env, n), mime(env, m) {}
+    uapmd_document_handle_t get() const { return {id.c_str(), name.c_str(), mime.c_str()}; }
+};
+
 inline uapmd_app_model_t AM(jlong h) { return j2p<uapmd_app_model_t>(h); }
 inline uapmd_transport_controller_t TC(jlong h) { return j2p<uapmd_transport_controller_t>(h); }
 
@@ -597,6 +604,20 @@ JNI_FN(void, uapmdAppSaveProject)(JNIEnv* env, jclass, jlong app, jstring path, 
     if (path) env->ReleaseStringUTFChars(path, p);
 }
 
+JNI_FN(void, uapmdAppLoadProjectFromResolvedPath)(JNIEnv* env, jclass, jlong app, jstring path, jobject cb) {
+    JStr p(env, path);
+    uapmd_app_load_project_from_resolved_path(AM(app), p.c_str(),
+        new AppCtx(env, cb, "(ZLjava/lang/String;)V"), app_project_save_trampoline);
+}
+
+JNI_FN(void, uapmdAppLoadProjectFromDocument)(JNIEnv* env, jclass, jlong app,
+                                              jstring id, jstring displayName, jstring mimeType, jobject cb) {
+    JHandle h(env, id, displayName, mimeType);
+    auto handle = h.get();
+    uapmd_app_load_project_from_document(AM(app), &handle,
+        new AppCtx(env, cb, "(ZLjava/lang/String;)V"), app_project_save_trampoline);
+}
+
 JNI_FN(jobjectArray, uapmdAppLoadProjectFromHandleToken)(JNIEnv* env, jclass, jlong app, jstring token) {
     const char* t = token ? env->GetStringUTFChars(token, nullptr) : nullptr;
     auto r = uapmd_app_load_project_from_handle_token(AM(app), t);
@@ -1104,6 +1125,22 @@ JNI_FN(void, uapmdAppSavePluginState)(JNIEnv* env, jclass, jlong app, jint insta
     uapmd_app_save_plugin_state(AM(app), instanceId, f.c_str(),
                                 new AppCtx(env, cb, "(IZLjava/lang/String;Ljava/lang/String;)V"),
                                 app_plugin_state_trampoline);
+}
+
+JNI_FN(void, uapmdAppLoadPluginStateFromDocument)(JNIEnv* env, jclass, jlong app, jint instanceId,
+                                                  jstring id, jstring displayName, jstring mimeType, jobject cb) {
+    JHandle h(env, id, displayName, mimeType);
+    auto handle = h.get();
+    uapmd_app_load_plugin_state_from_document(AM(app), instanceId, &handle,
+        new AppCtx(env, cb, "(IZLjava/lang/String;Ljava/lang/String;)V"), app_plugin_state_trampoline);
+}
+
+JNI_FN(void, uapmdAppSavePluginStateToDocument)(JNIEnv* env, jclass, jlong app, jint instanceId,
+                                                jstring id, jstring displayName, jstring mimeType, jobject cb) {
+    JHandle h(env, id, displayName, mimeType);
+    auto handle = h.get();
+    uapmd_app_save_plugin_state_to_document(AM(app), instanceId, &handle,
+        new AppCtx(env, cb, "(IZLjava/lang/String;Ljava/lang/String;)V"), app_plugin_state_trampoline);
 }
 
 JNI_FN(jintArray, uapmdAppLoadPluginStateSync)(JNIEnv* env, jclass, jlong app, jint instanceId,

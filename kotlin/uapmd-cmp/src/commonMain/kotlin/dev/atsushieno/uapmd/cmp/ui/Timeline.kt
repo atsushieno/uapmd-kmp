@@ -89,8 +89,8 @@ import dev.atsushieno.uapmd.cmp.assignClipLanes
 import dev.atsushieno.uapmd.ClipCommandTarget
 import dev.atsushieno.uapmd.TimelineClipTarget
 import dev.atsushieno.uapmd.cmp.UapmdHost
-import dev.atsushieno.uapmd.cmp.pickAudioFileToOpen
-import dev.atsushieno.uapmd.cmp.pickMidiFileToOpen
+import dev.atsushieno.uapmd.cmp.DocumentFilters
+import dev.atsushieno.uapmd.cmp.pickFileToRead
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -1418,13 +1418,13 @@ private fun ClipContextMenu(
             DropdownMenuItem(text = { Text("Create Audio Clip From File Here…") }, onClick = {
                 onDismiss()
                 scope.launch {
-                    pickAudioFileToOpen()?.let { host.importAudioClip(trackIndex, it, addAtSeconds) }
+                    host.pickFileToRead(DocumentFilters.audioClip)?.let { host.importAudioClip(trackIndex, it, addAtSeconds) }
                 }
             })
             DropdownMenuItem(text = { Text("Import SMF Here…") }, onClick = {
                 onDismiss()
                 scope.launch {
-                    pickMidiFileToOpen()?.let { host.importMidiClip(trackIndex, it, addAtSeconds) }
+                    host.pickFileToRead(DocumentFilters.midiClip)?.let { host.importMidiClip(trackIndex, it, addAtSeconds) }
                 }
             })
         }
@@ -1461,18 +1461,18 @@ private fun LaneAddMenu(
             })
             DropdownMenuItem(text = { Text("Create Audio Clip From File…") }, onClick = {
                 onDismiss()
-                scope.launch { pickAudioFileToOpen()?.let { host.importAudioClip(trackIndex, it, seconds) } }
+                scope.launch { host.pickFileToRead(DocumentFilters.audioClip)?.let { host.importAudioClip(trackIndex, it, seconds) } }
             })
         }
         HorizontalDivider()
         DropdownMenuItem(text = { Text("Add a MIDI Clip from File…") }, onClick = {
             onDismiss()
-            scope.launch { pickMidiFileToOpen()?.let { host.importMidiClip(trackIndex, it, seconds) } }
+            scope.launch { host.pickFileToRead(DocumentFilters.midiClip)?.let { host.importMidiClip(trackIndex, it, seconds) } }
         })
         if (!isMaster) {
             DropdownMenuItem(text = { Text("Add MIDI2 Clip from File…") }, onClick = {
                 onDismiss()
-                scope.launch { pickMidiFileToOpen()?.let { host.importMidiClip(trackIndex, it, seconds) } }
+                scope.launch { host.pickFileToRead(DocumentFilters.midiClip)?.let { host.importMidiClip(trackIndex, it, seconds) } }
             })
             HorizontalDivider()
             DropdownMenuItem(text = { Text("Clear All") }, onClick = {
@@ -1811,13 +1811,13 @@ private fun TrackLegend(
                     })
                     DropdownMenuItem(text = { Text("Add a MIDI Clip from File…") }, onClick = {
                         clipsMenu = false
-                        scope.launch { pickMidiFileToOpen()?.let { host.importMidiClip(trackIndex, it) } }
+                        scope.launch { host.pickFileToRead(DocumentFilters.midiClip)?.let { host.importMidiClip(trackIndex, it) } }
                     })
                     DropdownMenuItem(text = { Text("Add MIDI2 Clip from File…") }, onClick = {
                         clipsMenu = false
                         // .midi2 goes through the same importer; the engine
                         // picks the reader from the file itself.
-                        scope.launch { pickMidiFileToOpen()?.let { host.importMidiClip(trackIndex, it) } }
+                        scope.launch { host.pickFileToRead(DocumentFilters.midiClip)?.let { host.importMidiClip(trackIndex, it) } }
                     })
                     DropdownMenuItem(text = { Text("Add Empty Audio Clip") }, onClick = {
                         clipsMenu = false
@@ -1827,7 +1827,7 @@ private fun TrackLegend(
                     })
                     DropdownMenuItem(text = { Text("Create Audio Clip From File…") }, onClick = {
                         clipsMenu = false
-                        scope.launch { pickAudioFileToOpen()?.let { host.importAudioClip(trackIndex, it) } }
+                        scope.launch { host.pickFileToRead(DocumentFilters.audioClip)?.let { host.importAudioClip(trackIndex, it) } }
                     })
                     HorizontalDivider()
                     DropdownMenuItem(text = { Text("Clear All") }, onClick = {

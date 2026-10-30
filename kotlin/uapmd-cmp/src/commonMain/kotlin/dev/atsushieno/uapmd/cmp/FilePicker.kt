@@ -1,47 +1,9 @@
 package dev.atsushieno.uapmd.cmp
 
-import dev.atsushieno.uapmd.DocumentHandle
-
-/**
- * Minimal platform file chooser. Only what the Project menu needs for now;
- * import/export grow their own filters later.
- *
- * Returns null when the user cancels, or when the platform has no picker yet.
+/*
+ * Platform pieces that are not document picking; that goes through AppModel's
+ * document provider on every platform (DocumentPicking.kt).
  */
-expect suspend fun pickProjectFileToOpen(): String?
-
-/**
- * A destination to write to. [defaultName] seeds the name the platform offers,
- * which on the web is the only say the user gets: a browser cannot choose a
- * directory, it can only download a named file.
- */
-expect suspend fun pickProjectFileToSave(defaultName: String): String?
-
-/**
- * Where Render To File writes. Where the picked document has no writable path
- * (Android's SAF), [handle] carries it: the render job then writes through
- * AppModel's document provider, as uapmd-app's Render To File always does, and
- * [path] only names the file.
- */
-data class RenderDestination(val path: String, val handle: DocumentHandle? = null)
-
-expect suspend fun pickRenderDestination(host: UapmdHost, defaultName: String): RenderDestination?
-/**
- * Separate MIDI and audio choosers, as uapmd-app has them: `addSmfClipToTrack`
- * offers "SMF Files" (`*.mid`, `*.midi`, `*.smf`) and the audio paths offer
- * "Audio Files" (`*.wav`, `*.flac`, `*.ogg`). One combined "media" chooser stood
- * in for both, which left Android's MIDI imports filtering on audio extensions
- * only — an SMF could not be selected at all.
- */
-expect suspend fun pickMidiFileToOpen(): String?
-expect suspend fun pickAudioFileToOpen(): String?
-
-/**
- * The model file a stem separator asked for. [extensions] are the patterns it
- * reported (`*.bin` for Demucs, `*.gguf` for BS-Roformer), so the chooser
- * filters on what that backend can actually load rather than on a fixed list.
- */
-expect suspend fun pickStemModelFileToOpen(extensions: List<String>): String?
 
 /**
  * Where a split audio import writes its stems.
@@ -52,30 +14,6 @@ expect suspend fun pickStemModelFileToOpen(extensions: List<String>): String?
  * real filesystem, and into the app's own writable area where there is not.
  */
 expect fun defaultStemOutputDirectory(audioFilePath: String): String
-
-/**
- * Hands a file the app has just written to the user.
- *
- * On every platform with a real filesystem the picker already chose where the file
- * goes, so this does nothing. The browser has no such destination: a save writes
- * into the in-memory filesystem first and only reaches the user as a download, so
- * the web build needs telling once the bytes are actually there. Call it after any
- * successful write to a path that came from [pickProjectFileToSave].
- */
-expect fun deliverSavedFile(path: String)
-
-/**
- * Saves the current project wherever the platform puts files, and reports an error
- * message or null (saved, or the user cancelled).
- *
- * This is a whole operation rather than "pick a path, then write to it" because a
- * saved project is a *directory* — the `.uapmd` document plus its graphs and
- * extensions — and only some platforms can be handed a directory to write into.
- * uapmd-app packs the tree into a `.uapmdz` and writes it through the document
- * provider (`MainWindow::handleSaveProject`), which is the only route that works in
- * a browser, where the file reaches the user as a download.
- */
-expect suspend fun saveProjectToPlatform(host: UapmdHost, defaultName: String): String?
 
 /**
  * Optional file to import at startup, for development and screenshots.
@@ -130,13 +68,6 @@ expect fun startupSaveProjectPath(): String?
  * main thread and this is the only way to see what it is blocked in without root.
  */
 expect fun dumpThreadStacks(): String
-
-/**
- * Drives any pending file-picker work. uapmd's Android document provider
- * completes a pick when it is ticked, so the UI poll loop calls this every
- * frame; the other platforms resolve their pickers directly and do nothing.
- */
-expect fun tickPlatformFilePicker()
 
 /**
  * Back-to-quit handling, where the platform has a back gesture at all.

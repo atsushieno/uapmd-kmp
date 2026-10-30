@@ -21,6 +21,11 @@ private class DocumentReadCallback(private val callback: (DocumentIOResult, Byte
         callback(DocumentIOResult(success, error), data)
 }
 
+private class DocumentPathCallback(private val callback: (DocumentIOResult, String) -> Unit) {
+    @Suppress("unused")
+    fun invoke(success: Boolean, error: String?, path: String) = callback(DocumentIOResult(success, error), path)
+}
+
 private class FolderPickCallback(private val callback: (FolderPickResult) -> Unit) {
     @Suppress("unused")
     fun invoke(success: Boolean, path: String, documents: Array<String?>, token: String, displayName: String, error: String?) =
@@ -64,6 +69,10 @@ class AndroidDocumentProvider internal constructor(internal val handle: Long) : 
     override fun readDocument(handle: DocumentHandle, callback: (DocumentIOResult, ByteArray) -> Unit) =
         JniBridge.uapmdDocumentProviderRead(this.handle, handle.id, handle.displayName, handle.mimeType,
             DocumentReadCallback(callback))
+
+    override fun resolveToPath(handle: DocumentHandle, callback: (DocumentIOResult, String) -> Unit) =
+        JniBridge.uapmdDocumentProviderResolveToPath(this.handle, handle.id, handle.displayName, handle.mimeType,
+            DocumentPathCallback(callback))
 
     override fun pickFolder(callback: (FolderPickResult) -> Unit) =
         JniBridge.uapmdDocumentProviderPickFolder(handle, FolderPickCallback(callback))

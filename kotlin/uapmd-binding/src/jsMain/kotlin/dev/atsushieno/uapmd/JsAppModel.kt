@@ -322,6 +322,17 @@ class JsAppModel internal constructor(internal val handle: Int) : AppModel {
         withJsDocumentHandle(handle) { h -> jsMod._uapmd_app_save_project_to_document(this.handle, h, 0, slot) }
     }
 
+    override fun loadProjectFromResolvedPath(filePath: String, callback: (AppProjectResult) -> Unit) {
+        withJsCString(filePath) { p ->
+            jsMod._uapmd_app_load_project_from_resolved_path(handle, p, 0, makeJsProjectSave(callback))
+        }
+    }
+
+    override fun loadProjectFromDocument(handle: DocumentHandle, callback: (AppProjectResult) -> Unit) {
+        val slot = makeJsProjectSave(callback)
+        withJsDocumentHandle(handle) { h -> jsMod._uapmd_app_load_project_from_document(this.handle, h, 0, slot) }
+    }
+
     override fun loadProjectFromHandleToken(token: String): AppProjectResult =
         projectCall(token) { out, t -> jsMod._uapmd_app_load_project_from_handle_token(out, handle, t) }
 
@@ -533,6 +544,20 @@ class JsAppModel internal constructor(internal val handle: Int) : AppModel {
     override fun savePluginState(instanceId: Int, filepath: String, callback: (PluginStateResult) -> Unit) {
         withJsCString(filepath) { p ->
             jsMod._uapmd_app_save_plugin_state(handle, instanceId, p, 0, makeJsPluginState(callback))
+        }
+    }
+
+    override fun loadPluginState(instanceId: Int, handle: DocumentHandle, callback: (PluginStateResult) -> Unit) {
+        val slot = makeJsPluginState(callback)
+        withJsDocumentHandle(handle) { h ->
+            jsMod._uapmd_app_load_plugin_state_from_document(this.handle, instanceId, h, 0, slot)
+        }
+    }
+
+    override fun savePluginState(instanceId: Int, handle: DocumentHandle, callback: (PluginStateResult) -> Unit) {
+        val slot = makeJsPluginState(callback)
+        withJsDocumentHandle(handle) { h ->
+            jsMod._uapmd_app_save_plugin_state_to_document(this.handle, instanceId, h, 0, slot)
         }
     }
 

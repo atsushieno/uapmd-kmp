@@ -61,6 +61,7 @@ private val pendingDocumentPickResults = mutableMapOf<Int, (DocumentPickResult) 
 private val pendingDocumentReads = mutableMapOf<Int, (DocumentIOResult, ByteArray) -> Unit>()
 private val pendingFolderPicks = mutableMapOf<Int, (FolderPickResult) -> Unit>()
 private val pendingDocumentIOResults = mutableMapOf<Int, (DocumentIOResult) -> Unit>()
+private val pendingDocumentPaths = mutableMapOf<Int, (DocumentIOResult, String) -> Unit>()
 private val pendingJsfxFolderSyncs = mutableMapOf<Int, (UInt, String?) -> Unit>()
 
 /** The C callback takes uapmd_document_pick_result_t by value, i.e. as a pointer. */
@@ -87,6 +88,12 @@ fun uapmdDispatchDocumentRead(cbId: Int, resultPtr: Int, dataPtr: Int, size: Int
 @JsExport
 fun uapmdDispatchDocumentIOResult(cbId: Int, resultPtr: Int) {
     pendingDocumentIOResults.remove(cbId)?.invoke(DocumentIOResult(wasmGetBool(resultPtr), wasmStrOrNull(resultPtr + 4)))
+}
+
+@JsExport
+fun uapmdDispatchDocumentPath(cbId: Int, resultPtr: Int, pathPtr: Int) {
+    pendingDocumentPaths.remove(cbId)?.invoke(
+        DocumentIOResult(wasmGetBool(resultPtr), wasmStrOrNull(resultPtr + 4)), cStr(pathPtr))
 }
 
 internal fun documentWritePtr(callback: (DocumentIOResult) -> Unit): Int {
@@ -219,6 +226,14 @@ class WasmJsDocumentProvider internal constructor(internal val handle: Int) : Do
         val cbPtr = makeCFunctionPtr(cbId, "uapmdDispatchDocumentRead", "viiii")
         // The handle crosses by value, i.e. as a pointer.
         withWasmDocumentHandle(handle) { p -> wasmMod.uapmdDocumentProviderRead(this.handle, p, 0, cbPtr) }
+    }
+
+    override fun resolveToPath(handle: DocumentHandle, callback: (DocumentIOResult, String) -> Unit) {
+        val cbId = nextCallbackId()
+        pendingDocumentPaths[cbId] = callback
+        val cbPtr = makeCFunctionPtr(cbId, "uapmdDispatchDocumentPath", "viii")
+        // The handle crosses by value, i.e. as a pointer.
+        withWasmDocumentHandle(handle) { p -> wasmMod.uapmdDocumentProviderResolveToPath(this.handle, p, 0, cbPtr) }
     }
 
     override fun pickFolder(callback: (FolderPickResult) -> Unit) =

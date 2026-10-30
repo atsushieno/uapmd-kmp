@@ -36,9 +36,9 @@ import dev.atsushieno.uapmd.PresetMetadata
 import dev.atsushieno.uapmd.cmp.TrackInstance
 import androidx.compose.runtime.rememberCoroutineScope
 import dev.atsushieno.uapmd.cmp.UapmdHost
-import dev.atsushieno.uapmd.cmp.pickProjectFileToOpen
-import dev.atsushieno.uapmd.cmp.deliverSavedFile
-import dev.atsushieno.uapmd.cmp.pickProjectFileToSave
+import dev.atsushieno.uapmd.cmp.DocumentFilters
+import dev.atsushieno.uapmd.cmp.pickDocumentToOpen
+import dev.atsushieno.uapmd.cmp.pickDocumentToSave
 import dev.atsushieno.uapmd.PluginNode
 import dev.atsushieno.uapmd.SequencerEngine
 import kotlinx.coroutines.delay
@@ -139,16 +139,17 @@ fun InstanceDetails(host: UapmdHost, inst: TrackInstance) {
         Row(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalAlignment = Alignment.CenterVertically) {
             Button(onClick = {
                 scope.launch {
-                    pickProjectFileToSave("plugin-state.bin")?.let { path ->
-                        stateStatus = host.savePluginState(inst.instanceId, path)
-                        deliverSavedFile(path)
+                    // uapmd-app's default name: MainWindow::savePluginState.
+                    val defaultName = "${inst.displayName}.${inst.formatName}.state".replace(' ', '_')
+                    host.pickDocumentToSave(defaultName, DocumentFilters.pluginState)?.let { handle ->
+                        stateStatus = host.savePluginState(inst.instanceId, handle)
                     }
                 }
             }) { Text("Save State") }
             Button(onClick = {
                 scope.launch {
-                    pickProjectFileToOpen()?.let { path ->
-                        stateStatus = host.loadPluginState(inst.instanceId, path)
+                    host.pickDocumentToOpen(DocumentFilters.pluginState)?.let { handle ->
+                        stateStatus = host.loadPluginState(inst.instanceId, handle)
                         revision++
                     }
                 }

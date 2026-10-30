@@ -8,6 +8,13 @@ import dev.atsushieno.uapmd.jna.*
 
 private val documentHandleSize by lazy { UapmdDocumentHandle().size() }
 
+/** The C handle copies nothing: the strings only have to outlive the call. */
+internal fun DocumentHandle.toJna() = UapmdDocumentHandle().also {
+    it.id = id
+    it.display_name = displayName
+    it.mime_type = mimeType
+}
+
 private fun readDocumentHandles(handles: Pointer?, count: Int): List<DocumentHandle> {
     if (handles == null || count <= 0) return emptyList()
     return (0 until count).map { i ->
@@ -107,12 +114,25 @@ class JvmDocumentProvider internal constructor(internal val handle: Pointer) : D
             }
         }
         liveAppCallbacks.add(cb)
-        val h = UapmdDocumentHandle.ByValue().also {
-            it.id = handle.id
-            it.display_name = handle.displayName
-            it.mime_type = handle.mimeType
+        lib.uapmd_document_provider_read(this.handle, handle.toJnaByValue(), null, cb)
+    }
+
+    override fun resolveToPath(handle: DocumentHandle, callback: (DocumentIOResult, String) -> Unit) {
+        lateinit var cb: DocumentPathCb
+        cb = object : DocumentPathCb {
+            override fun invoke(result: UapmdDocumentIoResult.ByValue, path: String?, userData: Pointer?) {
+                liveAppCallbacks.remove(cb)
+                callback(DocumentIOResult(result.success != 0.toByte(), result.error), path ?: "")
+            }
         }
-        lib.uapmd_document_provider_read(this.handle, h, null, cb)
+        liveAppCallbacks.add(cb)
+        lib.uapmd_document_provider_resolve_to_path(this.handle, handle.toJnaByValue(), null, cb)
+    }
+
+    private fun DocumentHandle.toJnaByValue() = UapmdDocumentHandle.ByValue().also {
+        it.id = id
+        it.display_name = displayName
+        it.mime_type = mimeType
     }
 
     override fun pickFolder(callback: (FolderPickResult) -> Unit) =

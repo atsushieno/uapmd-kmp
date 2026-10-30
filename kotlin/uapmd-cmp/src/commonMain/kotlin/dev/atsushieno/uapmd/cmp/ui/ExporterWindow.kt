@@ -16,7 +16,6 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -24,8 +23,9 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import dev.atsushieno.uapmd.DocumentHandle
 import dev.atsushieno.uapmd.cmp.UapmdHost
-import dev.atsushieno.uapmd.cmp.deliverSavedFile
-import dev.atsushieno.uapmd.cmp.pickRenderDestination
+import dev.atsushieno.uapmd.cmp.DocumentFilters
+import dev.atsushieno.uapmd.cmp.label
+import dev.atsushieno.uapmd.cmp.pickDocumentToSave
 import kotlinx.coroutines.launch
 
 /**
@@ -43,7 +43,6 @@ fun ExporterWindow(host: UapmdHost) {
     var tailSeconds by remember { mutableStateOf("2") }
     var silenceStop by remember { mutableStateOf(false) }
     val scope = rememberCoroutineScope()
-    var deliverWhenDone by remember { mutableStateOf<String?>(null) }
 
     Column(Modifier.fillMaxWidth()) {
         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
@@ -53,9 +52,9 @@ fun ExporterWindow(host: UapmdHost) {
             )
             Button(onClick = {
                 scope.launch {
-                    pickRenderDestination(host, "render.wav")?.let {
-                        outputPath = it.path
-                        outputHandle = it.handle
+                    host.pickDocumentToSave("render.wav", DocumentFilters.renderOutput)?.let {
+                        outputPath = it.label
+                        outputHandle = it
                     }
                 }
             }) { Text("…") }
@@ -84,8 +83,6 @@ fun ExporterWindow(host: UapmdHost) {
         Row(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalAlignment = Alignment.CenterVertically) {
             Button(
                 onClick = {
-                    // A handle is written through the document provider by the job itself.
-                    deliverWhenDone = outputPath.takeIf { outputHandle == null }
                     host.startRender(
                         outputPath = outputPath,
                         startSeconds = startSeconds.toDoubleOrNull() ?: 0.0,
@@ -99,16 +96,6 @@ fun ExporterWindow(host: UapmdHost) {
             ) { Text(if (host.isRendering) "Rendering…" else "Render") }
 
             Button(onClick = { host.cancelRender() }, enabled = host.isRendering) { Text("Cancel") }
-        }
-
-        // A render finishes on its own schedule, so the file is delivered when the
-        // engine stops rendering rather than when the button was pressed.
-        val rendering = host.isRendering
-        LaunchedEffect(rendering) {
-            if (!rendering && deliverWhenDone != null) {
-                deliverSavedFile(deliverWhenDone!!)
-                deliverWhenDone = null
-            }
         }
 
         if (host.isRendering) {

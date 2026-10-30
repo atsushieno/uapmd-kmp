@@ -256,6 +256,15 @@ class AndroidAppModel internal constructor(internal val handle: Long) : AppModel
         JniBridge.uapmdAppSaveProjectToDocument(this.handle, handle.id, handle.displayName, handle.mimeType,
             AppProjectSaveCallback { success, error -> callback(DocumentIOResult(success, error)) })
 
+    override fun loadProjectFromResolvedPath(filePath: String, callback: (AppProjectResult) -> Unit) =
+        JniBridge.uapmdAppLoadProjectFromResolvedPath(handle, filePath, AppProjectSaveCallback { success, error ->
+            callback(AppProjectResult(success, error))
+        })
+
+    override fun loadProjectFromDocument(handle: DocumentHandle, callback: (AppProjectResult) -> Unit) =
+        JniBridge.uapmdAppLoadProjectFromDocument(this.handle, handle.id, handle.displayName, handle.mimeType,
+            AppProjectSaveCallback { success, error -> callback(AppProjectResult(success, error)) })
+
     override fun loadProjectFromHandleToken(token: String): AppProjectResult =
         JniBridge.uapmdAppLoadProjectFromHandleToken(handle, token).toProjectResult()
 
@@ -394,6 +403,18 @@ class AndroidAppModel internal constructor(internal val handle: Long) : AppModel
     override fun savePluginState(instanceId: Int, filepath: String, callback: (PluginStateResult) -> Unit) =
         JniBridge.uapmdAppSavePluginState(handle, instanceId, filepath,
             PluginStateCallback { id, ok, error, path ->
+                callback(PluginStateResult(id, ok, error ?: "", path ?: ""))
+            })
+
+    override fun loadPluginState(instanceId: Int, handle: DocumentHandle, callback: (PluginStateResult) -> Unit) =
+        JniBridge.uapmdAppLoadPluginStateFromDocument(this.handle, instanceId, handle.id, handle.displayName,
+            handle.mimeType, PluginStateCallback { id, ok, error, path ->
+                callback(PluginStateResult(id, ok, error ?: "", path ?: ""))
+            })
+
+    override fun savePluginState(instanceId: Int, handle: DocumentHandle, callback: (PluginStateResult) -> Unit) =
+        JniBridge.uapmdAppSavePluginStateToDocument(this.handle, instanceId, handle.id, handle.displayName,
+            handle.mimeType, PluginStateCallback { id, ok, error, path ->
                 callback(PluginStateResult(id, ok, error ?: "", path ?: ""))
             })
 

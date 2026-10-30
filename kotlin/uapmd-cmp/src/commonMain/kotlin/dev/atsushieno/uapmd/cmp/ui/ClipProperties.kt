@@ -117,7 +117,7 @@ fun ClipProperties(host: UapmdHost, trackIndex: Int, clipId: Int) {
                 )
                 Button(onClick = {
                     scope.launch {
-                        pickForClip(clip.clipType)?.let { report(host.setClipFilepath(trackIndex, clipId, it), "file") }
+                        host.pickForClip(clip.clipType)?.let { report(host.setClipFilepath(trackIndex, clipId, it), "file") }
                     }
                 }) { Text("Change file…") }
             }

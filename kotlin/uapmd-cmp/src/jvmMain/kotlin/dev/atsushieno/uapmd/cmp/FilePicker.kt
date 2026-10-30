@@ -1,56 +1,8 @@
 package dev.atsushieno.uapmd.cmp
 
-import java.awt.FileDialog
-import java.awt.Frame
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.withContext
-
-/** AWT FileDialog gives a native chooser on macOS and Windows without extra deps. */
-private suspend fun pick(mode: Int, name: String = "*.uapmd"): String? = withContext(Dispatchers.Main) {
-    val dialog = FileDialog(null as Frame?, "uapmd project", mode)
-    dialog.file = name
-    dialog.isVisible = true
-    val dir = dialog.directory
-    val file = dialog.file
-    if (dir == null || file == null) null else dir + file
-}
-
-actual suspend fun pickProjectFileToOpen(): String? = pick(FileDialog.LOAD)
-
-private suspend fun pickMedia(title: String, extensions: List<String>): String? =
-    withContext(Dispatchers.Main) {
-        val dialog = FileDialog(null as Frame?, title, FileDialog.LOAD)
-        // Honoured on Windows and most Linux desktops; the macOS peer ignores it,
-        // which is why the title says what is wanted too.
-        dialog.setFilenameFilter { _, name -> extensions.any { name.lowercase().endsWith(it) } }
-        dialog.isVisible = true
-        val dir = dialog.directory
-        val file = dialog.file
-        if (dir == null || file == null) null else dir + file
-    }
-
-actual suspend fun pickMidiFileToOpen(): String? =
-    pickMedia("SMF Files (.mid, .midi, .smf)", listOf(".mid", ".midi", ".smf", ".midi2"))
-
-actual suspend fun pickAudioFileToOpen(): String? =
-    pickMedia("Audio Files (.wav, .flac, .ogg)", listOf(".wav", ".flac", ".ogg", ".mp3", ".aiff"))
-actual suspend fun pickStemModelFileToOpen(extensions: List<String>): String? =
-    // The separator reports glob patterns ("*.bin"); the dialog filter wants
-    // plain suffixes.
-    pickMedia("Model File (${extensions.joinToString(", ")})", extensions.map { it.removePrefix("*") })
-
 /** Beside the source audio, which is where uapmd-app's default lands too. */
 actual fun defaultStemOutputDirectory(audioFilePath: String): String =
     java.io.File(audioFilePath).absoluteFile.parent ?: System.getProperty("java.io.tmpdir")
-
-actual suspend fun pickProjectFileToSave(defaultName: String): String? =
-    pick(FileDialog.SAVE, defaultName)
-
-actual suspend fun pickRenderDestination(host: UapmdHost, defaultName: String): RenderDestination? =
-    pickProjectFileToSave(defaultName)?.let { RenderDestination(it) }
-
-/** The dialog already chose a real destination. */
-actual fun deliverSavedFile(path: String) = Unit
 
 actual fun startupImportPath(): String? = System.getProperty("uapmd.cmp.importMidi")
 
@@ -60,8 +12,6 @@ actual fun startupAddTracks(): Int = System.getProperty("uapmd.cmp.addTracks")?.
 
 actual fun startupInstantiateCount(): Int =
     System.getProperty("uapmd.cmp.instantiateCount")?.toIntOrNull() ?: 1
-
-actual fun tickPlatformFilePicker() {}
 
 actual fun startupLoadProjectPath(): String? = System.getProperty("uapmd.cmp.loadProject")
 
@@ -97,10 +47,3 @@ actual fun startupSuppressPolling(): Boolean = System.getProperty("uapmd.cmp.noP
 actual fun startupRenderPath(): String? = System.getProperty("uapmd.cmp.renderTo")
 
 actual fun startupBufferSize(): Int = System.getProperty("uapmd.cmp.bufferSize")?.toIntOrNull() ?: 0
-
-/** A real filesystem: the picker chose the destination, so write straight to it. */
-actual suspend fun saveProjectToPlatform(host: UapmdHost, defaultName: String): String? {
-    val path = pickProjectFileToSave(defaultName) ?: return null
-    host.saveProject(path)
-    return host.lastProjectResult?.takeIf { !it.success }?.error
-}

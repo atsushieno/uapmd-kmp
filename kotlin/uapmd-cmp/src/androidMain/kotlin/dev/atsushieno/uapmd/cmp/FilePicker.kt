@@ -1,115 +1,13 @@
 package dev.atsushieno.uapmd.cmp
 
-import dev.atsushieno.uapmd.DocumentFilter
-import dev.atsushieno.uapmd.DocumentHandle
-import dev.atsushieno.uapmd.JniBridge
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.suspendCancellableCoroutine
-import kotlin.coroutines.resume
 
 /*
- * Android file picking goes through uapmd's own document provider, the route
- * composeApp proved: Storage Access Framework under the hood, but uapmd owns the
- * SAF handle and hands back a real path, so the engine can open it directly.
- *
- * Three things have to be in place, all wired from MainActivity:
- *  - uapmdDocumentProviderInit(activity) before any pick
- *  - onActivityResult forwarded, since the SAF result lands on the Activity
- *  - the provider ticked, which is how pending picks complete
+ * Document picking goes through AppModel's document provider (DocumentPicking.kt).
+ * On Android that provider is the Storage Access Framework, and MainActivity wires
+ * it up: uapmdDocumentProviderInit(activity) before any pick, and onActivityResult
+ * forwarded, since the SAF result lands on the Activity.
  */
-
-/** Mirrors the C `uapmd_document_filter` kinds the JNI layer switches on. */
-private const val KIND_PROJECT = 0
-private const val KIND_AUDIO = 1
-private const val KIND_MIDI = 2
-private const val KIND_ANY = 0
-
-private fun interface PickPathCallback {
-    fun onResult(success: Boolean, path: String?, error: String?)
-}
-
-internal object AndroidDocumentPicker {
-    /** Created lazily: the provider needs the Activity registered first. */
-    private val handle by lazy { JniBridge.uapmdDocumentProviderCreate() }
-
-    var initialized = false
-        private set
-
-    fun init() { initialized = true }
-
-    fun tick() {
-        if (initialized) JniBridge.uapmdDocumentProviderTick(handle)
-    }
-
-    suspend fun pickOpen(kind: Int): String? = suspendCancellableCoroutine { cont ->
-        if (!initialized) {
-            cont.resume(null)
-            return@suspendCancellableCoroutine
-        }
-        JniBridge.uapmdDocumentProviderPickOpenPath(
-            handle, kind,
-            PickPathCallback { success, path, _ ->
-                cont.resume(if (success && !path.isNullOrBlank()) path else null)
-            }
-        )
-    }
-
-    suspend fun pickSave(kind: Int, defaultName: String): String? =
-        suspendCancellableCoroutine { cont ->
-            if (!initialized) {
-                cont.resume(null)
-                return@suspendCancellableCoroutine
-            }
-            JniBridge.uapmdDocumentProviderPickSavePath(
-                handle, kind, defaultName,
-                PickPathCallback { success, path, _ ->
-                    cont.resume(if (success && !path.isNullOrBlank()) path else null)
-                }
-            )
-        }
-}
-
-actual suspend fun pickProjectFileToOpen(): String? = AndroidDocumentPicker.pickOpen(KIND_PROJECT)
-
-actual suspend fun pickProjectFileToSave(defaultName: String): String? =
-    AndroidDocumentPicker.pickSave(KIND_PROJECT, defaultName)
-
-/**
- * A SAF document to write to, picked the way uapmd-app picks one: through AppModel's
- * provider, keeping the handle. [AndroidDocumentPicker]'s save path cannot stand in
- * for it, being a cache copy that nothing writes back to the document.
- */
-private suspend fun pickSaveHandle(host: UapmdHost, defaultName: String, typeLabel: String, extension: String): DocumentHandle? {
-    val provider = host.documentProvider ?: return null
-    return suspendCancellableCoroutine { cont ->
-        provider.pickSaveDocument(
-            defaultName,
-            listOf(
-                DocumentFilter(typeLabel, emptyList(), listOf(extension)),
-                DocumentFilter("All Files", emptyList(), listOf("*"))
-            )
-        ) { result -> cont.resume(result.handles.firstOrNull()?.takeIf { result.success }) }
-    }
-}
-
-/** The render job writes through the handle, as uapmd-app's ExporterWindow has it do. */
-actual suspend fun pickRenderDestination(host: UapmdHost, defaultName: String): RenderDestination? =
-    pickSaveHandle(host, defaultName, "WAV", "*.wav")?.let { RenderDestination(it.displayName.ifEmpty { it.id }, it) }
-
-/** The Storage Access Framework already chose a real destination. */
-actual fun deliverSavedFile(path: String) = Unit
-
-actual suspend fun pickMidiFileToOpen(): String? = AndroidDocumentPicker.pickOpen(KIND_MIDI)
-
-actual suspend fun pickAudioFileToOpen(): String? = AndroidDocumentPicker.pickOpen(KIND_AUDIO)
-
-/**
- * SAF has no MIME type for a neural-network model file, so this opens the
- * generic chooser rather than filtering — the same thing the project picker
- * does for `.uapmdz`.
- */
-actual suspend fun pickStemModelFileToOpen(extensions: List<String>): String? =
-    AndroidDocumentPicker.pickOpen(KIND_ANY)
 
 /**
  * The app's own files directory. A SAF path is not a filesystem path the
@@ -147,8 +45,6 @@ actual fun startupInstantiateFormat(): String? = androidStartupInstantiateFormat
 actual fun startupAddTracks(): Int = androidStartupAddTracks
 
 actual fun startupInstantiateCount(): Int = androidStartupInstantiateCount
-
-actual fun tickPlatformFilePicker() = AndroidDocumentPicker.tick()
 
 actual fun startupLoadProjectPath(): String? = androidStartupLoadProject
 
@@ -213,10 +109,3 @@ actual fun startupRenderPath(): String? = androidStartupRenderPath
 
 actual fun startupBufferSize(): Int = androidStartupBufferSize
 
-/** As uapmd-app saves: a `.uapmdz` archive written through the picked SAF document. */
-actual suspend fun saveProjectToPlatform(host: UapmdHost, defaultName: String): String? {
-    val handle = pickSaveHandle(host, defaultName, "UAPMD Project Archive", "*.uapmdz") ?: return null
-    return suspendCancellableCoroutine { cont ->
-        host.saveProjectToDocument(handle) { cont.resume(it.takeIf { r -> !r.success }?.error) }
-    }
-}

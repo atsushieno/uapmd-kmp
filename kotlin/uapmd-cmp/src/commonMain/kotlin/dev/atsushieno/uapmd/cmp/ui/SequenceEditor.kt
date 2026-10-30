@@ -460,7 +460,7 @@ private fun ClipRow(
             Button(
                 onClick = {
                     scope.launch {
-                        pickForClip(clip.clipType)?.let {
+                        host.pickForClip(clip.clipType)?.let {
                             report(
                                 if (host.setClipFilepath(trackIndex, clip.clipId, it)) "File changed."
                                 else "Could not change the file."

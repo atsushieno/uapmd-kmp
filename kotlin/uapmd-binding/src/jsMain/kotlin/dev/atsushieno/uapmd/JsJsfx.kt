@@ -204,6 +204,21 @@ class JsDocumentProvider internal constructor(internal val handle: Int) : Docume
         withJsDocumentHandle(handle) { p -> jsMod._uapmd_document_provider_read(this.handle, p, 0, slot) }
     }
 
+    override fun resolveToPath(handle: DocumentHandle, callback: (DocumentIOResult, String) -> Unit) {
+        var slot = 0
+        val fn: (dynamic, dynamic, dynamic) -> Unit = { resultPtr, pathPtr, _ ->
+            try {
+                val p = resultPtr as Int
+                callback(DocumentIOResult(jsGetBool(p), jsStrOrNull(p + 4)), jsCStr(pathPtr as Int))
+            } finally {
+                removeJsCallback(slot)
+            }
+        }
+        slot = addJsCallback(fn.asDynamic(), "viii")
+        // The handle crosses by value, i.e. as a pointer.
+        withJsDocumentHandle(handle) { p -> jsMod._uapmd_document_provider_resolve_to_path(this.handle, p, 0, slot) }
+    }
+
     override fun pickFolder(callback: (FolderPickResult) -> Unit) {
         jsMod._uapmd_document_provider_pick_folder(handle, 0, makeJsFolderPick(callback))
     }

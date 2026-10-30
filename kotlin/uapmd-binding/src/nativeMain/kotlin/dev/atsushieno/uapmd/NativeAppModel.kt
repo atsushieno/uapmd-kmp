@@ -244,14 +244,17 @@ class NativeAppModel internal constructor(
         uapmd_app_save_project(handle, filePath, StableRef.create(callback).asCPointer(), appProjectSaveTrampoline)
 
     override fun saveProjectToDocument(handle: DocumentHandle, callback: (DocumentIOResult) -> Unit) = memScoped {
-        // The handle's strings are copied before the call returns.
-        val h = alloc<uapmd_document_handle_t>().also {
-            it.id = handle.id.cstr.ptr
-            it.display_name = handle.displayName.cstr.ptr
-            it.mime_type = handle.mimeType.cstr.ptr
-        }
-        uapmd_app_save_project_to_document(this@NativeAppModel.handle, h.ptr,
+        uapmd_app_save_project_to_document(this@NativeAppModel.handle, allocDocumentHandle(handle).ptr,
             StableRef.create(callback).asCPointer(), documentWriteTrampoline)
+    }
+
+    override fun loadProjectFromResolvedPath(filePath: String, callback: (AppProjectResult) -> Unit) =
+        uapmd_app_load_project_from_resolved_path(handle, filePath,
+            StableRef.create(callback).asCPointer(), appProjectSaveTrampoline)
+
+    override fun loadProjectFromDocument(handle: DocumentHandle, callback: (AppProjectResult) -> Unit) = memScoped {
+        uapmd_app_load_project_from_document(this@NativeAppModel.handle, allocDocumentHandle(handle).ptr,
+            StableRef.create(callback).asCPointer(), appProjectSaveTrampoline)
     }
 
     override fun loadProjectFromHandleToken(token: String): AppProjectResult =
@@ -420,6 +423,16 @@ class NativeAppModel internal constructor(
     override fun savePluginState(instanceId: Int, filepath: String, callback: (PluginStateResult) -> Unit) =
         uapmd_app_save_plugin_state(handle, instanceId, filepath,
             StableRef.create(callback).asCPointer(), pluginStateTrampoline)
+
+    override fun loadPluginState(instanceId: Int, handle: DocumentHandle, callback: (PluginStateResult) -> Unit) = memScoped {
+        uapmd_app_load_plugin_state_from_document(this@NativeAppModel.handle, instanceId, allocDocumentHandle(handle).ptr,
+            StableRef.create(callback).asCPointer(), pluginStateTrampoline)
+    }
+
+    override fun savePluginState(instanceId: Int, handle: DocumentHandle, callback: (PluginStateResult) -> Unit) = memScoped {
+        uapmd_app_save_plugin_state_to_document(this@NativeAppModel.handle, instanceId, allocDocumentHandle(handle).ptr,
+            StableRef.create(callback).asCPointer(), pluginStateTrampoline)
+    }
 
     override fun loadPluginStateSync(instanceId: Int, filepath: String): PluginStateResult =
         uapmd_app_load_plugin_state_sync(handle, instanceId, filepath).useContents { toKotlin() }

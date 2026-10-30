@@ -31,7 +31,6 @@ import dev.atsushieno.uapmd.CommandRegistry
 import dev.atsushieno.uapmd.StemSeparatorRegistry
 import dev.atsushieno.uapmd.AppModel
 import dev.atsushieno.uapmd.AppProjectResult
-import dev.atsushieno.uapmd.ProjectResult
 import dev.atsushieno.uapmd.AudioIoDirection
 import dev.atsushieno.uapmd.BlocklistEntry
 import dev.atsushieno.uapmd.createAddinManager
@@ -53,6 +52,7 @@ import dev.atsushieno.uapmd.TimeReferenceType
 import dev.atsushieno.uapmd.TimelinePosition
 import dev.atsushieno.uapmd.FreezePolicy
 import dev.atsushieno.uapmd.OfflineRenderProgress
+import dev.atsushieno.uapmd.PluginStateResult
 import dev.atsushieno.uapmd.FreezeRuntimeState
 import dev.atsushieno.uapmd.createAudioFileReader
 import dev.atsushieno.uapmd.createSilentAudioFileReader
@@ -67,8 +67,6 @@ import dev.atsushieno.uapmd.TrackProperties
 import dev.atsushieno.uapmd.UndoState
 import dev.atsushieno.uapmd.getAppModel
 import dev.atsushieno.uapmd.instantiateAppModel
-import dev.atsushieno.uapmd.PreparedProject
-import dev.atsushieno.uapmd.prepareProjectLoad
 
 /**
  * Owns the uapmd startup sequence and mirrors AppModel state into Compose.
@@ -731,31 +729,24 @@ class UapmdHost private constructor(val model: AppModel) {
     }
 
     /**
-     * Plug-in state to/from a file, as uapmd-app's Save/Load State buttons.
-     * Suspending because both talk to the plug-in and to the filesystem; on
-     * Android the plug-in lives in another process. See [backgroundDispatcher].
+     * Plug-in state to/from a picked document, as uapmd-app's Save/Load State
+     * buttons: AppModel reads or writes it through its document provider, and a
+     * load goes through ProjectCommands so it is undoable. Off the UI thread, since
+     * both talk to the plug-in; on Android it lives in another process.
      */
-    suspend fun savePluginState(instanceId: Int, path: String): String =
-        withContext(backgroundDispatcher()) {
-            val inst = model.sequencer.engine.getPluginInstance(instanceId)
-                ?: return@withContext "Instance $instanceId is gone."
-            runCatching {
-                writeBytesToFile(path, inst.saveStateSync())
-                "Saved state to $path"
-            }.getOrElse { "Failed to save state: ${it.message}" }
-        }
+    suspend fun savePluginState(instanceId: Int, handle: DocumentHandle): String =
+        pluginStateCall { done -> model.savePluginState(instanceId, handle, done) }
+            .let { if (it.success) "Saved state to ${it.filepath}" else "Failed to save state: ${it.error}" }
 
-    suspend fun loadPluginState(instanceId: Int, path: String): String =
+    suspend fun loadPluginState(instanceId: Int, handle: DocumentHandle): String =
+        pluginStateCall { done -> model.loadPluginState(instanceId, handle, done) }
+            .let { if (it.success) "Loaded state from ${it.filepath}" else "Failed to load state: ${it.error}" }
+
+    private suspend fun pluginStateCall(call: ((PluginStateResult) -> Unit) -> Unit): PluginStateResult =
         withContext(backgroundDispatcher()) {
-            val inst = model.sequencer.engine.getPluginInstance(instanceId)
-                ?: return@withContext "Instance $instanceId is gone."
-            runCatching {
-                val bytes = readBytesFromFile(path)
-                    ?: return@runCatching "Could not read $path."
-                // Route through ProjectCommands so the state change is undoable.
-                model.sequencer.engine.timeline.setPluginState(instanceId, bytes)
-                "Loaded state from $path"
-            }.getOrElse { "Failed to load state: ${it.message}" }
+            kotlinx.coroutines.suspendCancellableCoroutine { continuation ->
+                call { if (continuation.isActive) continuation.resumeWith(Result.success(it)) }
+            }
         }
 
     fun setInstanceGroup(instanceId: Int, group: Int) {
@@ -780,18 +771,14 @@ class UapmdHost private constructor(val model: AppModel) {
         private set
 
     /**
-     * Loading a project tears down every live plug-in, so it cannot run while
-     * audio is going or while plug-in UIs are open — that is what crashed on
-     * `.uapmdz`. It also has to be *unpacked* first: `.uapmdz` is an archive,
-     * and handing its path straight to loadProject() is not valid.
+     * A picked document that could not be opened, which uapmd-app reports with its
+     * "Open Failed" dialog. Cleared by the next successful pick.
      */
-    /**
-     * Runs off the UI thread - unpacking, engine stop/start and plug-in teardown
-     * all block, and on Android tearing down an out-of-process plug-in from the
-     * main thread deadlocks the same way instancing does. The steps still happen
-     * in the original order; only the thread each runs on differs, so the
-     * teardown below still cannot run before a successful prepare.
-     */
+    var fileErrorMessage by mutableStateOf<String?>(null)
+        private set
+
+    internal fun reportFileError(message: String?) = onUiThread { fileErrorMessage = message }
+
     /**
      * True while a project load is in flight.
      *
@@ -827,172 +814,84 @@ class UapmdHost private constructor(val model: AppModel) {
         private set
 
     /**
-     * Loads a project, following `composeApp`'s sequence exactly
-     * (`UapmdModel.loadProject`), which is the one proven on Android.
-     *
-     * Three things I had wrong before, all mine, none upstream:
-     *  - it went through `AppModel::loadProject`, whose instantiation chain is
-     *    marshalled onto the remidy event loop — the Android main thread — so the
-     *    second plug-in's service bind was issued from the main looper and blocked
-     *    it waiting for its own callback. `TimelineFacade.loadProject` is the
-     *    engine-level load composeApp uses, and it does not marshal that way.
-     *  - it hopped to the UI thread to close plug-in UIs. Nothing in a load
-     *    belongs on the main thread.
-     *  - it closed the prepared archive in a `finally`, deleting the unpacked
-     *    directory the freshly loaded audio clips still point at. The temp
-     *    directory has to outlive the load and is only retired on the next one.
+     * uapmd-app's Load Project: [AppModel.loadProjectFromDocument] resolves the picked
+     * document, keeps the audio engine off for the load and loads it, unpacking a
+     * `.uapmdz` and keeping its files for as long as the project is open.
      */
-    fun loadProject(path: String) {
-        if (isLoadingProject)
-            return
-        // Set synchronously: posting it through onUiThread left a window where
-        // the poll saw "not loading" and refreshed straight into the load.
-        isLoadingProject = true
-        loadProjectInternal(path)
-    }
+    fun loadProjectFromDocument(handle: DocumentHandle) =
+        replaceProject { done -> model.loadProjectFromDocument(handle, done) }
 
-    /** Kept alive while its project is loaded; the clips reference files inside it. */
-    private var activePreparedProject: PreparedProject? = null
-
-    private fun loadProjectInternal(path: String) = offUiThread {
-        val prepared = runCatching { prepareProjectLoad(path) }.getOrNull()
-        if (prepared == null || !prepared.success) {
-            val message = prepared?.error?.ifEmpty { null } ?: "Could not open $path."
-            prepared?.close()
-            onUiThread {
-                lastProjectResult = AppProjectResult(false, message)
-                isLoadingProject = false
-            }
-            return@offUiThread
-        }
-
-        // Stop the engine the way composeApp does, at the engine level.
-        // AppModel.setAudioEngineEnabled() runs its shutdown through the remidy
-        // event loop, which on Android is the main looper — the same thread the
-        // load then needs for plug-in service binds.
-        val engine = model.sequencer.engine
-        val wasRunning = model.isAudioEngineEnabled
-        if (wasRunning) {
-            engine.setActive(false)
-            sequencer.stopAudio()
-        }
-
-        // Project replacement destroys the old plugin instances as part of
-        // timeline reset. Detach Compose-owned state on its dispatcher, then
-        // perform native teardown on this background load coroutine.
-        val presentationsToClose = withContext(uiDispatcher) {
-            nativeUiVisibleInstanceIds = emptySet()
-            nativeUiPresentations.values.toList().also {
-                nativeUiPresentations.clear()
-            }
-        }
-        presentationsToClose.forEach { runCatching { it.close() } }
-
-        // Asynchronously: a load can be waiting on the browser's own event loop (a WebCLAP plug-in
-        // is fetched and compiled by JavaScript), which cannot run while this thread holds it.
-        val result = try {
-            kotlinx.coroutines.suspendCancellableCoroutine<ProjectResult> { continuation ->
-                var finished = false
-                engine.timeline.loadProjectAsync(prepared.path) { r ->
-                    finished = true
-                    if (continuation.isActive) continuation.resumeWith(Result.success(r))
-                }
-                if (!finished) isLoadAwaitingPlugins = true
-            }
-        } finally {
-            isLoadAwaitingPlugins = false
-            if (wasRunning) {
-                engine.setActive(true)
-                sequencer.startAudio()
-            }
-        }
-
-        if (result.success) {
-            // The previous project's unpacked files are only safe to drop once a
-            // new project has taken over.
-            activePreparedProject?.let { runCatching { it.close() } }
-            activePreparedProject = prepared
-        } else {
-            prepared.close()
-        }
-
-        onUiThread {
-            if (result.success) {
-                platformHostedUiInstanceIds = emptySet()
-                framebufferUiInstanceIds = emptySet()
-                selectedMidiClip = null
-            }
-            lastProjectResult = AppProjectResult(result.success, result.error)
-            noteCache.clear()
-            isLoadingProject = false
-            projectRevision++
-            refreshTempoMap()
-            refresh()
-        }
-    }
+    /** A project file on disk, for the startup hooks: [AppModel.loadProjectFromResolvedPath]. */
+    fun loadProject(path: String) =
+        replaceProject { done -> model.loadProjectFromResolvedPath(path, done) }
 
     /**
-     * "New Project", as uapmd-app does it (MainWindow.cpp:750).
-     *
-     * Goes through the same stop/teardown/restart dance as a load, and for the
-     * same reason: replacing the project destroys every live plug-in instance,
-     * which must not happen with audio running or with plug-in UIs open.
+     * "New Project", as uapmd-app's `MainWindow::startNewProject` does it: the engine
+     * stops for it exactly as it does for a load, since it tears down every plug-in.
      *
      * Whether unsaved changes may be discarded is the caller's decision — the
      * engine asks nothing and always replaces — so the toolbar confirms first
      * when the project is dirty.
      */
-    fun newProject() {
-        if (isLoadingProject)
-            return
-        isLoadingProject = true
-        newProjectInternal()
+    fun newProject() = replaceProject { done ->
+        val wasEnabled = model.isAudioEngineEnabled
+        if (wasEnabled)
+            model.setAudioEngineEnabled(false)
+        val result = model.newProject()
+        if (wasEnabled)
+            model.setAudioEngineEnabled(true)
+        done(result)
     }
 
-    private fun newProjectInternal() = offUiThread {
-        val engine = model.sequencer.engine
-        val wasRunning = model.isAudioEngineEnabled
-        if (wasRunning) {
-            engine.setActive(false)
-            sequencer.stopAudio()
-        }
-
-        val presentationsToClose = withContext(uiDispatcher) {
-            nativeUiVisibleInstanceIds = emptySet()
-            nativeUiPresentations.values.toList().also {
-                nativeUiPresentations.clear()
+    /**
+     * Replaces the project through AppModel, off the UI thread: tearing down an
+     * out-of-process plug-in from the Android main thread deadlocks the same way
+     * instancing does. Plug-in UIs this app presents are closed first, and the
+     * poll stays off the engine until [replace] reports back.
+     */
+    private fun replaceProject(replace: ((AppProjectResult) -> Unit) -> Unit) {
+        if (isLoadingProject)
+            return
+        // Set synchronously: posting it through onUiThread left a window where
+        // the poll saw "not loading" and refreshed straight into the load.
+        isLoadingProject = true
+        offUiThread {
+            val presentationsToClose = withContext(uiDispatcher) {
+                nativeUiVisibleInstanceIds = emptySet()
+                nativeUiPresentations.values.toList().also {
+                    nativeUiPresentations.clear()
+                }
             }
-        }
-        presentationsToClose.forEach { runCatching { it.close() } }
+            presentationsToClose.forEach { runCatching { it.close() } }
 
-        val result = try {
-            model.newProject()
-        } finally {
-            if (wasRunning) {
-                engine.setActive(true)
-                sequencer.startAudio()
+            // Asynchronously: a load can be waiting on the browser's own event loop (a WebCLAP plug-in
+            // is fetched and compiled by JavaScript), which cannot run while this thread holds it.
+            val result = try {
+                kotlinx.coroutines.suspendCancellableCoroutine<AppProjectResult> { continuation ->
+                    var finished = false
+                    replace { r ->
+                        finished = true
+                        if (continuation.isActive) continuation.resumeWith(Result.success(r))
+                    }
+                    if (!finished) isLoadAwaitingPlugins = true
+                }
+            } finally {
+                isLoadAwaitingPlugins = false
             }
-        }
 
-        // The outgoing project's unpacked archive is only safe to drop once the
-        // timeline no longer references the files inside it.
-        if (result.success) {
-            activePreparedProject?.let { runCatching { it.close() } }
-            activePreparedProject = null
-        }
-
-        onUiThread {
-            if (result.success) {
-                platformHostedUiInstanceIds = emptySet()
-                framebufferUiInstanceIds = emptySet()
-                selectedMidiClip = null
+            onUiThread {
+                if (result.success) {
+                    platformHostedUiInstanceIds = emptySet()
+                    framebufferUiInstanceIds = emptySet()
+                    selectedMidiClip = null
+                }
+                lastProjectResult = result
+                noteCache.clear()
+                isLoadingProject = false
+                projectRevision++
+                refreshTempoMap()
+                refresh()
             }
-            lastProjectResult = result
-            noteCache.clear()
-            isLoadingProject = false
-            projectRevision++
-            refreshTempoMap()
-            refresh()
         }
     }
 
@@ -2234,7 +2133,6 @@ fun rememberUapmdHost(): UapmdHost {
                 host.refresh(structural = pollTick % 5 == 0)
             }
             if (host.canPollEngine) host.tickModelServices()
-            tickPlatformFilePicker()
             if (pendingFormat != null && !host.isScanning && host.catalog.isNotEmpty()) {
                 val format = pendingFormat
                 pendingFormat = null

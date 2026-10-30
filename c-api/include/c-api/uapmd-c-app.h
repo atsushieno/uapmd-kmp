@@ -295,6 +295,18 @@ UAPMD_C_EXPORT void uapmd_app_save_plugin_state(uapmd_app_model_t app,
                                                    const char* filepath,
                                                    void* user_data,
                                                    uapmd_plugin_state_cb_t callback);
+/* The DocumentHandle overloads of AppModel::loadPluginState / savePluginState: the state
+ * is read from or written to a handle picked from the app's document provider. */
+UAPMD_C_EXPORT void uapmd_app_load_plugin_state_from_document(uapmd_app_model_t app,
+                                                                 int32_t instance_id,
+                                                                 const uapmd_document_handle_t* handle,
+                                                                 void* user_data,
+                                                                 uapmd_plugin_state_cb_t callback);
+UAPMD_C_EXPORT void uapmd_app_save_plugin_state_to_document(uapmd_app_model_t app,
+                                                               int32_t instance_id,
+                                                               const uapmd_document_handle_t* handle,
+                                                               void* user_data,
+                                                               uapmd_plugin_state_cb_t callback);
 
 /* ═══════════════════════════════════════════════════════════════════════════
  *  Clip management
@@ -861,12 +873,23 @@ typedef struct uapmd_app_project_result {
     const char* error;
 } uapmd_app_project_result_t;
 
+/* Also the result callback of the asynchronous loads below. */
 typedef void (*uapmd_project_save_cb_t)(uapmd_app_project_result_t result, void* user_data);
 
 UAPMD_C_EXPORT void uapmd_app_save_project(uapmd_app_model_t app, const char* file_path, void* user_data, uapmd_project_save_cb_t callback);
 UAPMD_C_EXPORT uapmd_app_project_result_t uapmd_app_save_project_sync(uapmd_app_model_t app, const char* file_path);
 UAPMD_C_EXPORT uapmd_app_project_result_t uapmd_app_load_project(uapmd_app_model_t app, const char* file_path);
 UAPMD_C_EXPORT uapmd_app_project_result_t uapmd_app_load_project_from_handle_token(uapmd_app_model_t app, const char* token);
+/* AppModel::loadProjectFromResolvedPath: loads a .uapmd, or extracts a .uapmdz and loads
+ * that, keeping the extracted files while the project is open and marking its clips so the
+ * next save packs them again. */
+UAPMD_C_EXPORT void uapmd_app_load_project_from_resolved_path(uapmd_app_model_t app, const char* file_path,
+                                                                 void* user_data, uapmd_project_save_cb_t callback);
+/* AppModel::loadProjectFromDocument, uapmd-app's Load Project: resolves a handle picked
+ * from the app's document provider, keeps the audio engine off for the load and restores
+ * it, then loads as uapmd_app_load_project_from_resolved_path(). */
+UAPMD_C_EXPORT void uapmd_app_load_project_from_document(uapmd_app_model_t app, const uapmd_document_handle_t* handle,
+                                                            void* user_data, uapmd_project_save_cb_t callback);
 /* Discards the current project and starts an empty one. Asks nothing and
  * always replaces: whether unsaved changes may be discarded is the caller's
  * decision. Unlike uapmd_tl_new_project() this also tears down what the

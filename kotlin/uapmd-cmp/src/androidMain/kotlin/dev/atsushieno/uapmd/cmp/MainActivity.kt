@@ -34,7 +34,6 @@ class MainActivity : ComponentActivity() {
         // its SAF result comes back through onActivityResult below.
         JniBridge.uapmdDocumentProviderInit(this)
         androidAppContext = applicationContext
-        AndroidDocumentPicker.init()
         // Lets a freeze be inspected even when the main looper is stuck.
         StackDumpTrigger.start(this)
         setContent {

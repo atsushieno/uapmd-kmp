@@ -211,6 +211,18 @@ interface AppModel {
      * Needed where the picked document has no writable path (Android's SAF).
      */
     fun saveProjectToDocument(handle: DocumentHandle, callback: (DocumentIOResult) -> Unit)
+    /**
+     * `AppModel::loadProjectFromResolvedPath`: loads a `.uapmd`, or extracts a `.uapmdz`
+     * and loads that, keeping the extracted files while the project is open and marking
+     * its clips so the next save packs them again.
+     */
+    fun loadProjectFromResolvedPath(filePath: String, callback: (AppProjectResult) -> Unit)
+    /**
+     * `AppModel::loadProjectFromDocument`, uapmd-app's Load Project: resolves a handle
+     * from [documentProvider]'s [DocumentProvider.pickOpenDocuments], keeps the audio
+     * engine off for the load and restores it, then loads as [loadProjectFromResolvedPath].
+     */
+    fun loadProjectFromDocument(handle: DocumentHandle, callback: (AppProjectResult) -> Unit)
     /** Android's document-picker path: resolves a content:// handle token. */
     fun loadProjectFromHandleToken(token: String): AppProjectResult
 
@@ -336,6 +348,9 @@ interface AppModel {
      */
     fun loadPluginState(instanceId: Int, filepath: String, callback: (PluginStateResult) -> Unit)
     fun savePluginState(instanceId: Int, filepath: String, callback: (PluginStateResult) -> Unit)
+    /** Through a handle picked from [documentProvider], where the document may have no path. */
+    fun loadPluginState(instanceId: Int, handle: DocumentHandle, callback: (PluginStateResult) -> Unit)
+    fun savePluginState(instanceId: Int, handle: DocumentHandle, callback: (PluginStateResult) -> Unit)
 
     /**
      * The blocking variants, for tools and tests that have no loop to post a
@@ -923,6 +938,13 @@ interface DocumentProvider {
     )
 
     fun readDocument(handle: DocumentHandle, callback: (DocumentIOResult, ByteArray) -> Unit)
+
+    /**
+     * A filesystem path to read [handle] from: the document itself on desktop, a copy
+     * the provider makes elsewhere (Android's SAF, the web's MEMFS). Writes go through
+     * a handle instead, since a copy is never written back.
+     */
+    fun resolveToPath(handle: DocumentHandle, callback: (DocumentIOResult, String) -> Unit)
 
     fun pickFolder(callback: (FolderPickResult) -> Unit)
 

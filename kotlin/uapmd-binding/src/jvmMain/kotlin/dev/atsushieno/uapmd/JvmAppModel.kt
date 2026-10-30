@@ -248,7 +248,7 @@ class JvmAppModel internal constructor(
     override fun saveProjectSync(filePath: String): AppProjectResult =
         lib.uapmd_app_save_project_sync(handle, filePath).toKotlin()
 
-    override fun saveProject(filePath: String, callback: (AppProjectResult) -> Unit) {
+    private fun projectResultCb(callback: (AppProjectResult) -> Unit): ProjectSaveCb {
         lateinit var cb: ProjectSaveCb
         cb = object : ProjectSaveCb {
             override fun invoke(result: UapmdAppProjectResult.ByVal, userData: Pointer?) {
@@ -257,8 +257,17 @@ class JvmAppModel internal constructor(
             }
         }
         liveAppCallbacks.add(cb)
-        lib.uapmd_app_save_project(handle, filePath, null, cb)
+        return cb
     }
+
+    override fun saveProject(filePath: String, callback: (AppProjectResult) -> Unit) =
+        lib.uapmd_app_save_project(handle, filePath, null, projectResultCb(callback))
+
+    override fun loadProjectFromResolvedPath(filePath: String, callback: (AppProjectResult) -> Unit) =
+        lib.uapmd_app_load_project_from_resolved_path(handle, filePath, null, projectResultCb(callback))
+
+    override fun loadProjectFromDocument(handle: DocumentHandle, callback: (AppProjectResult) -> Unit) =
+        lib.uapmd_app_load_project_from_document(this.handle, handle.toJna(), null, projectResultCb(callback))
 
     override fun saveProjectToDocument(handle: DocumentHandle, callback: (DocumentIOResult) -> Unit) {
         lateinit var cb: DocumentWriteCb
@@ -269,13 +278,7 @@ class JvmAppModel internal constructor(
             }
         }
         liveAppCallbacks.add(cb)
-        // The handle's strings are copied before the call returns.
-        val h = UapmdDocumentHandle().also {
-            it.id = handle.id
-            it.display_name = handle.displayName
-            it.mime_type = handle.mimeType
-        }
-        lib.uapmd_app_save_project_to_document(this.handle, h, null, cb)
+        lib.uapmd_app_save_project_to_document(this.handle, handle.toJna(), null, cb)
     }
 
     override fun loadProjectFromHandleToken(token: String): AppProjectResult =
@@ -448,6 +451,14 @@ class JvmAppModel internal constructor(
 
     override fun savePluginState(instanceId: Int, filepath: String, callback: (PluginStateResult) -> Unit) =
         lib.uapmd_app_save_plugin_state(handle, instanceId, filepath, null, pluginStateCallback(callback))
+
+    override fun loadPluginState(instanceId: Int, handle: DocumentHandle, callback: (PluginStateResult) -> Unit) =
+        lib.uapmd_app_load_plugin_state_from_document(this.handle, instanceId, handle.toJna(), null,
+            pluginStateCallback(callback))
+
+    override fun savePluginState(instanceId: Int, handle: DocumentHandle, callback: (PluginStateResult) -> Unit) =
+        lib.uapmd_app_save_plugin_state_to_document(this.handle, instanceId, handle.toJna(), null,
+            pluginStateCallback(callback))
 
     override fun loadPluginStateSync(instanceId: Int, filepath: String) =
         lib.uapmd_app_load_plugin_state_sync(handle, instanceId, filepath).toKotlin()
