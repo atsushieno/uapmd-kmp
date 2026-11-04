@@ -1280,8 +1280,6 @@ external interface UapmdCApiModule : JsAny {
     fun uapmdAppSaveProjectSync(out: Int, app: Int, filePath: Int)
     @JsName("_uapmd_app_save_project")
     fun uapmdAppSaveProject(app: Int, filePath: Int, userData: Int, callback: Int)
-    @JsName("_uapmd_app_load_project_from_handle_token")
-    fun uapmdAppLoadProjectFromHandleToken(out: Int, app: Int, token: Int)
     @JsName("_uapmd_app_new_project")
     fun uapmdAppNewProject(out: Int, app: Int)
     @JsName("_uapmd_app_master_tempo_map")

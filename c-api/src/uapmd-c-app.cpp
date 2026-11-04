@@ -1699,13 +1699,7 @@ uapmd_app_project_result_t uapmd_app_load_project(uapmd_app_model_t app, const c
     AM(app)->loadProject(file_path, [promise](uapmd_app::AppModel::ProjectResult r) mutable {
         promise->set_value(std::move(r));
     });
-    auto r = promise->get_future().get();
-    tl_error = r.error;
-    return { r.success, tl_error.empty() ? nullptr : tl_error.c_str() };
-}
-
-uapmd_app_project_result_t uapmd_app_load_project_from_handle_token(uapmd_app_model_t app, const char* token) {
-    auto r = AM(app)->loadProjectFromHandleToken(token ? token : "");
+    auto r = waitDrainingMainThread(promise->get_future());
     tl_error = r.error;
     return { r.success, tl_error.empty() ? nullptr : tl_error.c_str() };
 }

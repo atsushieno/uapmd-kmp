@@ -223,8 +223,6 @@ interface AppModel {
      * engine off for the load and restores it, then loads as [loadProjectFromResolvedPath].
      */
     fun loadProjectFromDocument(handle: DocumentHandle, callback: (AppProjectResult) -> Unit)
-    /** Android's document-picker path: resolves a content:// handle token. */
-    fun loadProjectFromHandleToken(token: String): AppProjectResult
 
     /**
      * Discards the current project and starts an empty one. Asks nothing and

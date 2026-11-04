@@ -333,9 +333,6 @@ class JsAppModel internal constructor(internal val handle: Int) : AppModel {
         withJsDocumentHandle(handle) { h -> jsMod._uapmd_app_load_project_from_document(this.handle, h, 0, slot) }
     }
 
-    override fun loadProjectFromHandleToken(token: String): AppProjectResult =
-        projectCall(token) { out, t -> jsMod._uapmd_app_load_project_from_handle_token(out, handle, t) }
-
     override fun newProject(): AppProjectResult =
         withWasmMem(8) { out ->                    // sizeof uapmd_app_project_result_t
             jsMod._uapmd_app_new_project(out, handle)

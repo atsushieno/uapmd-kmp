@@ -843,10 +843,7 @@ private fun checkBootstrap(model: AppModel, check: (String, Boolean) -> Unit) {
         check("the saved document loads back", p3.success && model.loadProject(p3.path).success)
         p3.close()
 
-        // Loaded the way uapmd-app loads. Whether re-saving packs the clips again is not
-        // checked here: AppModel marks them from the load completion, which runs on the
-        // event-loop thread (the EDT), and this harness creates AppModel on the test
-        // thread, so the model refuses those commands. The app creates it on the EDT.
+        // Loaded the way uapmd-app loads. ProjectResaveIntegrationTest checks that re-saving packs the clips again.
         fun awaitProject(call: ((dev.atsushieno.uapmd.AppProjectResult) -> Unit) -> Unit): dev.atsushieno.uapmd.AppProjectResult? {
             var result: dev.atsushieno.uapmd.AppProjectResult? = null
             call { result = it }

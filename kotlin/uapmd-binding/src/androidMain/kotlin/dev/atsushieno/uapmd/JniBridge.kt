@@ -886,7 +886,6 @@ object JniBridge {
     @JvmStatic external fun uapmdAppLoadProjectFromResolvedPath(app: Long, filePath: String, cb: Any)
     /** cb: invoke(success: Boolean, error: String?) */
     @JvmStatic external fun uapmdAppLoadProjectFromDocument(app: Long, id: String, displayName: String, mimeType: String, cb: Any)
-    @JvmStatic external fun uapmdAppLoadProjectFromHandleToken(app: Long, token: String): Array<Any>?
     @JvmStatic external fun uapmdAppNewProject(app: Long): Array<Any>?
     @JvmStatic external fun uapmdAppMasterTempoMap(app: Long): Long
 

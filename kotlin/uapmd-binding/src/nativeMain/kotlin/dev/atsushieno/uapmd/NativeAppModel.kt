@@ -257,9 +257,6 @@ class NativeAppModel internal constructor(
             StableRef.create(callback).asCPointer(), appProjectSaveTrampoline)
     }
 
-    override fun loadProjectFromHandleToken(token: String): AppProjectResult =
-        uapmd_app_load_project_from_handle_token(handle, token).useContents { toKotlin() }
-
     override fun newProject(): AppProjectResult =
         uapmd_app_new_project(handle).useContents { toKotlin() }
 

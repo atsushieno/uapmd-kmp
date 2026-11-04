@@ -618,13 +618,6 @@ JNI_FN(void, uapmdAppLoadProjectFromDocument)(JNIEnv* env, jclass, jlong app,
         new AppCtx(env, cb, "(ZLjava/lang/String;)V"), app_project_save_trampoline);
 }
 
-JNI_FN(jobjectArray, uapmdAppLoadProjectFromHandleToken)(JNIEnv* env, jclass, jlong app, jstring token) {
-    const char* t = token ? env->GetStringUTFChars(token, nullptr) : nullptr;
-    auto r = uapmd_app_load_project_from_handle_token(AM(app), t);
-    if (token) env->ReleaseStringUTFChars(token, t);
-    return pack_project_result(env, r);
-}
-
 JNI_FN(jobjectArray, uapmdAppNewProject)(JNIEnv* env, jclass, jlong app) {
     return pack_project_result(env, uapmd_app_new_project(AM(app)));
 }

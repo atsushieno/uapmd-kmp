@@ -20,6 +20,6 @@ actual fun PlatformHostedPluginUiLayer(host: UapmdHost, windows: FloatingWindowM
     AndroidPlatformHostedPluginUiLayer(host = host, windows = windows)
 }
 
-// Must be called from the Android main thread: it routes remidy EventLoop tasks
-// to the main looper so plugins that require the UI thread initialise correctly.
+// Must be called from the Android main thread: it routes remidy EventLoop tasks to
+// the main looper, which makes it uapmd's main thread and so also the model thread.
 actual fun initPlatformEventLoop() = initAndroidEventLoop()

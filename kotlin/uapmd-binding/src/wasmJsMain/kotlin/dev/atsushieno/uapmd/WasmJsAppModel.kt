@@ -286,9 +286,6 @@ class WasmJsAppModel internal constructor(internal val handle: Int) : AppModel {
         withWasmDocumentHandle(handle) { h -> wasmMod.uapmdAppLoadProjectFromDocument(this.handle, h, 0, cbPtr) }
     }
 
-    override fun loadProjectFromHandleToken(token: String): AppProjectResult =
-        projectCall(token) { out, app, t -> wasmMod.uapmdAppLoadProjectFromHandleToken(out, app, t) }
-
     override fun newProject(): AppProjectResult =
         withWasmStruct(8) { out ->                 // sizeof uapmd_app_project_result_t
             wasmMod.uapmdAppNewProject(out, handle)

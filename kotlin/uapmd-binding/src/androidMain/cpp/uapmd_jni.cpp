@@ -14,6 +14,7 @@
 #include <string>
 #include <vector>
 #include <mutex>
+#include <thread>
 #include <unordered_map>
 #include <atomic>
 
@@ -115,8 +116,8 @@ static std::atomic<int64_t> g_midi_counter{0};
 
 // ─── Android EventLoop bridge ─────────────────────────────────────────────────
 // remidy::EventLoop::runTaskOnMainThread() enqueues a task on the "native main"
-// thread and blocks the caller until it completes.  We redirect this to the
-// Android main looper so that plugins that require the UI thread work correctly.
+// thread and blocks the caller until it completes. Tasks run on the Android main
+// looper (AndroidEventLoop.kt), which is also the thread that creates AppModel.
 
 struct AndroidElCtx {
     jobject  dispatcher;      // global ref: AndroidEventLoopDispatcher Kotlin obj
@@ -129,25 +130,17 @@ static std::atomic<jlong>       g_el_next_id{1};
 static std::unordered_map<jlong, std::function<void()>> g_el_tasks;
 
 /*
- * Always false, matching remidy's own EventLoopAndroid
- * (`remidy/src/EventLoop.cpp`), which returns false with the note that UI tasks
- * should always be delegated rather than run inline.
+ * True on the Android main looper, which is where the event loop's tasks run
+ * (see AndroidEventLoop.kt) and the thread that creates AppModel.
  *
- * `EventLoop::runTaskOnMainThread` runs a task inline when this says the caller
- * is already the main thread. Reporting true on the Android main looper let
- * uapmd continue a plug-in instantiation chain *inside* AAP's
- * `onServiceConnected` callback, which runs on that looper: the nested
- * `ensureBinderConnected` then `runBlocking`s waiting for a connection only that
- * same looper could deliver. Always enqueuing keeps every task on the event-loop
- * thread, so a blocking bind never occupies the looper that must complete it.
- *
- * AAP itself expects this: `plugin-format-aap.hpp:55` reports
- * `PluginUIThreadRequirement::None`, so instancing is meant to run on an
- * ordinary thread, and `bindService` is the 3-argument form whose callback is
- * always delivered on the Android main looper.
+ * `EventLoop::runTaskOnMainThread` blocks its caller until the task has run, and
+ * runs it inline when this says the caller already is the main thread. Answering
+ * false there would post the task behind the very thread waiting for it.
  */
+static std::thread::id g_el_main_thread{};
+
 static bool android_is_main_thread(void*) {
-    return false;
+    return std::this_thread::get_id() == g_el_main_thread;
 }
 
 static void android_enqueue_task(uapmd_event_loop_task_fn_t task_fn, void* task_ctx, void*) {
@@ -1972,6 +1965,8 @@ JNIEXPORT void JNICALL Java_dev_atsushieno_uapmd_JniBridge_uapmdSetupAndroidEven
     ctx->dispatch_method = env->GetMethodID(cls, "dispatchTask", "(J)V");
     env->DeleteLocalRef(cls);
     g_android_el = ctx;
+    // Called on the main thread (AndroidEventLoop.kt checks), which runs the tasks.
+    g_el_main_thread = std::this_thread::get_id();
     uapmd_set_event_loop(ctx, nullptr, android_is_main_thread, android_enqueue_task);
 }
 

@@ -265,9 +265,6 @@ class AndroidAppModel internal constructor(internal val handle: Long) : AppModel
         JniBridge.uapmdAppLoadProjectFromDocument(this.handle, handle.id, handle.displayName, handle.mimeType,
             AppProjectSaveCallback { success, error -> callback(AppProjectResult(success, error)) })
 
-    override fun loadProjectFromHandleToken(token: String): AppProjectResult =
-        JniBridge.uapmdAppLoadProjectFromHandleToken(handle, token).toProjectResult()
-
     override fun newProject(): AppProjectResult =
         JniBridge.uapmdAppNewProject(handle).toProjectResult()
 

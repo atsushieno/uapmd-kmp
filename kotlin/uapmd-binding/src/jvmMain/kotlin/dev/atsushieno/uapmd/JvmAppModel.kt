@@ -281,9 +281,6 @@ class JvmAppModel internal constructor(
         lib.uapmd_app_save_project_to_document(this.handle, handle.toJna(), null, cb)
     }
 
-    override fun loadProjectFromHandleToken(token: String): AppProjectResult =
-        lib.uapmd_app_load_project_from_handle_token(handle, token).toKotlin()
-
     override fun newProject(): AppProjectResult = lib.uapmd_app_new_project(handle).toKotlin()
 
     // ── Timeline clip selection and clipboard ───────────────────────────────

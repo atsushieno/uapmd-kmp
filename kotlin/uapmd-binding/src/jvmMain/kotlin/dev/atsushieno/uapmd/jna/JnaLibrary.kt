@@ -2041,7 +2041,6 @@ interface UapmdLibrary : Library {
     fun uapmd_app_save_project_to_document(app: Pointer?, handle: UapmdDocumentHandle?, userData: Pointer?, callback: DocumentWriteCb?)
     fun uapmd_app_load_project_from_resolved_path(app: Pointer?, filePath: String?, userData: Pointer?, callback: ProjectSaveCb?)
     fun uapmd_app_load_project_from_document(app: Pointer?, handle: UapmdDocumentHandle?, userData: Pointer?, callback: ProjectSaveCb?)
-    fun uapmd_app_load_project_from_handle_token(app: Pointer?, token: String?): UapmdAppProjectResult.ByVal
     fun uapmd_app_new_project(app: Pointer?): UapmdAppProjectResult.ByVal
 
     // ══ Timeline clip selection and clipboard ═══════════════════════════════

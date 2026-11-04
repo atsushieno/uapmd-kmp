@@ -571,7 +571,7 @@ uapmd_project_result_t uapmd_tl_load_project(uapmd_timeline_facade_t tl, const c
     TF(tl)->loadProject(file_path, [promise](uapmd::TimelineFacade::ProjectResult r) mutable {
         promise->set_value(std::move(r));
     });
-    auto r = promise->get_future().get();
+    auto r = waitDrainingMainThread(promise->get_future());
     tl_error = r.error;
     return { r.success, tl_error.empty() ? nullptr : tl_error.c_str() };
 }

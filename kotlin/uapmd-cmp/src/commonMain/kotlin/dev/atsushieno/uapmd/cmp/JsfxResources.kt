@@ -119,7 +119,6 @@ class JsfxResources internal constructor(
         busy = true
         model.refreshFastScannedPlugins { syncError ->
             host.onUiThread {
-                busy = false
                 registeredFolders = Jsfx.registeredFolders
                 host.refreshCatalog()
                 val available = "${jsfxEffectCount()} JSFX effects available."
@@ -129,6 +128,8 @@ class JsfxResources internal constructor(
                     // Still says how many there are: some folders may have been read
                     // even though one of them could not be.
                     report("$syncError -- $available", true)
+                // Last, so that whoever sees this cleared also sees the result.
+                busy = false
             }
         }
     }

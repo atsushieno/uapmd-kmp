@@ -110,7 +110,9 @@ So, adopted from AppModel — the reverse of what an earlier draft of this plan 
 remidy marshals engine completions through an `EventLoop`. A host must install one
 (`initJvmEventLoop()` / `initAndroidEventLoop()`) **before** creating any engine or sequencer, or
 async completions silently never fire — `addEmptyTrack` still creates the track, but its callback
-never runs. On Android the loop must also not be the main looper; see `AndroidEventLoop.kt`.
+never runs. The thread that creates AppModel must be the loop's main thread, because that is where
+uapmd runs model work and refuses it from elsewhere. On Android that is the main looper; see
+`AndroidEventLoop.kt`.
 
 **On macOS the loop's main thread must be the AppKit main thread, not the AWT event queue**
 (`JvmEventLoop.kt`). remidy marshals `clap_plugin_factory.create_plugin` to whatever the loop

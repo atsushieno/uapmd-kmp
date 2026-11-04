@@ -114,11 +114,7 @@ class UapmdHost private constructor(val model: AppModel) {
     }
 
     /**
-     * Native calls that can block must leave the UI thread. On Android this is
-     * not merely a responsiveness matter: instantiating an AAP plugin binds to
-     * another process and the bind is completed on the main looper, so issuing
-     * it from the main thread deadlocks and the completion never arrives.
-     * See [backgroundDispatcher].
+     * Native calls that can block must leave the UI thread. See [backgroundDispatcher].
      */
     private fun offUiThread(block: suspend () -> Unit) {
         scope.launch(backgroundDispatcher()) { block() }
@@ -844,10 +840,10 @@ class UapmdHost private constructor(val model: AppModel) {
     }
 
     /**
-     * Replaces the project through AppModel, off the UI thread: tearing down an
-     * out-of-process plug-in from the Android main thread deadlocks the same way
-     * instancing does. Plug-in UIs this app presents are closed first, and the
-     * poll stays off the engine until [replace] reports back.
+     * Replaces the project through AppModel, off the UI thread: tearing down
+     * out-of-process plug-ins takes binder transactions for each instance. Plug-in UIs
+     * this app presents are closed first, and the poll stays off the engine until
+     * [replace] reports back.
      */
     private fun replaceProject(replace: ((AppProjectResult) -> Unit) -> Unit) {
         if (isLoadingProject)
