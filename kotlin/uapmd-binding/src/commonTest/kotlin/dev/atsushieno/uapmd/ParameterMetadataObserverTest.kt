@@ -24,6 +24,7 @@ class ParameterMetadataObserverTest {
         override val requiresReplacingProcess = false
         override fun startProcessing() = 0
         override fun stopProcessing() = 0
+        override var audioProcessingMode = AudioProcessingMode.Realtime
         override fun getParameterValue(index: Int) = 0.0
         override fun setParameterValue(index: Int, value: Double) {}
         override fun getParameterValueString(index: Int, value: Double) = ""

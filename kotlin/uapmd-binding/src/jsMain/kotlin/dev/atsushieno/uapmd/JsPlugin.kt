@@ -24,6 +24,10 @@ class JsPluginInstance internal constructor(
     override fun startProcessing(): Int = jsMod._uapmd_instance_start_processing(handle) as Int
     override fun stopProcessing(): Int  = jsMod._uapmd_instance_stop_processing(handle) as Int
 
+    override var audioProcessingMode: AudioProcessingMode
+        get() = AudioProcessingMode.fromNative(jsMod._uapmd_instance_get_audio_processing_mode(handle) as Int)
+        set(value) { jsMod._uapmd_instance_set_audio_processing_mode(handle, value.nativeValue) }
+
     override val latencyInSamples: UInt
         get() = (jsMod._uapmd_instance_latency_in_samples(handle) as Int).toUInt()
 

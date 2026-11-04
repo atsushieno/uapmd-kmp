@@ -167,6 +167,13 @@ interface AppModel {
     )
     fun removePluginInstance(instanceId: Int)
 
+    /**
+     * `AppModel::setAudioProcessingMode`: applies on the main thread, stopping and restarting DSP as
+     * needed. A render owns its temporary modes until it completes or is canceled, and this fails
+     * meanwhile.
+     */
+    fun setAudioProcessingMode(instanceId: Int, mode: AudioProcessingMode): OpResult
+
     fun getInstanceGroup(instanceId: Int): UByte
     fun setInstanceGroup(instanceId: Int, group: UByte): Boolean
 

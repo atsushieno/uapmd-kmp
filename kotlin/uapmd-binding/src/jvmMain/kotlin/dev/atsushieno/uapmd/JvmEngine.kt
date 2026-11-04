@@ -120,6 +120,9 @@ class JvmSequencerEngine internal constructor(
         get() = lib.uapmd_engine_get_offline_rendering(handle)
         set(value) { lib.uapmd_engine_set_offline_rendering(handle, value) }
 
+    override fun setAudioProcessingMode(instanceId: Int, mode: AudioProcessingMode, restartProcessing: Boolean): Int =
+        lib.uapmd_engine_set_audio_processing_mode(handle, instanceId, mode.nativeValue, restartProcessing)
+
     override fun setActive(active: Boolean) = lib.uapmd_engine_set_active(handle, active)
     override fun setExternalPump(enabled: Boolean) = lib.uapmd_engine_set_external_pump(handle, enabled)
 
@@ -232,7 +235,8 @@ class JvmSequencerEngine internal constructor(
             success = result.success != 0.toByte(),
             canceled = result.canceled != 0.toByte(),
             renderedSeconds = result.rendered_seconds,
-            errorMessage = result.error_message
+            errorMessage = result.error_message,
+            pluginProcessingRestored = result.plugin_processing_restored != 0.toByte()
         )
     }
 }

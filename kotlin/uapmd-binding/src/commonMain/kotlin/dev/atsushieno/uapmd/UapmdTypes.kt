@@ -137,11 +137,22 @@ data class OfflineRenderProgress(
     val totalFrames: Long
 )
 
+/** `uapmd_plugin_hosting::AudioProcessingMode`. */
+enum class AudioProcessingMode(val nativeValue: Int) {
+    Realtime(0), Offline(1);
+
+    companion object {
+        fun fromNative(v: Int): AudioProcessingMode = entries.firstOrNull { it.nativeValue == v } ?: Realtime
+    }
+}
+
 data class OfflineRenderResult(
     val success: Boolean,
     val canceled: Boolean,
     val renderedSeconds: Double,
-    val errorMessage: String?
+    val errorMessage: String?,
+    /** False when the render could not restart its plug-ins' processing afterwards; AppModel then keeps the audio engine off. */
+    val pluginProcessingRestored: Boolean = true
 )
 
 data class AudioFileProperties(

@@ -124,6 +124,9 @@ class JsSequencerEngine internal constructor(
         get() = jsMod._uapmd_engine_get_offline_rendering(handle) as Boolean
         set(value) { jsMod._uapmd_engine_set_offline_rendering(handle, value) }
 
+    override fun setAudioProcessingMode(instanceId: Int, mode: AudioProcessingMode, restartProcessing: Boolean): Int =
+        jsMod._uapmd_engine_set_audio_processing_mode(handle, instanceId, mode.nativeValue, restartProcessing) as Int
+
     override fun setActive(active: Boolean)        = jsMod._uapmd_engine_set_active(handle, active)
     override fun setExternalPump(enabled: Boolean) = jsMod._uapmd_engine_set_external_pump(handle, enabled)
 

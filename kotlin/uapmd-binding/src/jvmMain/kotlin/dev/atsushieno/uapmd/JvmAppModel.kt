@@ -195,6 +195,11 @@ class JvmAppModel internal constructor(
         lib.uapmd_app_create_plugin_instance(handle, format, pluginId, trackIndex, c, null, cb)
     }
 
+    override fun setAudioProcessingMode(instanceId: Int, mode: AudioProcessingMode): OpResult {
+        val r = lib.uapmd_app_set_audio_processing_mode(handle, instanceId, mode.nativeValue)
+        return OpResult(r.success != 0.toByte(), r.error)
+    }
+
     override fun removePluginInstance(instanceId: Int) = lib.uapmd_app_remove_plugin_instance(handle, instanceId)
 
     override fun getInstanceGroup(instanceId: Int): UByte =

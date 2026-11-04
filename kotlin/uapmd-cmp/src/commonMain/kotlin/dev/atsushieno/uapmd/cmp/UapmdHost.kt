@@ -62,6 +62,8 @@ import dev.atsushieno.uapmd.PluginInstanceConfig
 import dev.atsushieno.uapmd.PluginInstanceResult
 import dev.atsushieno.uapmd.ScanMode
 import dev.atsushieno.uapmd.SlowScanProgress
+import dev.atsushieno.uapmd.TempoPoint
+import dev.atsushieno.uapmd.TimeSignaturePoint
 import dev.atsushieno.uapmd.TimelineState
 import dev.atsushieno.uapmd.TrackProperties
 import dev.atsushieno.uapmd.UndoState
@@ -197,8 +199,8 @@ class UapmdHost private constructor(val model: AppModel) {
     var history by mutableStateOf(model.historyState)
         private set
 
-    fun undo() = model.undo { onUiThread { refresh() } }
-    fun redo() = model.redo { onUiThread { refresh() } }
+    fun undo() = model.undo { onUiThread { invalidateMidiCache() } }
+    fun redo() = model.redo { onUiThread { invalidateMidiCache() } }
 
     // ── Scanning ────────────────────────────────────────────────────────────
 
@@ -224,18 +226,27 @@ class UapmdHost private constructor(val model: AppModel) {
     fun clearPluginBlocklist() = model.clearPluginBlocklist().also { refreshBlocklist() }
 
     /**
-     * The master track's tempo map, for the beats view. Rebuilt when the project
-     * changes rather than per frame — `buildMasterTrackSnapshot()` walks the
-     * master clip.
+     * The master track's tempo map, for the beats view. Re-read on each structural refresh rather
+     * than per frame — `buildMasterTrackSnapshot()` walks the master clip — and judged by the points
+     * themselves: an edit, a recompile or an undo can replace them without changing the clip's
+     * duration or identity, as `TimelineEditor::renderMasterTrackRow` notes.
      */
     var tempoMap by mutableStateOf(TempoMap.Empty)
         private set
 
-    fun refreshTempoMap() {
+    private var tempoMapSource: Pair<List<TempoPoint>, List<TimeSignaturePoint>>? = null
+
+    private fun refreshTempoMap() {
         runCatching {
             model.refreshMasterTempoMap()
-            TempoMap.build(model.masterTempoPoints, model.masterTimeSignaturePoints)
-        }.onSuccess { tempoMap = it }
+            val source = model.masterTempoPoints to model.masterTimeSignaturePoints
+            if (source != tempoMapSource) {
+                tempoMapSource = source
+                tempoMap = TempoMap.build(source.first, source.second)
+                // The engine times a clip's notes through this map, so the previews are stale too.
+                clearNotePreviews()
+            }
+        }
     }
 
     /** AppModel's blocked bundles, as the Plugin Selector lists them. */
@@ -882,10 +893,9 @@ class UapmdHost private constructor(val model: AppModel) {
                     selectedMidiClip = null
                 }
                 lastProjectResult = result
-                noteCache.clear()
+                clearNotePreviews()
                 isLoadingProject = false
                 projectRevision++
-                refreshTempoMap()
                 refresh()
             }
         }
@@ -1488,11 +1498,11 @@ class UapmdHost private constructor(val model: AppModel) {
     fun addEmptyAudioClip(trackIndex: Int, positionSeconds: Double) =
         addEmptyAudioClip(trackIndex, positionSeconds, positionSeconds + 1.0)
 
-    private fun invalidateClips() = noteCache.clear()
+    private fun invalidateClips() = clearNotePreviews()
 
     /** Call after editing a clip's UMP stream so previews re-decode. */
     fun invalidateMidiCache() {
-        noteCache.clear()
+        clearNotePreviews()
         refresh()
     }
 
@@ -1627,6 +1637,26 @@ class UapmdHost private constructor(val model: AppModel) {
 
     fun setTrackSolo(trackIndex: Int, solo: Boolean) {
         model.setTrackSolo(trackIndex, solo)
+        refresh()
+    }
+
+    /** The master track's M: every track at once, as one undo step. */
+    fun setAllTracksMuted(muted: Boolean) =
+        applyToAllTracks(if (muted) "Mute all tracks" else "Unmute all tracks") { model.setTrackMuted(it, muted) }
+
+    /** The master track's S: every track at once, as one undo step. */
+    fun setAllTracksSolo(solo: Boolean) =
+        applyToAllTracks(if (solo) "Solo all tracks" else "Unsolo all tracks") { model.setTrackSolo(it, solo) }
+
+    private fun applyToAllTracks(description: String, apply: (Int) -> Boolean) {
+        val history = model.sequencer.engine.timeline.commands.history
+        if (!history.beginStep(description).succeeded)
+            return
+        // A track can refuse, and then nothing stays half-applied.
+        if ((0 until trackCount).all(apply))
+            history.endStep()
+        else
+            history.cancelStep()
         refresh()
     }
 
@@ -1797,8 +1827,15 @@ class UapmdHost private constructor(val model: AppModel) {
     var outputSpectrum by mutableStateOf(FloatArray(24))
         private set
 
-    /** MIDI note previews, cached per (track, clip) because decoding is not free. */
-    private val noteCache = mutableMapOf<Pair<Int, Int>, List<MidiNoteData>>()
+    /**
+     * MIDI note previews, cached per (track, clip) because decoding is not free. Replaced rather than
+     * emptied, so that whatever drew from the old map draws again.
+     */
+    private var noteCache by mutableStateOf(mutableMapOf<Pair<Int, Int>, List<MidiNoteData>>())
+
+    private fun clearNotePreviews() {
+        noteCache = mutableMapOf()
+    }
 
     fun midiNotes(trackIndex: Int, clipId: Int): List<MidiNoteData> =
         noteCache.getOrPut(trackIndex to clipId) {
@@ -1886,7 +1923,10 @@ class UapmdHost private constructor(val model: AppModel) {
         isPaused = t.isPaused
         isRecording = t.isRecording || model.sequencer.engine.midiRecorder?.isRecording == true
         timeline = model.getTimelineState()
-        if (structural) history = model.historyState
+        if (structural) {
+            history = model.historyState
+            if (!isLoadingProject) refreshTempoMap()
+        }
 
         val engine = model.sequencer.engine
         val count = minOf(engine.trackCount.toInt(), model.timelineTrackCount.toInt())

@@ -202,6 +202,9 @@ class AndroidAppModel internal constructor(internal val handle: Long) : AppModel
         }
     )
 
+    override fun setAudioProcessingMode(instanceId: Int, mode: AudioProcessingMode): OpResult =
+        JniBridge.uapmdAppSetAudioProcessingMode(handle, instanceId, mode.nativeValue).toOpResult()
+
     override fun removePluginInstance(instanceId: Int) = JniBridge.uapmdAppRemovePluginInstance(handle, instanceId)
 
     override fun getInstanceGroup(instanceId: Int): UByte =

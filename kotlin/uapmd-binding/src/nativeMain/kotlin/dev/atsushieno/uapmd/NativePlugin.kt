@@ -37,6 +37,10 @@ class NativePluginInstance internal constructor(
     override fun startProcessing(): Int = uapmd_instance_start_processing(handle)
     override fun stopProcessing(): Int = uapmd_instance_stop_processing(handle)
 
+    override var audioProcessingMode: AudioProcessingMode
+        get() = AudioProcessingMode.fromNative(uapmd_instance_get_audio_processing_mode(handle).toInt())
+        set(value) { uapmd_instance_set_audio_processing_mode(handle, value.nativeValue.toUInt()) }
+
     override val latencyInSamples: UInt get() = uapmd_instance_latency_in_samples(handle)
     override val tailLengthInSeconds: Double get() = uapmd_instance_tail_length_in_seconds(handle)
     override val requiresReplacingProcess: Boolean get() = uapmd_instance_requires_replacing_process(handle)

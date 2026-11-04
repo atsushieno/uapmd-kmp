@@ -9,6 +9,8 @@ interface PluginInstance {
 
     fun startProcessing(): Int
     fun stopProcessing(): Int
+    /** Select while processing is stopped, before [startProcessing]. */
+    var audioProcessingMode: AudioProcessingMode
 
     val latencyInSamples: UInt
     val tailLengthInSeconds: Double

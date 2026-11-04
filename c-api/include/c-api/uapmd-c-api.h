@@ -22,6 +22,9 @@ UAPMD_C_EXPORT void uapmd_instance_set_bypassed(uapmd_plugin_instance_t inst, bo
 
 UAPMD_C_EXPORT uapmd_status_t uapmd_instance_start_processing(uapmd_plugin_instance_t inst);
 UAPMD_C_EXPORT uapmd_status_t uapmd_instance_stop_processing(uapmd_plugin_instance_t inst);
+/* Select while processing is stopped, before uapmd_instance_start_processing(). */
+UAPMD_C_EXPORT uapmd_audio_processing_mode_t uapmd_instance_get_audio_processing_mode(uapmd_plugin_instance_t inst);
+UAPMD_C_EXPORT void uapmd_instance_set_audio_processing_mode(uapmd_plugin_instance_t inst, uapmd_audio_processing_mode_t mode);
 
 UAPMD_C_EXPORT uint32_t uapmd_instance_latency_in_samples(uapmd_plugin_instance_t inst);
 UAPMD_C_EXPORT double   uapmd_instance_tail_length_in_seconds(uapmd_plugin_instance_t inst);

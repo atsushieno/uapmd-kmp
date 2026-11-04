@@ -200,6 +200,10 @@ void uapmd_engine_set_default_channels(uapmd_sequencer_engine_t engine, uint32_t
 void uapmd_engine_set_sample_rate(uapmd_sequencer_engine_t engine, int32_t sample_rate)                  { E(engine)->setSampleRate(sample_rate); }
 bool uapmd_engine_get_offline_rendering(uapmd_sequencer_engine_t engine)          { return E(engine)->offlineRendering(); }
 void uapmd_engine_set_offline_rendering(uapmd_sequencer_engine_t engine, bool en) { E(engine)->offlineRendering(en); }
+uapmd_status_t uapmd_engine_set_audio_processing_mode(uapmd_sequencer_engine_t engine, int32_t instance_id,
+                                                     uapmd_audio_processing_mode_t mode, bool restart_processing) {
+    return E(engine)->setAudioProcessingMode(instance_id, static_cast<uapmd_plugin_hosting::AudioProcessingMode>(mode), restart_processing);
+}
 void uapmd_engine_set_active(uapmd_sequencer_engine_t engine, bool active)        { E(engine)->setEngineActive(active); }
 /* SequencerEngine has no external pump: it runs no inline pump that a separate
  * pump thread could race with. Kept as a no-op so the C ABI and the Kotlin
@@ -847,7 +851,7 @@ uapmd_offline_render_result_t uapmd_render_offline(uapmd_sequencer_engine_t engi
 
     auto r = uapmd::renderOfflineProject(*E(engine), s, cb);
     tl_error = r.errorMessage;
-    return { r.success, r.canceled, r.renderedSeconds, tl_error.empty() ? nullptr : tl_error.c_str() };
+    return { r.success, r.canceled, r.renderedSeconds, tl_error.empty() ? nullptr : tl_error.c_str(), r.plugin_processing_restored };
 }
 
 /* ═══════════════════════════════════════════════════════════════════════════

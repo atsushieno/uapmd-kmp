@@ -110,6 +110,12 @@ typedef enum uapmd_ui_host_kind {
     UAPMD_UI_HOST_WEB_EMBEDDED = 2
 } uapmd_ui_host_kind_t;
 
+/* uapmd_plugin_hosting::AudioProcessingMode */
+typedef enum uapmd_audio_processing_mode {
+    UAPMD_AUDIO_PROCESSING_REALTIME = 0,
+    UAPMD_AUDIO_PROCESSING_OFFLINE  = 1
+} uapmd_audio_processing_mode_t;
+
 typedef enum uapmd_ui_presentation_role {
     UAPMD_UI_ROLE_COMPACT = 0,
     UAPMD_UI_ROLE_FULL = 1,

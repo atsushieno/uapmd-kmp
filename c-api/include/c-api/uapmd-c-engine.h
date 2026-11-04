@@ -128,6 +128,11 @@ UAPMD_C_EXPORT void uapmd_engine_set_default_channels(uapmd_sequencer_engine_t e
 UAPMD_C_EXPORT void uapmd_engine_set_sample_rate(uapmd_sequencer_engine_t engine, int32_t sample_rate);
 UAPMD_C_EXPORT bool uapmd_engine_get_offline_rendering(uapmd_sequencer_engine_t engine);
 UAPMD_C_EXPORT void uapmd_engine_set_offline_rendering(uapmd_sequencer_engine_t engine, bool enabled);
+/* A control-thread operation: excludes audio callbacks while stopping, selecting the mode and
+ * restarting this instance. Pass false for restart_processing only when the caller already owns a
+ * stopped plug-in lifecycle (engine disabled). */
+UAPMD_C_EXPORT uapmd_status_t uapmd_engine_set_audio_processing_mode(uapmd_sequencer_engine_t engine, int32_t instance_id,
+                                                                     uapmd_audio_processing_mode_t mode, bool restart_processing);
 UAPMD_C_EXPORT void uapmd_engine_set_active(uapmd_sequencer_engine_t engine, bool active);
 UAPMD_C_EXPORT void uapmd_engine_set_external_pump(uapmd_sequencer_engine_t engine, bool enabled);
 
@@ -525,6 +530,9 @@ typedef struct uapmd_offline_render_result {
     bool canceled;
     double rendered_seconds;
     const char* error_message;
+    /* False when the render could not restart its plug-ins' processing afterwards; AppModel then
+     * keeps the audio engine off. */
+    bool plugin_processing_restored;
 } uapmd_offline_render_result_t;
 
 UAPMD_C_EXPORT uapmd_offline_render_result_t uapmd_render_offline(uapmd_sequencer_engine_t engine,

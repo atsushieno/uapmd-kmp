@@ -281,6 +281,14 @@ JNIEXPORT void JNICALL Java_dev_atsushieno_uapmd_JniBridge_uapmdInstanceSetBypas
         JNIEnv*, jclass, jlong h, jboolean v) {
     uapmd_instance_set_bypassed(j2p<uapmd_plugin_instance_t>(h), v);
 }
+JNIEXPORT jint JNICALL Java_dev_atsushieno_uapmd_JniBridge_uapmdInstanceGetAudioProcessingMode(
+        JNIEnv*, jclass, jlong h) {
+    return uapmd_instance_get_audio_processing_mode(j2p<uapmd_plugin_instance_t>(h));
+}
+JNIEXPORT void JNICALL Java_dev_atsushieno_uapmd_JniBridge_uapmdInstanceSetAudioProcessingMode(
+        JNIEnv*, jclass, jlong h, jint mode) {
+    uapmd_instance_set_audio_processing_mode(j2p<uapmd_plugin_instance_t>(h), static_cast<uapmd_audio_processing_mode_t>(mode));
+}
 JNIEXPORT jint JNICALL Java_dev_atsushieno_uapmd_JniBridge_uapmdInstanceStartProcessing(
         JNIEnv*, jclass, jlong h) {
     return uapmd_instance_start_processing(j2p<uapmd_plugin_instance_t>(h));
@@ -1056,6 +1064,11 @@ JNIEXPORT void JNICALL Java_dev_atsushieno_uapmd_JniBridge_uapmdEngineSetDefault
         JNIEnv*, jclass, jlong h, jint in, jint out) { uapmd_engine_set_default_channels(j2p<uapmd_sequencer_engine_t>(h), in, out); }
 JNIEXPORT void JNICALL Java_dev_atsushieno_uapmd_JniBridge_uapmdEngineSetSampleRate(
         JNIEnv*, jclass, jlong h, jint sr) { uapmd_engine_set_sample_rate(j2p<uapmd_sequencer_engine_t>(h), sr); }
+JNIEXPORT jint JNICALL Java_dev_atsushieno_uapmd_JniBridge_uapmdEngineSetAudioProcessingMode(
+        JNIEnv*, jclass, jlong h, jint instanceId, jint mode, jboolean restartProcessing) {
+    return uapmd_engine_set_audio_processing_mode(j2p<uapmd_sequencer_engine_t>(h), instanceId,
+                                                  static_cast<uapmd_audio_processing_mode_t>(mode), restartProcessing);
+}
 JNIEXPORT jboolean JNICALL Java_dev_atsushieno_uapmd_JniBridge_uapmdEngineGetOfflineRendering(
         JNIEnv*, jclass, jlong h) { return uapmd_engine_get_offline_rendering(j2p<uapmd_sequencer_engine_t>(h)); }
 JNIEXPORT void JNICALL Java_dev_atsushieno_uapmd_JniBridge_uapmdEngineSetOfflineRendering(
@@ -1109,8 +1122,8 @@ JNIEXPORT jfloatArray JNICALL Java_dev_atsushieno_uapmd_JniBridge_uapmdEngineGet
 JNIEXPORT jlong JNICALL Java_dev_atsushieno_uapmd_JniBridge_uapmdEngineTimeline(
         JNIEnv*, jclass, jlong h) { return p2j(uapmd_engine_timeline(j2p<uapmd_sequencer_engine_t>(h))); }
 
-// Offline render — returns double[4]: {success(0/1), canceled(0/1), renderedSecs, errorStr_ptr?}
-// We avoid pointer gymnastics: return a String[] {success, canceled, renderedSecs, error?}
+// Offline render — returns double[5]: {success(0/1), canceled(0/1), renderedSecs, errorStr_ptr?, pluginProcessingRestored(0/1)}
+// We avoid pointer gymnastics: return a String[] {success, canceled, renderedSecs, error?, pluginProcessingRestored}
 JNIEXPORT jobjectArray JNICALL Java_dev_atsushieno_uapmd_JniBridge_uapmdRenderOffline(
         JNIEnv* env, jclass, jlong h,
         jstring outputPath,
@@ -1174,12 +1187,13 @@ JNIEXPORT jobjectArray JNICALL Java_dev_atsushieno_uapmd_JniBridge_uapmdRenderOf
     jstr_release(env, outputPath, op);
 
     jclass sc = env->FindClass("java/lang/String");
-    jobjectArray arr = env->NewObjectArray(4, sc, nullptr);
+    jobjectArray arr = env->NewObjectArray(5, sc, nullptr);
     env->SetObjectArrayElement(arr, 0, env->NewStringUTF(result.success ? "1" : "0"));
     env->SetObjectArrayElement(arr, 1, env->NewStringUTF(result.canceled ? "1" : "0"));
     char buf[64]; snprintf(buf, sizeof(buf), "%.6f", result.rendered_seconds);
     env->SetObjectArrayElement(arr, 2, env->NewStringUTF(buf));
     env->SetObjectArrayElement(arr, 3, result.error_message ? env->NewStringUTF(result.error_message) : nullptr);
+    env->SetObjectArrayElement(arr, 4, env->NewStringUTF(result.plugin_processing_restored ? "1" : "0"));
     return arr;
 }
 

@@ -188,6 +188,12 @@ void uapmd_instance_set_bypassed(uapmd_plugin_instance_t inst, bool value) { I(i
 
 uapmd_status_t uapmd_instance_start_processing(uapmd_plugin_instance_t inst) { return I(inst)->startProcessing(); }
 uapmd_status_t uapmd_instance_stop_processing(uapmd_plugin_instance_t inst)  { return I(inst)->stopProcessing(); }
+uapmd_audio_processing_mode_t uapmd_instance_get_audio_processing_mode(uapmd_plugin_instance_t inst) {
+    return static_cast<uapmd_audio_processing_mode_t>(I(inst)->audioProcessingMode());
+}
+void uapmd_instance_set_audio_processing_mode(uapmd_plugin_instance_t inst, uapmd_audio_processing_mode_t mode) {
+    I(inst)->setAudioProcessingMode(static_cast<uapmd_plugin_hosting::AudioProcessingMode>(mode));
+}
 
 uint32_t uapmd_instance_latency_in_samples(uapmd_plugin_instance_t inst) { return I(inst)->latencyInSamples(); }
 double   uapmd_instance_tail_length_in_seconds(uapmd_plugin_instance_t inst) { return I(inst)->tailLengthInSeconds(); }

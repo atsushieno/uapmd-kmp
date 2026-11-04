@@ -43,6 +43,10 @@ class JvmPluginInstance internal constructor(
     override fun startProcessing(): Int = lib.uapmd_instance_start_processing(handle)
     override fun stopProcessing(): Int = lib.uapmd_instance_stop_processing(handle)
 
+    override var audioProcessingMode: AudioProcessingMode
+        get() = AudioProcessingMode.fromNative(lib.uapmd_instance_get_audio_processing_mode(handle))
+        set(value) { lib.uapmd_instance_set_audio_processing_mode(handle, value.nativeValue) }
+
     override val latencyInSamples: UInt get() = lib.uapmd_instance_latency_in_samples(handle).toUInt()
     override val tailLengthInSeconds: Double get() = lib.uapmd_instance_tail_length_in_seconds(handle)
     override val requiresReplacingProcess: Boolean get() = lib.uapmd_instance_requires_replacing_process(handle)

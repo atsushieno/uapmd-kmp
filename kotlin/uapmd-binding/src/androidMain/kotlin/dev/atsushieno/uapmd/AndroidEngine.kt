@@ -109,6 +109,9 @@ class AndroidSequencerEngine internal constructor(
         get() = JniBridge.uapmdEngineGetOfflineRendering(handle)
         set(value) { JniBridge.uapmdEngineSetOfflineRendering(handle, value) }
 
+    override fun setAudioProcessingMode(instanceId: Int, mode: AudioProcessingMode, restartProcessing: Boolean): Int =
+        JniBridge.uapmdEngineSetAudioProcessingMode(handle, instanceId, mode.nativeValue, restartProcessing)
+
     override fun setActive(active: Boolean) = JniBridge.uapmdEngineSetActive(handle, active)
     override fun setExternalPump(enabled: Boolean) = JniBridge.uapmdEngineSetExternalPump(handle, enabled)
 
@@ -221,7 +224,8 @@ class AndroidSequencerEngine internal constructor(
             success = arr[0] == "1",
             canceled = arr[1] == "1",
             renderedSeconds = arr[2]?.toDoubleOrNull() ?: 0.0,
-            errorMessage = arr[3]
+            errorMessage = arr[3],
+            pluginProcessingRestored = arr[4] == "1"
         )
     }
 }

@@ -32,6 +32,8 @@ object JniBridge {
     @JvmStatic external fun uapmdInstanceSetBypassed(h: Long, v: Boolean)
     @JvmStatic external fun uapmdInstanceStartProcessing(h: Long): Int
     @JvmStatic external fun uapmdInstanceStopProcessing(h: Long): Int
+    @JvmStatic external fun uapmdInstanceGetAudioProcessingMode(h: Long): Int
+    @JvmStatic external fun uapmdInstanceSetAudioProcessingMode(h: Long, mode: Int)
     @JvmStatic external fun uapmdInstanceLatencyInSamples(h: Long): Int
     @JvmStatic external fun uapmdInstanceTailLengthInSeconds(h: Long): Double
     @JvmStatic external fun uapmdInstanceRequiresReplacingProcess(h: Long): Boolean
@@ -239,6 +241,7 @@ object JniBridge {
     @JvmStatic external fun uapmdEngineSetSampleRate(h: Long, sr: Int)
     @JvmStatic external fun uapmdEngineGetOfflineRendering(h: Long): Boolean
     @JvmStatic external fun uapmdEngineSetOfflineRendering(h: Long, v: Boolean)
+    @JvmStatic external fun uapmdEngineSetAudioProcessingMode(h: Long, instanceId: Int, mode: Int, restartProcessing: Boolean): Int
     @JvmStatic external fun uapmdEngineSetActive(h: Long, v: Boolean)
     @JvmStatic external fun uapmdEngineSetExternalPump(h: Long, v: Boolean)
     @JvmStatic external fun uapmdEngineIsPlaybackActive(h: Long): Boolean
@@ -868,6 +871,7 @@ object JniBridge {
         cb: Any
     )
     @JvmStatic external fun uapmdAppRemovePluginInstance(app: Long, instanceId: Int)
+    @JvmStatic external fun uapmdAppSetAudioProcessingMode(app: Long, instanceId: Int, mode: Int): Array<Any>?
     @JvmStatic external fun uapmdAppGetInstanceGroup(app: Long, instanceId: Int): Int
     @JvmStatic external fun uapmdAppSetInstanceGroup(app: Long, instanceId: Int, group: Int): Boolean
     @JvmStatic external fun uapmdAppEnableUmpDevice(app: Long, instanceId: Int, deviceName: String)

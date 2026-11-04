@@ -33,6 +33,10 @@ class AndroidPluginInstance internal constructor(
     override fun startProcessing(): Int = JniBridge.uapmdInstanceStartProcessing(handle)
     override fun stopProcessing(): Int = JniBridge.uapmdInstanceStopProcessing(handle)
 
+    override var audioProcessingMode: AudioProcessingMode
+        get() = AudioProcessingMode.fromNative(JniBridge.uapmdInstanceGetAudioProcessingMode(handle))
+        set(value) { JniBridge.uapmdInstanceSetAudioProcessingMode(handle, value.nativeValue) }
+
     override val latencyInSamples: UInt get() = JniBridge.uapmdInstanceLatencyInSamples(handle).toUInt()
     override val tailLengthInSeconds: Double get() = JniBridge.uapmdInstanceTailLengthInSeconds(handle)
     override val requiresReplacingProcess: Boolean get() = JniBridge.uapmdInstanceRequiresReplacingProcess(handle)

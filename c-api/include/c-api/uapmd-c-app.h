@@ -698,6 +698,11 @@ typedef struct uapmd_op_result {
     const char* error;
 } uapmd_op_result_t;
 
+/* AppModel::setAudioProcessingMode: applies on the main thread, stopping and restarting DSP as
+ * needed. A render owns its temporary modes until it completes or is canceled, and this fails
+ * meanwhile. */
+UAPMD_C_EXPORT uapmd_op_result_t uapmd_app_set_audio_processing_mode(uapmd_app_model_t app, int32_t instance_id, uapmd_audio_processing_mode_t mode);
+
 UAPMD_C_EXPORT bool uapmd_app_ensure_track_uses_editor_graph(uapmd_app_model_t app, int32_t track_index);
 UAPMD_C_EXPORT void uapmd_app_request_show_track_graph(uapmd_app_model_t app, int32_t track_index);
 UAPMD_C_EXPORT bool uapmd_app_revert_track_to_simple_graph(uapmd_app_model_t app, int32_t track_index);

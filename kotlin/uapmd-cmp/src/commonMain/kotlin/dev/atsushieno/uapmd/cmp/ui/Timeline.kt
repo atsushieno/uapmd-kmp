@@ -1753,6 +1753,33 @@ private fun LegendIconButton(
     }
 }
 
+/** A legend's M or S: plain, or lit in [litColor]. */
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun LegendToggleButton(
+    label: String,
+    lit: Boolean,
+    litColor: Color,
+    tooltip: String,
+    enabled: Boolean = true,
+    onClick: () -> Unit
+) {
+    TooltipBox(
+        positionProvider = TooltipDefaults.rememberTooltipPositionProvider(),
+        tooltip = { PlainTooltip { Text(tooltip) } },
+        state = rememberTooltipState()
+    ) {
+        Button(
+            onClick = onClick,
+            enabled = enabled,
+            contentPadding = TightPadding,
+            modifier = Modifier.size(IconButtonSize),
+            colors = if (lit) ButtonDefaults.buttonColors(containerColor = litColor)
+            else ButtonDefaults.buttonColors()
+        ) { Text(label, style = MaterialTheme.typography.labelSmall) }
+    }
+}
+
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
 private fun TrackLegend(
@@ -1862,23 +1889,17 @@ private fun TrackLegend(
                 )
                 val muted = host.trackMuted(trackIndex)
                 val solo = host.trackSolo(trackIndex)
-                Button(
-                    onClick = { host.setTrackMuted(trackIndex, !muted) },
-                    contentPadding = TightPadding,
-                    modifier = Modifier.size(IconButtonSize),
-                    // M shows one thing only: this track's own mute flag.
-                    colors = if (muted) ButtonDefaults.buttonColors(containerColor = c.muted)
-                    else ButtonDefaults.buttonColors()
-                ) { Text("M", style = MaterialTheme.typography.labelSmall) }
-                Button(
-                    onClick = { host.setTrackSolo(trackIndex, !solo) },
-                    contentPadding = TightPadding,
-                    modifier = Modifier.size(IconButtonSize),
-                    // Lit when soloed, plain otherwise — the two states
-                    // uapmd-app draws (TimelineEditor.cpp:1576).
-                    colors = if (solo) ButtonDefaults.buttonColors(containerColor = c.solo)
-                    else ButtonDefaults.buttonColors()
-                ) { Text("S", style = MaterialTheme.typography.labelSmall) }
+                // M shows one thing only: this track's own mute flag.
+                LegendToggleButton(
+                    "M", muted, c.muted,
+                    if (muted) "Track muted (click to unmute)" else "Mute track"
+                ) { host.setTrackMuted(trackIndex, !muted) }
+                // Lit when soloed, plain otherwise — the two states
+                // uapmd-app draws (TimelineEditor.cpp:1576).
+                LegendToggleButton(
+                    "S", solo, c.solo,
+                    if (solo) "Track soloed (click to clear)" else "Solo track"
+                ) { host.setTrackSolo(trackIndex, !solo) }
             }
         }
 
@@ -2018,18 +2039,21 @@ private fun PluginInstanceMenuItems(
 
 /**
  * The master track. uapmd-app renders it above the regular tracks with a
- * reduced set of actions: no delete, no mute/solo, and "Add Master Plugin"
- * instead of "Add Plugin".
+ * reduced set of actions: no delete, M and S that act on every track, and
+ * "Add Master Plugin" instead of "Add Plugin".
  */
 @Composable
 private fun MasterTrackLegend(host: UapmdHost, windows: FloatingWindowManager, trackHeight: Dp) {
+    val c = editorPalette
     var pluginMenu by remember { mutableStateOf(false) }
     var clipsMenu by remember { mutableStateOf(false) }
     val instances = host.masterInstances
     // uapmd-app builds the master legend from the same code as a regular track
     // (`renderTrackLegendContent`, via `engine()->masterTrack()`): row 1 is
-    // Clips + Graph + the gain slider — this is the project's total volume —
-    // and only Mute/Solo, Freeze and the More menu are gated to regular tracks.
+    // Clips + Graph + the gain slider — this is the project's total volume — then
+    // M and S, and only Freeze and the More menu are gated to regular tracks. M and S
+    // are on row 2 here: "Master" is wider than a track's label, and at a phone's
+    // width row 1 has no room left for them.
 
     Column(
         Modifier.height(trackHeight).fillMaxWidth()
@@ -2091,7 +2115,8 @@ private fun MasterTrackLegend(host: UapmdHost, windows: FloatingWindowManager, t
             }
         }
         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(3.dp)) {
-            Box {
+            // Takes what is left, as a track's does, so a long plug-in name cannot push M and S out.
+            Box(Modifier.weight(1f)) {
                 Button(
                     onClick = {
                         if (instances.isEmpty()) {
@@ -2101,11 +2126,13 @@ private fun MasterTrackLegend(host: UapmdHost, windows: FloatingWindowManager, t
                             }
                         } else pluginMenu = true
                     },
-                    contentPadding = TightPadding
+                    contentPadding = TightPadding,
+                    modifier = Modifier.fillMaxWidth()
                 ) {
                     Text(
                         instances.firstOrNull()?.let { it.displayName } ?: "Add Master Plugin",
-                        style = MaterialTheme.typography.labelSmall
+                        style = MaterialTheme.typography.labelSmall,
+                        maxLines = 1
                     )
                 }
                 DropdownMenu(expanded = pluginMenu, onDismissRequest = { pluginMenu = false }) {
@@ -2119,6 +2146,20 @@ private fun MasterTrackLegend(host: UapmdHost, windows: FloatingWindowManager, t
                     })
                 }
             }
+            // Lit when any track is, as in uapmd-app, so the first click clears what is set.
+            val anyMuted = host.trackMutedFlags.any { it }
+            val anySolo = host.trackSoloFlags.any { it }
+            val hasTracks = host.trackCount > 0
+            LegendToggleButton(
+                "M", anyMuted, c.muted,
+                if (anyMuted) "Unmute all tracks" else "Mute all tracks",
+                enabled = hasTracks
+            ) { host.setAllTracksMuted(!anyMuted) }
+            LegendToggleButton(
+                "S", anySolo, c.solo,
+                if (anySolo) "Unsolo all tracks" else "Solo all tracks",
+                enabled = hasTracks
+            ) { host.setAllTracksSolo(!anySolo) }
         }
     }
 }

@@ -463,12 +463,13 @@ open class UapmdOfflineRenderProgress : Structure() {
     @JvmField var total_frames: Long = 0L
 }
 
-@FieldOrder("success", "canceled", "rendered_seconds", "error_message")
+@FieldOrder("success", "canceled", "rendered_seconds", "error_message", "plugin_processing_restored")
 open class UapmdOfflineRenderResult : Structure() {
     @JvmField var success: Byte = 0
     @JvmField var canceled: Byte = 0
     @JvmField var rendered_seconds: Double = 0.0
     @JvmField var error_message: String? = null
+    @JvmField var plugin_processing_restored: Byte = 1
 
     class ByVal : UapmdOfflineRenderResult(), Structure.ByValue
 }
@@ -1194,6 +1195,8 @@ interface UapmdLibrary : Library {
 
     fun uapmd_instance_start_processing(inst: Pointer?): Int
     fun uapmd_instance_stop_processing(inst: Pointer?): Int
+    fun uapmd_instance_get_audio_processing_mode(inst: Pointer?): Int
+    fun uapmd_instance_set_audio_processing_mode(inst: Pointer?, mode: Int)
 
     fun uapmd_instance_latency_in_samples(inst: Pointer?): Int
     fun uapmd_instance_tail_length_in_seconds(inst: Pointer?): Double
@@ -1431,6 +1434,7 @@ interface UapmdLibrary : Library {
     fun uapmd_engine_set_sample_rate(engine: Pointer?, sampleRate: Int)
     fun uapmd_engine_get_offline_rendering(engine: Pointer?): Boolean
     fun uapmd_engine_set_offline_rendering(engine: Pointer?, enabled: Boolean)
+    fun uapmd_engine_set_audio_processing_mode(engine: Pointer?, instanceId: Int, mode: Int, restartProcessing: Boolean): Int
     fun uapmd_engine_set_active(engine: Pointer?, active: Boolean)
     fun uapmd_engine_set_external_pump(engine: Pointer?, enabled: Boolean)
 
@@ -2027,6 +2031,7 @@ interface UapmdLibrary : Library {
 
     fun uapmd_app_create_plugin_instance(app: Pointer?, format: String?, pluginId: String?, trackIndex: Int, config: UapmdPluginInstanceConfig?, userData: Pointer?, callback: InstanceCreatedCb?)
     fun uapmd_app_remove_plugin_instance(app: Pointer?, instanceId: Int)
+    fun uapmd_app_set_audio_processing_mode(app: Pointer?, instanceId: Int, mode: Int): UapmdOpResult.ByVal
     fun uapmd_app_get_instance_group(app: Pointer?, instanceId: Int): Byte
     fun uapmd_app_set_instance_group(app: Pointer?, instanceId: Int, group: Byte): Boolean
     fun uapmd_app_enable_ump_device(app: Pointer?, instanceId: Int, deviceName: String?)

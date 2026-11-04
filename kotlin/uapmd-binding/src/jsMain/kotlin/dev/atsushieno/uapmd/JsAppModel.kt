@@ -240,6 +240,12 @@ class JsAppModel internal constructor(internal val handle: Int) : AppModel {
         }
     }
 
+    override fun setAudioProcessingMode(instanceId: Int, mode: AudioProcessingMode): OpResult =
+        withWasmMem(8) { out ->                    // sizeof uapmd_op_result_t
+            jsMod._uapmd_app_set_audio_processing_mode(out, handle, instanceId, mode.nativeValue)
+            jsReadOpResult(out)
+        }
+
     override fun removePluginInstance(instanceId: Int) {
         jsMod._uapmd_app_remove_plugin_instance(handle, instanceId)
     }

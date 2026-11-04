@@ -143,6 +143,9 @@ class WasmJsSequencerEngine internal constructor(
         get() = wasmMod.uapmdEngineGetOfflineRendering(handle)
         set(value) { wasmMod.uapmdEngineSetOfflineRendering(handle, value) }
 
+    override fun setAudioProcessingMode(instanceId: Int, mode: AudioProcessingMode, restartProcessing: Boolean): Int =
+        wasmMod.uapmdEngineSetAudioProcessingMode(handle, instanceId, mode.nativeValue, restartProcessing)
+
     override fun setActive(active: Boolean) = wasmMod.uapmdEngineSetActive(handle, active)
     override fun setExternalPump(enabled: Boolean) = wasmMod.uapmdEngineSetExternalPump(handle, enabled)
 

@@ -208,6 +208,12 @@ class WasmJsAppModel internal constructor(internal val handle: Int) : AppModel {
         }
     }
 
+    override fun setAudioProcessingMode(instanceId: Int, mode: AudioProcessingMode): OpResult =
+        withWasmStruct(8) { out ->                 // sizeof uapmd_op_result_t
+            wasmMod.uapmdAppSetAudioProcessingMode(out, handle, instanceId, mode.nativeValue)
+            readOpResult(out)
+        }
+
     override fun removePluginInstance(instanceId: Int) = wasmMod.uapmdAppRemovePluginInstance(handle, instanceId)
 
     override fun getInstanceGroup(instanceId: Int): UByte =

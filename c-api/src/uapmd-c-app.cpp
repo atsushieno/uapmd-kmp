@@ -292,6 +292,12 @@ void uapmd_app_create_plugin_instance(uapmd_app_model_t app,
         });
 }
 
+uapmd_op_result_t uapmd_app_set_audio_processing_mode(uapmd_app_model_t app, int32_t instance_id, uapmd_audio_processing_mode_t mode) {
+    tl_error.clear();
+    bool ok = AM(app)->setAudioProcessingMode(instance_id, static_cast<uapmd_plugin_hosting::AudioProcessingMode>(mode), tl_error);
+    return { ok, tl_error.empty() ? nullptr : tl_error.c_str() };
+}
+
 void uapmd_app_remove_plugin_instance(uapmd_app_model_t app, int32_t instance_id) {
     AM(app)->removePluginInstance(instance_id);
 }

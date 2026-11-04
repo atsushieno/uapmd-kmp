@@ -1373,6 +1373,10 @@ static jobjectArray pack_op_result(JNIEnv* env, uapmd_op_result_t r) {
     return result;
 }
 
+JNI_FN(jobjectArray, uapmdAppSetAudioProcessingMode)(JNIEnv* env, jclass, jlong app, jint instanceId, jint mode) {
+    return pack_op_result(env, uapmd_app_set_audio_processing_mode(AM(app), instanceId, static_cast<uapmd_audio_processing_mode_t>(mode)));
+}
+
 JNI_FN(jobjectArray, uapmdAppConnectTrackGraph)(JNIEnv* env, jclass, jlong app, jint t,
                                                   jlong id, jint busType,
                                                   jint srcType, jstring srcNodeId, jint srcInstance, jint srcBus,

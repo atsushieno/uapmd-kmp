@@ -28,6 +28,10 @@ class WasmJsPluginInstance internal constructor(
     override fun startProcessing(): Int = wasmMod.uapmdInstanceStartProcessing(handle)
     override fun stopProcessing(): Int  = wasmMod.uapmdInstanceStopProcessing(handle)
 
+    override var audioProcessingMode: AudioProcessingMode
+        get() = AudioProcessingMode.fromNative(wasmMod.uapmdInstanceGetAudioProcessingMode(handle))
+        set(value) { wasmMod.uapmdInstanceSetAudioProcessingMode(handle, value.nativeValue) }
+
     override val latencyInSamples: UInt
         get() = wasmMod.uapmdInstanceLatencyInSamples(handle).toUInt()
 

@@ -191,6 +191,10 @@ external interface UapmdCApiModule : JsAny {
     fun uapmdInstanceStartProcessing(inst: Int): Int
     @JsName("_uapmd_instance_stop_processing")
     fun uapmdInstanceStopProcessing(inst: Int): Int
+    @JsName("_uapmd_instance_get_audio_processing_mode")
+    fun uapmdInstanceGetAudioProcessingMode(inst: Int): Int
+    @JsName("_uapmd_instance_set_audio_processing_mode")
+    fun uapmdInstanceSetAudioProcessingMode(inst: Int, mode: Int)
     @JsName("_uapmd_instance_show_ui")
     fun uapmdInstanceShowUi(inst: Int): Boolean
     @JsName("_uapmd_instance_hide_ui")
@@ -315,6 +319,8 @@ external interface UapmdCApiModule : JsAny {
     fun uapmdEngineSetExternalPump(handle: Int, enabled: Boolean)
     @JsName("_uapmd_engine_set_default_channels")
     fun uapmdEngineSetDefaultChannels(handle: Int, inputChannels: Int, outputChannels: Int)
+    @JsName("_uapmd_engine_set_audio_processing_mode")
+    fun uapmdEngineSetAudioProcessingMode(handle: Int, instanceId: Int, mode: Int, restartProcessing: Boolean): Int
     @JsName("_uapmd_engine_set_offline_rendering")
     fun uapmdEngineSetOfflineRendering(handle: Int, offline: Boolean)
     @JsName("_uapmd_engine_get_offline_rendering")
@@ -1256,6 +1262,8 @@ external interface UapmdCApiModule : JsAny {
 
     @JsName("_uapmd_app_create_plugin_instance")
     fun uapmdAppCreatePluginInstance(app: Int, format: Int, pluginId: Int, trackIndex: Int, config: Int, userData: Int, callback: Int)
+    @JsName("_uapmd_app_set_audio_processing_mode")
+    fun uapmdAppSetAudioProcessingMode(out: Int, app: Int, instanceId: Int, mode: Int)
     @JsName("_uapmd_app_remove_plugin_instance")
     fun uapmdAppRemovePluginInstance(app: Int, instanceId: Int)
     @JsName("_uapmd_app_get_instance_group")

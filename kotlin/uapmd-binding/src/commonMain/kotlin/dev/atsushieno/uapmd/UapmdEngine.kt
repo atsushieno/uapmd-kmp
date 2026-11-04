@@ -51,6 +51,13 @@ interface SequencerEngine {
     fun setDefaultChannels(inputChannels: UInt, outputChannels: UInt)
     var sampleRate: Int
     var offlineRendering: Boolean
+    /**
+     * `SequencerEngine::setAudioProcessingMode`, returning its status. A control-thread operation:
+     * excludes audio callbacks while stopping, selecting the mode and restarting this instance. Pass
+     * false for [restartProcessing] only when the caller already owns a stopped plug-in lifecycle
+     * (engine disabled).
+     */
+    fun setAudioProcessingMode(instanceId: Int, mode: AudioProcessingMode, restartProcessing: Boolean = true): Int
     fun setActive(active: Boolean)
     fun setExternalPump(enabled: Boolean)
 

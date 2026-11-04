@@ -29,6 +29,7 @@ This belongs in `uapmd-binding-missing-api.md` §2 as C API work.
 | What | Status |
 |---|---|
 | `ClipProperties` window | Ahead of uapmd-app rather than diverging from it: uapmd-app has no per-clip properties window (`setClipGain` / `setClipMuted` are never called from its GUI), but these features are wanted there too. Kept by the user's decision, 2026-08-29 |
+| Master track's M and S on the legend's second row | uapmd-app puts them after the gain slider. "Master" is wider than a track's label, so at a phone's width that row has no room and the last button is crushed |
 
 ## Known defects
 

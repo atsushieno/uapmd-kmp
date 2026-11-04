@@ -115,6 +115,9 @@ class NativeSequencerEngine internal constructor(
         get() = uapmd_engine_get_offline_rendering(handle)
         set(value) { uapmd_engine_set_offline_rendering(handle, value) }
 
+    override fun setAudioProcessingMode(instanceId: Int, mode: AudioProcessingMode, restartProcessing: Boolean): Int =
+        uapmd_engine_set_audio_processing_mode(handle, instanceId, mode.nativeValue.toUInt(), restartProcessing)
+
     override fun setActive(active: Boolean) = uapmd_engine_set_active(handle, active)
     override fun setExternalPump(enabled: Boolean) = uapmd_engine_set_external_pump(handle, enabled)
 
@@ -227,7 +230,7 @@ class NativeSequencerEngine internal constructor(
         ctx?.dispose()
 
         result.useContents {
-            OfflineRenderResult(success, canceled, rendered_seconds, error_message?.toKString())
+            OfflineRenderResult(success, canceled, rendered_seconds, error_message?.toKString(), plugin_processing_restored)
         }
     }
 }

@@ -189,6 +189,11 @@ class NativeAppModel internal constructor(
         )
     }
 
+    override fun setAudioProcessingMode(instanceId: Int, mode: AudioProcessingMode): OpResult =
+        uapmd_app_set_audio_processing_mode(handle, instanceId, mode.nativeValue.toUInt()).useContents {
+            OpResult(success, error?.toKString())
+        }
+
     override fun removePluginInstance(instanceId: Int) = uapmd_app_remove_plugin_instance(handle, instanceId)
 
     override fun getInstanceGroup(instanceId: Int): UByte = uapmd_app_get_instance_group(handle, instanceId)
