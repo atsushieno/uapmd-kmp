@@ -29,6 +29,16 @@ on:
         required: false
         type: boolean
         default: false
+      aap_core_ref:
+        description: 'aap-core git ref to build Android against (branch / tag / sha)'
+        required: false
+        type: string
+        default: 'main'
+      aap_ara_ref:
+        description: 'aap-ara git ref to build Android against (branch / tag / sha)'
+        required: false
+        type: string
+        default: 'main'
 
 jobs:
   build:
@@ -63,6 +73,26 @@ jobs:
       uses: actions/checkout@v4
       with:
         submodules: recursive
+
+    # The Android build resolves AAP from Maven Local only. These checkouts exist
+    # solely to publish it there. Inputs are empty on push and pull_request.
+    - name: checkout aap-core
+      if: matrix.name == 'android'
+      uses: actions/checkout@v4
+      with:
+        repository: atsushieno/aap-core
+        ref: ${{ inputs.aap_core_ref || 'main' }}
+        submodules: recursive
+        path: external/aap-core
+
+    - name: checkout aap-ara
+      if: matrix.name == 'android'
+      uses: actions/checkout@v4
+      with:
+        repository: atsushieno/aap-ara
+        ref: ${{ inputs.aap_ara_ref || 'main' }}
+        submodules: recursive
+        path: external/aap-ara
 
     - name: apt update and install
       if: matrix.name == 'linux-jvm'
@@ -123,7 +153,9 @@ jobs:
       working-directory: external/aap-core
       run: ./gradlew :androidaudioplugin:publishToMavenLocal
 
-    # aap-ara resolves ../aap-core as an included build, so it follows aap-core.
+    # aap-ara compiles against the aap-core version in its own catalog, which may be
+    # older than the one published above (Maven Central supplies it). Bump its catalog
+    # whenever aap-core's native ABI changes.
     - name: publish aap-ara to Maven Local
       if: matrix.name == 'android'
       working-directory: external/aap-ara

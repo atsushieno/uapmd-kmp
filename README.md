@@ -35,17 +35,23 @@ git clone --recursive https://github.com/atsushieno/uapmd-kmp
 
 ### Android
 
-Publish the AAP framework dependencies to Maven Local before the main build. The ARA
-backend of uapmd also needs `androidaudioplugin-ara` from the `external/aap-ara`
-submodule ([aap-ara](https://github.com/atsushieno/aap-ara), which builds against the
-sibling `external/aap-core`):
+The Android build resolves the AAP framework from Maven Local, so publish
+[aap-core](https://github.com/atsushieno/aap-core) and
+[aap-ara](https://github.com/atsushieno/aap-ara) (needed by the ARA backend of uapmd)
+first. Check them out outside this repository:
 
 ```sh
-cd external/aap-core
+git clone --recursive https://github.com/atsushieno/aap-core
+git clone --recursive https://github.com/atsushieno/aap-ara
+cd aap-core
 ./gradlew :androidaudioplugin:publishToMavenLocal
 cd ../aap-ara
 ./gradlew :androidaudioplugin-ara:publishToMavenLocal
-cd ../../kotlin
+```
+
+Then build from `kotlin/` in this repository:
+
+```sh
 ./gradlew assembleDebug
 ```
 
