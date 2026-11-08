@@ -160,3 +160,7 @@ class JvmPluginInstancing internal constructor(
 actual var applicationDataDirectory: String
     get() = readJvmString { buf, size -> lib.uapmd_application_data_directory_get(buf, size) }
     set(value) { lib.uapmd_application_data_directory_set(value) }
+
+actual var applicationCacheDirectory: String
+    get() = readJvmString { buf, size -> lib.uapmd_application_cache_directory_get(buf, size) }
+    set(value) { lib.uapmd_application_cache_directory_set(value) }

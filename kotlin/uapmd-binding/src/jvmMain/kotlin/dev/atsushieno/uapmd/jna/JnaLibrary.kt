@@ -1629,6 +1629,8 @@ interface UapmdLibrary : Library {
 
     fun uapmd_application_data_directory_set(path: String)
     fun uapmd_application_data_directory_get(buf: ByteArray?, bufSize: Long): Long
+    fun uapmd_application_cache_directory_set(path: String)
+    fun uapmd_application_cache_directory_get(buf: ByteArray?, bufSize: Long): Long
 
     fun uapmd_scan_tool_get_search_path_settings_file(tool: Pointer?, buf: ByteArray?, bufSize: Long): Long
     fun uapmd_scan_tool_load_search_path_settings(tool: Pointer?)

@@ -87,6 +87,14 @@ UAPMD_C_EXPORT size_t   uapmd_scan_tool_get_format_name(uapmd_scan_tool_t tool, 
 UAPMD_C_EXPORT void   uapmd_application_data_directory_set(const char* path);
 UAPMD_C_EXPORT size_t uapmd_application_data_directory_get(char* buf, size_t buf_size);
 
+/* uapmd_plugin_hosting::applicationCacheDirectory(): where data that can be produced again may be
+ * kept, which the platform may purge (Android: Context.getCacheDir()). Frozen track audio goes in
+ * its "frozen-tracks" folder; when it is empty, the application data directory's, and failing
+ * that the system temp directory. Set it before the AppModel/SequencerEngine is created: the
+ * freeze manager sweeps that folder on construction. Empty when unknown. */
+UAPMD_C_EXPORT void   uapmd_application_cache_directory_set(const char* path);
+UAPMD_C_EXPORT size_t uapmd_application_cache_directory_get(char* buf, size_t buf_size);
+
 UAPMD_C_EXPORT size_t uapmd_scan_tool_get_cache_file(uapmd_scan_tool_t tool, char* buf, size_t buf_size);
 
 /* The user's plugin search paths, kept beside the cache file. Empty on platforms

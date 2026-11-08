@@ -48,6 +48,15 @@ interface ScanTool : AutoCloseable {
  */
 expect var applicationDataDirectory: String
 
+/**
+ * `uapmd_plugin_hosting::applicationCacheDirectory`: where data that can be produced again may
+ * be kept, which the platform may purge (on Android, `Context.cacheDir`). Frozen track audio is
+ * streamed to its `frozen-tracks` folder; when it is empty, to [applicationDataDirectory]'s, and
+ * failing that to the system temp directory. Set it before the [AppModel] is created, since the
+ * freeze manager sweeps that folder on construction. Empty when unknown.
+ */
+expect var applicationCacheDirectory: String
+
 /** Minimal format manager – exposes available plugin formats by name. */
 interface FormatManager : AutoCloseable {
     val formatCount: UInt

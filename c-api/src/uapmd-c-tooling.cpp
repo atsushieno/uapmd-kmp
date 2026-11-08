@@ -86,6 +86,14 @@ size_t uapmd_application_data_directory_get(char* buf, size_t buf_size) {
     return copy_string(uapmd_plugin_hosting::applicationDataDirectory().string(), buf, buf_size);
 }
 
+void uapmd_application_cache_directory_set(const char* path) {
+    uapmd_plugin_hosting::applicationCacheDirectory(path ? std::filesystem::path(path) : std::filesystem::path());
+}
+
+size_t uapmd_application_cache_directory_get(char* buf, size_t buf_size) {
+    return copy_string(uapmd_plugin_hosting::applicationCacheDirectory().string(), buf, buf_size);
+}
+
 size_t uapmd_scan_tool_get_search_path_settings_file(uapmd_scan_tool_t tool, char* buf, size_t buf_size) {
     return copy_string(PST(tool)->searchPathSettingsFile().string(), buf, buf_size);
 }

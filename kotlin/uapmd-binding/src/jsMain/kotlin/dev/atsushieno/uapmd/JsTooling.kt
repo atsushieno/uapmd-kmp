@@ -157,6 +157,17 @@ actual var applicationDataDirectory: String
         } finally { jsMod._free(p) }
     }
 
+actual var applicationCacheDirectory: String
+    get() = jsReadPathString { buf, sz -> jsMod._uapmd_application_cache_directory_get(buf, sz) as Int }
+    set(value) {
+        val len = (jsMod.lengthBytesUTF8(value) as Int) + 1
+        val p = jsMod._malloc(len) as Int
+        try {
+            jsMod.stringToUTF8(value, p, len)
+            jsMod._uapmd_application_cache_directory_set(p)
+        } finally { jsMod._free(p) }
+    }
+
 // ─── JsFormatManager ─────────────────────────────────────────────────────────
 
 class JsFormatManager internal constructor(

@@ -166,3 +166,7 @@ class NativePluginInstancing internal constructor(
 actual var applicationDataDirectory: String
     get() = readCString { buf, size -> uapmd_application_data_directory_get(buf, size) }
     set(value) { uapmd_application_data_directory_set(value) }
+
+actual var applicationCacheDirectory: String
+    get() = readCString { buf, size -> uapmd_application_cache_directory_get(buf, size) }
+    set(value) { uapmd_application_cache_directory_set(value) }

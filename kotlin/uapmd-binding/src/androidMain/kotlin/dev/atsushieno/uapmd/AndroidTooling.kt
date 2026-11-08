@@ -155,3 +155,7 @@ class AndroidPluginInstancing internal constructor(
 actual var applicationDataDirectory: String
     get() = JniBridge.uapmdApplicationDataDirectoryGet()
     set(value) { JniBridge.uapmdApplicationDataDirectorySet(value) }
+
+actual var applicationCacheDirectory: String
+    get() = JniBridge.uapmdApplicationCacheDirectoryGet()
+    set(value) { JniBridge.uapmdApplicationCacheDirectorySet(value) }

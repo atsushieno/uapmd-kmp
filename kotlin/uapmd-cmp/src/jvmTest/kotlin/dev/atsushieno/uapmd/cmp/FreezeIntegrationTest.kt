@@ -3,6 +3,7 @@ package dev.atsushieno.uapmd.cmp
 import dev.atsushieno.uapmd.AppModel
 import dev.atsushieno.uapmd.FreezeRuntimeState
 import dev.atsushieno.uapmd.TimelinePosition
+import dev.atsushieno.uapmd.applicationCacheDirectory
 import dev.atsushieno.uapmd.cleanupAppModel
 import dev.atsushieno.uapmd.getAppModel
 import dev.atsushieno.uapmd.initJvmEventLoop
@@ -11,7 +12,9 @@ import org.junit.AfterClass
 import org.junit.Assume.assumeTrue
 import org.junit.BeforeClass
 import java.io.File
+import kotlin.io.path.createTempDirectory
 import kotlin.test.Test
+import kotlin.test.assertEquals
 
 /**
  * What the freeze command actually does, read back from the engine.
@@ -29,12 +32,18 @@ import kotlin.test.Test
 class FreezeIntegrationTest {
     companion object {
         private lateinit var model: AppModel
+        private lateinit var cacheDirectory: File
 
         @BeforeClass
         @JvmStatic
         fun startModel() {
             val smf = File(System.getProperty("uapmd.probe.smf") ?: defaultMidiFile().path)
             assumeTrue("MIDI file $smf exists", smf.isFile)
+            // Frozen audio streams to <cache>/frozen-tracks; the freeze manager reads the
+            // directory when the AppModel creates it.
+            cacheDirectory = createTempDirectory("uapmd-freeze-cache").toFile()
+            applicationCacheDirectory = cacheDirectory.path
+            assertEquals(cacheDirectory.path, applicationCacheDirectory)
             initJvmEventLoop()
             instantiateAppModel()
             model = getAppModel()
@@ -48,7 +57,11 @@ class FreezeIntegrationTest {
 
         @AfterClass
         @JvmStatic
-        fun cleanUp() = cleanupAppModel()
+        fun cleanUp() {
+            cleanupAppModel()
+            applicationCacheDirectory = ""
+            cacheDirectory.deleteRecursively()
+        }
     }
 
     private val engine get() = model.sequencer.engine
@@ -96,6 +109,9 @@ class FreezeIntegrationTest {
             check("frozen T$t has channels", (summary?.channels ?: 0u) > 0u)
             check("frozen T$t reports no error", error.isEmpty())
         }
+        val files = File(cacheDirectory, "frozen-tracks").listFiles()?.map { it.name }.orEmpty()
+        println("frozen-tracks: $files")
+        check("frozen audio streams into the application cache directory", files.isNotEmpty())
     }
 
     /**

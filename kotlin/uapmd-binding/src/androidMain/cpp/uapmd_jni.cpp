@@ -1783,6 +1783,16 @@ JNIEXPORT jstring JNICALL Java_dev_atsushieno_uapmd_JniBridge_uapmdApplicationDa
         JNIEnv* env, jclass) {
     return cstr(env, [&](char* b, size_t n){ return uapmd_application_data_directory_get(b, n); });
 }
+JNIEXPORT void JNICALL Java_dev_atsushieno_uapmd_JniBridge_uapmdApplicationCacheDirectorySet(
+        JNIEnv* env, jclass, jstring path) {
+    const char* p = jstr(env, path);
+    uapmd_application_cache_directory_set(p);
+    jstr_release(env, path, p);
+}
+JNIEXPORT jstring JNICALL Java_dev_atsushieno_uapmd_JniBridge_uapmdApplicationCacheDirectoryGet(
+        JNIEnv* env, jclass) {
+    return cstr(env, [&](char* b, size_t n){ return uapmd_application_cache_directory_get(b, n); });
+}
 JNIEXPORT jstring JNICALL Java_dev_atsushieno_uapmd_JniBridge_uapmdScanToolGetSearchPathSettingsFile(
         JNIEnv* env, jclass, jlong h) {
     auto t = j2p<uapmd_scan_tool_t>(h);

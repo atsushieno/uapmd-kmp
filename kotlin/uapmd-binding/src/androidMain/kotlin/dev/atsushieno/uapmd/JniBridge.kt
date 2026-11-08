@@ -118,6 +118,8 @@ object JniBridge {
     @JvmStatic external fun uapmdPluginHostGetFormatName(h: Long, idx: Int): String
     @JvmStatic external fun uapmdApplicationDataDirectorySet(path: String)
     @JvmStatic external fun uapmdApplicationDataDirectoryGet(): String
+    @JvmStatic external fun uapmdApplicationCacheDirectorySet(path: String)
+    @JvmStatic external fun uapmdApplicationCacheDirectoryGet(): String
     @JvmStatic external fun uapmdScanToolGetSearchPathSettingsFile(h: Long): String
     @JvmStatic external fun uapmdScanToolLoadSearchPathSettings(h: Long)
     @JvmStatic external fun uapmdScanToolSaveSearchPathSettings(h: Long)

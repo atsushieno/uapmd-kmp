@@ -220,3 +220,7 @@ class WasmJsPluginInstancing internal constructor(
 actual var applicationDataDirectory: String
     get() = readString(0) { _, buf, size -> uapmdApplicationDataDirectoryGet(buf, size) }
     set(value) = withCStringKt(value) { ptr -> wasmMod.uapmdApplicationDataDirectorySet(ptr) }
+
+actual var applicationCacheDirectory: String
+    get() = readString(0) { _, buf, size -> uapmdApplicationCacheDirectoryGet(buf, size) }
+    set(value) = withCStringKt(value) { ptr -> wasmMod.uapmdApplicationCacheDirectorySet(ptr) }

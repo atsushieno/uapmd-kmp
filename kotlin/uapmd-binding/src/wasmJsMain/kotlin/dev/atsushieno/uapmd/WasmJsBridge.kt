@@ -115,6 +115,10 @@ external interface UapmdCApiModule : JsAny {
     fun uapmdApplicationDataDirectorySet(pathPtr: Int)
     @JsName("_uapmd_application_data_directory_get")
     fun uapmdApplicationDataDirectoryGet(buf: Int, bufSize: Int): Int
+    @JsName("_uapmd_application_cache_directory_set")
+    fun uapmdApplicationCacheDirectorySet(pathPtr: Int)
+    @JsName("_uapmd_application_cache_directory_get")
+    fun uapmdApplicationCacheDirectoryGet(buf: Int, bufSize: Int): Int
     @JsName("_uapmd_scan_tool_get_search_path_settings_file")
     fun uapmdScanToolGetSearchPathSettingsFile(tool: Int, buf: Int, bufSize: Int): Int
     @JsName("_uapmd_scan_tool_load_search_path_settings")

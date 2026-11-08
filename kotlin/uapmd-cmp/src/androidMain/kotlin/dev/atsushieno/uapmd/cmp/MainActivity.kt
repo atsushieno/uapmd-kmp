@@ -6,6 +6,8 @@ import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import dev.atsushieno.uapmd.JniBridge
+import dev.atsushieno.uapmd.applicationCacheDirectory
+import dev.atsushieno.uapmd.applicationDataDirectory
 
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -34,6 +36,12 @@ class MainActivity : ComponentActivity() {
         // its SAF result comes back through onActivityResult below.
         JniBridge.uapmdDocumentProviderInit(this)
         androidAppContext = applicationContext
+        // Both must precede the AppModel, which UapmdHost.start() creates, as in uapmd-app's
+        // main_common.cpp. The plugin list cache, blocklist and search path settings persist in
+        // filesDir; frozen track audio is streamed to cacheDir, which Android may purge when
+        // storage runs low.
+        applicationDataDirectory = filesDir.absolutePath
+        applicationCacheDirectory = cacheDir.absolutePath
         // Lets a freeze be inspected even when the main looper is stuck.
         StackDumpTrigger.start(this)
         setContent {
