@@ -137,6 +137,15 @@ data class OfflineRenderProgress(
     val totalFrames: Long
 )
 
+/** `FrozenTrackManager::FrozenAudioSummary`: a measurement of a track's published frozen audio. */
+data class FrozenAudioSummary(
+    val startSample: Long,
+    val frames: ULong,
+    val channels: UInt,
+    val peak: Float,
+    val rms: Double
+)
+
 /** `uapmd_plugin_hosting::AudioProcessingMode`. */
 enum class AudioProcessingMode(val nativeValue: Int) {
     Realtime(0), Offline(1);

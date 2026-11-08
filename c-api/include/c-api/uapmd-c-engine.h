@@ -51,6 +51,11 @@ typedef struct uapmd_audio_device_info {
  *  SequencerEngine
  * ═══════════════════════════════════════════════════════════════════════════ */
 
+/* uapmd::kAudioBlockCapacityInFrames: the largest block the graph and plug-ins are prepared for.
+ * The audio device can use any smaller buffer; offline rendering uses this size. uapmd's own
+ * RealtimeSequencer creates its engine with max(device buffer, this) as audio_buffer_size. */
+#define UAPMD_AUDIO_BLOCK_CAPACITY_IN_FRAMES 8192
+
 UAPMD_C_EXPORT uapmd_sequencer_engine_t uapmd_engine_create(int32_t sample_rate,
                                                               uint32_t audio_buffer_size,
                                                               uint32_t ump_buffer_size);
@@ -85,6 +90,27 @@ UAPMD_C_EXPORT uapmd_freeze_policy_t uapmd_engine_track_freeze_policy(uapmd_sequ
 UAPMD_C_EXPORT uapmd_freeze_runtime_state_t uapmd_engine_track_freeze_state(uapmd_sequencer_engine_t engine,
                                                                            int32_t track_index);
 UAPMD_C_EXPORT bool uapmd_engine_is_track_busy(uapmd_sequencer_engine_t engine, int32_t track_index);
+/* FrozenTrackManager::errorMessageForTrack(): why the track's last freeze failed (runtime state
+ * Error), or an empty string. Returns the required size (including the NUL) when buf is NULL or
+ * buf_size is 0, otherwise the length written. */
+UAPMD_C_EXPORT size_t uapmd_engine_track_freeze_error_message(uapmd_sequencer_engine_t engine,
+                                                              int32_t track_index,
+                                                              char* buf, size_t buf_size);
+
+/* FrozenTrackManager::FrozenAudioSummary: a measurement of a track's published frozen audio. */
+typedef struct uapmd_frozen_audio_summary {
+    int64_t start_sample;
+    uint64_t frames;
+    uint32_t channels;
+    float peak;
+    double rms;
+} uapmd_frozen_audio_summary_t;
+
+/* FrozenTrackManager::frozenAudioSummaryForTrack(). Returns false when the track has no frozen
+ * audio, in which case out_summary is untouched (the C++ API returns an empty optional). */
+UAPMD_C_EXPORT bool uapmd_engine_track_frozen_audio_summary(uapmd_sequencer_engine_t engine,
+                                                            int32_t track_index,
+                                                            uapmd_frozen_audio_summary_t* out_summary);
 UAPMD_C_EXPORT uapmd_plugin_instance_t uapmd_engine_get_plugin_instance(uapmd_sequencer_engine_t engine, int32_t instance_id);
 /* SequencerEngine::notifyPluginEditorVisibilityChanged(). A host that shows or hides a plug-in
  * editor itself (rather than through uapmd_app_show_plugin_ui()/uapmd_app_hide_plugin_ui(),

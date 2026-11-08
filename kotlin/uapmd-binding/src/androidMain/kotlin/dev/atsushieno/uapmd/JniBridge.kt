@@ -410,6 +410,9 @@ object JniBridge {
     @JvmStatic external fun uapmdEngineTrackFreezeState(engine: Long, trackIndex: Int): Int
     /** [progress, renderedSeconds, totalSeconds, renderedFrames, totalFrames], or null when idle. */
     @JvmStatic external fun uapmdEngineTrackFreezeRenderProgress(engine: Long, trackIndex: Int): DoubleArray?
+    @JvmStatic external fun uapmdEngineTrackFreezeErrorMessage(engine: Long, trackIndex: Int): String
+    /** [startSample, frames, channels, peak, rms], or null when the track has no frozen audio. */
+    @JvmStatic external fun uapmdEngineTrackFrozenAudioSummary(engine: Long, trackIndex: Int): DoubleArray?
     @JvmStatic external fun uapmdEngineIsTrackBusy(engine: Long, trackIndex: Int): Boolean
     @JvmStatic external fun uapmdTtChannelCount(tt: Long): Int
     @JvmStatic external fun uapmdTtPropertiesHasColor(tt: Long): Boolean

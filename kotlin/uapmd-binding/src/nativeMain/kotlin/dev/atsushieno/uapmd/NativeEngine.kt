@@ -55,6 +55,13 @@ class NativeSequencerEngine internal constructor(
             out.rendered_frames, out.total_frames)
     }
     override fun isTrackBusy(trackIndex: Int) = uapmd_engine_is_track_busy(handle, trackIndex)
+    override fun trackFreezeErrorMessage(trackIndex: Int): String =
+        readCString { buf, size -> uapmd_engine_track_freeze_error_message(handle, trackIndex, buf, size) }
+    override fun trackFrozenAudioSummary(trackIndex: Int): FrozenAudioSummary? = memScoped {
+        val out = alloc<uapmd_frozen_audio_summary_t>()
+        if (!uapmd_engine_track_frozen_audio_summary(handle, trackIndex, out.ptr)) return@memScoped null
+        FrozenAudioSummary(out.start_sample, out.frames, out.channels, out.peak, out.rms)
+    }
 
     override val masterTrack: SequencerTrack
         get() = NativeSequencerTrack(uapmd_engine_master_track(handle)!!)

@@ -463,6 +463,15 @@ open class UapmdOfflineRenderProgress : Structure() {
     @JvmField var total_frames: Long = 0L
 }
 
+@FieldOrder("start_sample", "frames", "channels", "peak", "rms")
+open class UapmdFrozenAudioSummary : Structure() {
+    @JvmField var start_sample: Long = 0L
+    @JvmField var frames: Long = 0L
+    @JvmField var channels: Int = 0
+    @JvmField var peak: Float = 0f
+    @JvmField var rms: Double = 0.0
+}
+
 @FieldOrder("success", "canceled", "rendered_seconds", "error_message", "plugin_processing_restored")
 open class UapmdOfflineRenderResult : Structure() {
     @JvmField var success: Byte = 0
@@ -1115,6 +1124,9 @@ interface UapmdLibrary : Library {
     fun uapmd_engine_track_freeze_render_progress(engine: Pointer, trackIndex: Int,
                                                   outProgress: UapmdOfflineRenderProgress): Boolean
     fun uapmd_engine_is_track_busy(engine: Pointer, trackIndex: Int): Boolean
+    fun uapmd_engine_track_freeze_error_message(engine: Pointer, trackIndex: Int, buf: ByteArray?, bufSize: Long): Long
+    fun uapmd_engine_track_frozen_audio_summary(engine: Pointer, trackIndex: Int,
+                                                outSummary: UapmdFrozenAudioSummary): Boolean
     fun uapmd_tt_channel_count(tt: Pointer): Int
     fun uapmd_tt_properties_has_color(tt: Pointer): Boolean
     fun uapmd_tt_properties_color(tt: Pointer): Int

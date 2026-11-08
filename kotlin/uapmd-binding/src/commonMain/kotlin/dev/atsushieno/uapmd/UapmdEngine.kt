@@ -29,6 +29,17 @@ interface SequencerEngine {
     fun trackFreezeRenderProgress(trackIndex: Int): OfflineRenderProgress?
     /** True while a freeze render is in flight; the legend disables the track's controls. */
     fun isTrackBusy(trackIndex: Int): Boolean
+    /**
+     * `FrozenTrackManager::errorMessageForTrack` — why the track's last freeze failed (state
+     * [FreezeRuntimeState.Error]), or an empty string. uapmd-app shows it as the freeze
+     * button's tooltip.
+     */
+    fun trackFreezeErrorMessage(trackIndex: Int): String
+    /**
+     * `FrozenTrackManager::frozenAudioSummaryForTrack` — measures the track's published frozen
+     * audio, or null when it has none.
+     */
+    fun trackFrozenAudioSummary(trackIndex: Int): FrozenAudioSummary?
     fun addEmptyTrack(): Int
     fun addPluginToTrack(
         trackIndex: Int,
@@ -133,6 +144,16 @@ interface SequencerEngine {
         progressCallback: ((OfflineRenderProgress) -> Unit)? = null,
         shouldCancel: (() -> Boolean)? = null
     ): OfflineRenderResult
+
+    companion object {
+        /**
+         * `uapmd::kAudioBlockCapacityInFrames`: the largest block the graph and plug-ins are
+         * prepared for. The audio device can use any smaller buffer, and offline rendering uses
+         * this size. uapmd's own realtime sequencer creates its engine with
+         * `max(device buffer, AUDIO_BLOCK_CAPACITY_IN_FRAMES)` frames.
+         */
+        const val AUDIO_BLOCK_CAPACITY_IN_FRAMES: Int = 8192
+    }
 }
 
 enum class AudioWorkerFault(val nativeValue: Int) {

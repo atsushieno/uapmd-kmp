@@ -80,6 +80,29 @@ class JsSequencerEngine internal constructor(
     }
     override fun isTrackBusy(trackIndex: Int) =
         jsMod._uapmd_engine_is_track_busy(handle, trackIndex) as Boolean
+    override fun trackFreezeErrorMessage(trackIndex: Int): String =
+        readJsStringIndexed(handle, trackIndex) { h, i, buf, size ->
+            jsMod._uapmd_engine_track_freeze_error_message(h, i, buf, size) as Int
+        }
+
+    // uapmd_frozen_audio_summary_t: i64 @0, u64 @8, u32 @16, f32 @20, f64 @24 (sizeof 32).
+    override fun trackFrozenAudioSummary(trackIndex: Int): FrozenAudioSummary? {
+        val out = jsMod._malloc(32) as Int
+        return try {
+            if (jsMod._uapmd_engine_track_frozen_audio_summary(handle, trackIndex, out) != true) null
+            else {
+                fun u32(o: Int) = (jsMod.getValue(out + o, "i32") as Int).toLong() and 0xFFFFFFFFL
+                fun i64(o: Int) = (jsMod.getValue(out + o + 4, "i32") as Int).toLong() * 4294967296L + u32(o)
+                FrozenAudioSummary(
+                    i64(0),
+                    (u32(12) shl 32 or u32(8)).toULong(),
+                    u32(16).toUInt(),
+                    (jsMod.getValue(out + 20, "float") as Double).toFloat(),
+                    jsMod.getValue(out + 24, "double") as Double
+                )
+            }
+        } finally { jsMod._free(out) }
+    }
 
     override val masterTrack: SequencerTrack
         get() = JsSequencerTrack(jsMod._uapmd_engine_master_track(handle) as Int)

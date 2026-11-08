@@ -83,6 +83,28 @@ class WasmJsSequencerEngine internal constructor(
         } finally { mod.free(out) }
     }
     override fun isTrackBusy(trackIndex: Int) = wasmMod.uapmdEngineIsTrackBusy(handle, trackIndex)
+    override fun trackFreezeErrorMessage(trackIndex: Int): String =
+        readStringIndexed(handle, trackIndex) { h, i, buf, size -> uapmdEngineTrackFreezeErrorMessage(h, i, buf, size) }
+
+    // uapmd_frozen_audio_summary_t: i64 @0, u64 @8, u32 @16, f32 @20, f64 @24 (sizeof 32).
+    override fun trackFrozenAudioSummary(trackIndex: Int): FrozenAudioSummary? {
+        val mod = wasmMod
+        val out = mod.malloc(32)
+        return try {
+            if (!mod.uapmdEngineTrackFrozenAudioSummary(handle, trackIndex, out)) null
+            else {
+                fun u32(o: Int) = mod.getValue(out + o, "i32").toInt().toLong() and 0xFFFFFFFFL
+                fun i64(o: Int) = mod.getValue(out + o + 4, "i32").toInt().toLong() * 4294967296L + u32(o)
+                FrozenAudioSummary(
+                    i64(0),
+                    (u32(12) shl 32 or u32(8)).toULong(),
+                    u32(16).toUInt(),
+                    mod.getValue(out + 20, "float").toFloat(),
+                    mod.getValue(out + 24, "double")
+                )
+            }
+        } finally { mod.free(out) }
+    }
 
     override val masterTrack: SequencerTrack
         get() = WasmJsSequencerTrack(wasmMod.uapmdEngineMasterTrack(handle))

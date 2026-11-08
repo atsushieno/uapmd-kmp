@@ -81,6 +81,21 @@ class FreezeIntegrationTest {
             state(0) == FreezeRuntimeState.Live && state(1) == FreezeRuntimeState.Live
         })
         report("before")
+        for (t in 0..1)
+            check("live T$t has no frozen audio", engine.trackFrozenAudioSummary(t) == null)
+    }
+
+    /** What a frozen track reports about its audio and its (absent) failure. */
+    private fun checkFrozenAudio(check: (String, Boolean) -> Unit) {
+        for (t in 0..1) {
+            val summary = engine.trackFrozenAudioSummary(t)
+            val error = engine.trackFreezeErrorMessage(t)
+            println("T$t frozen audio=$summary error='$error'")
+            check("frozen T$t has frozen audio", summary != null)
+            check("frozen T$t has frames", (summary?.frames ?: 0uL) > 0uL)
+            check("frozen T$t has channels", (summary?.channels ?: 0u) > 0u)
+            check("frozen T$t reports no error", error.isEmpty())
+        }
     }
 
     /**
@@ -108,6 +123,7 @@ class FreezeIntegrationTest {
         model.transport.stop()
         check("both tracks freeze after stop", waitFor(8_000) { bothFrozen() })
         report("after stop")
+        checkFrozenAudio(check)
         checks.assertAllPassed()
     }
 
@@ -135,6 +151,7 @@ class FreezeIntegrationTest {
         // The muted shutdown drain alone may take up to 8 seconds.
         check("both tracks freeze after the engine goes off", waitFor(20_000) { bothFrozen() })
         report("after engine off")
+        checkFrozenAudio(check)
         checks.assertAllPassed()
     }
 }

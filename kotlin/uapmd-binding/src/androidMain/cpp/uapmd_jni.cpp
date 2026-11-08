@@ -1522,6 +1522,28 @@ JNIEXPORT jboolean JNICALL Java_dev_atsushieno_uapmd_JniBridge_uapmdEngineIsTrac
     return uapmd_engine_is_track_busy(j2p<uapmd_sequencer_engine_t>(engine), trackIndex);
 }
 
+JNIEXPORT jstring JNICALL Java_dev_atsushieno_uapmd_JniBridge_uapmdEngineTrackFreezeErrorMessage(
+        JNIEnv* env, jclass, jlong engine, jint trackIndex) {
+    auto e = j2p<uapmd_sequencer_engine_t>(engine);
+    return cstr(env, [&](char* b, size_t n){ return uapmd_engine_track_freeze_error_message(e, trackIndex, b, n); });
+}
+
+JNIEXPORT jdoubleArray JNICALL Java_dev_atsushieno_uapmd_JniBridge_uapmdEngineTrackFrozenAudioSummary(
+        JNIEnv* env, jclass, jlong engine, jint trackIndex) {
+    uapmd_frozen_audio_summary_t s{};
+    if (!uapmd_engine_track_frozen_audio_summary(
+            j2p<uapmd_sequencer_engine_t>(engine), trackIndex, &s))
+        return nullptr;
+    // Sample counts ride along as doubles, as in uapmdEngineTrackFreezeRenderProgress: exact up
+    // to 2^53 frames.
+    jdouble values[5]{static_cast<jdouble>(s.start_sample), static_cast<jdouble>(s.frames),
+                      static_cast<jdouble>(s.channels), static_cast<jdouble>(s.peak), s.rms};
+    auto array = env->NewDoubleArray(5);
+    if (!array) return nullptr;
+    env->SetDoubleArrayRegion(array, 0, 5, values);
+    return array;
+}
+
 JNIEXPORT jint JNICALL Java_dev_atsushieno_uapmd_JniBridge_uapmdTtChannelCount(
         JNIEnv*, jclass, jlong tt) {
     return static_cast<jint>(uapmd_tt_channel_count(j2p<uapmd_timeline_track_t>(tt)));

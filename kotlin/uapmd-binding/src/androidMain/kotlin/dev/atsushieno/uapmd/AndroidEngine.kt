@@ -54,6 +54,12 @@ class AndroidSequencerEngine internal constructor(
         return OfflineRenderProgress(a[0], a[1], a[2], a[3].toLong(), a[4].toLong())
     }
     override fun isTrackBusy(trackIndex: Int) = JniBridge.uapmdEngineIsTrackBusy(handle, trackIndex)
+    override fun trackFreezeErrorMessage(trackIndex: Int): String =
+        JniBridge.uapmdEngineTrackFreezeErrorMessage(handle, trackIndex)
+    override fun trackFrozenAudioSummary(trackIndex: Int): FrozenAudioSummary? {
+        val a = JniBridge.uapmdEngineTrackFrozenAudioSummary(handle, trackIndex) ?: return null
+        return FrozenAudioSummary(a[0].toLong(), a[1].toLong().toULong(), a[2].toUInt(), a[3].toFloat(), a[4])
+    }
 
     override val masterTrack: SequencerTrack
         get() = AndroidSequencerTrack(JniBridge.uapmdEngineMasterTrack(handle))

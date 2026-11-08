@@ -112,6 +112,22 @@ bool uapmd_engine_is_track_busy(uapmd_sequencer_engine_t engine, int32_t track_i
     return E(engine)->frozenTrackManager().isTrackBusy(track_index);
 }
 
+static_assert(uapmd::kAudioBlockCapacityInFrames == UAPMD_AUDIO_BLOCK_CAPACITY_IN_FRAMES);
+
+bool uapmd_engine_track_frozen_audio_summary(uapmd_sequencer_engine_t engine,
+                                             int32_t track_index,
+                                             uapmd_frozen_audio_summary_t* out_summary) {
+    if (!engine || !out_summary) return false;
+    const auto summary = E(engine)->frozenTrackManager().frozenAudioSummaryForTrack(track_index);
+    if (!summary) return false;
+    out_summary->start_sample = summary->startSample;
+    out_summary->frames       = summary->frames;
+    out_summary->channels     = summary->channels;
+    out_summary->peak         = summary->peak;
+    out_summary->rms          = summary->rms;
+    return true;
+}
+
 uapmd_plugin_host_t uapmd_engine_plugin_host(uapmd_sequencer_engine_t engine) {
     return reinterpret_cast<uapmd_plugin_host_t>(E(engine)->pluginHost());
 }
@@ -373,6 +389,12 @@ static size_t copy_out_bytes(const std::vector<uint8_t>& src, uint8_t* buf, size
     if (to_copy)
         std::memcpy(buf, src.data(), to_copy);
     return to_copy;
+}
+
+size_t uapmd_engine_track_freeze_error_message(uapmd_sequencer_engine_t engine, int32_t track_index,
+                                               char* buf, size_t buf_size) {
+    return copy_out_string(engine ? E(engine)->frozenTrackManager().errorMessageForTrack(track_index)
+                                  : std::string{}, buf, buf_size);
 }
 
 size_t uapmd_track_unresolved_graph_type(uapmd_sequencer_track_t track, char* buf, size_t buf_size) {

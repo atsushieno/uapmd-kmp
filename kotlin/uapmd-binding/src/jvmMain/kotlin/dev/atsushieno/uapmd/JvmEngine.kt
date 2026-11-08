@@ -62,6 +62,14 @@ class JvmSequencerEngine internal constructor(
             out.rendered_frames, out.total_frames)
     }
     override fun isTrackBusy(trackIndex: Int) = lib.uapmd_engine_is_track_busy(handle, trackIndex)
+    override fun trackFreezeErrorMessage(trackIndex: Int): String =
+        readJvmString { buf, size -> lib.uapmd_engine_track_freeze_error_message(handle, trackIndex, buf, size) }
+    override fun trackFrozenAudioSummary(trackIndex: Int): FrozenAudioSummary? {
+        val out = dev.atsushieno.uapmd.jna.UapmdFrozenAudioSummary()
+        if (!lib.uapmd_engine_track_frozen_audio_summary(handle, trackIndex, out)) return null
+        out.read()
+        return FrozenAudioSummary(out.start_sample, out.frames.toULong(), out.channels.toUInt(), out.peak, out.rms)
+    }
 
     override val masterTrack: SequencerTrack
         get() = JvmSequencerTrack(lib.uapmd_engine_master_track(handle) ?: error("master track not found"))
