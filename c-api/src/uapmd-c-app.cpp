@@ -996,6 +996,10 @@ void uapmd_piano_roll_session_resize_note(uapmd_piano_roll_session_t session, ui
     if (session) PRS(session)->resizeNote(static_cast<int>(index), start_seconds, duration_seconds, note);
 }
 
+void uapmd_piano_roll_session_set_note_velocity(uapmd_piano_roll_session_t session, uint32_t index, float velocity) {
+    if (session) PRS(session)->setNoteVelocity(static_cast<int>(index), velocity);
+}
+
 void uapmd_piano_roll_session_begin_drag(uapmd_piano_roll_session_t session) {
     if (!session) return;
     auto* s = PRS(session);

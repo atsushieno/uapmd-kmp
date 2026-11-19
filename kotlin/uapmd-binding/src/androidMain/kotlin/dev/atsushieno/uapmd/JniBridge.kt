@@ -963,6 +963,7 @@ object JniBridge {
     @JvmStatic external fun uapmdPianoRollSessionCreateNote(h: Long, start: Double, duration: Double, note: Int, velocity: Float)
     @JvmStatic external fun uapmdPianoRollSessionDeleteNote(h: Long, index: Int)
     @JvmStatic external fun uapmdPianoRollSessionResizeNote(h: Long, index: Int, start: Double, duration: Double, note: Int)
+    @JvmStatic external fun uapmdPianoRollSessionSetNoteVelocity(h: Long, index: Int, velocity: Float)
     @JvmStatic external fun uapmdPianoRollSessionBeginDrag(h: Long)
     @JvmStatic external fun uapmdPianoRollSessionMoveSelection(h: Long, timeDelta: Double, pitchDelta: Int)
     @JvmStatic external fun uapmdPianoRollSessionCancelDrag(h: Long)

@@ -968,6 +968,9 @@ class NativePianoRollSession internal constructor(
     override fun resizeNote(index: Int, startSeconds: Double, durationSeconds: Double, note: Int) =
         uapmd_piano_roll_session_resize_note(handle, index.toUInt(), startSeconds, durationSeconds, note.toUByte())
 
+    override fun setNoteVelocity(index: Int, velocity: Float) =
+        uapmd_piano_roll_session_set_note_velocity(handle, index.toUInt(), velocity)
+
     override fun beginDrag() = uapmd_piano_roll_session_begin_drag(handle)
     override fun moveSelection(timeDeltaSeconds: Double, pitchDelta: Int) =
         uapmd_piano_roll_session_move_selection(handle, timeDeltaSeconds, pitchDelta)

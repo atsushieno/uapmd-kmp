@@ -570,6 +570,8 @@ UAPMD_C_EXPORT void uapmd_piano_roll_session_perform_action(uapmd_piano_roll_ses
 UAPMD_C_EXPORT void uapmd_piano_roll_session_create_note(uapmd_piano_roll_session_t session, double start_seconds, double duration_seconds, uint8_t note, float velocity);
 UAPMD_C_EXPORT void uapmd_piano_roll_session_delete_note(uapmd_piano_roll_session_t session, uint32_t index);
 UAPMD_C_EXPORT void uapmd_piano_roll_session_resize_note(uapmd_piano_roll_session_t session, uint32_t index, double start_seconds, double duration_seconds, uint8_t note);
+/* Clamped to 0.0 - 1.0; reaches the clip on commit. */
+UAPMD_C_EXPORT void uapmd_piano_roll_session_set_note_velocity(uapmd_piano_roll_session_t session, uint32_t index, float velocity);
 
 /* A move drag works from the notes as they were when it began, so that each
  * update re-applies one delta rather than accumulating rounding. The session

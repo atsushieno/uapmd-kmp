@@ -949,6 +949,10 @@ JNI_FN(void, uapmdPianoRollSessionResizeNote)(JNIEnv*, jclass, jlong h, jint ind
         start, duration, static_cast<uint8_t>(note));
 }
 
+JNI_FN(void, uapmdPianoRollSessionSetNoteVelocity)(JNIEnv*, jclass, jlong h, jint index, jfloat velocity) {
+    uapmd_piano_roll_session_set_note_velocity(j2p<uapmd_piano_roll_session_t>(h), static_cast<uint32_t>(index), velocity);
+}
+
 JNI_FN(void, uapmdPianoRollSessionBeginDrag)(JNIEnv*, jclass, jlong h) {
     uapmd_piano_roll_session_begin_drag(j2p<uapmd_piano_roll_session_t>(h));
 }

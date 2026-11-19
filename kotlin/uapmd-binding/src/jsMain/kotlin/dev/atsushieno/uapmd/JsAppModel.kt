@@ -1316,6 +1316,10 @@ class JsPianoRollSession internal constructor(private val handle: Int) : PianoRo
         jsMod._uapmd_piano_roll_session_resize_note(handle, index, startSeconds, durationSeconds, note)
     }
 
+    override fun setNoteVelocity(index: Int, velocity: Float) {
+        jsMod._uapmd_piano_roll_session_set_note_velocity(handle, index, velocity)
+    }
+
     override fun beginDrag() { jsMod._uapmd_piano_roll_session_begin_drag(handle) }
     override fun moveSelection(timeDeltaSeconds: Double, pitchDelta: Int) {
         jsMod._uapmd_piano_roll_session_move_selection(handle, timeDeltaSeconds, pitchDelta)

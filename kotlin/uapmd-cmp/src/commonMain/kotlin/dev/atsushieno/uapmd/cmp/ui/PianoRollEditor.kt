@@ -335,6 +335,15 @@ fun PianoRollEditor(
                     style = MaterialTheme.typography.bodySmall
                 )
                 Text("ch ${note.channel} · grp ${note.umpGroup}", style = MaterialTheme.typography.labelSmall)
+                Text("Velocity", style = MaterialTheme.typography.bodySmall)
+                // Edits the session while dragging, as a note drag does, and writes the clip once on release.
+                Slider(
+                    value = note.velocity,
+                    onValueChange = { v -> session?.setNoteVelocity(entry.index, v); revision++ },
+                    onValueChangeFinished = { commit("velocity change") },
+                    valueRange = 0f..1f,
+                    modifier = Modifier.width(160.dp)
+                )
             }
         }
 

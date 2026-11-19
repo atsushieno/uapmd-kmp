@@ -908,6 +908,9 @@ class AndroidPianoRollSession internal constructor(private val handle: Long) : P
     override fun resizeNote(index: Int, startSeconds: Double, durationSeconds: Double, note: Int) =
         JniBridge.uapmdPianoRollSessionResizeNote(handle, index, startSeconds, durationSeconds, note)
 
+    override fun setNoteVelocity(index: Int, velocity: Float) =
+        JniBridge.uapmdPianoRollSessionSetNoteVelocity(handle, index, velocity)
+
     override fun beginDrag() = JniBridge.uapmdPianoRollSessionBeginDrag(handle)
     override fun moveSelection(timeDeltaSeconds: Double, pitchDelta: Int) =
         JniBridge.uapmdPianoRollSessionMoveSelection(handle, timeDeltaSeconds, pitchDelta)

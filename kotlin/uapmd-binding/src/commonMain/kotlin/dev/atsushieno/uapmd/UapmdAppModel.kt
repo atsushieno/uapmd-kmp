@@ -776,6 +776,8 @@ interface PianoRollSession {
     fun createNote(startSeconds: Double, durationSeconds: Double, note: Int, velocity: Float)
     fun deleteNote(index: Int)
     fun resizeNote(index: Int, startSeconds: Double, durationSeconds: Double, note: Int)
+    /** Clamped to 0..1; reaches the clip on [commit]. */
+    fun setNoteVelocity(index: Int, velocity: Float)
 
     /**
      * A move drag works from the notes as they were when it began, so each

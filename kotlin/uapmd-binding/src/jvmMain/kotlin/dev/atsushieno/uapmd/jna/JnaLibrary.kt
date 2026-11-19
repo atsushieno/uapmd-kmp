@@ -2119,6 +2119,7 @@ interface UapmdLibrary : Library {
     fun uapmd_piano_roll_session_create_note(session: Pointer?, startSeconds: Double, durationSeconds: Double, note: Byte, velocity: Float)
     fun uapmd_piano_roll_session_delete_note(session: Pointer?, index: Int)
     fun uapmd_piano_roll_session_resize_note(session: Pointer?, index: Int, startSeconds: Double, durationSeconds: Double, note: Byte)
+    fun uapmd_piano_roll_session_set_note_velocity(session: Pointer?, index: Int, velocity: Float)
     fun uapmd_piano_roll_session_begin_drag(session: Pointer?)
     fun uapmd_piano_roll_session_move_selection(session: Pointer?, timeDeltaSeconds: Double, pitchDelta: Int)
     fun uapmd_piano_roll_session_cancel_drag(session: Pointer?)

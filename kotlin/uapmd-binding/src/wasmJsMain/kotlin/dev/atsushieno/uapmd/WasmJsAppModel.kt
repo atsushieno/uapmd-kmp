@@ -1262,6 +1262,9 @@ class WasmJsPianoRollSession internal constructor(private val handle: Int) : Pia
     override fun resizeNote(index: Int, startSeconds: Double, durationSeconds: Double, note: Int) =
         wasmMod.uapmdPianoRollSessionResizeNote(handle, index, startSeconds, durationSeconds, note)
 
+    override fun setNoteVelocity(index: Int, velocity: Float) =
+        wasmMod.uapmdPianoRollSessionSetNoteVelocity(handle, index, velocity)
+
     override fun beginDrag() = wasmMod.uapmdPianoRollSessionBeginDrag(handle)
     override fun moveSelection(timeDeltaSeconds: Double, pitchDelta: Int) =
         wasmMod.uapmdPianoRollSessionMoveSelection(handle, timeDeltaSeconds, pitchDelta)

@@ -918,6 +918,9 @@ class JvmPianoRollSession internal constructor(private val handle: Pointer) : Pi
     override fun resizeNote(index: Int, startSeconds: Double, durationSeconds: Double, note: Int) =
         lib.uapmd_piano_roll_session_resize_note(handle, index, startSeconds, durationSeconds, note.toByte())
 
+    override fun setNoteVelocity(index: Int, velocity: Float) =
+        lib.uapmd_piano_roll_session_set_note_velocity(handle, index, velocity)
+
     override fun beginDrag() = lib.uapmd_piano_roll_session_begin_drag(handle)
     override fun moveSelection(timeDeltaSeconds: Double, pitchDelta: Int) =
         lib.uapmd_piano_roll_session_move_selection(handle, timeDeltaSeconds, pitchDelta)

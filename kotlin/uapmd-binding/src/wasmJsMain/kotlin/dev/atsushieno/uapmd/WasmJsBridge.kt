@@ -1407,6 +1407,8 @@ external interface UapmdCApiModule : JsAny {
     fun uapmdPianoRollSessionDeleteNote(h: Int, index: Int)
     @JsName("_uapmd_piano_roll_session_resize_note")
     fun uapmdPianoRollSessionResizeNote(h: Int, index: Int, start: Double, duration: Double, note: Int)
+    @JsName("_uapmd_piano_roll_session_set_note_velocity")
+    fun uapmdPianoRollSessionSetNoteVelocity(h: Int, index: Int, velocity: Float)
     @JsName("_uapmd_piano_roll_session_begin_drag")
     fun uapmdPianoRollSessionBeginDrag(h: Int)
     @JsName("_uapmd_piano_roll_session_move_selection")
