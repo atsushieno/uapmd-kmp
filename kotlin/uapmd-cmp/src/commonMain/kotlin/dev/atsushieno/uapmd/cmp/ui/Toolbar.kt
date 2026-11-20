@@ -271,6 +271,32 @@ fun Toolbar(
                 enabled = host.isAudioEngineEnabled && host.isPlaying,
                 contentPadding = Compact
             ) { if (host.isPaused) PlayIcon(LocalContentColor.current) else PauseIcon(LocalContentColor.current) }
+            // The region is drawn and edited on the timeline ruler; without one, the button loops the bar under the playhead.
+            TooltipBox(
+                positionProvider = TooltipDefaults.rememberTooltipPositionProvider(),
+                tooltip = {
+                    PlainTooltip {
+                        val range = "${TimelineAxis.positionLabel(TimeUnit.Beats, host.loopStartSeconds, host.tempoMap)} - " +
+                            TimelineAxis.positionLabel(TimeUnit.Beats, host.loopEndSeconds, host.tempoMap)
+                        Text(when {
+                            host.isLooping -> "Looping $range. Click to stop looping."
+                            host.hasLoopRegion -> "Loop $range. Click to start looping."
+                            else -> "Click to loop the bar under the playhead, or drag on the ruler to draw the loop region."
+                        })
+                    }
+                },
+                state = rememberTooltipState()
+            ) {
+                Button(
+                    onClick = {
+                        if (host.hasLoopRegion) host.toggleLooping()
+                        else host.tempoMap.barAt(host.playheadSeconds).let { (start, end) -> host.setLoop(start, end) }
+                    },
+                    contentPadding = Compact,
+                    colors = if (host.isLooping) ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.tertiary)
+                        else ButtonDefaults.buttonColors()
+                ) { Text("Loop") }
+            }
 
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Text("In ", style = MaterialTheme.typography.labelSmall)

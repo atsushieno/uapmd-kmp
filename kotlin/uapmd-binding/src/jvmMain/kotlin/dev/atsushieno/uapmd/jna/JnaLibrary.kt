@@ -2135,6 +2135,11 @@ interface UapmdLibrary : Library {
     fun uapmd_app_get_midi_output_ports(app: Pointer?, out: UapmdMidiPortInfo?, outCount: Int): Int
     fun uapmd_app_is_track_hidden(app: Pointer?, trackIndex: Int): Boolean
     fun uapmd_transport_jump(tc: Pointer?, positionSeconds: Double)
+    fun uapmd_transport_set_loop(tc: Pointer?, startSeconds: Double, endSeconds: Double)
+    fun uapmd_transport_set_looping(tc: Pointer?, enabled: Byte)
+    fun uapmd_transport_is_looping(tc: Pointer?): Boolean
+    fun uapmd_transport_loop_start_seconds(tc: Pointer?): Double
+    fun uapmd_transport_loop_end_seconds(tc: Pointer?): Double
     fun uapmd_app_timeline_content_bounds(app: Pointer?): UapmdTimelineContentBounds.ByVal
     fun uapmd_app_get_devices(app: Pointer?, out: UapmdDeviceEntry?, outCount: Int): Int
     fun uapmd_app_get_device_for_instance(app: Pointer?, instanceId: Int, out: UapmdDeviceEntry): Boolean

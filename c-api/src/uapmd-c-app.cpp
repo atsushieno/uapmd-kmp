@@ -662,6 +662,18 @@ void uapmd_transport_jump(uapmd_transport_controller_t tc, double position_secon
     if (tc) TC(tc)->jump(position_seconds);
 }
 
+void uapmd_transport_set_loop(uapmd_transport_controller_t tc, double start_seconds, double end_seconds) {
+    if (tc) TC(tc)->setLoop(start_seconds, end_seconds);
+}
+
+void uapmd_transport_set_looping(uapmd_transport_controller_t tc, bool enabled) {
+    if (tc) TC(tc)->setLooping(enabled);
+}
+
+bool uapmd_transport_is_looping(uapmd_transport_controller_t tc) { return tc && TC(tc)->isLooping(); }
+double uapmd_transport_loop_start_seconds(uapmd_transport_controller_t tc) { return tc ? TC(tc)->loopStartSeconds() : 0.0; }
+double uapmd_transport_loop_end_seconds(uapmd_transport_controller_t tc) { return tc ? TC(tc)->loopEndSeconds() : 0.0; }
+
 uapmd_timeline_content_bounds_t uapmd_app_timeline_content_bounds(uapmd_app_model_t app) {
     if (!app) return {false, 0.0, 0.0, 0.0};
     const auto b = AM(app)->timelineContentBounds();

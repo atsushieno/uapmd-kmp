@@ -1178,6 +1178,11 @@ class JsTransportController internal constructor(internal val handle: Int) : Tra
     override fun record() { jsMod._uapmd_transport_record(handle) }
 
     override fun jump(positionSeconds: Double) { jsMod._uapmd_transport_jump(handle, positionSeconds) }
+    override fun setLoop(startSeconds: Double, endSeconds: Double) { jsMod._uapmd_transport_set_loop(handle, startSeconds, endSeconds) }
+    override fun setLooping(enabled: Boolean) { jsMod._uapmd_transport_set_looping(handle, if (enabled) 1 else 0) }
+    override val isLooping: Boolean get() = jsMod._uapmd_transport_is_looping(handle) as Boolean
+    override val loopStartSeconds: Double get() = jsMod._uapmd_transport_loop_start_seconds(handle) as Double
+    override val loopEndSeconds: Double get() = jsMod._uapmd_transport_loop_end_seconds(handle) as Double
 }
 
 actual fun instantiateAppModel() {

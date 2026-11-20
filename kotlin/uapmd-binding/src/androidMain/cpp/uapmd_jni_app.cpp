@@ -990,6 +990,26 @@ JNI_FN(void, uapmdTransportJump)(JNIEnv*, jclass, jlong tc, jdouble positionSeco
     uapmd_transport_jump(j2p<uapmd_transport_controller_t>(tc), positionSeconds);
 }
 
+JNI_FN(void, uapmdTransportSetLoop)(JNIEnv*, jclass, jlong tc, jdouble startSeconds, jdouble endSeconds) {
+    uapmd_transport_set_loop(j2p<uapmd_transport_controller_t>(tc), startSeconds, endSeconds);
+}
+
+JNI_FN(void, uapmdTransportSetLooping)(JNIEnv*, jclass, jlong tc, jboolean enabled) {
+    uapmd_transport_set_looping(j2p<uapmd_transport_controller_t>(tc), enabled == JNI_TRUE);
+}
+
+JNI_FN(jboolean, uapmdTransportIsLooping)(JNIEnv*, jclass, jlong tc) {
+    return uapmd_transport_is_looping(j2p<uapmd_transport_controller_t>(tc)) ? JNI_TRUE : JNI_FALSE;
+}
+
+JNI_FN(jdouble, uapmdTransportLoopStartSeconds)(JNIEnv*, jclass, jlong tc) {
+    return uapmd_transport_loop_start_seconds(j2p<uapmd_transport_controller_t>(tc));
+}
+
+JNI_FN(jdouble, uapmdTransportLoopEndSeconds)(JNIEnv*, jclass, jlong tc) {
+    return uapmd_transport_loop_end_seconds(j2p<uapmd_transport_controller_t>(tc));
+}
+
 /* ── Assorted AppModel accessors ──────────────────────────────────────────── */
 
 namespace {

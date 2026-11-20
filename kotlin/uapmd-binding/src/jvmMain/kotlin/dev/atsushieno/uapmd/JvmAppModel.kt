@@ -817,6 +817,11 @@ class JvmTransportController internal constructor(
     override fun record() = lib.uapmd_transport_record(handle)
 
     override fun jump(positionSeconds: Double) = lib.uapmd_transport_jump(handle, positionSeconds)
+    override fun setLoop(startSeconds: Double, endSeconds: Double) = lib.uapmd_transport_set_loop(handle, startSeconds, endSeconds)
+    override fun setLooping(enabled: Boolean) = lib.uapmd_transport_set_looping(handle, if (enabled) 1 else 0)
+    override val isLooping: Boolean get() = lib.uapmd_transport_is_looping(handle)
+    override val loopStartSeconds: Double get() = lib.uapmd_transport_loop_start_seconds(handle)
+    override val loopEndSeconds: Double get() = lib.uapmd_transport_loop_end_seconds(handle)
 }
 
 actual fun instantiateAppModel() = lib.uapmd_app_instantiate()

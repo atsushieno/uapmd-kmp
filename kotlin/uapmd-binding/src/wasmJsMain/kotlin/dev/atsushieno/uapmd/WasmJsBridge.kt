@@ -1427,6 +1427,16 @@ external interface UapmdCApiModule : JsAny {
     fun uapmdAppClearPianoRollCommitSource(app: Int)
     @JsName("_uapmd_transport_jump")
     fun uapmdTransportJump(tc: Int, positionSeconds: Double)
+    @JsName("_uapmd_transport_set_loop")
+    fun uapmdTransportSetLoop(tc: Int, startSeconds: Double, endSeconds: Double)
+    @JsName("_uapmd_transport_set_looping")
+    fun uapmdTransportSetLooping(tc: Int, enabled: Boolean)
+    @JsName("_uapmd_transport_is_looping")
+    fun uapmdTransportIsLooping(tc: Int): Boolean
+    @JsName("_uapmd_transport_loop_start_seconds")
+    fun uapmdTransportLoopStartSeconds(tc: Int): Double
+    @JsName("_uapmd_transport_loop_end_seconds")
+    fun uapmdTransportLoopEndSeconds(tc: Int): Double
 
     // ── Assorted AppModel accessors ────────────────────────────────────────
     @JsName("_uapmd_app_get_midi_input_ports")

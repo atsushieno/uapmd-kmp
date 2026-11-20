@@ -415,6 +415,13 @@ UAPMD_C_EXPORT bool uapmd_app_is_track_hidden(uapmd_app_model_t app, int32_t tra
 /* Moves the playhead without starting or stopping the transport. Lives on the
  * transport controller, as it does upstream. */
 UAPMD_C_EXPORT void uapmd_transport_jump(uapmd_transport_controller_t tc, double position_seconds);
+/* Sample-accurate looping; the region is session state, not saved with the project.
+ * set_loop sets the region and turns looping on; set_looping keeps the region. */
+UAPMD_C_EXPORT void   uapmd_transport_set_loop(uapmd_transport_controller_t tc, double start_seconds, double end_seconds);
+UAPMD_C_EXPORT void   uapmd_transport_set_looping(uapmd_transport_controller_t tc, bool enabled);
+UAPMD_C_EXPORT bool   uapmd_transport_is_looping(uapmd_transport_controller_t tc);
+UAPMD_C_EXPORT double uapmd_transport_loop_start_seconds(uapmd_transport_controller_t tc);
+UAPMD_C_EXPORT double uapmd_transport_loop_end_seconds(uapmd_transport_controller_t tc);
 
 /* The span the timeline's content actually occupies. */
 typedef struct uapmd_timeline_content_bounds {

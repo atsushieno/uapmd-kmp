@@ -152,6 +152,13 @@ class UapmdHost private constructor(val model: AppModel) {
         private set
     var isPaused by mutableStateOf(false)
         private set
+    var isLooping by mutableStateOf(false)
+        private set
+    var loopStartSeconds by mutableStateOf(0.0)
+        private set
+    var loopEndSeconds by mutableStateOf(0.0)
+        private set
+    val hasLoopRegion get() = loopEndSeconds > loopStartSeconds
     var isRecording by mutableStateOf(false)
         private set
 
@@ -191,6 +198,25 @@ class UapmdHost private constructor(val model: AppModel) {
     fun pauseOrResume() {
         val t = model.transport
         if (t.isPaused) t.resume() else t.pause()
+        refresh()
+    }
+
+    /** Sets the region and turns looping on; the engine wraps sample-accurately at [endSeconds]. */
+    fun setLoop(startSeconds: Double, endSeconds: Double) {
+        model.transport.setLoop(startSeconds, endSeconds)
+        refresh()
+    }
+
+    /** Reshapes the region, leaving looping on or off as it was. */
+    fun editLoop(startSeconds: Double, endSeconds: Double) {
+        val wasLooping = model.transport.isLooping
+        model.transport.setLoop(startSeconds, endSeconds)
+        if (!wasLooping) model.transport.setLooping(false)
+        refresh()
+    }
+
+    fun toggleLooping() {
+        model.transport.setLooping(!model.transport.isLooping)
         refresh()
     }
 
@@ -1921,6 +1947,9 @@ class UapmdHost private constructor(val model: AppModel) {
         val t = model.transport
         isPlaying = t.isPlaying
         isPaused = t.isPaused
+        isLooping = t.isLooping
+        loopStartSeconds = t.loopStartSeconds
+        loopEndSeconds = t.loopEndSeconds
         isRecording = t.isRecording || model.sequencer.engine.midiRecorder?.isRecording == true
         timeline = model.getTimelineState()
         if (structural) {

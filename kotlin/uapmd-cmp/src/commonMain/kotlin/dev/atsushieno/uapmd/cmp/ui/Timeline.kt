@@ -5,6 +5,9 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.detectDragGestures
 import androidx.compose.foundation.gestures.detectTapGestures
+import androidx.compose.foundation.gestures.awaitEachGesture
+import androidx.compose.foundation.gestures.awaitFirstDown
+import androidx.compose.ui.draw.drawWithContent
 import androidx.compose.ui.input.pointer.PointerEventType
 import androidx.compose.ui.input.pointer.isCtrlPressed
 import androidx.compose.ui.input.pointer.isMetaPressed
@@ -662,7 +665,20 @@ fun Timeline(
             HorizontalDivider(Modifier.width(1.dp).fillMaxSize())
 
             // ── Lanes ────────────────────────────────────────────────────────
-            Column(Modifier.fillMaxSize().horizontalScroll(hScroll).verticalScroll(vScroll)) {
+            val loopPalette = editorPalette
+            Column(Modifier.fillMaxSize().horizontalScroll(hScroll).verticalScroll(vScroll)
+                .drawWithContent {
+                    drawContent()
+                    // While looping, the region is washed over every lane, as uapmd-app does.
+                    if (!host.isLooping || !host.hasLoopRegion) return@drawWithContent
+                    val top = RulerHeight.toPx()
+                    val x0 = TimelineAxis.xOf(host.loopStartSeconds, pixelsPerSecond)
+                    val x1 = max(TimelineAxis.xOf(host.loopEndSeconds, pixelsPerSecond), x0 + 1f)
+                    if (size.height <= top) return@drawWithContent
+                    drawRect(loopPalette.loopLaneTint, Offset(x0, top), Size(x1 - x0, size.height - top))
+                    drawLine(loopPalette.loopEdge.copy(alpha = 0.45f), Offset(x0, top), Offset(x0, size.height), 1f)
+                    drawLine(loopPalette.loopEdge.copy(alpha = 0.45f), Offset(x1, top), Offset(x1, size.height), 1f)
+                }) {
                 val laneWidth = (contentSeconds * dpPerSecond).dp
                 val fallbackBeatsPerBar = host.timeline?.timeSignatureNumerator ?: 4
                 // One tick list for the strip and every lane, so a bar line and
@@ -675,7 +691,7 @@ fun Timeline(
                         host.tempoMap, density, fallbackBeatsPerBar
                     )
                 }
-                Ruler(ticks, pixelsPerSecond, laneWidth)
+                Ruler(host, ticks, pixelsPerSecond, laneWidth, timeUnit, snapIndex)
                 MasterTrackLane(
                     host, pixelsPerSecond, laneWidth, heightFor(masterLanes), ticks, masterLanes
                 )
@@ -720,17 +736,96 @@ private data class EditNotice(val message: String, val serial: Int)
 
 private const val EditNoticeMillis = 5000L
 
+/** What a press on the ruler does: draw a new loop region, move one of its edges, or move it whole. */
+private enum class LoopDragMode { Create, Start, End, Move }
+
+/** A ruler drag in progress, with the region it proposes. */
+private data class LoopDrag(val mode: LoopDragMode, val start: Double, val end: Double, val moved: Boolean)
+
+/** The band fills the lower part of the ruler, under the tick marks; the bar numbers stay clear above it. */
+private const val LoopBandTopFraction = 0.55f
+
 @Composable
 private fun Ruler(
+    host: UapmdHost,
     ticks: List<RulerTick>,
     pixelsPerSecond: Float,
-    laneWidth: Dp
+    laneWidth: Dp,
+    timeUnit: TimeUnit,
+    snapIndex: Int
 ) {
     val c = editorPalette
     val textMeasurer = rememberTextMeasurer()
     val labelStyle = MaterialTheme.typography.labelSmall
     val uiScale = LocalDensity.current.density
-    Canvas(Modifier.height(RulerHeight).width(laneWidth)) {
+    var loopDrag by remember { mutableStateOf<LoopDrag?>(null) }
+    val snapUnitBeats by rememberUpdatedState(SnapBeats[snapIndex.coerceIn(0, SnapBeats.lastIndex)].toDouble())
+    Canvas(Modifier.height(RulerHeight).width(laneWidth).pointerInput(pixelsPerSecond) {
+        val handleReach = 6.dp.toPx()
+        val deadZone = 4.dp.toPx()
+        awaitEachGesture {
+            val down = awaitFirstDown()
+            if (currentEvent.buttons.isSecondaryPressed) return@awaitEachGesture
+            // Alt places freely, as it does for clip grips.
+            val free = currentEvent.keyboardModifiers.isAltPressed
+            fun secondsAt(x: Float) = (x / pixelsPerSecond).toDouble().coerceAtLeast(0.0)
+            fun snap(seconds: Double) = if (free || snapUnitBeats <= 0.0) seconds
+                else snapToBeats(seconds, snapUnitBeats, host.tempoMap::secondsToBeats, host.tempoMap::beatsToSeconds)
+                    .coerceAtLeast(0.0)
+
+            val savedStart = host.loopStartSeconds
+            val savedEnd = host.loopEndSeconds
+            val pressX = down.position.x
+            val x0 = TimelineAxis.xOf(savedStart, pixelsPerSecond)
+            val x1 = TimelineAxis.xOf(savedEnd, pixelsPerSecond)
+            val nearStart = abs(pressX - x0) <= handleReach
+            val nearEnd = abs(pressX - x1) <= handleReach
+            // An edge resizes, the band moves or toggles, anywhere else draws a new region.
+            val mode = when {
+                savedEnd <= savedStart -> LoopDragMode.Create
+                nearStart && nearEnd -> if (pressX >= (x0 + x1) / 2f) LoopDragMode.End else LoopDragMode.Start
+                nearStart -> LoopDragMode.Start
+                nearEnd -> LoopDragMode.End
+                pressX > x0 && pressX < x1 && down.position.y >= size.height * LoopBandTopFraction -> LoopDragMode.Move
+                else -> LoopDragMode.Create
+            }
+            val pressSeconds = secondsAt(pressX)
+            var drag = LoopDrag(mode, savedStart, savedEnd, moved = false)
+            loopDrag = drag
+            down.consume()
+            while (true) {
+                val change = awaitPointerEvent().changes.firstOrNull { it.id == down.id } ?: break
+                val pointer = secondsAt(change.position.x.coerceIn(0f, size.width.toFloat()))
+                val moved = drag.moved || abs(change.position.x - pressX) >= deadZone
+                val minLength = 0.001
+                drag = when (mode) {
+                    LoopDragMode.Create -> {
+                        val a = snap(pressSeconds)
+                        val b = snap(pointer)
+                        LoopDrag(mode, minOf(a, b), maxOf(a, b), moved)
+                    }
+                    LoopDragMode.Start ->
+                        LoopDrag(mode, minOf(snap(pointer), savedEnd - minLength).coerceAtLeast(0.0), savedEnd, moved)
+                    LoopDragMode.End ->
+                        LoopDrag(mode, savedStart, maxOf(snap(pointer), savedStart + minLength), moved)
+                    LoopDragMode.Move -> {
+                        val start = snap(savedStart + (pointer - pressSeconds)).coerceAtLeast(0.0)
+                        LoopDrag(mode, start, start + (savedEnd - savedStart), moved)
+                    }
+                }
+                loopDrag = drag
+                change.consume()
+                if (!change.pressed) break
+            }
+            loopDrag = null
+            when {
+                // Drawing a region starts looping it; reshaping one leaves looping as it was.
+                drag.moved && drag.end > drag.start ->
+                    if (mode == LoopDragMode.Create) host.setLoop(drag.start, drag.end) else host.editLoop(drag.start, drag.end)
+                !drag.moved && mode == LoopDragMode.Move -> host.toggleLooping()
+            }
+        }
+    }) {
         ticks.forEach { tick ->
             val x = TimelineAxis.xOf(tick.seconds, pixelsPerSecond)
             if (x < 0f || x > size.width) return@forEach
@@ -748,6 +843,29 @@ private fun Ruler(
                 topLeft = Offset(x + 3f * uiScale, 0f),
                 style = labelStyle.copy(color = c.rulerMajorTick)
             )
+        }
+
+        val drag = loopDrag?.takeIf { it.moved }
+        val start = drag?.start ?: host.loopStartSeconds
+        val end = drag?.end ?: host.loopEndSeconds
+        if (end > start) {
+            val on = if (drag?.mode == LoopDragMode.Create) true else host.isLooping
+            val x0 = TimelineAxis.xOf(start, pixelsPerSecond)
+            val x1 = max(TimelineAxis.xOf(end, pixelsPerSecond), x0 + 1f)
+            val bandTop = size.height * LoopBandTopFraction
+            val edge = if (on) c.loopEdge else c.loopOffEdge
+            drawRect(if (on) c.loopBand else c.loopOffBand, Offset(x0, bandTop), Size(x1 - x0, size.height - bandTop))
+            drawLine(edge, Offset(x0, 0f), Offset(x0, size.height), 2f * uiScale)
+            drawLine(edge, Offset(x1, 0f), Offset(x1, size.height), 2f * uiScale)
+            // While dragging, the region being proposed, in the ruler's own unit.
+            if (drag != null)
+                drawText(
+                    textMeasurer,
+                    "Loop ${TimelineAxis.positionLabel(timeUnit, start, host.tempoMap)} - " +
+                        TimelineAxis.positionLabel(timeUnit, end, host.tempoMap),
+                    topLeft = Offset(x1 + 4f * uiScale, 0f),
+                    style = labelStyle.copy(color = edge)
+                )
         }
     }
 }
@@ -1510,6 +1628,11 @@ private fun LaneRangeMenu(
         DropdownMenuItem(text = { Text("Add Empty Audio Clip") }, onClick = {
             onDismiss()
             host.addEmptyAudioClip(trackIndex, startSeconds, endSeconds)
+        })
+        HorizontalDivider()
+        DropdownMenuItem(text = { Text("Set Loop to Range") }, onClick = {
+            onDismiss()
+            host.setLoop(startSeconds, endSeconds)
         })
     }
 }

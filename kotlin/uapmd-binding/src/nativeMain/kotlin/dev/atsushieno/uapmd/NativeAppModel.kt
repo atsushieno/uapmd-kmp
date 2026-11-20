@@ -856,6 +856,11 @@ class NativeTransportController internal constructor(
     override fun record() = uapmd_transport_record(handle)
 
     override fun jump(positionSeconds: Double) = uapmd_transport_jump(handle, positionSeconds)
+    override fun setLoop(startSeconds: Double, endSeconds: Double) = uapmd_transport_set_loop(handle, startSeconds, endSeconds)
+    override fun setLooping(enabled: Boolean) = uapmd_transport_set_looping(handle, enabled)
+    override val isLooping: Boolean get() = uapmd_transport_is_looping(handle)
+    override val loopStartSeconds: Double get() = uapmd_transport_loop_start_seconds(handle)
+    override val loopEndSeconds: Double get() = uapmd_transport_loop_end_seconds(handle)
 }
 
 actual fun instantiateAppModel() = uapmd_app_instantiate()

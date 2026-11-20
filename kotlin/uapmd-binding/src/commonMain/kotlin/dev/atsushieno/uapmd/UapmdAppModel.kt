@@ -667,6 +667,14 @@ interface TransportController {
 
     /** Moves the playhead without starting or stopping the transport. */
     fun jump(positionSeconds: Double)
+
+    /** Sets the loop region and turns looping on; playback returns to [startSeconds] sample-accurately at [endSeconds]. */
+    fun setLoop(startSeconds: Double, endSeconds: Double)
+    /** Turns looping on or off, keeping the region; on does nothing without a region. */
+    fun setLooping(enabled: Boolean)
+    val isLooping: Boolean
+    val loopStartSeconds: Double
+    val loopEndSeconds: Double
 }
 
 /** One clip, by the identifiers the rest of this API takes. */

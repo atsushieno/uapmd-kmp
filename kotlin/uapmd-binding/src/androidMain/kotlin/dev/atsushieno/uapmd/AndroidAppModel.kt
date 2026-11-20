@@ -787,6 +787,11 @@ class AndroidTransportController internal constructor(internal val handle: Long)
     override fun record() = JniBridge.uapmdTransportRecord(handle)
 
     override fun jump(positionSeconds: Double) = JniBridge.uapmdTransportJump(handle, positionSeconds)
+    override fun setLoop(startSeconds: Double, endSeconds: Double) = JniBridge.uapmdTransportSetLoop(handle, startSeconds, endSeconds)
+    override fun setLooping(enabled: Boolean) = JniBridge.uapmdTransportSetLooping(handle, enabled)
+    override val isLooping: Boolean get() = JniBridge.uapmdTransportIsLooping(handle)
+    override val loopStartSeconds: Double get() = JniBridge.uapmdTransportLoopStartSeconds(handle)
+    override val loopEndSeconds: Double get() = JniBridge.uapmdTransportLoopEndSeconds(handle)
 }
 
 actual fun instantiateAppModel() = JniBridge.uapmdAppInstantiate()

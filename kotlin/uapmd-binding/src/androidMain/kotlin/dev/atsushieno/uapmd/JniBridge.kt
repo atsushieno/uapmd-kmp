@@ -973,6 +973,11 @@ object JniBridge {
     @JvmStatic external fun uapmdAppPianoRollSourceMatchesLastEdit(app: Long): Boolean
     @JvmStatic external fun uapmdAppClearPianoRollCommitSource(app: Long)
     @JvmStatic external fun uapmdTransportJump(tc: Long, positionSeconds: Double)
+    @JvmStatic external fun uapmdTransportSetLoop(tc: Long, startSeconds: Double, endSeconds: Double)
+    @JvmStatic external fun uapmdTransportSetLooping(tc: Long, enabled: Boolean)
+    @JvmStatic external fun uapmdTransportIsLooping(tc: Long): Boolean
+    @JvmStatic external fun uapmdTransportLoopStartSeconds(tc: Long): Double
+    @JvmStatic external fun uapmdTransportLoopEndSeconds(tc: Long): Double
 
     // ══ Assorted AppModel accessors ═════════════════════════════════════════
     //

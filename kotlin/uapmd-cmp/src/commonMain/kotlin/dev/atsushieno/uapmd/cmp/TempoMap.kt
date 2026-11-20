@@ -85,6 +85,16 @@ class TempoMap private constructor(
         return numerator * 4.0 / denominator
     }
 
+    /** The bar holding [seconds], as its start and end in seconds, through the meter in force there. */
+    fun barAt(seconds: Double): Pair<Double, Double> {
+        val beat = max(0.0, secondsToBeats(seconds))
+        val region = signatures.lastOrNull { beat >= it.startBeat - 1e-9 }
+        val barLength = region?.let { barLengthBeats(it) } ?: 4.0
+        val regionStart = region?.startBeat ?: 0.0
+        val start = regionStart + kotlin.math.floor((beat - regionStart) / barLength + 1e-9) * barLength
+        return beatsToSeconds(start) to beatsToSeconds(start + barLength)
+    }
+
     companion object {
         const val DefaultBpm = 120.0
 

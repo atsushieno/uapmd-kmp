@@ -1137,6 +1137,11 @@ class WasmJsTransportController internal constructor(internal val handle: Int) :
     override fun record() = wasmMod.uapmdTransportRecord(handle)
 
     override fun jump(positionSeconds: Double) = wasmMod.uapmdTransportJump(handle, positionSeconds)
+    override fun setLoop(startSeconds: Double, endSeconds: Double) = wasmMod.uapmdTransportSetLoop(handle, startSeconds, endSeconds)
+    override fun setLooping(enabled: Boolean) = wasmMod.uapmdTransportSetLooping(handle, enabled)
+    override val isLooping: Boolean get() = wasmMod.uapmdTransportIsLooping(handle)
+    override val loopStartSeconds: Double get() = wasmMod.uapmdTransportLoopStartSeconds(handle)
+    override val loopEndSeconds: Double get() = wasmMod.uapmdTransportLoopEndSeconds(handle)
 }
 
 actual fun instantiateAppModel() = wasmMod.uapmdAppInstantiate()

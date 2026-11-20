@@ -52,6 +52,12 @@ data class EditorPalette(
      * for the seconds grid, 0.35/0.12 for bars and beats, so they read as
      * structure rather than as content.
      */
+    /** The transport loop band on the ruler, its edges, and the wash over the lanes while looping. */
+    val loopBand: Color,
+    val loopEdge: Color,
+    val loopLaneTint: Color,
+    val loopOffBand: Color,
+    val loopOffEdge: Color,
     val rulerMajorTick: Color,
     val rulerMinorTick: Color,
     val gridMajorLine: Color,
@@ -94,6 +100,11 @@ private val DarkEditorPalette = EditorPalette(
     clipBorder           = Color(0xFF9A8FC7),
     note                 = Color(0xFFBFD8F0),
     playhead             = Color(0xFFE8C547),
+    loopBand             = Color(0x964696FF),
+    loopEdge             = Color(0xFF78B9FF),
+    loopLaneTint         = Color(0x184696FF),
+    loopOffBand          = Color(0x5A969696),
+    loopOffEdge          = Color(0xC8AAAAAA),
     rulerMajorTick       = Color(0xB3C8C8D4),
     rulerMinorTick       = Color(0x66C8C8D4),
     gridMajorLine        = Color(0x4DE4E4EC),
@@ -144,6 +155,11 @@ private val LightEditorPalette = EditorPalette(
     clipBorder           = Color(0xFF6E62A6),
     note                 = Color(0xFF1D3E63),
     playhead             = Color(0xFFC2410C),
+    loopBand             = Color(0x8C2F6FD0),
+    loopEdge             = Color(0xFF1F5FB8),
+    loopLaneTint         = Color(0x1A2F6FD0),
+    loopOffBand          = Color(0x5A808088),
+    loopOffEdge          = Color(0xC8707078),
     rulerMajorTick       = Color(0xB33A3A44),
     rulerMinorTick       = Color(0x663A3A44),
     gridMajorLine        = Color(0x4D2A2A32),
