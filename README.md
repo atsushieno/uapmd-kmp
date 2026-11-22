@@ -11,6 +11,11 @@ The project is split into two parts:
 
 Target platforms: Android, iOS, JVM desktop (macOS, Linux, Windows), and WebAssembly (experimental).
 
+Open **Mixer** from the timeline footer for track and master faders, per-bus stereo
+balance, and channel meters. Choose a bus in the output inspector to show its meters
+on the strip. **M** and **S** are also available in the track headers. The mixer
+toolbar opens the **Latency Monitor**.
+
 ---
 
 ## Build instructions

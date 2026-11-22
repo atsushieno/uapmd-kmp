@@ -57,6 +57,19 @@ class JsSequencerEngine internal constructor(
     override fun getTrack(index: UInt): SequencerTrack =
         JsSequencerTrack(jsMod._uapmd_engine_get_track(handle, index.toInt()) as Int)
 
+    override fun captureMixerPeaks(enabled: Boolean) { jsMod._uapmd_engine_capture_mixer_peaks(handle, enabled) }
+    override fun setTrackStereoBalance(trackIndex: Int, bus: UInt, balance: Double) = (jsMod._uapmd_engine_set_track_stereo_balance(handle, trackIndex, bus.toInt(), balance) as Int) != 0
+    override fun setTrackOutputPanner(trackIndex: Int, bus: UInt, panner: TrackOutputPanner?): Boolean =
+        withJsCString(panner?.nodeType) { type ->
+            withJsCString(panner?.parametersJson) { parameters ->
+                (jsMod._uapmd_engine_set_track_output_panner(handle, trackIndex, bus.toInt(), type, parameters) as Int) != 0
+            }
+        }
+    override fun trackOutputBusRoute(trackIndex: Int, bus: UInt): String =
+        readJsString(handle) { h, buf, size ->
+            jsMod._uapmd_engine_track_output_bus_route(h, trackIndex, bus.toInt(), buf, size) as Int
+        }
+
     override fun trackFreezePolicy(trackIndex: Int) =
         FreezePolicy.fromNative(jsMod._uapmd_engine_track_freeze_policy(handle, trackIndex) as Int)
     override fun trackFreezeState(trackIndex: Int) =
@@ -230,6 +243,19 @@ class JsSequencerTrack internal constructor(
     override val latencyInSamples: UInt   get() = (jsMod._uapmd_track_latency_in_samples(handle) as Int).toUInt()
     override val renderLeadInSamples: UInt get() = (jsMod._uapmd_track_render_lead_in_samples(handle) as Int).toUInt()
     override val tailLengthInSeconds: Double get() = jsMod._uapmd_track_tail_length_in_seconds(handle) as Double
+
+    override val outputBusCount: Int get() = (jsMod._uapmd_track_output_bus_count(handle) as Int)
+    override fun outputChannelCount(bus: UInt) = (jsMod._uapmd_track_output_channel_count(handle, bus.toInt()) as Int)
+    override fun consumeOutputPeak(bus: UInt, channel: UInt) = (jsMod._uapmd_track_consume_output_peak(handle, bus.toInt(), channel.toInt()) as Double)
+    override fun stereoBalance(bus: UInt): Double? = (jsMod._uapmd_track_stereo_balance(handle, bus.toInt()) as Double).takeIf { it.isFinite() }
+    override fun outputPanner(bus: UInt): TrackOutputPanner? {
+        fun field(parameters: Boolean) =
+            readJsString(handle) { h, buf, size ->
+            jsMod._uapmd_track_output_panner_field(h, bus.toInt(), parameters, buf, size) as Int
+        }
+        val type = field(false)
+        return if (type.isEmpty()) null else TrackOutputPanner(type, field(true))
+    }
 
     override val gain: Double get() = jsMod._uapmd_track_get_gain(handle) as Double
     override val muted: Boolean get() = jsMod._uapmd_track_get_muted(handle) as Boolean

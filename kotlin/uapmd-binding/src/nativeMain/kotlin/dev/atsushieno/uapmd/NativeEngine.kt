@@ -43,6 +43,13 @@ class NativeSequencerEngine internal constructor(
     override fun getTrack(index: UInt): SequencerTrack =
         NativeSequencerTrack(uapmd_engine_get_track(handle, index)!!)
 
+    override fun captureMixerPeaks(enabled: Boolean) = uapmd_engine_capture_mixer_peaks(handle, enabled)
+    override fun setTrackStereoBalance(trackIndex: Int, bus: UInt, balance: Double) = uapmd_engine_set_track_stereo_balance(handle, trackIndex, bus, balance)
+    override fun setTrackOutputPanner(trackIndex: Int, bus: UInt, panner: TrackOutputPanner?): Boolean =
+        uapmd_engine_set_track_output_panner(handle, trackIndex, bus, panner?.nodeType, panner?.parametersJson)
+    override fun trackOutputBusRoute(trackIndex: Int, bus: UInt): String =
+        readCString { buf, size -> uapmd_engine_track_output_bus_route(handle, trackIndex, bus, buf, size) }
+
     override fun trackFreezePolicy(trackIndex: Int) =
         FreezePolicy.fromNative(uapmd_engine_track_freeze_policy(handle, trackIndex).toInt())
     override fun trackFreezeState(trackIndex: Int) =
@@ -264,6 +271,17 @@ class NativeSequencerTrack internal constructor(
     override val latencyInSamples: UInt get() = uapmd_track_latency_in_samples(handle)
     override val renderLeadInSamples: UInt get() = uapmd_track_render_lead_in_samples(handle)
     override val tailLengthInSeconds: Double get() = uapmd_track_tail_length_in_seconds(handle)
+
+    override val outputBusCount: Int get() = uapmd_track_output_bus_count(handle).toInt()
+    override fun outputChannelCount(bus: UInt) = uapmd_track_output_channel_count(handle, bus).toInt()
+    override fun consumeOutputPeak(bus: UInt, channel: UInt) = uapmd_track_consume_output_peak(handle, bus, channel)
+    override fun stereoBalance(bus: UInt): Double? = uapmd_track_stereo_balance(handle, bus).takeIf { it.isFinite() }
+    override fun outputPanner(bus: UInt): TrackOutputPanner? {
+        fun field(parameters: Boolean) =
+            readCString { buf, size -> uapmd_track_output_panner_field(handle, bus, parameters, buf, size) }
+        val type = field(false)
+        return if (type.isEmpty()) null else TrackOutputPanner(type, field(true))
+    }
 
     override val gain: Double get() = uapmd_track_get_gain(handle)
     override val muted: Boolean get() = uapmd_track_get_muted(handle)

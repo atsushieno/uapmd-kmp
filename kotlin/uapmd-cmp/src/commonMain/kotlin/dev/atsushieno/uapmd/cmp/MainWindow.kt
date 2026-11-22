@@ -54,7 +54,9 @@ import dev.atsushieno.uapmd.cmp.ui.DeviceSettings
 import dev.atsushieno.uapmd.cmp.ui.ExporterWindow
 import dev.atsushieno.uapmd.cmp.ui.InstanceDetails
 import dev.atsushieno.uapmd.cmp.ui.MasterMarkersWindow
-import dev.atsushieno.uapmd.cmp.ui.MixerMonitor
+import dev.atsushieno.uapmd.cmp.ui.Mixer
+import dev.atsushieno.uapmd.cmp.ui.MixerWindowKey
+import dev.atsushieno.uapmd.cmp.ui.MixerWindowSize
 import dev.atsushieno.uapmd.cmp.ui.Augene2Window
 import dev.atsushieno.uapmd.cmp.ui.VirtualMidiDevicesWindow
 import dev.atsushieno.uapmd.cmp.ui.PluginSelector
@@ -300,7 +302,7 @@ private fun BottomBar(host: UapmdHost, windows: dev.atsushieno.uapmd.cmp.ui.Floa
         Button(onClick = { host.addTrack() }) { Text("+") }
         Text("  ")
         Button(onClick = {
-            windows.toggle("mixer", "Mixer Monitor", DpSize(480.dp, 340.dp)) { MixerMonitor(host) }
-        }) { Text("Mixer Monitor") }
+            windows.toggle(MixerWindowKey, "Mixer", MixerWindowSize) { Mixer(host, windows) }
+        }) { Text("Mixer") }
     }
 }

@@ -11,6 +11,7 @@
 #include <jni.h>
 #include <android/log.h>
 #include <functional>
+#include <limits>
 #include <string>
 #include <vector>
 #include <mutex>
@@ -1238,6 +1239,81 @@ JNIEXPORT void JNICALL Java_dev_atsushieno_uapmd_JniBridge_uapmdMidiRecorderCanc
         JNIEnv*, jclass, jlong r) { uapmd_midi_recorder_cancel(j2p<uapmd_midi_recorder_t>(r)); }
 JNIEXPORT jboolean JNICALL Java_dev_atsushieno_uapmd_JniBridge_uapmdMidiRecorderIsRecording(
         JNIEnv*, jclass, jlong r) { return uapmd_midi_recorder_is_recording(j2p<uapmd_midi_recorder_t>(r)); }
+
+JNIEXPORT void JNICALL Java_dev_atsushieno_uapmd_JniBridge_uapmdEngineCaptureMixerPeaks(
+        JNIEnv*, jclass, jlong h, jboolean enabled) {
+    uapmd_engine_capture_mixer_peaks(j2p<uapmd_sequencer_engine_t>(h), enabled);
+}
+
+JNIEXPORT jboolean JNICALL Java_dev_atsushieno_uapmd_JniBridge_uapmdEngineSetTrackStereoBalance(
+        JNIEnv*, jclass, jlong h, jint trackIndex, jint bus, jdouble balance) {
+    return uapmd_engine_set_track_stereo_balance(j2p<uapmd_sequencer_engine_t>(h), trackIndex, static_cast<uint32_t>(bus), balance);
+}
+
+JNIEXPORT jint JNICALL Java_dev_atsushieno_uapmd_JniBridge_uapmdTrackOutputBusCount(
+        JNIEnv*, jclass, jlong h) {
+    return static_cast<jint>(uapmd_track_output_bus_count(j2p<uapmd_sequencer_track_t>(h)));
+}
+
+JNIEXPORT jint JNICALL Java_dev_atsushieno_uapmd_JniBridge_uapmdTrackOutputChannelCount(
+        JNIEnv*, jclass, jlong h, jint bus) {
+    return static_cast<jint>(uapmd_track_output_channel_count(j2p<uapmd_sequencer_track_t>(h), static_cast<uint32_t>(bus)));
+}
+
+JNIEXPORT jdouble JNICALL Java_dev_atsushieno_uapmd_JniBridge_uapmdTrackConsumeOutputPeak(
+        JNIEnv*, jclass, jlong h, jint bus, jint channel) {
+    return uapmd_track_consume_output_peak(j2p<uapmd_sequencer_track_t>(h), static_cast<uint32_t>(bus), static_cast<uint32_t>(channel));
+}
+
+JNIEXPORT jdouble JNICALL Java_dev_atsushieno_uapmd_JniBridge_uapmdTrackStereoBalance(
+        JNIEnv*, jclass, jlong h, jint bus) {
+    return uapmd_track_stereo_balance(j2p<uapmd_sequencer_track_t>(h), static_cast<uint32_t>(bus));
+}
+
+JNIEXPORT jboolean JNICALL Java_dev_atsushieno_uapmd_JniBridge_uapmdEngineSetTrackOutputPanner(
+        JNIEnv* env, jclass, jlong h, jint track, jint bus, jbyteArray node_type, jbyteArray parameters_json) {
+    // Use standard UTF-8 bytes here. JNI strings use modified UTF-8, which
+    // cannot be written verbatim to the project's JSON sidecar.
+    const auto asString = [env](jbyteArray bytes) {
+        if (!bytes)
+            return std::string{};
+        const auto length = env->GetArrayLength(bytes);
+        std::string result(static_cast<size_t>(length), '\0');
+        if (length > 0)
+            env->GetByteArrayRegion(bytes, 0, length, reinterpret_cast<jbyte*>(result.data()));
+        return result;
+    };
+    const auto type = asString(node_type);
+    const auto parameters = asString(parameters_json);
+    if (env->ExceptionCheck())
+        return false;
+    return uapmd_engine_set_track_output_panner(j2p<uapmd_sequencer_engine_t>(h), track,
+        static_cast<uint32_t>(bus), node_type ? type.c_str() : nullptr, parameters_json ? parameters.c_str() : nullptr);
+}
+
+JNIEXPORT jstring JNICALL Java_dev_atsushieno_uapmd_JniBridge_uapmdEngineTrackOutputBusRoute(
+        JNIEnv* env, jclass, jlong h, jint track, jint bus) {
+    return cstr(env, [&](char* buf, size_t size) {
+        return uapmd_engine_track_output_bus_route(
+            j2p<uapmd_sequencer_engine_t>(h), track, static_cast<uint32_t>(bus), buf, size);
+    });
+}
+
+JNIEXPORT jbyteArray JNICALL Java_dev_atsushieno_uapmd_JniBridge_uapmdTrackOutputPannerField(
+        JNIEnv* env, jclass, jlong h, jint bus, jboolean parameters) {
+    const auto track = j2p<uapmd_sequencer_track_t>(h);
+    const auto index = static_cast<uint32_t>(bus);
+    const auto size = uapmd_track_output_panner_field(track, index, parameters, nullptr, 0);
+    if (size <= 1 || size > std::numeric_limits<jsize>::max())
+        return env->NewByteArray(0);
+    std::string bytes(size, '\0');
+    const auto length = static_cast<jsize>(
+        uapmd_track_output_panner_field(track, index, parameters, bytes.data(), size));
+    auto out = env->NewByteArray(length);
+    if (out && length > 0)
+        env->SetByteArrayRegion(out, 0, length, reinterpret_cast<const jbyte*>(bytes.data()));
+    return out;
+}
 
 JNIEXPORT jdouble JNICALL Java_dev_atsushieno_uapmd_JniBridge_uapmdTrackGetGain(
         JNIEnv*, jclass, jlong track) {

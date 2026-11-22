@@ -42,6 +42,15 @@ class AndroidSequencerEngine internal constructor(
     override fun getTrack(index: UInt): SequencerTrack =
         AndroidSequencerTrack(JniBridge.uapmdEngineGetTrack(handle, index.toInt()))
 
+    override fun captureMixerPeaks(enabled: Boolean) = JniBridge.uapmdEngineCaptureMixerPeaks(handle, enabled)
+    override fun setTrackStereoBalance(trackIndex: Int, bus: UInt, balance: Double) = JniBridge.uapmdEngineSetTrackStereoBalance(handle, trackIndex, bus.toInt(), balance)
+    override fun setTrackOutputPanner(trackIndex: Int, bus: UInt, panner: TrackOutputPanner?): Boolean =
+        JniBridge.uapmdEngineSetTrackOutputPanner(
+            handle, trackIndex, bus.toInt(), panner?.nodeType?.encodeToByteArray(), panner?.parametersJson?.encodeToByteArray()
+        )
+    override fun trackOutputBusRoute(trackIndex: Int, bus: UInt): String =
+        JniBridge.uapmdEngineTrackOutputBusRoute(handle, trackIndex, bus.toInt())
+
     override fun trackFreezePolicy(trackIndex: Int) =
         FreezePolicy.fromNative(JniBridge.uapmdEngineTrackFreezePolicy(handle, trackIndex))
     override fun trackFreezeState(trackIndex: Int) =
@@ -249,6 +258,17 @@ class AndroidSequencerTrack internal constructor(
     override val latencyInSamples: UInt get() = JniBridge.uapmdTrackLatencyInSamples(handle).toUInt()
     override val renderLeadInSamples: UInt get() = JniBridge.uapmdTrackRenderLeadInSamples(handle).toUInt()
     override val tailLengthInSeconds: Double get() = JniBridge.uapmdTrackTailLengthInSeconds(handle)
+
+    override val outputBusCount: Int get() = JniBridge.uapmdTrackOutputBusCount(handle)
+    override fun outputChannelCount(bus: UInt) = JniBridge.uapmdTrackOutputChannelCount(handle, bus.toInt())
+    override fun consumeOutputPeak(bus: UInt, channel: UInt) = JniBridge.uapmdTrackConsumeOutputPeak(handle, bus.toInt(), channel.toInt())
+    override fun stereoBalance(bus: UInt): Double? = JniBridge.uapmdTrackStereoBalance(handle, bus.toInt()).takeIf { it.isFinite() }
+    override fun outputPanner(bus: UInt): TrackOutputPanner? {
+        fun field(parameters: Boolean) =
+            JniBridge.uapmdTrackOutputPannerField(handle, bus.toInt(), parameters).decodeToString()
+        val type = field(false)
+        return if (type.isEmpty()) null else TrackOutputPanner(type, field(true))
+    }
 
     override val gain: Double get() = JniBridge.uapmdTrackGetGain(handle)
     override val muted: Boolean get() = JniBridge.uapmdTrackGetMuted(handle)

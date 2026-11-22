@@ -593,6 +593,24 @@ external interface UapmdCApiModule : JsAny {
     fun uapmdMidiRecorderCancel(rec: Int)
     @JsName("_uapmd_midi_recorder_is_recording")
     fun uapmdMidiRecorderIsRecording(rec: Int): Boolean
+    @JsName("_uapmd_engine_capture_mixer_peaks")
+    fun uapmdEngineCaptureMixerPeaks(handle: Int, enabled: Boolean): Unit
+    @JsName("_uapmd_engine_set_track_stereo_balance")
+    fun uapmdEngineSetTrackStereoBalance(handle: Int, trackIndex: Int, bus: Int, balance: Double): Boolean
+    @JsName("_uapmd_track_output_bus_count")
+    fun uapmdTrackOutputBusCount(handle: Int): Int
+    @JsName("_uapmd_track_output_channel_count")
+    fun uapmdTrackOutputChannelCount(handle: Int, bus: Int): Int
+    @JsName("_uapmd_track_consume_output_peak")
+    fun uapmdTrackConsumeOutputPeak(handle: Int, bus: Int, channel: Int): Double
+    @JsName("_uapmd_track_stereo_balance")
+    fun uapmdTrackStereoBalance(handle: Int, bus: Int): Double
+    @JsName("_uapmd_engine_set_track_output_panner")
+    fun uapmdEngineSetTrackOutputPanner(handle: Int, trackIndex: Int, bus: Int, nodeType: Int, parametersJson: Int): Boolean
+    @JsName("_uapmd_engine_track_output_bus_route")
+    fun uapmdEngineTrackOutputBusRoute(handle: Int, trackIndex: Int, bus: Int, buf: Int, size: Int): Int
+    @JsName("_uapmd_track_output_panner_field")
+    fun uapmdTrackOutputPannerField(handle: Int, bus: Int, parameters: Boolean, buf: Int, size: Int): Int
     @JsName("_uapmd_track_get_gain")
     fun uapmdTrackGetGain(track: Int): Double
     @JsName("_uapmd_track_get_muted")

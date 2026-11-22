@@ -186,6 +186,14 @@ UAPMD_C_EXPORT void uapmd_engine_get_output_spectrum(uapmd_sequencer_engine_t en
 /* Timeline facade access */
 UAPMD_C_EXPORT uapmd_timeline_facade_t uapmd_engine_timeline(uapmd_sequencer_engine_t engine);
 
+/* Mixer capture is opt-in. Peak readings are linear amplitudes and are consumed
+ * when read. Stereo balance is NaN when the bus has no stereo control. Both
+ * setters are undoable. Pass a null node type to remove an authored panner. */
+UAPMD_C_EXPORT void uapmd_engine_capture_mixer_peaks(uapmd_sequencer_engine_t engine, bool enabled);
+UAPMD_C_EXPORT bool uapmd_engine_set_track_stereo_balance(uapmd_sequencer_engine_t engine, int32_t track_index, uint32_t bus, double balance);
+UAPMD_C_EXPORT bool uapmd_engine_set_track_output_panner(uapmd_sequencer_engine_t engine, int32_t track_index, uint32_t bus, const char* node_type, const char* parameters_json);
+UAPMD_C_EXPORT size_t uapmd_engine_track_output_bus_route(uapmd_sequencer_engine_t engine, int32_t track_index, uint32_t bus, char* buf, size_t buf_size);
+
 /* Audio workers (SequencerEngine::audioWorkers()): independent tracks processed
  * in parallel. A count of 0 processes serially. configure() and wait() are
  * control-thread operations and may wait for outstanding workers. */
@@ -236,6 +244,14 @@ UAPMD_C_EXPORT double   uapmd_track_tail_length_in_seconds(uapmd_sequencer_track
 UAPMD_C_EXPORT double uapmd_track_get_gain(uapmd_sequencer_track_t track);
 UAPMD_C_EXPORT bool   uapmd_track_get_muted(uapmd_sequencer_track_t track);
 UAPMD_C_EXPORT bool   uapmd_track_get_solo(uapmd_sequencer_track_t track);
+
+UAPMD_C_EXPORT uint32_t uapmd_track_output_bus_count(uapmd_sequencer_track_t track);
+UAPMD_C_EXPORT uint32_t uapmd_track_output_channel_count(uapmd_sequencer_track_t track, uint32_t bus);
+UAPMD_C_EXPORT double uapmd_track_consume_output_peak(uapmd_sequencer_track_t track, uint32_t bus, uint32_t channel);
+UAPMD_C_EXPORT double uapmd_track_stereo_balance(uapmd_sequencer_track_t track, uint32_t bus);
+/* Size-query string getter. Pass parameters=true for the JSON object, false for
+ * the node type. Returns zero when the bus has no authored node. */
+UAPMD_C_EXPORT size_t uapmd_track_output_panner_field(uapmd_sequencer_track_t track, uint32_t bus, bool parameters, char* buf, size_t buf_size);
 
 UAPMD_C_EXPORT bool uapmd_track_get_bypassed(uapmd_sequencer_track_t track);
 UAPMD_C_EXPORT bool uapmd_track_get_frozen(uapmd_sequencer_track_t track);

@@ -8,6 +8,7 @@
 #include <cmath>
 #include <cstring>
 #include <functional>
+#include <limits>
 #include <memory>
 #include <mutex>
 #include <atomic>
@@ -439,6 +440,93 @@ bool uapmd_midi_recorder_is_recording(uapmd_midi_recorder_t rec) {
 double uapmd_track_get_gain(uapmd_sequencer_track_t track)  { return ST(track)->trackGain(); }
 bool   uapmd_track_get_muted(uapmd_sequencer_track_t track) { return ST(track)->muted(); }
 bool   uapmd_track_get_solo(uapmd_sequencer_track_t track)  { return ST(track)->solo(); }
+
+void uapmd_engine_capture_mixer_peaks(uapmd_sequencer_engine_t engine, bool enabled) {
+    if (engine)
+        E(engine)->captureMixerPeaks(enabled);
+}
+
+static uapmd::SequencerTrack* mixerTrack(uapmd_sequencer_engine_t engine, int32_t index) {
+    if (!engine)
+        return nullptr;
+    if (index == uapmd::kMasterTrackIndex)
+        return E(engine)->masterTrack();
+    if (index < 0)
+        return nullptr;
+    return ST(uapmd_engine_get_track(engine, static_cast<uint32_t>(index)));
+}
+
+bool uapmd_engine_set_track_stereo_balance(
+        uapmd_sequencer_engine_t engine, int32_t track_index, uint32_t bus, double balance) {
+    auto* track = mixerTrack(engine, track_index);
+    if (!track || !track->stereoBalance(bus) || !std::isfinite(balance) || balance < -1 || balance > 1)
+        return false;
+    return E(engine)->commands().setTrackOutputPanners(
+        track_index, track->outputPannersWithStereoBalance(bus, static_cast<float>(balance)));
+}
+
+bool uapmd_engine_set_track_output_panner(
+        uapmd_sequencer_engine_t engine, int32_t track_index, uint32_t bus,
+        const char* node_type, const char* parameters_json) {
+    auto* track = mixerTrack(engine, track_index);
+    if (!track)
+        return false;
+    auto panners = track->outputPanners();
+    if (node_type) {
+        if (!parameters_json)
+            return false;
+        panners.insert_or_assign(bus, uapmd::TrackOutputPanner{node_type, parameters_json});
+    } else
+        panners.erase(bus);
+    return E(engine)->commands().setTrackOutputPanners(track_index, std::move(panners));
+}
+
+size_t uapmd_engine_track_output_bus_route(
+        uapmd_sequencer_engine_t engine, int32_t track_index, uint32_t bus, char* buf, size_t buf_size) {
+    if (!mixerTrack(engine, track_index))
+        return 0;
+    if (track_index == uapmd::kMasterTrackIndex)
+        return copy_out_string("Device output", buf, buf_size);
+    const auto route = E(engine)->trackOutputBusRoutingTarget(track_index, bus);
+    const char* folded = route.folded ? " (folded)" : "";
+    using Type = uapmd_graph::TrackOutputRoutingTargetType;
+    switch (route.type) {
+    case Type::MASTER_INPUT_BUS:
+        return copy_out_string("Master In " + std::to_string(route.bus_index + 1) + folded, buf, buf_size);
+    case Type::MAIN_MIX_BUS:
+        return copy_out_string("Main Mix " + std::to_string(route.bus_index + 1) + folded, buf, buf_size);
+    default:
+        return copy_out_string("Unrouted", buf, buf_size);
+    }
+}
+
+uint32_t uapmd_track_output_bus_count(uapmd_sequencer_track_t track) {
+    return track ? static_cast<uint32_t>(ST(track)->outputMeterBusCount()) : 0;
+}
+
+uint32_t uapmd_track_output_channel_count(uapmd_sequencer_track_t track, uint32_t bus) {
+    return track ? static_cast<uint32_t>(ST(track)->outputMeterChannelCount(bus)) : 0;
+}
+
+double uapmd_track_consume_output_peak(uapmd_sequencer_track_t track, uint32_t bus, uint32_t channel) {
+    return track ? ST(track)->consumeOutputPeak(bus, channel) : 0.0;
+}
+
+double uapmd_track_stereo_balance(uapmd_sequencer_track_t track, uint32_t bus) {
+    const auto value = track ? ST(track)->stereoBalance(bus) : std::nullopt;
+    return value ? *value : std::numeric_limits<double>::quiet_NaN();
+}
+
+size_t uapmd_track_output_panner_field(
+        uapmd_sequencer_track_t track, uint32_t bus, bool parameters, char* buf, size_t buf_size) {
+    if (!track)
+        return 0;
+    const auto& panners = ST(track)->outputPanners();
+    const auto it = panners.find(bus);
+    if (it == panners.end())
+        return 0;
+    return copy_out_string(parameters ? it->second.parameters_json : it->second.node_type, buf, buf_size);
+}
 
 bool uapmd_track_get_bypassed(uapmd_sequencer_track_t track) { return ST(track)->bypassed(); }
 bool uapmd_track_get_frozen(uapmd_sequencer_track_t track)   { return ST(track)->frozen(); }

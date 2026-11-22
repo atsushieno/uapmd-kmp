@@ -1483,6 +1483,15 @@ interface UapmdLibrary : Library {
     fun uapmd_midi_recorder_stop(rec: Pointer?)
     fun uapmd_midi_recorder_cancel(rec: Pointer?)
     fun uapmd_midi_recorder_is_recording(rec: Pointer?): Boolean
+    fun uapmd_engine_capture_mixer_peaks(handle: Pointer?, enabled: Boolean): Unit
+    fun uapmd_engine_set_track_stereo_balance(handle: Pointer?, trackIndex: Int, bus: Int, balance: Double): Boolean
+    fun uapmd_track_output_bus_count(handle: Pointer?): Int
+    fun uapmd_track_output_channel_count(handle: Pointer?, bus: Int): Int
+    fun uapmd_track_consume_output_peak(handle: Pointer?, bus: Int, channel: Int): Double
+    fun uapmd_track_stereo_balance(handle: Pointer?, bus: Int): Double
+    fun uapmd_engine_set_track_output_panner(handle: Pointer?, trackIndex: Int, bus: Int, nodeType: String?, parametersJson: String?): Boolean
+    fun uapmd_engine_track_output_bus_route(handle: Pointer?, trackIndex: Int, bus: Int, buf: ByteArray?, size: Long): Long
+    fun uapmd_track_output_panner_field(handle: Pointer?, bus: Int, parameters: Boolean, buf: ByteArray?, size: Long): Long
     fun uapmd_track_get_gain(track: Pointer?): Double
     fun uapmd_track_get_muted(track: Pointer?): Boolean
     fun uapmd_track_get_solo(track: Pointer?): Boolean

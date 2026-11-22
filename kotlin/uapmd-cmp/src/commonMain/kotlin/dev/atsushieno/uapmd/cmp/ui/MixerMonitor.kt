@@ -17,7 +17,7 @@ import androidx.compose.ui.unit.dp
 import dev.atsushieno.uapmd.cmp.UapmdHost
 
 /**
- * uapmd-app's Mixer Monitor: transport positions and the per-track latency
+ * The mixer's Latency Monitor: transport positions and the per-track latency
  * picture the engine computes.
  *
  * The monitoring-policy and infinite-tail-policy dropdowns from the original are

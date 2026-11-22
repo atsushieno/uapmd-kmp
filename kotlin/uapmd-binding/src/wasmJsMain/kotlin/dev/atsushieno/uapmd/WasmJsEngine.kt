@@ -56,6 +56,17 @@ class WasmJsSequencerEngine internal constructor(
     override fun getTrack(index: UInt): SequencerTrack =
         WasmJsSequencerTrack(wasmMod.uapmdEngineGetTrack(handle, index.toInt()))
 
+    override fun captureMixerPeaks(enabled: Boolean) = wasmMod.uapmdEngineCaptureMixerPeaks(handle, enabled)
+    override fun setTrackStereoBalance(trackIndex: Int, bus: UInt, balance: Double) = wasmMod.uapmdEngineSetTrackStereoBalance(handle, trackIndex, bus.toInt(), balance)
+    override fun setTrackOutputPanner(trackIndex: Int, bus: UInt, panner: TrackOutputPanner?): Boolean =
+        withCStringKt(panner?.nodeType) { type ->
+            withCStringKt(panner?.parametersJson) { parameters ->
+                wasmMod.uapmdEngineSetTrackOutputPanner(handle, trackIndex, bus.toInt(), type, parameters)
+            }
+        }
+    override fun trackOutputBusRoute(trackIndex: Int, bus: UInt): String =
+        readString(handle) { h, buf, size -> uapmdEngineTrackOutputBusRoute(h, trackIndex, bus.toInt(), buf, size) }
+
     override fun trackFreezePolicy(trackIndex: Int) =
         FreezePolicy.fromNative(wasmMod.uapmdEngineTrackFreezePolicy(handle, trackIndex))
     override fun trackFreezeState(trackIndex: Int) =
@@ -259,6 +270,17 @@ class WasmJsSequencerTrack internal constructor(
 
     override val tailLengthInSeconds: Double
         get() = wasmMod.uapmdTrackTailLengthInSeconds(handle)
+
+    override val outputBusCount: Int get() = wasmMod.uapmdTrackOutputBusCount(handle)
+    override fun outputChannelCount(bus: UInt) = wasmMod.uapmdTrackOutputChannelCount(handle, bus.toInt())
+    override fun consumeOutputPeak(bus: UInt, channel: UInt) = wasmMod.uapmdTrackConsumeOutputPeak(handle, bus.toInt(), channel.toInt())
+    override fun stereoBalance(bus: UInt): Double? = wasmMod.uapmdTrackStereoBalance(handle, bus.toInt()).takeIf { it.isFinite() }
+    override fun outputPanner(bus: UInt): TrackOutputPanner? {
+        fun field(parameters: Boolean) =
+            readString(handle) { h, buf, size -> uapmdTrackOutputPannerField(h, bus.toInt(), parameters, buf, size) }
+        val type = field(false)
+        return if (type.isEmpty()) null else TrackOutputPanner(type, field(true))
+    }
 
     override val gain: Double get() = wasmMod.uapmdTrackGetGain(handle)
     override val muted: Boolean get() = wasmMod.uapmdTrackGetMuted(handle)

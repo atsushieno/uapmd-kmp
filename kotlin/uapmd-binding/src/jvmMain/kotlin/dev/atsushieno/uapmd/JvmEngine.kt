@@ -49,6 +49,13 @@ class JvmSequencerEngine internal constructor(
     override fun getTrack(index: UInt): SequencerTrack =
         JvmSequencerTrack(lib.uapmd_engine_get_track(handle, index.toInt()) ?: error("track $index not found"))
 
+    override fun captureMixerPeaks(enabled: Boolean) = lib.uapmd_engine_capture_mixer_peaks(handle, enabled)
+    override fun setTrackStereoBalance(trackIndex: Int, bus: UInt, balance: Double) = lib.uapmd_engine_set_track_stereo_balance(handle, trackIndex, bus.toInt(), balance)
+    override fun setTrackOutputPanner(trackIndex: Int, bus: UInt, panner: TrackOutputPanner?): Boolean =
+        lib.uapmd_engine_set_track_output_panner(handle, trackIndex, bus.toInt(), panner?.nodeType, panner?.parametersJson)
+    override fun trackOutputBusRoute(trackIndex: Int, bus: UInt): String =
+        readJvmString { buf, size -> lib.uapmd_engine_track_output_bus_route(handle, trackIndex, bus.toInt(), buf, size) }
+
     override fun trackFreezePolicy(trackIndex: Int) =
         FreezePolicy.fromNative(lib.uapmd_engine_track_freeze_policy(handle, trackIndex))
     override fun trackFreezeState(trackIndex: Int) =
@@ -271,6 +278,17 @@ class JvmSequencerTrack internal constructor(
     override val latencyInSamples: UInt get() = lib.uapmd_track_latency_in_samples(handle).toUInt()
     override val renderLeadInSamples: UInt get() = lib.uapmd_track_render_lead_in_samples(handle).toUInt()
     override val tailLengthInSeconds: Double get() = lib.uapmd_track_tail_length_in_seconds(handle)
+
+    override val outputBusCount: Int get() = lib.uapmd_track_output_bus_count(handle)
+    override fun outputChannelCount(bus: UInt) = lib.uapmd_track_output_channel_count(handle, bus.toInt())
+    override fun consumeOutputPeak(bus: UInt, channel: UInt) = lib.uapmd_track_consume_output_peak(handle, bus.toInt(), channel.toInt())
+    override fun stereoBalance(bus: UInt): Double? = lib.uapmd_track_stereo_balance(handle, bus.toInt()).takeIf { it.isFinite() }
+    override fun outputPanner(bus: UInt): TrackOutputPanner? {
+        fun field(parameters: Boolean) =
+            readJvmString { buf, size -> lib.uapmd_track_output_panner_field(handle, bus.toInt(), parameters, buf, size) }
+        val type = field(false)
+        return if (type.isEmpty()) null else TrackOutputPanner(type, field(true))
+    }
 
     override val gain: Double get() = lib.uapmd_track_get_gain(handle)
     override val muted: Boolean get() = lib.uapmd_track_get_muted(handle)

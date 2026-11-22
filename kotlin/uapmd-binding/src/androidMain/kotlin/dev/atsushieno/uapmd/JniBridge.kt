@@ -293,6 +293,15 @@ object JniBridge {
     @JvmStatic external fun uapmdMidiRecorderStop(rec: Long)
     @JvmStatic external fun uapmdMidiRecorderCancel(rec: Long)
     @JvmStatic external fun uapmdMidiRecorderIsRecording(rec: Long): Boolean
+    @JvmStatic external fun uapmdEngineCaptureMixerPeaks(handle: Long, enabled: Boolean): Unit
+    @JvmStatic external fun uapmdEngineSetTrackStereoBalance(handle: Long, trackIndex: Int, bus: Int, balance: Double): Boolean
+    @JvmStatic external fun uapmdTrackOutputBusCount(handle: Long): Int
+    @JvmStatic external fun uapmdTrackOutputChannelCount(handle: Long, bus: Int): Int
+    @JvmStatic external fun uapmdTrackConsumeOutputPeak(handle: Long, bus: Int, channel: Int): Double
+    @JvmStatic external fun uapmdTrackStereoBalance(handle: Long, bus: Int): Double
+    @JvmStatic external fun uapmdEngineSetTrackOutputPanner(handle: Long, trackIndex: Int, bus: Int, nodeType: ByteArray?, parametersJson: ByteArray?): Boolean
+    @JvmStatic external fun uapmdEngineTrackOutputBusRoute(handle: Long, trackIndex: Int, bus: Int): String
+    @JvmStatic external fun uapmdTrackOutputPannerField(handle: Long, bus: Int, parameters: Boolean): ByteArray
     @JvmStatic external fun uapmdTrackGetGain(h: Long): Double
     @JvmStatic external fun uapmdTrackGetMuted(h: Long): Boolean
     @JvmStatic external fun uapmdTrackGetSolo(h: Long): Boolean

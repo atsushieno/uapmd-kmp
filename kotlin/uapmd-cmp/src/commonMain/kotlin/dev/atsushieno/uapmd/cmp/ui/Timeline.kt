@@ -66,7 +66,6 @@ import androidx.compose.ui.text.rememberTextMeasurer
 import androidx.compose.ui.text.drawText
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
-import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.graphics.Brush
@@ -74,7 +73,6 @@ import androidx.compose.ui.graphics.lerp
 import androidx.compose.ui.draw.drawBehind
 import dev.atsushieno.uapmd.TrackProperties
 import androidx.compose.ui.input.pointer.pointerInput
-import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.DpSize
@@ -135,29 +133,10 @@ private val IconButtonSize = 30.dp
  * Legend width adapts to the window: a fixed 260dp eats two thirds of a phone
  * screen, leaving no room for the lanes it is supposed to label.
  */
-/*
- * uapmd-app computes the legend width from the row-1 buttons rather than fixing
- * it (TimelineEditor.cpp:634):
- *     pad + clips + gap + graph + gap + slider(iconW * 1.5) + gap + mute + gap + solo + pad
- * The same sum here, plus the track label and the editable dB readout, which
- * ImGui draws inside the slider and Compose cannot. Pinning this at 150dp is
- * what pushed Freeze / Add Plugin / the More menu out of the visible area.
- */
 private val LegendPad = 4.dp
 private val LegendGap = 3.dp
 private val TrackLabelWidth = 26.dp
-private val GainReadoutWidth = 40.dp
-private val GainSliderWidth = IconButtonSize * 1.5f
-
-/**
- * The master track's slider is the project's total volume, and its row carries
- * no Mute or Solo, so it reclaims their width rather than staying as narrow as a
- * track's. Same legend width as every other row.
- */
-private val MasterVolumeSliderWidth = GainSliderWidth + IconButtonSize * 2 + LegendGap * 2
-private val LegendWidth =
-    LegendPad * 2 + TrackLabelWidth + IconButtonSize * 4 + GainSliderWidth +
-        GainReadoutWidth + LegendGap * 6
+private val LegendWidth = LegendPad * 2 + TrackLabelWidth + IconButtonSize * 4 + LegendGap * 4
 private const val NarrowWidthThreshold = 620
 /**
  * Row height. Narrow screens wrap the legend controls onto a third line, so the
@@ -252,16 +231,6 @@ internal fun Modifier.trackColorStrip(properties: TrackProperties): Modifier {
 }
 
 /** Gain slider range in dB; the bottom of the range is treated as silence. */
-private const val MinGainDb = -60f
-private const val MaxGainDb = 6f
-
-private fun linearToDb(linear: Double): Double =
-    if (linear <= 0.0) MinGainDb.toDouble()
-    else (20.0 * kotlin.math.log10(linear)).coerceIn(MinGainDb.toDouble(), MaxGainDb.toDouble())
-
-private fun dbToLinear(db: Double): Double =
-    if (db <= MinGainDb) 0.0 else kotlin.math.exp(db / 20.0 * kotlin.math.ln(10.0))
-
 /**
  * The navigator's position control — a whole-song overview with the visible
  * window drawn on it, matching uapmd-app's `renderTimelineNavigator`. Clicking
@@ -1708,73 +1677,6 @@ private fun androidx.compose.ui.graphics.drawscope.DrawScope.drawWaveform(
     }
 }
 
-/**
- * The legend gain slider, plus an editable dB readout.
- *
- * uapmd-app draws no value on the slider — its format string is `""`, or `"Mute"`
- * at the bottom (`TimelineEditor.cpp:1255`) — and puts the dB in a tooltip. Its
- * slider is `iconButtonWidth * 1.5f`, as narrow as this one, but ImGui's
- * SliderFloat takes a ctrl+click to type an exact value. Compose's Slider has no
- * such affordance, and at 45dp a drag gives only a few dozen usable steps, so the
- * readout beside it is a text field: tap it and type the dB. That is the one
- * deliberate addition here, and it exists because the widget is weaker, not
- * because the layout should differ.
- */
-@OptIn(ExperimentalMaterial3Api::class)
-@Composable
-private fun GainSlider(
-    gainDb: Float,
-    onChange: (Float) -> Unit,
-    onFinished: () -> Unit,
-    modifier: Modifier = Modifier,
-    sliderWidth: Dp = GainSliderWidth
-) {
-    Row(modifier, verticalAlignment = Alignment.CenterVertically) {
-        TooltipBox(
-            positionProvider = TooltipDefaults.rememberTooltipPositionProvider(),
-            tooltip = {
-                PlainTooltip {
-                    Text(if (gainDb <= MinGainDb) "Mute" else "${fixed(gainDb.toDouble(), 1)} dB")
-                }
-            },
-            state = rememberTooltipState()
-        ) {
-            Slider(
-                value = gainDb,
-                onValueChange = onChange,
-                onValueChangeFinished = onFinished,
-                valueRange = MinGainDb..MaxGainDb,
-                modifier = Modifier.width(sliderWidth)
-            )
-        }
-        var editing by remember { mutableStateOf<String?>(null) }
-        val shown = if (gainDb <= MinGainDb) "Mute" else fixed(gainDb.toDouble(), 1)
-        if (editing == null) {
-            Text(
-                shown,
-                Modifier.width(GainReadoutWidth).clickable { editing = fixed(gainDb.toDouble(), 1) },
-                style = MaterialTheme.typography.labelSmall
-            )
-        } else {
-            BasicTextField(
-                value = editing.orEmpty(),
-                onValueChange = { editing = it },
-                singleLine = true,
-                textStyle = MaterialTheme.typography.labelSmall.copy(color = LocalContentColor.current),
-                cursorBrush = SolidColor(LocalContentColor.current),
-                modifier = Modifier.width(GainReadoutWidth).onFocusChanged { state ->
-                    if (!state.isFocused) {
-                        editing?.toFloatOrNull()
-                            ?.coerceIn(MinGainDb, MaxGainDb)
-                            ?.let { onChange(it); onFinished() }
-                        editing = null
-                    }
-                }
-            )
-        }
-    }
-}
-
 /*
  * Legend button icons.
  *
@@ -1944,6 +1846,11 @@ private fun TrackLegend(
             Box {
                 LegendIconButton("Track details and clips", onClick = { clipsMenu = true }) { ClipsIcon(it) }
                 DropdownMenu(expanded = clipsMenu, onDismissRequest = { clipsMenu = false }) {
+                    DropdownMenuItem(text = { Text("Show in Mixer") }, onClick = {
+                        clipsMenu = false
+                        host.mixerFocusTrack = trackIndex
+                        windows.open(MixerWindowKey, "Mixer", MixerWindowSize) { Mixer(host, windows) }
+                    })
                     // First item in uapmd-app's Clips popup; the per-lane context
                     // actions live in that window.
                     DropdownMenuItem(text = { Text("Track Details…") }, onClick = {
@@ -1998,18 +1905,6 @@ private fun TrackLegend(
             ) { GraphIcon(it) }
 
             if (host.trackExists(trackIndex)) {
-                // Read the value from the track, write it through ProjectCommands.
-                // uapmd-app's slider is in dB and wraps the drag in an undo
-                // gesture, so a drag is one history entry rather than dozens.
-                // Keyed on the project revision so a load re-reads the new value.
-                var gainDb by remember(trackIndex, host.projectRevision) {
-                    mutableStateOf(linearToDb(host.trackGain(trackIndex)).toFloat())
-                }
-                GainSlider(
-                    gainDb = gainDb,
-                    onChange = { gainDb = it; host.setTrackGain(trackIndex, dbToLinear(it.toDouble())) },
-                    onFinished = { host.endTrackGainGesture() }
-                )
                 val muted = host.trackMuted(trackIndex)
                 val solo = host.trackSolo(trackIndex)
                 // M shows one thing only: this track's own mute flag.
@@ -2171,13 +2066,6 @@ private fun MasterTrackLegend(host: UapmdHost, windows: FloatingWindowManager, t
     var pluginMenu by remember { mutableStateOf(false) }
     var clipsMenu by remember { mutableStateOf(false) }
     val instances = host.masterInstances
-    // uapmd-app builds the master legend from the same code as a regular track
-    // (`renderTrackLegendContent`, via `engine()->masterTrack()`): row 1 is
-    // Clips + Graph + the gain slider — this is the project's total volume — then
-    // M and S, and only Freeze and the More menu are gated to regular tracks. M and S
-    // are on row 2 here: "Master" is wider than a track's label, and at a phone's
-    // width row 1 has no room left for them.
-
     Column(
         Modifier.height(trackHeight).fillMaxWidth()
             .trackColorStrip(host.masterTrackProperties)
@@ -2189,6 +2077,11 @@ private fun MasterTrackLegend(host: UapmdHost, windows: FloatingWindowManager, t
             Box {
                 LegendIconButton("Track details and clips", onClick = { clipsMenu = true }) { ClipsIcon(it) }
                 DropdownMenu(expanded = clipsMenu, onDismissRequest = { clipsMenu = false }) {
+                    DropdownMenuItem(text = { Text("Show in Mixer") }, onClick = {
+                        clipsMenu = false
+                        host.mixerFocusTrack = MasterTrackIndex
+                        windows.open(MixerWindowKey, "Mixer", MixerWindowSize) { Mixer(host, windows) }
+                    })
                     DropdownMenuItem(text = { Text("Track Details…") }, onClick = {
                         clipsMenu = false
                         windows.open(
@@ -2222,20 +2115,6 @@ private fun MasterTrackLegend(host: UapmdHost, windows: FloatingWindowManager, t
                 }
             ) { GraphIcon(it) }
 
-            if (host.trackExists(MasterTrackIndex)) {
-                var gainDb by remember(host.projectRevision) {
-                    mutableStateOf(linearToDb(host.trackGain(MasterTrackIndex)).toFloat())
-                }
-                GainSlider(
-                    gainDb = gainDb,
-                    onChange = {
-                        gainDb = it
-                        host.setTrackGain(MasterTrackIndex, dbToLinear(it.toDouble()))
-                    },
-                    onFinished = { host.endTrackGainGesture() },
-                    sliderWidth = MasterVolumeSliderWidth
-                )
-            }
         }
         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(3.dp)) {
             // Takes what is left, as a track's does, so a long plug-in name cannot push M and S out.
@@ -2253,7 +2132,7 @@ private fun MasterTrackLegend(host: UapmdHost, windows: FloatingWindowManager, t
                     modifier = Modifier.fillMaxWidth()
                 ) {
                     Text(
-                        instances.firstOrNull()?.let { it.displayName } ?: "Add Master Plugin",
+                        instances.firstOrNull()?.let { it.displayName } ?: "Add Plugin",
                         style = MaterialTheme.typography.labelSmall,
                         maxLines = 1
                     )

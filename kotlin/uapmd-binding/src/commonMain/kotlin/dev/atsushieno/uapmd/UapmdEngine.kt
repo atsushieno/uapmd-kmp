@@ -17,6 +17,13 @@ interface SequencerEngine {
     fun getTrack(index: UInt): SequencerTrack
     val masterTrack: SequencerTrack
 
+    fun captureMixerPeaks(enabled: Boolean)
+    /** Undoable edit for the stereo control on a zero-based output bus. */
+    fun setTrackStereoBalance(trackIndex: Int, bus: UInt, balance: Double): Boolean
+    /** Sets or removes an authored output panner through project history. */
+    fun setTrackOutputPanner(trackIndex: Int, bus: UInt, panner: TrackOutputPanner?): Boolean
+    fun trackOutputBusRoute(trackIndex: Int, bus: UInt): String
+
     /** `FrozenTrackManager::freezePolicyForTrack` — what the user asked for. */
     fun trackFreezePolicy(trackIndex: Int): FreezePolicy
     /** `FrozenTrackManager::runtimeStateForTrack` — what the engine is doing. */
@@ -190,6 +197,9 @@ interface MidiRecorder {
     fun cancel()
 }
 
+/** Node-specific parameters form a JSON object and are carried by project saves. */
+data class TrackOutputPanner(val nodeType: String, val parametersJson: String = "{}")
+
 interface SequencerTrack {
     val graph: PluginGraph
 
@@ -220,6 +230,13 @@ interface SequencerTrack {
     val gain: Double
     val muted: Boolean
     val solo: Boolean
+    val outputBusCount: Int
+    fun outputChannelCount(bus: UInt): Int
+    /** Maximum linear amplitude since the last read. */
+    fun consumeOutputPeak(bus: UInt, channel: UInt): Double
+    fun stereoBalance(bus: UInt): Double?
+    fun outputPanner(bus: UInt): TrackOutputPanner?
+
     fun getOrderedInstanceIds(): List<Int>
     fun setInstanceGroup(instanceId: Int, group: UByte)
     fun getInstanceGroup(instanceId: Int): UByte

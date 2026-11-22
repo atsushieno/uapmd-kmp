@@ -1634,24 +1634,30 @@ class UapmdHost private constructor(val model: AppModel) {
 
     // ── Track mixer (read from the track, write through commands) ────────────
 
-    private var gainGestureOpen = false
+    var mixerFocusTrack by mutableStateOf<Int?>(null)
+    private var mixerGestureOpen = false
 
-    /**
-     * Opens an undo *gesture* on the first change of a drag so the whole drag
-     * collapses into one history entry, as uapmd-app does around its slider.
-     */
-    fun setTrackGain(trackIndex: Int, gain: Double): Boolean {
-        if (!gainGestureOpen) {
-            model.sequencer.engine.timeline.commands.history.beginGesture("Change track gain")
-            gainGestureOpen = true
-        }
-        return commands.setTrackGain(trackIndex, gain).also { refresh() }
+    private fun beginMixerGesture(description: String) {
+        if (!mixerGestureOpen)
+            mixerGestureOpen = commands.history.beginGesture(description).succeeded
     }
 
-    fun endTrackGainGesture() {
-        if (gainGestureOpen) {
-            model.sequencer.engine.timeline.commands.history.endGesture()
-            gainGestureOpen = false
+    fun setTrackGain(trackIndex: Int, gain: Double): Boolean {
+        beginMixerGesture("Change track gain")
+        return commands.setTrackGain(trackIndex, gain)
+    }
+
+    fun setTrackStereoBalance(trackIndex: Int, bus: Int, balance: Double, dragging: Boolean = false): Boolean {
+        if (dragging) beginMixerGesture("Change track balance") else endMixerGesture()
+        val applied = model.sequencer.engine.setTrackStereoBalance(trackIndex, bus.toUInt(), balance)
+        if (!dragging) refresh()
+        return applied
+    }
+
+    fun endMixerGesture() {
+        if (mixerGestureOpen) {
+            mixerGestureOpen = false
+            commands.history.endGesture()
             refresh()
         }
     }
