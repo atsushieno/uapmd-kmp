@@ -33,6 +33,7 @@ import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalWindowInfo
+import androidx.compose.ui.unit.Density
 import androidx.compose.ui.unit.DpSize
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.IntSize
@@ -124,6 +125,9 @@ private fun AapPluginUiWindowContent(
     // area for this; LocalWindowInfo is the Compose equivalent and, unlike the
     // display metrics, follows folds and multi-window.
     val available = LocalWindowInfo.current.containerSize
+    val density = LocalDensity.current
+    val currentAvailable by rememberUpdatedState(available)
+    val currentDensity by rememberUpdatedState(density)
     val hostDetails = info.aapUiHostDetails
 
     val hostLoadState by produceState<AapHostLoadState>(
@@ -154,13 +158,19 @@ private fun AapPluginUiWindowContent(
                 available.width.coerceAtLeast(MIN_CONTENT_FALLBACK_WIDTH),
                 available.height.coerceAtLeast(MIN_CONTENT_FALLBACK_HEIGHT)
             )
-            value = AapHostLoadState.Ready(
-                AapHostState(
-                    host,
-                    preferred.width.coerceAtLeast(MIN_CONTENT_FALLBACK_WIDTH),
-                    preferred.height.coerceAtLeast(MIN_CONTENT_FALLBACK_HEIGHT)
-                )
+            val state = AapHostState(
+                host,
+                preferred.width.coerceAtLeast(MIN_CONTENT_FALLBACK_WIDTH),
+                preferred.height.coerceAtLeast(MIN_CONTENT_FALLBACK_HEIGHT)
             )
+            // Before the surface is composed, and in the same frame, so that the first area it
+            // measures is the final one. Resizing from an effect inside AapPluginSurface instead
+            // created the surface at ProvisionalWindowSize and resized it a frame later, and
+            // SurfaceView's two transactions could land in either order: losing that race left
+            // the surface cropped to the provisional size until the next resize. uapmd-app
+            // likewise has no surface until it knows the editor's frame.
+            windows.resizeForEditor(key, state, currentAvailable, currentDensity)
+            value = AapHostLoadState.Ready(state)
             awaitDispose {
                 host.close()
             }
@@ -177,7 +187,7 @@ private fun AapPluginUiWindowContent(
             Text("Connecting to ${info.displayName}…", style = MaterialTheme.typography.bodySmall)
         }
         is AapHostLoadState.Error -> LaunchedEffect(state.message) { onError(state.message) }
-        is AapHostLoadState.Ready -> AapPluginSurface(state.state, windows, key, available)
+        is AapHostLoadState.Ready -> AapPluginSurface(state.state, windows, key)
     }
 }
 
@@ -186,6 +196,33 @@ private data class AapHostState(
     val contentWidth: Int,
     val contentHeight: Int
 )
+
+/**
+ * The preferred size asks for a window size once, as uapmd-app's resizeContent() does: at most
+ * 80% of the host window, plus whatever scrollbar that leaves necessary. Later content
+ * measurements only move the scrollbars. Growing the window with them fed a responsive (Compose)
+ * editor's layout back into another, larger window size.
+ */
+private fun FloatingWindowManager.resizeForEditor(
+    key: String,
+    state: AapHostState,
+    available: IntSize,
+    density: Density
+) = with(density) {
+    val viewportW = state.contentWidth.coerceAtMost((available.width * INITIAL_MAX_HOST_FRACTION).toInt())
+    val viewportH = state.contentHeight.coerceAtMost((available.height * INITIAL_MAX_HOST_FRACTION).toInt())
+    val barPx = ScrollbarThickness.roundToPx()
+    val areaW = viewportW + if (state.contentHeight > viewportH) barPx else 0
+    val areaH = viewportH + ResizeGripContentOverlap.roundToPx()
+    val size = windowSizeForContent(DpSize(areaW.toDp(), areaH.toDp()))
+    resize(
+        key,
+        DpSize(
+            size.width.coerceAtMost((available.width * MAX_WINDOW_HOST_FRACTION).toDp()),
+            size.height.coerceAtMost((available.height * MAX_WINDOW_HOST_FRACTION).toDp())
+        )
+    )
+}
 
 /** The viewport configuration the remote editor last laid itself out for. */
 private class AppliedViewport {
@@ -196,8 +233,7 @@ private class AppliedViewport {
 private fun AapPluginSurface(
     state: AapHostState,
     windows: FloatingWindowManager,
-    key: String,
-    available: IntSize
+    key: String
 ) {
     val density = LocalDensity.current
     val barPx = with(density) { ScrollbarThickness.roundToPx() }
@@ -228,28 +264,6 @@ private fun AapPluginSurface(
     val maxScrollY = (contentHeightPx - viewportHeightPx).coerceAtLeast(0)
     val effectiveScrollX = scrollX.coerceIn(0, maxScrollX)
     val effectiveScrollY = scrollY.coerceIn(0, maxScrollY)
-
-    // The preferred size asks for a window size once, as uapmd-app's
-    // resizeContent() does: at most 80% of the host window, plus whatever
-    // scrollbar that leaves necessary. Later content measurements only move the
-    // scrollbars. Growing the window with them fed a responsive (Compose)
-    // editor's layout back into another, larger window size.
-    LaunchedEffect(state) {
-        val viewportW = state.contentWidth.coerceAtMost((available.width * INITIAL_MAX_HOST_FRACTION).toInt())
-        val viewportH = state.contentHeight.coerceAtMost((available.height * INITIAL_MAX_HOST_FRACTION).toInt())
-        val areaW = viewportW + if (state.contentHeight > viewportH) barPx else 0
-        val areaH = viewportH + gripPx
-        with(density) {
-            val size = windowSizeForContent(DpSize(areaW.toDp(), areaH.toDp()))
-            windows.resize(
-                key,
-                DpSize(
-                    size.width.coerceAtMost((available.width * MAX_WINDOW_HOST_FRACTION).toDp()),
-                    size.height.coerceAtMost((available.height * MAX_WINDOW_HOST_FRACTION).toDp())
-                )
-            )
-        }
-    }
 
     // Where the surface sits in the window stack; see applyWindowStackOrder().
     val front = windows.isFrontmost(key)
