@@ -33,6 +33,13 @@
     if (crossOriginIsolated) {
         sessionStorage.removeItem('uapmd-coop-coep-reloaded');
         loadApp();
+    } else if (!isSecureContext) {
+        // Browsers withhold SharedArrayBuffer and service workers from insecure
+        // contexts whatever headers the server sends -- e.g. a dev server opened
+        // through its LAN address over plain http.
+        isolationMessage.textContent =
+            'SharedArrayBuffer is required for uapmd Wasm audio, and browsers only provide it ' +
+            `on https:// or localhost. This page was opened from ${location.protocol}//${location.host}.`;
     } else if ('serviceWorker' in navigator) {
         isolationMessage.textContent = 'Preparing WebAssembly runtime...';
         // Registration resolves before activation and clients.claim(). Reload
@@ -62,7 +69,9 @@
         });
     } else {
         isolationMessage.textContent =
-            'This browser does not support service workers. SharedArrayBuffer is required for uapmd Wasm audio.';
+            'SharedArrayBuffer is required for uapmd Wasm audio. The server did not send the ' +
+            'COOP/COEP headers, and service workers, which could add them, are unavailable here ' +
+            '(e.g. in a private window).';
     }
 </script>
 </body>
