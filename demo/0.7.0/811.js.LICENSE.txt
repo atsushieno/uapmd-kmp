@@ -1,0 +1,1 @@
+// Modified from js-untar: https://github.com/InvokIT/js-untar/blob/master/src/untar-worker.js @license MIT
