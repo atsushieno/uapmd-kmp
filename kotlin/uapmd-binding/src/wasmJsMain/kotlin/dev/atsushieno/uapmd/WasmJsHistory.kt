@@ -326,19 +326,19 @@ private fun undoCompletionPtr(completion: ((UndoResult) -> Unit)?): Int {
     if (completion == null) return 0
     val cbId = nextCallbackId()
     pendingUndoCompletions[cbId] = completion
-    return makeCFunctionPtr(cbId, "uapmdDispatchUndoCompletion", "vii")
+    return makeCFunctionPtr(cbId, "vii", ::uapmdDispatchUndoCompletion)
 }
 
 private fun trackMutationPtr(callback: (Int, String?) -> Unit): Int {
     val cbId = nextCallbackId()
     pendingTrackMutations[cbId] = callback
-    return makeCFunctionPtr(cbId, "uapmdDispatchTrackMutation", "viii")
+    return makeCFunctionPtr(cbId, "viii", ::uapmdDispatchTrackMutation)
 }
 
 private fun trackFragmentPtr(callback: (TrackFragment?, String?) -> Unit): Int {
     val cbId = nextCallbackId()
     pendingTrackFragments[cbId] = callback
-    return makeCFunctionPtr(cbId, "uapmdDispatchTrackFragment", "viii")
+    return makeCFunctionPtr(cbId, "viii", ::uapmdDispatchTrackFragment)
 }
 
 // ─── WasmJsCommandManager ────────────────────────────────────────────────────

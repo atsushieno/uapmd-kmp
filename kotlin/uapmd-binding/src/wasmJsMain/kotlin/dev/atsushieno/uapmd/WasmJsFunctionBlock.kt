@@ -16,7 +16,7 @@ class WasmJsMidiIO internal constructor(
         val cbId = nextCallbackId()
         midiInputHandlers[cbId] = receiver
         // C: void(void* context, uapmd_ump_t* ump, size_t size_in_bytes, int64 timestamp)
-        val fnPtr = makeCFunctionPtr(cbId, "uapmdDispatchMidiInput", "viiij")
+        val fnPtr = makeCFunctionPtr(cbId, "viiij", ::uapmdDispatchMidiInput)
         wasmMod.uapmdMidiIoAddInputHandler(handle, fnPtr, 0)
         midiInputFnPtrs[fnPtr] = handle to cbId
         return fnPtr

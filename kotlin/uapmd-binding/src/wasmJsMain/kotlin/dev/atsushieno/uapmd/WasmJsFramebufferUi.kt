@@ -152,9 +152,9 @@ class WasmJsFramebufferUi internal constructor(private val handle: Int) : Frameb
             val id = nextCallbackId()
             framebufferUiHosts[id] = host
             hostCallbackId = id
-            menuCallback = makeCFunctionPtr(id, "uapmdDispatchFbuiMenu", "viiiiii")
-            cursorCallback = makeCFunctionPtr(id, "uapmdDispatchFbuiCursor", "vii")
-            droppedFileCallback = makeCFunctionPtr(id, "uapmdDispatchFbuiDroppedFile", "iiiii")
+            menuCallback = makeCFunctionPtr(id, "viiiiii", ::uapmdDispatchFbuiMenu)
+            cursorCallback = makeCFunctionPtr(id, "vii", ::uapmdDispatchFbuiCursor)
+            droppedFileCallback = makeCFunctionPtr(id, "iiiii", ::uapmdDispatchFbuiDroppedFile)
             wasmMod.uapmdInstanceFbuiSetHost(handle, menuCallback, cursorCallback, droppedFileCallback, 0)
         }
 

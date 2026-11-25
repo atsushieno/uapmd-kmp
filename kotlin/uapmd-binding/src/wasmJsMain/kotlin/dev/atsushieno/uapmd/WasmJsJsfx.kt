@@ -99,7 +99,7 @@ fun uapmdDispatchDocumentPath(cbId: Int, resultPtr: Int, pathPtr: Int) {
 internal fun documentWritePtr(callback: (DocumentIOResult) -> Unit): Int {
     val cbId = nextCallbackId()
     pendingDocumentIOResults[cbId] = callback
-    return makeCFunctionPtr(cbId, "uapmdDispatchDocumentIOResult", "vii")
+    return makeCFunctionPtr(cbId, "vii", ::uapmdDispatchDocumentIOResult)
 }
 
 @JsExport
@@ -128,13 +128,13 @@ fun uapmdDispatchJsfxFolderSync(cbId: Int, filesWritten: Int, errorPtr: Int) {
 private fun folderPickPtr(callback: (FolderPickResult) -> Unit): Int {
     val cbId = nextCallbackId()
     pendingFolderPicks[cbId] = callback
-    return makeCFunctionPtr(cbId, "uapmdDispatchFolderPick", "vii")
+    return makeCFunctionPtr(cbId, "vii", ::uapmdDispatchFolderPick)
 }
 
 internal fun jsfxFolderSyncPtr(callback: (UInt, String?) -> Unit): Int {
     val cbId = nextCallbackId()
     pendingJsfxFolderSyncs[cbId] = callback
-    return makeCFunctionPtr(cbId, "uapmdDispatchJsfxFolderSync", "viii")
+    return makeCFunctionPtr(cbId, "viii", ::uapmdDispatchJsfxFolderSync)
 }
 
 /** A uapmd_document_filter_t array of [filters] for the duration of [block]; 0 when empty. */
@@ -191,7 +191,7 @@ class WasmJsDocumentProvider internal constructor(internal val handle: Int) : Do
     private fun documentPickPtr(callback: (DocumentPickResult) -> Unit): Int {
         val cbId = nextCallbackId()
         pendingDocumentPickResults[cbId] = callback
-        return makeCFunctionPtr(cbId, "uapmdDispatchDocumentPickResult", "vii")
+        return makeCFunctionPtr(cbId, "vii", ::uapmdDispatchDocumentPickResult)
     }
 
     // The provider copies the filters, name and handle before a call returns.
@@ -223,7 +223,7 @@ class WasmJsDocumentProvider internal constructor(internal val handle: Int) : Do
     override fun readDocument(handle: DocumentHandle, callback: (DocumentIOResult, ByteArray) -> Unit) {
         val cbId = nextCallbackId()
         pendingDocumentReads[cbId] = callback
-        val cbPtr = makeCFunctionPtr(cbId, "uapmdDispatchDocumentRead", "viiii")
+        val cbPtr = makeCFunctionPtr(cbId, "viiii", ::uapmdDispatchDocumentRead)
         // The handle crosses by value, i.e. as a pointer.
         withWasmDocumentHandle(handle) { p -> wasmMod.uapmdDocumentProviderRead(this.handle, p, 0, cbPtr) }
     }
@@ -231,7 +231,7 @@ class WasmJsDocumentProvider internal constructor(internal val handle: Int) : Do
     override fun resolveToPath(handle: DocumentHandle, callback: (DocumentIOResult, String) -> Unit) {
         val cbId = nextCallbackId()
         pendingDocumentPaths[cbId] = callback
-        val cbPtr = makeCFunctionPtr(cbId, "uapmdDispatchDocumentPath", "viii")
+        val cbPtr = makeCFunctionPtr(cbId, "viii", ::uapmdDispatchDocumentPath)
         // The handle crosses by value, i.e. as a pointer.
         withWasmDocumentHandle(handle) { p -> wasmMod.uapmdDocumentProviderResolveToPath(this.handle, p, 0, cbPtr) }
     }

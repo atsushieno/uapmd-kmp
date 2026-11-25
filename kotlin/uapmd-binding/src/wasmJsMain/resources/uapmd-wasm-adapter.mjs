@@ -6,7 +6,6 @@
  */
 
 let _mod = null;
-let _ktDisp = null;
 
 const _callbacks = new Map();
 let _nextCbId = 1;
@@ -17,10 +16,6 @@ export function setUapmdModule(mod) {
 
 export function getUapmdModule() {
     return _mod;
-}
-
-export function setKotlinDispatchers(dispatchers) {
-    _ktDisp = dispatchers;
 }
 
 /**
@@ -244,12 +239,7 @@ export function unregisterCallback(id) {
     _callbacks.delete(id);
 }
 
-export function makeCFunctionPtr(cbId, dispatchName, sig) {
-    if (!_ktDisp || typeof _ktDisp[dispatchName] !== 'function') {
-        console.warn(`uapmd-wasm-adapter: Kotlin dispatcher '${dispatchName}' not set; callback will be ignored`);
-        return _mod.addFunction(function() {}, sig);
-    }
-    const dispatcher = _ktDisp[dispatchName];
+export function makeCFunctionPtr(cbId, sig, dispatcher) {
     // int64_t arguments ('j' in the signature) arrive as BigInt, which the Kotlin
     // dispatchers take as decimal strings.
     const fn = function(...args) {
@@ -260,22 +250,6 @@ export function makeCFunctionPtr(cbId, dispatchName, sig) {
 
 export function removeCFunctionPtr(ptr) {
     if (_mod && ptr !== 0) _mod.removeFunction(ptr);
-}
-
-export function makeStateCallbackPtr(cbId, dispatchName) {
-    if (!_ktDisp || typeof _ktDisp[dispatchName] !== 'function') {
-        return _mod.addFunction(function() {}, 'viiii');
-    }
-    const dispatcher = _ktDisp[dispatchName];
-    const fn = function(dataPtr, size, errorPtr) {
-        let data = null;
-        if (dataPtr !== 0 && size > 0) {
-            data = new Uint8Array(_mod.HEAPU8.buffer, dataPtr, size).slice();
-        }
-        const error = errorPtr !== 0 ? _mod.UTF8ToString(errorPtr) : null;
-        dispatcher(cbId, data, error);
-    };
-    return _mod.addFunction(fn, 'viii');
 }
 
 let _nextPickId = 1;
@@ -339,7 +313,6 @@ export function pickFile(accept) {
 globalThis.__uapmdWasmAdapter = {
     setUapmdModule,
     getUapmdModule,
-    setKotlinDispatchers,
     isReady,
     initBrowserFileSystem,
     readCStringFromHandle,
@@ -358,6 +331,5 @@ globalThis.__uapmdWasmAdapter = {
     unregisterCallback,
     makeCFunctionPtr,
     removeCFunctionPtr,
-    makeStateCallbackPtr,
     pickFile
 };

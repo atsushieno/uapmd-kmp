@@ -29,7 +29,7 @@ class WasmJsJsRuntime internal constructor(internal val handle: Int) : JsRuntime
                     p
                 }
             }
-            resolverPtr = makeCFunctionPtr(cbId, "uapmdDispatchJsModuleResolver", "iii")
+            resolverPtr = makeCFunctionPtr(cbId, "iii", ::uapmdDispatchJsModuleResolver)
         }
 
         try {

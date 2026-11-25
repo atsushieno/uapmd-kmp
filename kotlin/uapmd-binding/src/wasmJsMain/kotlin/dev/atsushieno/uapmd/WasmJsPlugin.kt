@@ -124,9 +124,12 @@ class WasmJsPluginInstance internal constructor(
 
     override fun requestState(ctx: StateContextType, includeUiState: Boolean, callback: (ByteArray?, String?) -> Unit) {
         val cbId = nextCallbackId()
-        pendingRequestStateCallbacks[cbId] = callback
-        val fnPtr = makeStateCallbackPtr(cbId, "uapmdDispatchRequestState")
-        wasmMod.uapmdInstanceRequestState(handle, ctx.nativeValue, includeUiState, fnPtr, 0)
+        val fnPtr = makeCFunctionPtr(cbId, "viiii", ::uapmdDispatchRequestState)
+        pendingRequestStateCallbacks[cbId] = { data, error ->
+            deferRemoveCFunctionPtr(fnPtr)
+            callback(data, error)
+        }
+        wasmMod.uapmdInstanceRequestState(handle, ctx.nativeValue, includeUiState, 0, fnPtr)
     }
 
     override fun loadState(data: ByteArray, ctx: StateContextType, includeUiState: Boolean, callback: (String?) -> Unit) {
@@ -136,7 +139,7 @@ class WasmJsPluginInstance internal constructor(
             data.forEachIndexed { i, b -> mod.setValue(ptr + i, b.toDouble(), "i8") }
             val cbId = nextCallbackId()
             pendingLoadStateCallbacks[cbId] = callback
-            val fnPtr = makeCFunctionPtr(cbId, "uapmdDispatchLoadState", "vii")
+            val fnPtr = makeCFunctionPtr(cbId, "vii", ::uapmdDispatchLoadState)
             mod.uapmdInstanceLoadState(handle, ptr, data.size, ctx.nativeValue, includeUiState, 0, fnPtr)
         } finally { mod.free(ptr) }
     }
@@ -378,7 +381,7 @@ class WasmJsPluginHost internal constructor(
     ) {
         val cbId = nextCallbackId()
         pendingCreateInstanceCallbacks[cbId] = callback
-        val fnPtr = makeCFunctionPtr(cbId, "uapmdDispatchCreateInstance", "viii")
+        val fnPtr = makeCFunctionPtr(cbId, "viii", ::uapmdDispatchCreateInstance)
         withTwoCStringsKt(format, pluginId) { fmtPtr, idPtr ->
             wasmMod.uapmdPluginHostCreateInstance(
                 handle, sampleRate.toInt(), bufferSize.toInt(),
@@ -433,7 +436,7 @@ class WasmJsPluginNode internal constructor(
     override fun addParameterUpdateListener(listener: ParameterUpdateListener): Long {
         val cbId = nextCallbackId()
         parameterUpdateListeners[cbId] = listener
-        val fnPtr = makeCFunctionPtr(cbId, "uapmdDispatchParameterUpdate", "vidi")
+        val fnPtr = makeCFunctionPtr(cbId, "vidi", ::uapmdDispatchParameterUpdate)
         val id = wasmNodeAddParameterUpdateListener(wasmMod, handle, fnPtr).toLong()
         if (id == 0L) {
             parameterUpdateListeners.remove(cbId)
@@ -453,7 +456,7 @@ class WasmJsPluginNode internal constructor(
     override fun addParameterMetadataRefreshListener(listener: () -> Unit): Long {
         val cbId = nextCallbackId()
         parameterMetadataRefreshListeners[cbId] = listener
-        val fnPtr = makeCFunctionPtr(cbId, "uapmdDispatchParameterMetadataRefresh", "vi")
+        val fnPtr = makeCFunctionPtr(cbId, "vi", ::uapmdDispatchParameterMetadataRefresh)
         val id = wasmNodeAddParameterMetadataRefreshListener(wasmMod, handle, fnPtr).toLong()
         if (id == 0L) {
             parameterMetadataRefreshListeners.remove(cbId)
@@ -481,7 +484,7 @@ class WasmJsPluginNode internal constructor(
         }
         val cbId = nextCallbackId()
         eventOutputCallbacks[cbId] = { _, data, _ -> observer(data.toUIntArray()) }
-        val fnPtr = makeCFunctionPtr(cbId, "uapmdDispatchEventOutput", "viiii")
+        val fnPtr = makeCFunctionPtr(cbId, "viiii", ::uapmdDispatchEventOutput)
         wasmNodeEventOutputRegs[handle] = cbId to fnPtr
         wasmMod.uapmdNodeSetEventOutputObserver(handle, 0, fnPtr)
     }
@@ -500,24 +503,10 @@ class WasmJsPluginGraph internal constructor(
     internal val handle: Int
 ) : PluginGraph {
 
-    // Callback registrations kept alive
-    private val deleteCallbackIds = mutableListOf<Int>()
-    private val deleteCallbackPtrs = mutableListOf<Int>()
-
     override fun appendNode(instanceId: Int, instance: PluginInstance, onDelete: (() -> Unit)?): Int {
-        val delPtr = if (onDelete != null) {
-            val cbId = nextCallbackId()
-            deleteCallbackIds += cbId
-            // Store the callback as a scan observer slot (reuse registry for simplicity)
-            // Actually use a dedicated registry entry
-            val ptr = makeCFunctionPtr(cbId, "uapmdDispatchGraphNodeDelete_$cbId", "v")
-            deleteCallbackPtrs += ptr
-            // Note: we can't dispatch without a dedicated dispatcher. Use 0 for now.
-            // TODO: add dedicated node-delete dispatcher
-            0
-        } else 0
         val instHandle = (instance as WasmJsPluginInstance).handle
-        return wasmMod.uapmdGraphAppendNode(handle, instanceId, instHandle, delPtr, 0)
+        // TODO: wire the graph node's onDelete callback on Wasm.
+        return wasmMod.uapmdGraphAppendNode(handle, instanceId, instHandle, 0, 0)
     }
 
     override fun removeNode(instanceId: Int): Boolean =
@@ -555,7 +544,6 @@ class WasmJsPluginGraph internal constructor(
         get() = wasmMod.uapmdGraphMainOutputTailLengthInSeconds(handle)
 
     override fun close() {
-        deleteCallbackPtrs.forEach { removeCFunctionPtr(it) }
         wasmMod.uapmdGraphDestroy(handle)
     }
 }

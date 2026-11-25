@@ -40,12 +40,12 @@ class WasmJsScanTool internal constructor(
         //   slow_scan_completed(void* ctx)                → "vi"
         //   error_occurred(const char* msg, void* ctx)    → "vii"
         //   should_cancel(void* ctx) → bool               → "ii"
-        val slowStartPtr      = makeCFunctionPtr(cbId, "uapmdDispatchScanSlowStart",    "vii")
-        val bundleStartPtr    = makeCFunctionPtr(cbId, "uapmdDispatchScanBundleStart",   "vii")
-        val bundleCompletePtr = makeCFunctionPtr(cbId, "uapmdDispatchScanBundleComplete","vii")
-        val slowCompletePtr   = makeCFunctionPtr(cbId, "uapmdDispatchScanSlowComplete",  "vi")
-        val errorPtr_         = makeCFunctionPtr(cbId, "uapmdDispatchScanError",         "vii")
-        val cancelPtr         = makeCFunctionPtr(cbId, "uapmdDispatchScanCancel",        "ii")
+        val slowStartPtr      = makeCFunctionPtr(cbId, "vii", ::uapmdDispatchScanSlowStart)
+        val bundleStartPtr    = makeCFunctionPtr(cbId, "vii", ::uapmdDispatchScanBundleStart)
+        val bundleCompletePtr = makeCFunctionPtr(cbId, "vii", ::uapmdDispatchScanBundleComplete)
+        val slowCompletePtr   = makeCFunctionPtr(cbId, "vi", ::uapmdDispatchScanSlowComplete)
+        val errorPtr_         = makeCFunctionPtr(cbId, "vii", ::uapmdDispatchScanError)
+        val cancelPtr         = makeCFunctionPtr(cbId, "ii", ::uapmdDispatchScanCancel)
 
         // Wrap the observer so cleanup happens when the scan actually completes.
         // The scan is async on WASM: performScanning returns before callbacks fire,
@@ -209,7 +209,7 @@ class WasmJsPluginInstancing internal constructor(
     override fun makeAlive(callback: (String?) -> Unit) {
         val cbId = nextCallbackId()
         pendingMakeAliveCallbacks[cbId] = callback
-        val fnPtr = makeCFunctionPtr(cbId, "uapmdDispatchMakeAlive", "vii")
+        val fnPtr = makeCFunctionPtr(cbId, "vii", ::uapmdDispatchMakeAlive)
         wasmMod.uapmdInstancingMakeAlive(handle, 0, fnPtr)
     }
 

@@ -233,7 +233,7 @@ external interface UapmdCApiModule : JsAny {
     fun uapmdInstanceLoadStateSync(inst: Int, data: Int, size: Int): Boolean
     /** Callback: void(const uint8_t* data, size_t size, const char* error) */
     @JsName("_uapmd_instance_request_state")
-    fun uapmdInstanceRequestState(inst: Int, ctx: Int, includeUiState: Boolean, callback: Int, callbackCtx: Int)
+    fun uapmdInstanceRequestState(inst: Int, ctx: Int, includeUiState: Boolean, callbackCtx: Int, callback: Int)
     @JsName("_uapmd_instance_load_state")
     fun uapmdInstanceLoadState(inst: Int, data: Int, size: Int, ctx: Int, includeUiState: Boolean, callback: Int, callbackCtx: Int)
 
@@ -1747,7 +1747,7 @@ external interface UapmdCApiModule : JsAny {
 @JsFun("(factory, wasmUrl) => factory({ locateFile: () => wasmUrl })")
 private external fun invokeFactory(factory: JsAny, wasmUrl: String): Promise<UapmdCApiModule>
 
-@JsFun("(mod) => { globalThis.__uapmdWasmAdapter.setUapmdModule(mod); globalThis.__uapmdWasmAdapter.setKotlinDispatchers(wasmExports); }")
+@JsFun("(mod) => globalThis.__uapmdWasmAdapter.setUapmdModule(mod)")
 private external fun setUapmdModule(mod: JsAny)
 
 @JsFun("() => globalThis.__uapmdWasmAdapter.initBrowserFileSystem()")
@@ -1798,8 +1798,54 @@ internal external fun registerCallback(obj: JsAny): Int
 @JsModule("uapmd-wasm-adapter")
 internal external fun unregisterCallback(id: Int)
 
-@JsFun("(cbId, dispatchName, sig) => globalThis.__uapmdWasmAdapter.makeCFunctionPtr(cbId, dispatchName, sig)")
-internal external fun makeCFunctionPtr(cbId: Int, dispatchName: String, sig: String): Int
+// The compiler generates a JavaScript closure for each typed Kotlin dispatcher.
+private const val MAKE_C_FUNCTION_PTR =
+    "(cbId, sig, dispatcher) => globalThis.__uapmdWasmAdapter.makeCFunctionPtr(cbId, sig, dispatcher)"
+
+@JsFun(MAKE_C_FUNCTION_PTR)
+internal external fun makeCFunctionPtr(cbId: Int, sig: String, dispatcher: (Int) -> Unit): Int
+
+@JsFun(MAKE_C_FUNCTION_PTR)
+internal external fun makeCFunctionPtr(cbId: Int, sig: String, dispatcher: (Int, Int) -> Unit): Int
+
+@JsFun(MAKE_C_FUNCTION_PTR)
+internal external fun makeCFunctionPtr(cbId: Int, sig: String, dispatcher: (Int, Int, Int) -> Unit): Int
+
+@JsFun(MAKE_C_FUNCTION_PTR)
+internal external fun makeCFunctionPtr(cbId: Int, sig: String, dispatcher: (Int, Int, Int, Int) -> Unit): Int
+
+@JsFun(MAKE_C_FUNCTION_PTR)
+internal external fun makeCFunctionPtr(cbId: Int, sig: String, dispatcher: (Int, Int, Int, Int, Int) -> Unit): Int
+
+@JsFun(MAKE_C_FUNCTION_PTR)
+internal external fun makeCFunctionPtr(cbId: Int, sig: String, dispatcher: (Int, Int, Int, Int, Int, Int, Int) -> Unit): Int
+
+@JsFun(MAKE_C_FUNCTION_PTR)
+internal external fun makeCFunctionPtr(cbId: Int, sig: String, dispatcher: (Int, Int, Double) -> Unit): Int
+
+@JsFun(MAKE_C_FUNCTION_PTR)
+internal external fun makeCFunctionPtr(cbId: Int, sig: String, dispatcher: (Int, Int, Int, Int, String) -> Unit): Int
+
+@JsFun(MAKE_C_FUNCTION_PTR)
+internal external fun makeCFunctionPtr(cbId: Int, sig: String, dispatcher: (Int, String, Int, Int, Int) -> Unit): Int
+
+@JsFun(MAKE_C_FUNCTION_PTR)
+internal external fun makeCFunctionPtr(cbId: Int, sig: String, dispatcher: (Int, String, String, Int) -> Unit): Int
+
+@JsFun(MAKE_C_FUNCTION_PTR)
+internal external fun makeCFunctionPtr(cbId: Int, sig: String, dispatcher: (Int, String, Int) -> Unit): Int
+
+@JsFun(MAKE_C_FUNCTION_PTR)
+internal external fun makeCFunctionPtr(cbId: Int, sig: String, dispatcher: (Int) -> Boolean): Int
+
+@JsFun(MAKE_C_FUNCTION_PTR)
+internal external fun makeCFunctionPtr(cbId: Int, sig: String, dispatcher: (Int, Int) -> Int): Int
+
+@JsFun(MAKE_C_FUNCTION_PTR)
+internal external fun makeCFunctionPtr(cbId: Int, sig: String, dispatcher: (Int, Int, Int, Int, Int) -> Int): Int
+
+@JsFun(MAKE_C_FUNCTION_PTR)
+internal external fun makeCFunctionPtr(cbId: Int, sig: String, dispatcher: (Int, Float, Int, Int) -> Int): Int
 
 @JsFun("(ptr) => globalThis.__uapmdWasmAdapter.removeCFunctionPtr(ptr)")
 internal external fun removeCFunctionPtr(ptr: Int)
@@ -1807,9 +1853,6 @@ internal external fun removeCFunctionPtr(ptr: Int)
 /** For a table entry that is executing right now: removed on the next turn of the event loop. */
 @JsFun("(ptr) => { setTimeout(() => globalThis.__uapmdWasmAdapter.removeCFunctionPtr(ptr), 0); }")
 internal external fun deferRemoveCFunctionPtr(ptr: Int)
-
-@JsFun("(cbId, dispatchName) => globalThis.__uapmdWasmAdapter.makeStateCallbackPtr(cbId, dispatchName)")
-internal external fun makeStateCallbackPtr(cbId: Int, dispatchName: String): Int
 
 // ── Module singleton ──────────────────────────────────────────────────────────
 
@@ -1917,7 +1960,7 @@ internal fun <T> withThreeCStringsKt(s1: String, s2: String, s3: String, block: 
     withCStringKt(s1) { p1 -> withCStringKt(s2) { p2 -> withCStringKt(s3) { p3 -> block(p1, p2, p3) } } }
 
 // ── Global callback dispatch (called from JS adapter) ────────────────────────
-// Each @JsExport function receives cbId (from the registry) + C callback args.
+// Each dispatcher receives the callback registry ID followed by the C arguments it uses.
 
 internal val pendingCreateInstanceCallbacks = mutableMapOf<Int, (Int, String?) -> Unit>()
 internal val pendingAddPluginCallbacks      = mutableMapOf<Int, (Int, Int, String?) -> Unit>()

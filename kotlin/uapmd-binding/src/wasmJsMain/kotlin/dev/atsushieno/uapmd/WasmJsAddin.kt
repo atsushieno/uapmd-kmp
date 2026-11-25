@@ -169,7 +169,7 @@ class WasmJsStemSeparatorRegistry internal constructor(internal val handle: Int)
         val progressPtr = progress?.let {
             val cbId = nextCallbackId()
             pendingImportProgress[cbId] = it
-            makeCFunctionPtr(cbId, "uapmdDispatchImportProgress", "ifii")
+            makeCFunctionPtr(cbId, "ifii", ::uapmdDispatchImportProgress)
         } ?: 0
         return withWasmStruct(WasmOff.IMPORT_RESULT_SIZE) { out ->
             withCStringKt(separatorId) { sep ->

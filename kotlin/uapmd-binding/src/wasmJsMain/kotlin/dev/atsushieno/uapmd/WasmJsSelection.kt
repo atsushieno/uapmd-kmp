@@ -135,9 +135,9 @@ internal class WasmJsProjectSelectionService(
     override fun addListener(listener: ProjectSelectionListener): Long {
         val cbId = nextCallbackId()
         selectionListeners[cbId] = listener
-        val changed = makeCFunctionPtr(cbId, "uapmdDispatchSelectionChanged", "vjiii")
-        val active = makeCFunctionPtr(cbId, "uapmdDispatchSelectionActiveContextChanged", "vjji")
-        val removed = makeCFunctionPtr(cbId, "uapmdDispatchSelectionContextRemoved", "vji")
+        val changed = makeCFunctionPtr(cbId, "vjiii", ::uapmdDispatchSelectionChanged)
+        val active = makeCFunctionPtr(cbId, "vjji", ::uapmdDispatchSelectionActiveContextChanged)
+        val removed = makeCFunctionPtr(cbId, "vji", ::uapmdDispatchSelectionContextRemoved)
         val token = wasmSelAddListener(wasmMod, handle, changed, active, removed).toLong()
         if (token > 0) wasmSelectionListenerRegs["$handle:$token"] = SelectionListenerReg(cbId, intArrayOf(changed, active, removed))
         else {

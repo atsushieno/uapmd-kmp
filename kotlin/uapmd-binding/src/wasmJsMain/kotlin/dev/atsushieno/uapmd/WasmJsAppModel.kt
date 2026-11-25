@@ -245,7 +245,7 @@ class WasmJsAppModel internal constructor(internal val handle: Int) : AppModel {
             // One function-table entry serves every handler: the dispatcher
             // reads the current one, so it is created once and never removed.
             if (showVirtualMidiDevicesFnPtr == 0)
-                showVirtualMidiDevicesFnPtr = makeCFunctionPtr(0, "uapmdDispatchShowVirtualMidiDevices", "vi")
+                showVirtualMidiDevicesFnPtr = makeCFunctionPtr(0, "vi", ::uapmdDispatchShowVirtualMidiDevices)
             wasmMod.uapmdAppSetShowVirtualMidiDevicesCallback(handle, 0, showVirtualMidiDevicesFnPtr)
         }
 
@@ -566,7 +566,7 @@ class WasmJsAppModel internal constructor(internal val handle: Int) : AppModel {
         // void(bool, const char*, uint32_t, void*) -> four i32 args, no return.
         val cbId = nextCallbackId()
         pendingImportMidiTracksCallbacks[cbId] = callback
-        val fnPtr = makeCFunctionPtr(cbId, "uapmdDispatchImportMidiTracks", "viiii")
+        val fnPtr = makeCFunctionPtr(cbId, "viiii", ::uapmdDispatchImportMidiTracks)
         withCStringKt(filepath) { fp ->
             wasmMod.uapmdAppImportMidiTracksFromFile(handle, fp, 0, fnPtr)
         }
@@ -1037,7 +1037,7 @@ internal fun readPluginStateResult(p: Int) = PluginStateResult(
 private fun pluginStatePtr(callback: (PluginStateResult) -> Unit): Int {
     val cbId = nextCallbackId()
     pendingPluginStates[cbId] = callback
-    return makeCFunctionPtr(cbId, "uapmdDispatchPluginState", "vii")
+    return makeCFunctionPtr(cbId, "vii", ::uapmdDispatchPluginState)
 }
 
 private fun wasmStrAt(ptr: Int): String {
@@ -1100,25 +1100,25 @@ private fun decodeProjectResult(ptr: Int): AppProjectResult {
 private fun appProjectSavePtr(callback: (AppProjectResult) -> Unit): Int {
     val cbId = nextCallbackId()
     pendingProjectSaves[cbId] = callback
-    return makeCFunctionPtr(cbId, "uapmdDispatchProjectSave", "vii")
+    return makeCFunctionPtr(cbId, "vii", ::uapmdDispatchProjectSave)
 }
 
 private fun appInstanceCreatedPtr(callback: (PluginInstanceResult) -> Unit): Int {
     val cbId = nextCallbackId()
     pendingInstanceCreations[cbId] = callback
-    return makeCFunctionPtr(cbId, "uapmdDispatchInstanceCreated", "vii")
+    return makeCFunctionPtr(cbId, "vii", ::uapmdDispatchInstanceCreated)
 }
 
 private fun appTrackMutationPtr(callback: (Int, String?) -> Unit): Int {
     val cbId = nextCallbackId()
     pendingTrackMutations[cbId] = callback
-    return makeCFunctionPtr(cbId, "uapmdDispatchTrackMutation", "viii")
+    return makeCFunctionPtr(cbId, "viii", ::uapmdDispatchTrackMutation)
 }
 
 private fun appErrorOnlyPtr(callback: (String?) -> Unit): Int {
     val cbId = nextCallbackId()
     pendingErrorOnlyCallbacks[cbId] = callback
-    return makeCFunctionPtr(cbId, "uapmdDispatchErrorOnly", "vii")
+    return makeCFunctionPtr(cbId, "vii", ::uapmdDispatchErrorOnly)
 }
 
 class WasmJsTransportController internal constructor(internal val handle: Int) : TransportController {

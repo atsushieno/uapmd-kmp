@@ -238,7 +238,7 @@ class WasmJsTimelineFacade internal constructor(
 
     override fun loadProjectAsync(filePath: String, callback: (ProjectResult) -> Unit) {
         val cbId = nextCallbackId()
-        val fnPtr = makeCFunctionPtr(cbId, "uapmdDispatchProjectLoad", "viii")
+        val fnPtr = makeCFunctionPtr(cbId, "viii", ::uapmdDispatchProjectLoad)
         pendingProjectLoads[cbId] = PendingProjectLoad(fnPtr, callback)
         withCStringKt(filePath) { fpPtr -> wasmMod.uapmdTlLoadProjectAsync(handle, fpPtr, 0, fnPtr) }
     }
