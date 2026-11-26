@@ -8,6 +8,8 @@ import androidx.compose.runtime.setValue
 import androidx.compose.runtime.LaunchedEffect
 import kotlin.concurrent.Volatile
 import kotlinx.coroutines.cancel
+import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import dev.atsushieno.uapmd.AddinCommandInfo
@@ -793,6 +795,7 @@ class UapmdHost private constructor(val model: AppModel) {
         // instance leaves a window on screen that nothing can reach any more.
         destroyPluginUi(instanceId)
         offUiThread {
+            releaseFramebufferEditors(setOf(instanceId))
             model.removePluginInstance(instanceId)
             onUiThread { refresh() }
         }
@@ -896,6 +899,9 @@ class UapmdHost private constructor(val model: AppModel) {
                 }
             }
             presentationsToClose.forEach { runCatching { it.close() } }
+            // Every instance is about to go, and drawn editors read theirs until they
+            // are disposed.
+            releaseFramebufferEditors()
 
             // Asynchronously: a load can be waiting on the browser's own event loop (a WebCLAP plug-in
             // is fetched and compiled by JavaScript), which cannot run while this thread holds it.
@@ -969,6 +975,41 @@ class UapmdHost private constructor(val model: AppModel) {
      */
     var framebufferUiInstanceIds by mutableStateOf<Set<Int>>(emptySet())
         private set
+
+    /**
+     * The drawn editors that are composed right now, as [FramebufferPluginUiLayer]
+     * reports them. Taking an id out of [framebufferUiInstanceIds] only asks for its
+     * window to close; the editor is still composed until a later frame, and its
+     * teardown calls into the instance. See [releaseFramebufferEditors].
+     */
+    private val composedFramebufferEditors =
+        kotlinx.coroutines.flow.MutableStateFlow<Set<Int>>(emptySet())
+
+    internal fun reportFramebufferEditorComposed(instanceId: Int, composed: Boolean) {
+        composedFramebufferEditors.update { if (composed) it + instanceId else it - instanceId }
+    }
+
+    /**
+     * Closes the drawn editors of [instanceIds], or every one of them when it is null,
+     * and returns once none of those is composed any more. Anything that deletes an
+     * instance must wait for this first:
+     * the editor polls the instance every frame and, on its way out, stops it drawing
+     * and uninstalls its host, so deleting the instance under an open editor left the
+     * window reading freed native memory.
+     *
+     * Runs on the UI thread, so it resumes only after the composition pass that
+     * disposed the editors has finished every one of its disposals.
+     */
+    private suspend fun releaseFramebufferEditors(instanceIds: Set<Int>? = null) {
+        withContext(uiDispatcher) {
+            framebufferUiInstanceIds =
+                if (instanceIds == null) emptySet() else framebufferUiInstanceIds - instanceIds
+            composedFramebufferEditors.first { composed ->
+                if (instanceIds == null) composed.isEmpty() else composed.none { it in instanceIds }
+            }
+        }
+    }
+
     var pluginUiStatusMessage by mutableStateOf<String?>(null)
         private set
 
@@ -1120,6 +1161,8 @@ class UapmdHost private constructor(val model: AppModel) {
         // The instance may already be gone when a project is being replaced.
         runCatching { model.sequencer.engine.notifyPluginEditorVisibilityChanged(instanceId, false) }
         platformHostedUiInstanceIds = platformHostedUiInstanceIds - instanceId
+        // Only starts closing a drawn editor; see releaseFramebufferEditors.
+        framebufferUiInstanceIds = framebufferUiInstanceIds - instanceId
         nativeUiPresentations.remove(instanceId)?.let { runCatching { it.close() } }
         markNativeUiVisible(instanceId, false)
     }

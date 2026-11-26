@@ -57,6 +57,13 @@ fun FramebufferPluginUiLayer(host: UapmdHost, windows: FloatingWindowManager) {
                 resizable = true,
                 onClose = { host.hidePluginUi(instanceId) }
             ) {
+                // Declared ahead of the editor so that it is disposed after the editor's
+                // own effects, which call into the instance. The host does not delete an
+                // instance until this has reported the editor gone.
+                DisposableEffect(instanceId) {
+                    host.reportFramebufferEditorComposed(instanceId, true)
+                    onDispose { host.reportFramebufferEditorComposed(instanceId, false) }
+                }
                 // Fills the window and tells the plugin so: a JSFX script lays out
                 // against whatever gfx_w and gfx_h it is given, so resizing the window
                 // resizes the editor rather than cropping or scrolling it. Wrapping this
