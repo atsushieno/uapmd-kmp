@@ -157,6 +157,7 @@ fun initJvmEventLoop() {
     // dispatching to a queue nobody drains would hang on the first task.
     if (EventQueue.isDispatchThread()) debugJvmThread("initJvmEventLoop.awt (already on it)")
     else EventQueue.invokeAndWait { debugJvmThread("initJvmEventLoop.awt") }
+    lib.uapmd_internal_preserve_jvm_signal_handlers()
     installedDispatcher =
         if (isMacOs) SystemMainThreadJvmEventLoopDispatcher() else AwtJvmEventLoopDispatcher()
     lib.uapmd_set_event_loop(null, null, isMainThreadCb, enqueueTaskCb)

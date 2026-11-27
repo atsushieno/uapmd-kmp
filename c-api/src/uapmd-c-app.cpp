@@ -2,6 +2,7 @@
 
 #include "c-api/uapmd-c-app.h"
 #include "c-api-internal.h"
+#include "jvm-signal-handlers.h"
 #include <uapmd-app-model/uapmd-app-model.hpp>
 #include <uapmd-addin-core/uapmd-addin-core.hpp>
 #include <uapmd-midi-service/uapmd-midi-service.hpp>
@@ -283,6 +284,8 @@ void uapmd_app_create_plugin_instance(uapmd_app_model_t app,
 
     AM(app)->createPluginInstanceAsync(format, plugin_id, track_index, cfg,
         [callback, user_data](const uapmd_app::AppModel::PluginInstanceResult& r) {
+            // The completion can re-enter Java before the native event-loop task returns.
+            restoreJvmSignalHandlers();
             if (!callback) return;
             uapmd_plugin_instance_result_t cr;
             cr.instance_id = r.instanceId;

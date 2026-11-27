@@ -2,6 +2,7 @@
 
 #include "c-api/uapmd-c-engine.h"
 #include "c-api-internal.h"
+#include "jvm-signal-handlers.h"
 #include <uapmd-engine/uapmd-engine.hpp>
 #include <remidy/detail/event-loop.hpp>
 #include <algorithm>
@@ -175,6 +176,7 @@ void uapmd_engine_add_plugin_to_track(uapmd_sequencer_engine_t engine,
     std::string pid = plugin_id;
     E(engine)->addPluginToTrack(track_index, fmt, pid,
         [callback, user_data](int32_t instanceId, int32_t trackIdx, std::string error) {
+            restoreJvmSignalHandlers();
             if (callback)
                 callback(instanceId, trackIdx, error.empty() ? nullptr : error.c_str(), user_data);
         });
@@ -984,8 +986,10 @@ class CApiEventLoop : public remidy::EventLoop {
         std::function<void()> func;
         std::atomic<bool> claimed{false};
         void runOnce() {
-            if (!claimed.exchange(true))
-                func();
+            if (claimed.exchange(true))
+                return;
+            RestoreJvmSignalHandlersOnExit restore;
+            func();
         }
     };
 

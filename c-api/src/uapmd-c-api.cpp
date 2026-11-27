@@ -1,6 +1,7 @@
 /* uapmd C API — implementation for the uapmd module bindings */
 
 #include "c-api/uapmd-c-api.h"
+#include "jvm-signal-handlers.h"
 #include <uapmd-midi-service/uapmd-midi-service.hpp>
 #include <uapmd-plugin-hosting/uapmd-plugin-hosting.hpp>
 #include <uapmd-graph/uapmd-graph.hpp>
@@ -104,19 +105,23 @@ extern "C" UAPMD_C_EXPORT void uapmd_internal_enqueue_on_main_thread(
 // has no JVM re-entry and is also correct for non-JVM C API clients.
 template <class F>
 static auto on_native_ui_thread(F&& operation) -> std::invoke_result_t<F&> {
-#if defined(__APPLE__)
     using Result = std::invoke_result_t<F&>;
-    if (pthread_main_np() != 0)
+    auto perform = [&]() -> Result {
+        RestoreJvmSignalHandlersOnExit restore;
         return operation();
+    };
+#if defined(__APPLE__)
+    if (pthread_main_np() != 0)
+        return perform();
 
     // Waiting happens here, on a thread that is never the main one, so blocking
     // is safe; the main thread stays free to run its run loop.
     struct Context {
-        std::remove_reference_t<F>* operation;
+        decltype(perform)* operation;
         dispatch_semaphore_t done;
         std::conditional_t<std::is_void_v<Result>, std::monostate, std::optional<Result>> result;
     };
-    Context context{&operation, dispatch_semaphore_create(0), {}};
+    Context context{&perform, dispatch_semaphore_create(0), {}};
     perform_on_main_run_loop([](void* raw) {
         auto* ctx = static_cast<Context*>(raw);
         if constexpr (std::is_void_v<Result>)
@@ -132,7 +137,7 @@ static auto on_native_ui_thread(F&& operation) -> std::invoke_result_t<F&> {
         return std::move(*context.result);
     }
 #else
-    return operation();
+    return perform();
 #endif
 }
 
@@ -670,6 +675,7 @@ void uapmd_plugin_host_create_instance(uapmd_plugin_host_t host,
     std::optional<uint32_t> outCh = main_output_channels >= 0 ? std::optional<uint32_t>(main_output_channels) : std::nullopt;
     H(host)->createPluginInstance(sample_rate, buffer_size, inCh, outCh, offline_mode, fmt, pid,
         [callback, user_data](int32_t instanceId, std::string error) {
+            restoreJvmSignalHandlers();
             callback(instanceId, error.empty() ? nullptr : error.c_str(), user_data);
         });
 }

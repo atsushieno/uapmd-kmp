@@ -1,7 +1,13 @@
 package dev.atsushieno.uapmd.cmp
 
+import com.sun.jna.Memory
+import com.sun.jna.Native
+import com.sun.jna.NativeLibrary
+import com.sun.jna.Platform
+import com.sun.jna.Pointer
 import dev.atsushieno.uapmd.AppModel
 import dev.atsushieno.uapmd.PluginInstanceResult
+import java.util.concurrent.atomic.AtomicReference
 import org.junit.Assume.assumeTrue
 import kotlin.test.Test
 
@@ -25,6 +31,7 @@ import kotlin.test.Test
  *
  * Run with:
  *   ./gradlew :uapmd-cmp:jvmIntegrationTest --tests '*PluginUiIntegrationTest' -Duapmd.probe.uiPlugin=ADLplug-AE -Duapmd.probe.uiFormat=CLAP
+ * On macOS, Vaporizer2 (AU or VST3) exercises the check for replaced JVM signal handlers.
  */
 class PluginUiIntegrationTest {
     @Test
@@ -84,13 +91,16 @@ private fun cyclePluginUi(model: AppModel, check: (String, Boolean) -> Unit) {
     if (entry == null) return
     println("-- ${entry.format} | ${entry.pluginId} | ${entry.displayName}")
 
-    var result: PluginInstanceResult? = null
-    model.createPluginInstance(entry.format, entry.pluginId, -1) { r -> result = r }
+    val signalActions = macOsFaultSignalActions()
+    val result = AtomicReference<PluginInstanceResult>()
+    model.createPluginInstance(entry.format, entry.pluginId, -1) { r -> result.set(r) }
     val instUntil = System.currentTimeMillis() + 30_000
-    while (result == null && System.currentTimeMillis() < instUntil) Thread.sleep(50)
-    val created = result
+    while (result.get() == null && System.currentTimeMillis() < instUntil) Thread.sleep(50)
+    val created = result.get()
     check("instantiated (${created?.error ?: "no error"})", created?.error == null && (created?.instanceId ?: -1) >= 0)
     if (created == null || created.error != null) return
+    if (signalActions != null)
+        check("instantiation preserved the JVM fault signal handlers", macOsFaultSignalActions() == signalActions)
 
     val instance = pluginHost.getInstance(created.instanceId)!!
     check("reports UI support", instance.uiCapabilities.hasUiSupport)
@@ -101,6 +111,8 @@ private fun cyclePluginUi(model: AppModel, check: (String, Boolean) -> Unit) {
 
     check("show() succeeded", presentation.show())
     check("isVisible after show", presentation.isVisible)
+    if (signalActions != null)
+        check("opening the editor preserved the JVM fault signal handlers", macOsFaultSignalActions() == signalActions)
     println("   size after show: ${presentation.getSize()}")
     Thread.sleep(1500)
 
@@ -119,4 +131,19 @@ private fun cyclePluginUi(model: AppModel, check: (String, Boolean) -> Unit) {
 
     model.setAudioEngineEnabled(false)
     Thread.sleep(1000)
+}
+
+private data class SignalAction(val handler: Pointer?, val mask: Int, val flags: Int)
+
+private fun macOsFaultSignalActions(): List<SignalAction>? {
+    if (!Platform.isMac()) return null
+    val sigaction = NativeLibrary.getInstance("System").getFunction("sigaction")
+    val maskOffset = Native.POINTER_SIZE.toLong()
+    // Darwin's struct sigaction has a handler pointer followed by the mask and flags.
+    return Memory(maskOffset + 8).use { action ->
+        listOf(11, 10, 4, 8).map { signal -> // SIGSEGV, SIGBUS, SIGILL, SIGFPE
+            check(sigaction.invokeInt(arrayOf(signal, null, action)) == 0)
+            SignalAction(action.getPointer(0), action.getInt(maskOffset), action.getInt(maskOffset + 4))
+        }
+    }
 }

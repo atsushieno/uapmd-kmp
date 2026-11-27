@@ -33,6 +33,7 @@ set(UAPMD_C_API_SOURCES
     src/uapmd-c-script.cpp
     src/uapmd-c-augene2.cpp
     src/uapmd-c-jsfx.cpp
+    src/jvm-signal-handlers.cpp
 )
 
 if(ANDROID OR IOS OR EMSCRIPTEN)
@@ -64,6 +65,10 @@ target_link_libraries(uapmd-c-api
 
 if(APPLE AND NOT IOS)
     target_link_libraries(uapmd-c-api PRIVATE "-framework OpenGL")
+endif()
+
+if(CMAKE_SYSTEM_NAME STREQUAL "Linux")
+    target_link_libraries(uapmd-c-api PRIVATE ${CMAKE_DL_LIBS})
 endif()
 
 if(WIN32)

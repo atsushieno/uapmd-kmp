@@ -1266,6 +1266,7 @@ interface UapmdLibrary : Library {
      * why the difference decides whether AUv3 instantiation can complete.
      */
     fun uapmd_internal_enqueue_on_main_thread(taskFn: Pointer?, taskCtx: Pointer?)
+    fun uapmd_internal_preserve_jvm_signal_handlers()
     fun uapmd_instance_create_ui(
         inst: Pointer?,
         isFloating: Boolean,
